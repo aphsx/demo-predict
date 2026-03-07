@@ -16,6 +16,10 @@ import pandas as pd
 import numpy as np
 import joblib
 import json
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 app = FastAPI(title="Churn CRM API", version="1.0.0")
 
@@ -28,10 +32,12 @@ app.add_middleware(
 
 # ── Paths ─────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent.parent
-PRED_CSV    = BASE_DIR / "churn_output" / "churn_predictions.csv"
-USERS_CSV   = BASE_DIR / "sample_users.csv"
-PAY_CSV     = BASE_DIR / "sample_payments.csv"
-MODEL_PKL   = BASE_DIR / "churn_output" / "churn_model.pkl"
+TRAIN_DIR   = BASE_DIR / "train"
+PRED_CSV    = TRAIN_DIR / "output" / "churn_predictions.csv"
+USERS_CSV   = TRAIN_DIR / "data" / "sample_users.csv"
+PAY_CSV     = TRAIN_DIR / "data" / "sample_payments.csv"
+MODEL_PKL   = TRAIN_DIR / "output" / "churn_model.pkl"
+MODEL_H5    = TRAIN_DIR / "output" / "churn_model_keras.h5"
 
 # ── Feature columns (must match training order) ───────────
 FEATURE_COLS = [
@@ -49,16 +55,24 @@ REFERENCE_DATE = pd.Timestamp("2026-03-06")
 # ── Load assets at startup ────────────────────────────────
 _predictions: pd.DataFrame = pd.DataFrame()
 _model = None
+_keras_model = None
 
 @app.on_event("startup")
 def load_assets():
-    global _predictions, _model
+    global _predictions, _model, _keras_model
     if PRED_CSV.exists():
         _predictions = pd.read_csv(PRED_CSV)
         # normalise risk_tier emojis for JSON safety
         _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
     if MODEL_PKL.exists():
         _model = joblib.load(MODEL_PKL)
+    if MODEL_H5.exists():
+        try:
+            from tensorflow import keras
+            _keras_model = keras.models.load_model(str(MODEL_H5))
+            print("✅ Keras H5 model loaded")
+        except Exception as e:
+            print(f"⚠️  Keras model load failed: {e}")
 
 
 # ── Helpers ───────────────────────────────────────────────
@@ -297,4 +311,66 @@ def model_info():
         "test_auc":      1.0,
         "cv_auc":        1.0,
         "feature_importance": feature_importance,
+        "keras_available": _keras_model is not None,
+        "keras_h5_path": str(MODEL_H5) if MODEL_H5.exists() else None,
+    }
+
+
+# ══════════════════════════════════════════════════════════
+# POST /api/predict-keras  — live prediction via Keras H5
+# ══════════════════════════════════════════════════════════
+@app.post("/api/predict-keras")
+def predict_keras(req: PredictRequest):
+    """Score a customer using the Keras neural network (.h5 model)."""
+    if _keras_model is None:
+        raise HTTPException(503, "Keras H5 model not loaded — run churn_model.py first or install TensorFlow")
+    if _model is None:
+        raise HTTPException(503, "sklearn pipeline not loaded (needed for preprocessing)")
+
+    exp  = pd.Timestamp(req.expire)
+    join = pd.Timestamp(req.join_date)
+    la   = pd.Timestamp(req.last_access)
+    ls   = pd.Timestamp(req.last_send)
+
+    status_enc     = 1 if req.status.lower() == "trial" else 0
+    credit_map     = {"sms": 0, "email": 1}
+    credit_enc     = credit_map.get(req.credit.lower(), 0)
+    dom_credit_map = {"email": 0, "none": 1, "sms": 2}
+    dom_credit_enc = dom_credit_map.get(req.dominant_credit_type.lower(), 1)
+
+    row = {
+        "status_enc":             status_enc,
+        "credit_enc":             credit_enc,
+        "days_since_last_access": (REFERENCE_DATE - la).days,
+        "days_since_last_send":   (REFERENCE_DATE - ls).days,
+        "days_until_expire":      (exp - REFERENCE_DATE).days,
+        "account_age_days":       (REFERENCE_DATE - join).days,
+        "total_payments":         req.total_payments,
+        "total_amount_paid":      req.total_amount_paid,
+        "avg_amount_per_tx":      req.avg_amount_per_tx,
+        "total_sms_volume":       req.total_sms_volume,
+        "avg_sms_volume":         req.avg_sms_volume,
+        "unique_products":        req.unique_products,
+        "last_payment_recency":   req.last_payment_recency,
+        "avg_payment_gap_days":   req.avg_payment_gap_days,
+        "last_payment_amount":    req.last_payment_amount,
+        "downgraded":             req.downgraded,
+        "dom_credit_enc":         dom_credit_enc,
+    }
+
+    X_raw = pd.DataFrame([row])[FEATURE_COLS]
+
+    # Reuse sklearn pipeline's imputer + scaler for preprocessing
+    imputer = _model.named_steps["imputer"]
+    scaler  = _model.named_steps["scaler"]
+    X_scaled = scaler.transform(imputer.transform(X_raw))
+
+    prob = float(_keras_model.predict(X_scaled, verbose=0).flatten()[0])
+
+    return {
+        "churn_probability": round(prob, 4),
+        "churn_predicted":   int(prob >= 0.5),
+        "risk":              risk_label(prob),
+        "model":             "Keras Neural Network (H5)",
+        "features_used":     row,
     }
