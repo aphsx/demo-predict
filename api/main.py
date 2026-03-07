@@ -17,6 +17,7 @@ import numpy as np
 import joblib
 import json
 import os
+from sklearn.preprocessing import LabelEncoder
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
@@ -33,7 +34,6 @@ app.add_middleware(
 # ── Paths ─────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent.parent
 TRAIN_DIR   = BASE_DIR / "train"
-PRED_CSV    = TRAIN_DIR / "output" / "churn_predictions.csv"
 USERS_CSV   = TRAIN_DIR / "data" / "sample_users.csv"
 PAY_CSV     = TRAIN_DIR / "data" / "sample_payments.csv"
 MODEL_PKL   = TRAIN_DIR / "output" / "churn_model.pkl"
@@ -51,6 +51,71 @@ FEATURE_COLS = [
 ]
 
 REFERENCE_DATE = pd.Timestamp("2026-03-06")
+CHURN_DAYS     = 90
+
+# ── Feature engineering (mirrors train/churn_model.py) ────
+def _build_features() -> pd.DataFrame:
+    """Load raw CSVs, engineer features, return full feature DataFrame."""
+    users = pd.read_csv(USERS_CSV, parse_dates=["expire", "join_date", "last_access", "last_send"])
+    pays  = pd.read_csv(PAY_CSV,   parse_dates=["payment_date"])
+
+    df = users.copy()
+    df["days_since_last_access"] = (REFERENCE_DATE - df["last_access"]).dt.days
+    df["days_since_last_send"]   = (REFERENCE_DATE - df["last_send"]).dt.days
+    df["days_until_expire"]      = (df["expire"] - REFERENCE_DATE).dt.days
+    df["account_age_days"]       = (REFERENCE_DATE - df["join_date"]).dt.days
+
+    expired       = df["expire"] < REFERENCE_DATE
+    long_inactive = df["days_since_last_access"] > CHURN_DAYS
+    df["churned"]  = (expired & long_inactive).astype(int)
+
+    # Payment aggregation
+    pf = pays.copy()
+    pf["payment_recency_days"] = (REFERENCE_DATE - pf["payment_date"]).dt.days
+
+    agg = pf.groupby("acc_id").agg(
+        total_payments        =("payment_date",        "count"),
+        total_amount_paid     =("amount",               "sum"),
+        avg_amount_per_tx     =("amount",               "mean"),
+        total_sms_volume      =("sms_volume",           "sum"),
+        avg_sms_volume        =("sms_volume",           "mean"),
+        unique_products       =("product_name",         "nunique"),
+        last_payment_recency  =("payment_recency_days", "min"),
+        first_payment_recency =("payment_recency_days", "max"),
+        payment_span_days     =("payment_recency_days", lambda x: x.max() - x.min()),
+    ).reset_index()
+
+    agg["avg_payment_gap_days"] = agg.apply(
+        lambda r: r["payment_span_days"] / max(r["total_payments"] - 1, 1), axis=1
+    )
+
+    last_amt = pf.sort_values("payment_date").groupby("acc_id").last()["amount"]
+    agg = agg.merge(last_amt.rename("last_payment_amount"), on="acc_id", how="left")
+    agg["downgraded"] = (agg["last_payment_amount"] < agg["avg_amount_per_tx"]).astype(int)
+
+    dom_credit = pf.groupby("acc_id")["credit_type"].agg(
+        lambda x: x.mode()[0] if not x.empty else "Unknown"
+    ).rename("dominant_credit_type")
+    agg = agg.merge(dom_credit, on="acc_id", how="left")
+
+    df = df.merge(agg, on="acc_id", how="left")
+
+    pay_numeric_cols = [
+        "total_payments", "total_amount_paid", "avg_amount_per_tx",
+        "total_sms_volume", "avg_sms_volume", "unique_products",
+        "last_payment_recency", "first_payment_recency", "payment_span_days",
+        "avg_payment_gap_days", "last_payment_amount", "downgraded",
+    ]
+    df[pay_numeric_cols] = df[pay_numeric_cols].fillna(0)
+    df["dominant_credit_type"] = df["dominant_credit_type"].fillna("None")
+
+    le = LabelEncoder()
+    df["status_enc"]     = le.fit_transform(df["status"])
+    df["credit_enc"]     = le.fit_transform(df["credit"])
+    df["dom_credit_enc"] = le.fit_transform(df["dominant_credit_type"])
+
+    return df
+
 
 # ── Load assets at startup ────────────────────────────────
 _predictions: pd.DataFrame = pd.DataFrame()
@@ -60,10 +125,6 @@ _keras_model = None
 @app.on_event("startup")
 def load_assets():
     global _predictions, _model, _keras_model
-    if PRED_CSV.exists():
-        _predictions = pd.read_csv(PRED_CSV)
-        # normalise risk_tier emojis for JSON safety
-        _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
     if MODEL_PKL.exists():
         _model = joblib.load(MODEL_PKL)
     if MODEL_H5.exists():
@@ -73,6 +134,25 @@ def load_assets():
             print("✅ Keras H5 model loaded")
         except Exception as e:
             print(f"⚠️  Keras model load failed: {e}")
+
+    # Compute predictions fresh from raw data + model
+    if _model is not None and USERS_CSV.exists() and PAY_CSV.exists():
+        df = _build_features()
+        X  = df[FEATURE_COLS]
+        df["churn_probability"] = _model.predict_proba(X)[:, 1]
+        df["churn_predicted"]   = (df["churn_probability"] >= 0.5).astype(int)
+        df["risk_tier"] = df["churn_probability"].apply(
+            lambda p: "🔴 High" if p >= 0.6 else ("🟡 Medium" if p >= 0.3 else "🟢 Low")
+        )
+        _predictions = df[[
+            "acc_id", "status", "credit", "expire",
+            "days_since_last_access", "total_payments", "total_amount_paid",
+            "churn_probability", "churn_predicted", "risk_tier", "churned",
+        ]].copy()
+        _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
+        print(f"✅ Predictions computed for {len(_predictions)} customers")
+    else:
+        print("⚠️  Model or data not found — run churn_model.py first")
 
 
 # ── Helpers ───────────────────────────────────────────────

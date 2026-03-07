@@ -7,7 +7,6 @@
   - Engineers churn label based on expiry + last_access
   - Builds rich behavioral features from payment history
   - Trains & evaluates multiple ML classifiers
-  - Outputs predictions with churn probability scores
   - Saves best sklearn model as  output/churn_model.pkl
   - Saves Keras neural network as output/churn_model_keras.h5
 ======================================================="""
@@ -494,9 +493,6 @@ def main():
 
     # Visualise
     plot_all(df, results, best_model)
-
-    # Report
-    generate_predictions(df, results, best_model, scaler)
 
     # ── Save models ───────────────────────────────────
     print("\n" + "═" * 60)
