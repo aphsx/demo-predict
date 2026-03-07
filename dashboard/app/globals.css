@@ -2,25 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── 1moby Design System ─── */
 :root {
-  --sidebar-width: 220px;
-  --bg: #06111f;
-  --bg-soft: #0a1a2f;
-  --panel: rgba(7, 21, 39, 0.72);
-  --panel-strong: rgba(7, 21, 39, 0.92);
-  --line: rgba(255, 255, 255, 0.08);
-  --text: #eff6ff;
-  --muted: #9fb0c8;
-  --accent: #2fd3ff;
-  --accent-strong: #1b82ff;
+  --sidebar-width: 260px;
+  --bg: #F5F7FB;
+  --panel: #FFFFFF;
+  --line: rgba(11, 25, 55, 0.08);
+  --text: #0B1937;
+  --muted: #5A6B8A;
+  --accent: #1461F0;
+  --accent-light: #EEF4FF;
+  --navy: #0B1937;
 }
 
 body {
   @apply antialiased;
-  background:
-    radial-gradient(circle at top left, rgba(47, 211, 255, 0.16), transparent 28%),
-    radial-gradient(circle at top right, rgba(27, 130, 255, 0.18), transparent 26%),
-    linear-gradient(180deg, #07111f 0%, #081424 32%, #050b14 100%);
+  background: #F5F7FB;
   color: var(--text);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
@@ -35,73 +32,103 @@ html {
 
 .dashboard-shell {
   position: relative;
-  isolation: isolate;
 }
 
-.dashboard-bg {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(circle at 15% 15%, rgba(67, 181, 255, 0.14), transparent 0, transparent 28%),
-    radial-gradient(circle at 85% 8%, rgba(47, 211, 255, 0.18), transparent 0, transparent 26%),
-    radial-gradient(circle at 50% 100%, rgba(17, 65, 133, 0.24), transparent 0, transparent 30%);
-}
+/* Placeholder for legacy element */
+.dashboard-bg { display: none; }
 
-/* Scrollbar */
+/* ─── Scrollbar (light) ─── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: rgba(4, 12, 24, 0.8); }
-::-webkit-scrollbar-thumb { background: rgba(121, 143, 175, 0.45); border-radius: 9999px; }
+::-webkit-scrollbar-track { background: #EEF3FF; }
+::-webkit-scrollbar-thumb { background: rgba(11, 25, 55, 0.18); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(11, 25, 55, 0.32); }
 
-/* Glass card */
+/* ─── Card ─── */
 .glass {
-  @apply rounded-[28px] border backdrop-blur-xl;
-  background: linear-gradient(180deg, rgba(10, 25, 43, 0.88) 0%, rgba(7, 19, 35, 0.74) 100%);
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 28px 80px rgba(3, 9, 19, 0.38);
+  @apply rounded-2xl border bg-white;
+  border-color: rgba(11, 25, 55, 0.08);
+  box-shadow: 0 1px 12px rgba(11, 25, 55, 0.07);
 }
 
 .glass-strong {
-  background: linear-gradient(180deg, rgba(11, 28, 49, 0.96) 0%, rgba(8, 20, 36, 0.92) 100%);
+  /* dark-navy hero card */
+  background: linear-gradient(135deg, #0B1937 0%, #0E2155 60%, #1A3068 100%);
+  border-color: transparent;
+  box-shadow: 0 8px 48px rgba(11, 25, 55, 0.28);
 }
 
+/* ─── Typography helpers ─── */
 .section-label {
   @apply text-[10px] font-semibold uppercase;
-  letter-spacing: 0.42em;
-  color: rgba(168, 191, 224, 0.72);
+  letter-spacing: 0.38em;
+  color: #5A6B8A;
 }
 
+/* Hero text gradient (used on dark backgrounds) */
 .text-gradient {
-  background: linear-gradient(135deg, #ffffff 0%, #d8efff 24%, #6cd6ff 100%);
+  background: linear-gradient(135deg, #FFFFFF 0%, #C8DEFF 40%, #38BDF8 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
+/* Blue accent text gradient (light bg) */
+.text-gradient-blue {
+  background: linear-gradient(135deg, #1461F0 0%, #38BDF8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ─── Metric ring (blue accent border) ─── */
 .metric-ring {
   position: relative;
 }
-
 .metric-ring::before {
   content: "";
   position: absolute;
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(47, 211, 255, 0.4), rgba(255, 255, 255, 0.04));
+  background: linear-gradient(135deg, rgba(20, 97, 240, 0.35), rgba(56, 189, 248, 0.12));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
 }
 
-/* Risk badge */
-.badge-high   { @apply border border-red-400/25 bg-red-400/10 text-red-200; }
-.badge-medium { @apply border border-amber-300/25 bg-amber-300/10 text-amber-200; }
-.badge-low    { @apply border border-emerald-300/25 bg-emerald-300/10 text-emerald-200; }
+/* ─── Risk badges (light theme) ─── */
+.badge-high   { @apply border border-red-200 bg-red-50 text-red-700; }
+.badge-medium { @apply border border-amber-200 bg-amber-50 text-amber-700; }
+.badge-low    { @apply border border-emerald-200 bg-emerald-50 text-emerald-700; }
+
+/* ─── Button primitives ─── */
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-white transition-all;
+  background: linear-gradient(135deg, #1461F0, #2B72FF);
+  box-shadow: 0 4px 18px rgba(20, 97, 240, 0.35);
+}
+.btn-primary:hover { box-shadow: 0 6px 24px rgba(20, 97, 240, 0.48); transform: translateY(-1px); }
+
+.btn-outline {
+  @apply inline-flex items-center justify-center rounded-full border px-6 py-3 text-sm font-semibold text-navy-900 transition-all bg-white;
+  border-color: rgba(11, 25, 55, 0.16);
+}
+.btn-outline:hover { background: #EEF4FF; border-color: #1461F0; color: #1461F0; }
+
+/* ─── Input (light) ─── */
+.input-field {
+  @apply w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-navy-900 transition-all;
+  border-color: rgba(11, 25, 55, 0.14);
+  box-shadow: 0 1px 4px rgba(11, 25, 55, 0.04);
+}
+.input-field:focus {
+  outline: none;
+  border-color: #1461F0;
+  box-shadow: 0 0 0 3px rgba(20, 97, 240, 0.12);
+}
+.input-field::placeholder { color: #9aaabf; }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+  .text-balance { text-wrap: balance; }
 }

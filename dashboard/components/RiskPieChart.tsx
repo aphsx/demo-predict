@@ -3,7 +3,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 
-const COLORS = ["#ef4444", "#f59e0b", "#10b981"];
+const COLORS = ["#EF4444", "#F59E0B", "#10B981"];
 
 interface Props {
   high: number;
@@ -40,16 +40,17 @@ export default function RiskPieChart({ high, medium, low }: Props) {
         </Pie>
         <Tooltip
           contentStyle={{
-            background: "rgba(8, 20, 36, 0.96)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 16,
-            color: "#e2e8f0",
+            background: "#FFFFFF",
+            border: "1px solid rgba(11,25,55,0.10)",
+            borderRadius: 12,
+            boxShadow: "0 8px 24px rgba(11,25,55,0.12)",
+            color: "#0B1937",
           }}
-          labelStyle={{ color: "#94a3b8" }}
+          labelStyle={{ color: "#5A6B8A", fontWeight: 600 }}
         />
         <Legend
           formatter={(value) => (
-            <span style={{ color: "#cbd5e1", fontSize: 12 }}>{value}</span>
+            <span style={{ color: "#5A6B8A", fontSize: 12, fontWeight: 500 }}>{value}</span>
           )}
         />
       </PieChart>

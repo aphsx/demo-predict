@@ -114,55 +114,59 @@ export default function PredictPage() {
   const ResultCard = ({ result, title }: { result: PredictResult; title: string }) => {
     const p = result.churn_probability;
     const pct = (p * 100).toFixed(2);
-    const color = p >= 0.6 ? "text-red-400" : p >= 0.3 ? "text-amber-400" : "text-emerald-400";
-    const ringColor = p >= 0.6 ? "#ef4444" : p >= 0.3 ? "#f59e0b" : "#10b981";
-    const borderColor = p >= 0.6 ? "border-red-500/30" : p >= 0.3 ? "border-amber-500/30" : "border-emerald-500/30";
+    const color = p >= 0.6 ? "text-red-600" : p >= 0.3 ? "text-amber-600" : "text-emerald-600";
+    const ringColor = p >= 0.6 ? "#EF4444" : p >= 0.3 ? "#F59E0B" : "#10B981";
+    const borderStyle = p >= 0.6 ? { borderLeft: "4px solid #EF4444" } : p >= 0.3 ? { borderLeft: "4px solid #F59E0B" } : { borderLeft: "4px solid #10B981" };
 
     return (
-      <div className={`glass p-6 border ${borderColor} flex flex-col items-center gap-4`}>
-        <h3 className="text-sm font-semibold text-slate-300">{title}</h3>
+      <div className="glass p-6 flex flex-col items-center gap-4" style={borderStyle}>
+        <h3 className="text-sm font-semibold text-navy-900">{title}</h3>
 
         {/* Gauge */}
         <div
           className="relative w-28 h-28 flex items-center justify-center rounded-full"
           style={{ background: `conic-gradient(${ringColor} ${p * 360}deg, #1e293b 0deg)` }}
         >
-          <div className="absolute inset-2 bg-slate-900 rounded-full flex flex-col items-center justify-center">
+          <div className="absolute inset-2 bg-white rounded-full flex flex-col items-center justify-center">
             <span className={`text-xl font-bold ${color}`}>{pct}%</span>
-            <span className="text-[10px] text-slate-500">Churn</span>
+            <span className="text-[10px] text-slate-400">Churn</span>
           </div>
         </div>
 
         <div className="text-center space-y-2">
           <RiskBadge risk={result.risk} />
-          <p className={`text-lg font-bold ${result.churn_predicted ? "text-red-400" : "text-emerald-400"}`}>
+          <p className={`text-lg font-bold ${result.churn_predicted ? "text-red-600" : "text-emerald-600"}`}>
             {result.churn_predicted ? "⚠️ CHURN" : "✅ RETAIN"}
           </p>
-          {result.model && <p className="text-xs text-slate-600">{result.model}</p>}
+          {result.model && <p className="text-xs text-slate-500">{result.model}</p>}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-white">🤖 Live Churn Prediction</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          ทดสอบ prediction แบบ real-time ด้วย Random Forest + Keras H5 Neural Network
-        </p>
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="glass glass-strong rounded-2xl px-8 py-8">
+        <div className="relative">
+          <p className="section-label mb-3" style={{ color: "rgba(148,163,184,0.7)" }}>Prediction Engine</p>
+          <h2 className="text-3xl font-bold text-white">Live Churn Prediction</h2>
+          <p className="mt-2 text-slate-400 text-sm">
+            ทดสอบ prediction แบบ real-time ด้วย Random Forest + Keras H5 Neural Network
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Form */}
         <div className="xl:col-span-2 glass p-6 space-y-5">
-          <h3 className="text-sm font-semibold text-slate-300 border-b border-slate-800 pb-3">
-            📋 ข้อมูลลูกค้า
+          <h3 className="text-sm font-semibold text-navy-900 border-b pb-3" style={{ borderColor: "rgba(11,25,55,0.08)" }}>
+            ข้อมูลลูกค้า (Input Features)
           </h3>
 
           {/* Basic info */}
           <div>
-            <p className="text-xs text-slate-600 uppercase tracking-widest mb-3">Account Info</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Account Info</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <FormField label="Status" name="status" value={form.status} onChange={handleChange}>
                 <option value="paid">Paid</option>
@@ -190,7 +194,7 @@ export default function PredictPage() {
 
           {/* Payment features */}
           <div>
-            <p className="text-xs text-slate-600 uppercase tracking-widest mb-3">Payment Features</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Payment Features</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {([
                 ["Total Payments", "total_payments"],
@@ -211,13 +215,13 @@ export default function PredictPage() {
           <button
             onClick={runPredict}
             disabled={loading}
-            className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+            className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed py-3 rounded-xl text-sm"
           >
             {loading ? "⏳ กำลังประมวลผล..." : "🚀 Run Prediction (RF + Keras)"}
           </button>
 
           {error && (
-            <div className="p-3 bg-red-900/20 border border-red-500/30 rounded-xl text-red-300 text-xs">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs">
               ⚠️ {error}
             </div>
           )}
@@ -226,7 +230,7 @@ export default function PredictPage() {
         {/* Results */}
         <div className="space-y-4">
           {!rfResult && !kerasResult && !loading && (
-            <div className="glass p-8 text-center text-slate-600">
+            <div className="glass p-8 text-center text-slate-400">
               <p className="text-4xl mb-3">🎯</p>
               <p className="text-sm">กรอกข้อมูลลูกค้าแล้วกด</p>
               <p className="text-sm font-semibold">"Run Prediction"</p>
@@ -250,11 +254,11 @@ export default function PredictPage() {
             <div className="glass p-4 text-center">
               <p className="text-xs text-slate-500 mb-2">Model Agreement</p>
               {rfResult.churn_predicted === kerasResult.churn_predicted ? (
-                <p className="text-emerald-400 text-sm font-semibold">✅ ทั้ง 2 models ตรงกัน</p>
+                <p className="text-emerald-600 text-sm font-semibold">✅ ทั้ง 2 models ตรงกัน</p>
               ) : (
-                <p className="text-amber-400 text-sm font-semibold">⚠️ Models ไม่ตรงกัน</p>
+                <p className="text-amber-600 text-sm font-semibold">⚠️ Models ไม่ตรงกัน</p>
               )}
-              <p className="text-xs text-slate-600 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 RF: {(rfResult.churn_probability * 100).toFixed(1)}% ·
                 Keras: {(kerasResult.churn_probability * 100).toFixed(1)}%
               </p>
