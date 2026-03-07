@@ -61,7 +61,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="sticky top-0 hidden min-h-screen w-[260px] shrink-0 flex-col lg:flex"
+      className="hidden h-screen w-[260px] shrink-0 flex-col overflow-y-auto lg:flex"
       style={{ background: "linear-gradient(180deg, #0B1937 0%, #0E2155 100%)" }}
     >
       {/* Logo */}
