@@ -4,24 +4,104 @@
 
 :root {
   --sidebar-width: 220px;
+  --bg: #06111f;
+  --bg-soft: #0a1a2f;
+  --panel: rgba(7, 21, 39, 0.72);
+  --panel-strong: rgba(7, 21, 39, 0.92);
+  --line: rgba(255, 255, 255, 0.08);
+  --text: #eff6ff;
+  --muted: #9fb0c8;
+  --accent: #2fd3ff;
+  --accent-strong: #1b82ff;
 }
 
 body {
-  @apply bg-slate-950 text-slate-100 antialiased;
-  font-family: 'Inter', system-ui, sans-serif;
+  @apply antialiased;
+  background:
+    radial-gradient(circle at top left, rgba(47, 211, 255, 0.16), transparent 28%),
+    radial-gradient(circle at top right, rgba(27, 130, 255, 0.18), transparent 26%),
+    linear-gradient(180deg, #07111f 0%, #081424 32%, #050b14 100%);
+  color: var(--text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+* {
+  border-color: var(--line);
+}
+
+.dashboard-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.dashboard-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(67, 181, 255, 0.14), transparent 0, transparent 28%),
+    radial-gradient(circle at 85% 8%, rgba(47, 211, 255, 0.18), transparent 0, transparent 26%),
+    radial-gradient(circle at 50% 100%, rgba(17, 65, 133, 0.24), transparent 0, transparent 30%);
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { @apply bg-slate-900; }
-::-webkit-scrollbar-thumb { @apply bg-slate-600 rounded-full; }
+::-webkit-scrollbar-track { background: rgba(4, 12, 24, 0.8); }
+::-webkit-scrollbar-thumb { background: rgba(121, 143, 175, 0.45); border-radius: 9999px; }
 
 /* Glass card */
 .glass {
-  @apply bg-slate-900/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl;
+  @apply rounded-[28px] border backdrop-blur-xl;
+  background: linear-gradient(180deg, rgba(10, 25, 43, 0.88) 0%, rgba(7, 19, 35, 0.74) 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 28px 80px rgba(3, 9, 19, 0.38);
+}
+
+.glass-strong {
+  background: linear-gradient(180deg, rgba(11, 28, 49, 0.96) 0%, rgba(8, 20, 36, 0.92) 100%);
+}
+
+.section-label {
+  @apply text-[10px] font-semibold uppercase;
+  letter-spacing: 0.42em;
+  color: rgba(168, 191, 224, 0.72);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #ffffff 0%, #d8efff 24%, #6cd6ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.metric-ring {
+  position: relative;
+}
+
+.metric-ring::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(47, 211, 255, 0.4), rgba(255, 255, 255, 0.04));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
 }
 
 /* Risk badge */
-.badge-high   { @apply bg-red-500/20 text-red-300 border border-red-500/30; }
-.badge-medium { @apply bg-amber-500/20 text-amber-300 border border-amber-500/30; }
-.badge-low    { @apply bg-emerald-500/20 text-emerald-300 border border-emerald-500/30; }
+.badge-high   { @apply border border-red-400/25 bg-red-400/10 text-red-200; }
+.badge-medium { @apply border border-amber-300/25 bg-amber-300/10 text-amber-200; }
+.badge-low    { @apply border border-emerald-300/25 bg-emerald-300/10 text-emerald-200; }
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

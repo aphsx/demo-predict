@@ -4,7 +4,6 @@ import {
 } from "recharts";
 
 const COLORS = ["#ef4444", "#f59e0b", "#10b981"];
-const LABELS = ["High Risk", "Medium Risk", "Low Risk"];
 
 interface Props {
   high: number;
@@ -40,12 +39,17 @@ export default function RiskPieChart({ high, medium, low }: Props) {
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8 }}
+          contentStyle={{
+            background: "rgba(8, 20, 36, 0.96)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 16,
+            color: "#e2e8f0",
+          }}
           labelStyle={{ color: "#94a3b8" }}
         />
         <Legend
           formatter={(value) => (
-            <span style={{ color: "#94a3b8", fontSize: 12 }}>{value}</span>
+            <span style={{ color: "#cbd5e1", fontSize: 12 }}>{value}</span>
           )}
         />
       </PieChart>
