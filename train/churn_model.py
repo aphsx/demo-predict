@@ -8,8 +8,8 @@
   - Builds rich behavioral features from payment history
   - Trains & evaluates multiple ML classifiers
   - Outputs predictions with churn probability scores
-  - Saves best sklearn model as  churn_output/churn_model.pkl
-  - Saves Keras neural network as churn_output/churn_model_keras.h5
+  - Saves best sklearn model as  output/churn_model.pkl
+  - Saves Keras neural network as output/churn_model_keras.h5
 ======================================================="""
 
 import pandas as pd
@@ -43,15 +43,15 @@ REFERENCE_DATE = datetime(2026, 3, 6)          # "today" for computing recency
 CHURN_DAYS     = 90                             # inactive > 90 d since expire → churned
 PAID_THRESHOLD = 7                             # days before expiry to flag at-risk trial
 
-OUTPUT_DIR = SCRIPT_DIR / "churn_output"
+OUTPUT_DIR = SCRIPT_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # ══════════════════════════════════════════════════════
 # 1. LOAD DATA
 # ══════════════════════════════════════════════════════
 def load_data():
-    users    = pd.read_csv(SCRIPT_DIR / "sample_users.csv")
-    payments = pd.read_csv(SCRIPT_DIR / "sample_payments.csv")
+    users    = pd.read_csv(SCRIPT_DIR / "data" / "sample_users.csv")
+    payments = pd.read_csv(SCRIPT_DIR / "data" / "sample_payments.csv")
 
     # Parse dates
     date_cols_u = ["expire", "join_date", "last_access", "last_send"]
