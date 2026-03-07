@@ -1,0 +1,53 @@
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+*.env
+
+# ── Jupyter ───────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── ML Models & Large Files ───────────────────────────────
+# !! โมเดลไม่ควร commit เพราะไฟล์ใหญ่
+# ถ้าอยากเก็บให้ใช้ Git LFS แทน
+train/output/*.h5
+train/output/*.pkl
+
+# churn_predictions.csv ควร commit ได้ (เป็นผลลัพธ์)
+# ถ้าไม่ต้องการให้ uncomment บรรทัดนี้:
+# train/output/*.csv
+
+# ── Node.js / Next.js ─────────────────────────────────────
+node_modules/
+.next/
+out/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# ── Logs ──────────────────────────────────────────────────
+*.log
+logs/
