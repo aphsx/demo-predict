@@ -345,7 +345,7 @@ def churn_trend():
         churned=("churned", "sum"),
     ).reset_index()
     grouped["rate"] = (grouped["churned"] / grouped["total"] * 100).round(1)
-    grouped = grouped.sort_values("join_month")
+    grouped = grouped.sort_values("join_month").tail(6)
 
     return [
         {"month": str(r["join_month"]), "rate": float(r["rate"]), "total": int(r["total"]), "churned": int(r["churned"])}
@@ -368,7 +368,7 @@ def retention_trend():
         total=("acc_id", "count"),
     ).reset_index()
     grouped["retained"] = grouped["total"] - grouped["churned"]
-    grouped = grouped.sort_values("join_month")
+    grouped = grouped.sort_values("join_month").tail(6)
 
     return [
         {"month": str(r["join_month"]), "churned": int(r["churned"]), "retained": int(r["retained"])}

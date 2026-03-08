@@ -23,8 +23,9 @@ function ScoreBar({ score, color }: { score: number; color: string }) {
   );
 }
 
-export default async function CustomerDetailPage({ params }: { params: { id: string } }) {
-  const customer = await getCustomer(params.id);
+export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const customer = await getCustomer(id);
   if (!customer) notFound();
 
   const prob = customer.churn_probability ?? 0;
@@ -80,6 +81,8 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
     return s >= 7 ? "#EF4444" : s >= 4 ? "#F59E0B" : "#10B981";
   }
 
+  const riskScore = parseFloat((prob * 10).toFixed(1));
+
   return (
     <div className="space-y-5">
       {/* Breadcrumb */}
@@ -88,29 +91,27 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M15 18l-6-6 6-6" />
           </svg>
-          ลูกค้าทั้งหมด
+          Customer Details
         </Link>
-        <span className="text-gray-300">/</span>
-        <span className="text-gray-900 font-mono font-semibold">{customer.acc_id}</span>
       </div>
 
       {/* ── Hero: Left profile + Right Churn Risk Factors ── */}
-      <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-5">
 
         {/* LEFT — Profile Card */}
         <div className="bg-white rounded-[20px] border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-7 flex flex-col gap-5">
           {/* Avatar + Name */}
-          <div className="flex flex-col items-center text-center gap-2">
+          <div className="flex items-start gap-3">
             <div
-              className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white"
+              className="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"
               style={{ background: "linear-gradient(135deg, #005AE2 0%, #38BDF8 100%)" }}
             >
               {initials}
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900 font-mono">{customer.acc_id}</h2>
-              <div className="flex items-center justify-center gap-2 mt-1">
-                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${customer.status === "paid" ? "bg-blue-50 text-blue-600 border border-blue-100" : "bg-gray-100 text-gray-500"}`}>
+              <h2 className="text-base font-bold text-gray-900 font-mono">{customer.acc_id}</h2>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${customer.status === "paid" ? "bg-blue-50 text-blue-600 border border-blue-100" : "bg-gray-100 text-gray-500"}`}>
                   {customer.status}
                 </span>
                 {customer.churned === 1
@@ -120,50 +121,30 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
             </div>
           </div>
 
-          {/* Info rows */}
-          <div className="space-y-2.5">
-            {[
-              {
-                icon: <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>,
-                label: "Expires",
-                value: customer.expire?.slice(0, 10) ?? "—",
-              },
-              {
-                icon: <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>,
-                label: "Last Active",
-                value: `${customer.days_since_last_access} days ago`,
-              },
-              {
-                icon: <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
-                label: "Total Revenue",
-                value: `฿${ltv.toLocaleString()}`,
-              },
-              {
-                icon: <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>,
-                label: "Payments",
-                value: `${customer.total_payments ?? 0} transactions`,
-              },
-            ].map((row) => (
-              <div key={row.label} className="flex items-center gap-2.5">
-                {row.icon}
-                <div className="flex-1 flex justify-between items-center">
-                  <span className="text-xs text-gray-500">{row.label}</span>
-                  <span className="text-xs font-semibold text-gray-800">{row.value}</span>
-                </div>
-              </div>
-            ))}
+          {/* Info rows — icon-based list like the screenshot */}
+          <div className="space-y-3 text-sm text-gray-600">
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-gray-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+              <span>Joined {customer.join_date?.slice(0, 10) ?? "—"}</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-gray-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+              <span>฿{ltv.toLocaleString()} total revenue</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-gray-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+              <span>Last active {customer.last_access?.slice(0, 10) ?? `${customer.days_since_last_access} days ago`}</span>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <svg className="w-4 h-4 text-gray-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+              <span>Expires {customer.expire?.slice(0, 10) ?? "—"}</span>
+            </div>
           </div>
 
-          {/* Churn Risk Score */}
-          <div
-            className="rounded-[14px] p-4 text-center"
-            style={{ background: riskBg, border: `1px solid ${riskColor}30` }}
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">Churn Risk Score</p>
-            <p className="text-4xl font-black" style={{ color: riskColor }}>{probPct}%</p>
-            <div className="mt-2 flex justify-center">
-              <RiskBadge risk={risk} />
-            </div>
+          {/* Churn Risk Score — shown as 0-10 scale like screenshot */}
+          <div className="text-center">
+            <p className="text-4xl font-black" style={{ color: riskColor }}>{riskScore}</p>
+            <p className="text-xs text-gray-400 mt-1">Churn Risk Score</p>
           </div>
 
           {/* Action buttons */}
@@ -187,16 +168,17 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
         {/* RIGHT — Churn Risk Factors */}
         <div className="bg-white rounded-[20px] border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-7">
           <h3 className="text-lg font-bold text-gray-900 mb-5">Churn Risk Factors</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
             {factors.map((f) => {
               const color = factorColor(f.score);
+              const bgTint = f.score >= 7 ? "#FEF2F2" : f.score >= 4 ? "#FFFBEB" : "#F0FDF4";
               return (
                 <div key={f.label}>
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-semibold text-gray-800">{f.label}</span>
-                    <span className="text-sm font-bold" style={{ color }}>{f.score}</span>
+                    <span className="text-lg font-bold" style={{ color }}>{f.score}</span>
                   </div>
-                  <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-2.5 w-full rounded-full overflow-hidden" style={{ background: bgTint }}>
                     <div
                       className="h-full rounded-full transition-all"
                       style={{ width: `${(f.score / 10) * 100}%`, background: color }}
