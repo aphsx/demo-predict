@@ -6,3 +6,13 @@ joblib
 scikit-learn
 python-multipart
 tensorflow
+
+# ── Database ───────────────────────────────────────────────
+sqlalchemy>=2.0
+asyncpg
+
+# ── AI Chat (Ollama HTTP client) ───────────────────────────
+httpx
+
+# ── Config ─────────────────────────────────────────────────
+python-dotenv
