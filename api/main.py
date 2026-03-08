@@ -234,9 +234,9 @@ def load_assets():
         try:
             obj = joblib.load(SHAP_PKL)
             _shap_explainer = obj["explainer"]
-            print("✅ SHAP explainer loaded")
+            print("[OK] SHAP explainer loaded")
         except Exception as e:
-            print(f"⚠️  SHAP load failed: {e}")
+            print(f"[WARN] SHAP load failed: {e}")
 
     # Extract feature importance for explainable AI
     if _model is not None:
@@ -253,7 +253,7 @@ def load_assets():
         df["churn_probability"] = _model.predict_proba(X)[:, 1]
         df["churn_predicted"]   = (df["churn_probability"] >= 0.5).astype(int)
         df["risk_tier"] = df["churn_probability"].apply(
-            lambda p: "🔴 High" if p >= 0.6 else ("🟡 Medium" if p >= 0.3 else "🟢 Low")
+            lambda p: "High" if p >= 0.6 else ("Medium" if p >= 0.3 else "Low")
         )
 
         # ── New enriched columns ──────────────────────────────
@@ -277,17 +277,8 @@ def load_assets():
             lambda r: _recommended_action(r["churn_probability"], r["rfm_segment"]), axis=1
         )
 
-        # Key Reason — use SHAP if available, else rule-based fallback
-        if _shap_explainer is not None:
-            X_scaled = _model.named_steps["scaler"].transform(
-                _model.named_steps["imputer"].transform(X)
-            )
-            shap_vals = _shap_explainer.shap_values(X_scaled)
-            # For binary classification shap_values returns [neg_class, pos_class]
-            churn_shap = shap_vals[1] if isinstance(shap_vals, list) else shap_vals
-            df["key_reason"] = [_key_reason_from_shap(row) for row in churn_shap]
-        else:
-            df["key_reason"] = df.apply(_risk_factor, axis=1)
+        # Key Reason — rule-based at startup (fast); use /api/explain/{acc_id} for SHAP per-customer
+        df["key_reason"] = df.apply(_risk_factor, axis=1)
 
         _predictions = df[[
             "acc_id", "status", "credit", "expire",
@@ -300,9 +291,9 @@ def load_assets():
             "rfm_segment", "risk_factor", "recommended_action", "key_reason",
         ]].copy()
         _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
-        print(f"✅ Predictions computed for {len(_predictions)} customers")
+        print(f"[OK] Predictions computed for {len(_predictions)} customers")
     else:
-        print("⚠️  Model or data not found — run churn_model.py first")
+        print("[WARN] Model or data not found — run churn_model.py first")
 
 
 # ══════════════════════════════════════════════════════════
