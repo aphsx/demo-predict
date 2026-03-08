@@ -1,6 +1,7 @@
 import Link from "next/link";
 import RiskPieChart from "@/components/RiskPieChart";
-import SpendBarChart from "@/components/SpendBarChart";
+import ChurnTrendChart from "@/components/ChurnTrendChart";
+import RetentionBarChart from "@/components/RetentionBarChart";
 import { RiskBadge } from "@/components/RiskBadge";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
@@ -101,13 +102,6 @@ export default async function DashboardPage() {
   } catch (e: any) {
     error = "ไม่สามารถเชื่อมต่อ API ได้ — ตรวจสอบว่า FastAPI กำลังรันที่ port 8000";
   }
-
-  const spendData = stats
-    ? [
-      { label: "Active", value: stats.avg_spend_active },
-      { label: "Churned", value: stats.avg_spend_churned },
-    ]
-    : [];
 
   const kpiCards = stats
     ? [
@@ -268,34 +262,25 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {/* ── Charts ── */}
+      {/* ── Charts (3 in a row) ── */}
       {stats && (
-        <section className="grid gap-6 xl:grid-cols-[1.05fr_1fr]">
-          <div className="glass p-6 sm:p-7">
-            <div className="mb-6 flex items-center justify-between gap-3">
-              <div>
-                <p className="section-label">Risk Distribution</p>
-                <h3 className="mt-1.5 text-lg font-semibold text-gray-900">Portfolio risk mix</h3>
-              </div>
-              <span className="rounded-[10px] border border-[#006bff]/20 bg-[#006bff]/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#006bff]">
-                Updated live
-              </span>
-            </div>
+        <section className="grid gap-5 xl:grid-cols-3">
+          {/* Churn Rate Trends — [DEMO] ยังไม่มี historical data API */}
+          <div className="bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-6 relative overflow-hidden">
+            <h3 className="text-base font-bold text-gray-900 mb-4">Churn Rate Trends</h3>
+            <ChurnTrendChart />
+          </div>
+
+          {/* Customer Risk Distribution */}
+          <div className="bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-6">
+            <h3 className="text-base font-bold text-gray-900 mb-4">Customer Risk Distribution</h3>
             <RiskPieChart high={stats.high_risk} medium={stats.medium_risk} low={stats.low_risk} />
           </div>
 
-          <div className="glass p-6 sm:p-7">
-            <div className="mb-6 flex items-center justify-between gap-3">
-              <div>
-                <p className="section-label">Spend Analysis</p>
-                <h3 className="mt-1.5 text-lg font-semibold text-gray-900">Average spend by lifecycle</h3>
-              </div>
-              <div className="text-right text-xs text-gray-500">
-                <p>Active: {currency.format(stats.avg_spend_active)}</p>
-                <p>Churned: {currency.format(stats.avg_spend_churned)}</p>
-              </div>
-            </div>
-            <SpendBarChart data={spendData} />
+          {/* Monthly Customer Retention — [DEMO] ยังไม่มี historical data API */}
+          <div className="bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-6 relative overflow-hidden">
+            <h3 className="text-base font-bold text-gray-900 mb-4">Monthly Customer Retention</h3>
+            <RetentionBarChart />
           </div>
         </section>
       )}
