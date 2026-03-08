@@ -156,10 +156,10 @@ export default async function DashboardPage() {
         range: "≥ 60% probability",
         value: stats.high_risk,
         description: "Prioritize intervention and retention outreach immediately.",
-        barColor: "#fc4c02",
-        bgColor: "#fff0ea",
-        borderColor: "#ffc9b3",
-        textColor: "#cc3d02",
+        barColor: "#F56200",
+        bgColor: "#FFF3EB",
+        borderColor: "#FFCFA0",
+        textColor: "#C74E00",
         pct: stats.total_customers ? (stats.high_risk / stats.total_customers) * 100 : 0,
       },
       {
@@ -167,10 +167,10 @@ export default async function DashboardPage() {
         range: "30–60% probability",
         value: stats.medium_risk,
         description: "Watch closely with proactive campaign triggers.",
-        barColor: "#ffa400",
-        bgColor: "#fffaf0",
-        borderColor: "#ffe3b3",
-        textColor: "#b37300",
+        barColor: "#FFB020",
+        bgColor: "#FFFBF0",
+        borderColor: "#FFE4A0",
+        textColor: "#A07000",
         pct: stats.total_customers ? (stats.medium_risk / stats.total_customers) * 100 : 0,
       },
       {
@@ -178,10 +178,10 @@ export default async function DashboardPage() {
         range: "< 30% probability",
         value: stats.low_risk,
         description: "Stable accounts with normal engagement trend.",
-        barColor: "#10B981",
-        bgColor: "#F0FDF4",
-        borderColor: "#6EE7B7",
-        textColor: "#047857",
+        barColor: "#1A6BFF",
+        bgColor: "#EEF3FF",
+        borderColor: "#BFCFFF",
+        textColor: "#1243C2",
         pct: stats.total_customers ? (stats.low_risk / stats.total_customers) * 100 : 0,
       },
     ]
@@ -354,13 +354,13 @@ export default async function DashboardPage() {
                                 className="h-full rounded-full"
                                 style={{
                                   width: `${probability.toFixed(0)}%`,
-                                  background: probability >= 60 ? "#fc4c02" : probability >= 30 ? "#ffa400" : "#10B981",
+                                  background: probability >= 60 ? "#F56200" : probability >= 30 ? "#FFB020" : "#1A6BFF",
                                 }}
                               />
                             </div>
                             <span
                               className="font-mono text-xs font-semibold"
-                              style={{ color: probability >= 60 ? "#cc3d02" : probability >= 30 ? "#b37300" : "#059669" }}
+                              style={{ color: probability >= 60 ? "#C74E00" : probability >= 30 ? "#A07000" : "#1243C2" }}
                             >
                               {probability.toFixed(1)}%
                             </span>

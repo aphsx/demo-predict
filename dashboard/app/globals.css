@@ -107,10 +107,10 @@ html {
   mask-composite: exclude;
 }
 
-/* ─── Risk badges (light theme) ─── */
-.badge-high   { @apply border border-red-200 bg-red-50 text-red-700; }
-.badge-medium { @apply border border-amber-200 bg-amber-50 text-amber-700; }
-.badge-low    { @apply border border-emerald-200 bg-emerald-50 text-emerald-700; }
+/* ─── Risk badges — 1moby brand (Orange = High, Amber = Medium, Blue = Low) ─── */
+.badge-high   { background: #FFF3EB; color: #C74E00; border: 1px solid #FFCFA0; }
+.badge-medium { background: #FFFBF0; color: #A07000; border: 1px solid #FFE4A0; }
+.badge-low    { background: #EEF3FF; color: #1243C2; border: 1px solid #BFCFFF; }
 
 /* ─── Button primitives ─── */
 .btn-primary {

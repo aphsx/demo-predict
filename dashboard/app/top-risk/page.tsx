@@ -88,13 +88,13 @@ export default async function TopRiskPage() {
                           className="h-full rounded-full"
                           style={{
                             width: `${(c.churn_probability * 100).toFixed(0)}%`,
-                            background: c.churn_probability >= 0.6 ? "#EF4444" : c.churn_probability >= 0.3 ? "#F59E0B" : "#10B981",
+                            background: c.churn_probability >= 0.6 ? "#F56200" : c.churn_probability >= 0.3 ? "#FFB020" : "#1A6BFF",
                           }}
                         />
                       </div>
                       <span
                         className="font-mono text-xs font-semibold"
-                        style={{ color: c.churn_probability >= 0.6 ? "#DC2626" : c.churn_probability >= 0.3 ? "#D97706" : "#059669" }}
+                        style={{ color: c.churn_probability >= 0.6 ? "#C74E00" : c.churn_probability >= 0.3 ? "#A07000" : "#1243C2" }}
                       >
                         {(c.churn_probability * 100).toFixed(1)}%
                       </span>
