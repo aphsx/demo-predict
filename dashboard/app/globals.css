@@ -37,12 +37,14 @@ html {
 /* Placeholder for legacy element */
 .dashboard-bg { display: none; }
 
-/* ─── Scrollbar (light) ─── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #EEF3FF; }
-::-webkit-scrollbar-thumb { background: rgba(11, 25, 55, 0.18); border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(11, 25, 55, 0.32); }
-
+/* ─── Scrollbar (Hidden, but scrollable) ─── */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+*::-webkit-scrollbar { 
+  display: none; /* Chrome, Safari and Opera */
+}
 /* ─── Card ─── */
 .glass {
   @apply bg-white;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Noto_Sans_Thai, Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import FloatingChat from "@/components/FloatingChat";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,10 +27,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="th" suppressHydrationWarning>
       <body className={`${notoSansThai.variable} ${inter.variable} dashboard-shell min-h-screen flex`}>
         <Sidebar />
-        <main className="flex-1 overflow-auto flex flex-col h-screen">
-          <div className="mx-auto w-full max-w-[1600px] flex-1 flex flex-col px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
+        <main className="flex-1 overflow-auto flex flex-col h-screen relative">
+          <div className="w-full flex-1 flex flex-col px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
             {children}
           </div>
+          <FloatingChat />
         </main>
       </body>
     </html>

@@ -171,94 +171,27 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6 lg:space-y-7">
 
-      {/* ── Hero Banner (dark navy, 1moby style) ── */}
-      <section
-        className="relative glass glass-strong overflow-hidden rounded-2xl px-8 py-10 sm:px-10 lg:px-12 lg:py-12"
-      >
-        {/* Subtle grid dots overlay */}
-        <div
-          className="pointer-events-none absolute inset-0 rounded-2xl opacity-[0.04]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, #fff 1px, transparent 1px)",
-            backgroundSize: "28px 28px",
-          }}
-        />
-        <div className="relative grid gap-8 xl:grid-cols-[1.3fr_0.7fr] xl:items-center">
-          <div className="space-y-6">
-            <div>
-              <span
-                className="inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.38em]"
-                style={{ background: "rgba(0,107,255,0.15)", color: "#006bff", border: "1px solid rgba(0,107,255,0.25)" }}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-[#006bff] animate-pulse" />
-                Live Dashboard
-              </span>
-            </div>
-            <div>
-              <h2 className="max-w-2xl text-balance text-4xl font-bold leading-tight text-white sm:text-5xl">
-                <span className="text-gradient">One move,</span>
-                <br />
-                <span className="text-white">endless potential.</span>
-              </h2>
-              <p className="mt-4 max-w-xl text-base leading-7 text-gray-400">
-                Monitor churn risk, account health, and revenue exposure in a single intelligence command center.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3 pt-1">
-              <Link href="/top-risk" className="btn-primary">
-                Review top-risk accounts
-                <svg className="ml-2 h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
-              </Link>
-              <Link href="/predict" className="btn-outline">
-                Run live prediction
-              </Link>
-            </div>
-          </div>
+      {/* ── Hero Banner (CRM Dashboard Style) ── */}
+      <section className="-mx-5 -mt-6 sm:-mx-8 lg:-mx-10 lg:-mt-8 relative overflow-hidden bg-gradient-to-r from-[#005AE2] via-[#005AE2] to-[#c96216] px-8 py-8 sm:px-10 lg:px-12 lg:pt-10 lg:pb-[90px] shadow-sm">
 
-          {/* Quick stats on dark hero */}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
-            <div
-              className="rounded-xl p-5"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
-            >
-              <p className="section-label" style={{ color: "rgba(148,163,184,0.7)" }}>Churn Exposure</p>
-              <div className="mt-3 flex items-end justify-between gap-4">
-                <p className="text-4xl font-bold text-white">
-                  {stats ? formatPercent(stats.churn_rate) : "--"}
-                </p>
-                <span
-                  className="rounded-[10px] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em]"
-                  style={{ background: "rgba(252,76,2,0.18)", color: "#fc4c02", border: "1px solid rgba(252,76,2,0.25)" }}
-                >
-                  Risk
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-gray-500">Across full tracked customer base</p>
-            </div>
-            <div
-              className="rounded-xl p-5"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)" }}
-            >
-              <p className="section-label" style={{ color: "rgba(148,163,184,0.7)" }}>Revenue Contrast</p>
-              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-xs text-gray-500">Active</p>
-                  <p className="mt-1 text-xl font-semibold text-white">
-                    {stats ? currency.format(stats.avg_spend_active) : "--"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Churned</p>
-                  <p className="mt-1 text-xl font-semibold text-gray-300">
-                    {stats ? currency.format(stats.avg_spend_churned) : "--"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* Large Background Text Overlay '1MOBY' or 'M' */}
+        <div className="absolute right-[-20px] top-0 select-none pointer-events-none opacity-[0.85] mix-blend-overlay">
+          <span className="text-[140px] leading-[0.85] font-black tracking-tighter text-white" style={{ fontFamily: "Arial, sans-serif" }}>
+            1MO<br />BY
+          </span>
+        </div>
+
+        {/* Banner Content (CRM Focus) */}
+        <div className="relative z-20 max-w-2xl flex flex-col items-start pt-2">
+          <p className="mb-3 text-[10px] font-bold tracking-[0.2em] text-white/90 uppercase">
+            Customer Retention Command Center
+          </p>
+          <h2 className="text-balance text-[28px] font-bold leading-[1.3] text-white sm:text-[34px] lg:text-[40px] tracking-tight">
+            Churn Insight &amp; Analytics
+          </h2>
+          <p className="mt-4 max-w-lg text-[13px] leading-relaxed text-blue-50/90 font-medium">
+            ระบบวิเคราะห์พฤติกรรมลูกค้าและประเมินความเสี่ยงในการยกเลิกบริการ (Churn Risk) แบบ Real-time เพื่อช่วยให้ทีมดูแลลูกค้าสามารถเข้าไปรักษาฐานลูกค้าได้ทันท่วงที
+          </p>
         </div>
       </section>
 
@@ -269,11 +202,13 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* ── KPI Cards ── */}
+      {/* ── KPI Cards (Overlapping Banner) ── */}
       {stats && (
-        <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4 relative z-30 mt-[-80px] px-2">
           {kpiCards.map((card) => (
-            <StatCard key={card.label} {...card} />
+            <div key={card.label} className="bg-white rounded-[20px] shadow-[0_12px_32px_-12px_rgba(0,0,0,0.1)] border border-gray-100/50">
+              <StatCard {...card} />
+            </div>
           ))}
         </section>
       )}
@@ -396,8 +331,8 @@ export default async function DashboardPage() {
                         <td className="py-3 pr-4">
                           <span
                             className={`rounded-[10px] px-2.5 py-0.5 text-[11px] font-semibold ${customer.status === "paid"
-                                ? "bg-[#006bff]/5 text-[#006bff] border border-[#006bff]/20"
-                                : "bg-gray-100 text-gray-500 border border-gray-200"
+                              ? "bg-[#006bff]/5 text-[#006bff] border border-[#006bff]/20"
+                              : "bg-gray-100 text-gray-500 border border-gray-200"
                               }`}
                           >
                             {customer.status}

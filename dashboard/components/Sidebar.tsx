@@ -70,32 +70,26 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="hidden h-screen w-[260px] shrink-0 flex-col overflow-y-auto lg:flex bg-[#0b0b0b] border-r border-[#333333]"
+      className="hidden h-screen w-[260px] shrink-0 flex-col overflow-y-auto lg:flex bg-white border-r border-gray-100 shadow-[4px_0_24px_rgba(0,0,0,0.02)]"
     >
       {/* Logo */}
-      <div className="px-7 py-8 border-b border-[#333333]">
-        <div className="flex items-center gap-3 mb-5">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-[10px] text-white text-sm font-bold select-none bg-[#006bff]"
-          >
-            1M
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#fc4c02]">One move</p>
-            <h1 className="text-base font-semibold leading-tight text-white">Churn Insight</h1>
-          </div>
+      <div className="px-8 py-8 border-b border-gray-100">
+        <div className="flex items-center mb-1">
+          <h1 className="text-3xl font-black text-[#006bff] tracking-tight" style={{ fontFamily: "Arial, sans-serif" }}>
+            1MOBY
+          </h1>
         </div>
-        <p className="text-xs leading-5 text-gray-400">
-          Retention intelligence &amp; customer risk command center.
+        <p className="text-[11px] text-gray-400 mt-2 font-medium uppercase tracking-wider">
+          Technology &amp; Innovation
         </p>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-4 py-6 space-y-1">
+      <nav className="flex-1 px-4 py-6 space-y-1.5">
         <p
-          className="px-3 mb-3 text-[9px] font-semibold uppercase tracking-[0.42em] text-gray-500"
+          className="px-4 mb-4 text-[10px] font-bold uppercase tracking-wider text-gray-400"
         >
-          Navigation
+          Menu
         </p>
         {nav.map((item) => {
           const active = path === item.href;
@@ -104,22 +98,16 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={clsx(
-                "group flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                "group flex items-center gap-3.5 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
                 active
-                  ? "text-white bg-[#006bff]"
-                  : "text-gray-400 hover:text-white"
+                  ? "text-[#006bff] bg-blue-50/80"
+                  : "text-gray-600 hover:text-[#006bff] hover:bg-gray-50"
               )}
-              onMouseEnter={(e) => {
-                if (!active) (e.currentTarget as HTMLElement).style.background = "#222222";
-              }}
-              onMouseLeave={(e) => {
-                if (!active) (e.currentTarget as HTMLElement).style.background = "";
-              }}
             >
               <span
                 className={clsx(
-                  "flex h-8 w-8 items-center justify-center rounded-[10px] transition-colors",
-                  active ? "text-white" : "text-gray-500 group-hover:text-gray-300"
+                  "flex h-5 w-5 items-center justify-center transition-colors",
+                  active ? "text-[#006bff]" : "text-gray-400 group-hover:text-[#006bff]"
                 )}
               >
                 {item.icon}
@@ -127,7 +115,7 @@ export default function Sidebar() {
               <span className="flex-1">{item.label}</span>
               {active && (
                 <span
-                  className="h-1.5 w-1.5 rounded-full bg-white"
+                  className="h-1.5 w-1.5 rounded-full bg-[#006bff]"
                 />
               )}
             </Link>
@@ -135,17 +123,16 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="px-4 pb-6">
-        <div
-          className="rounded-[10px] p-4 bg-[#111111] border border-[#222222]"
-        >
-          <p className="text-[9px] font-semibold uppercase tracking-[0.38em] text-gray-500">Model Stack</p>
-          <p className="mt-2 text-xs font-semibold text-white">Random Forest + Keras</p>
-          <p className="mt-1 text-[11px] leading-4 text-gray-400">Realtime churn scoring with dual-model ensemble pipeline.</p>
-        </div>
+      {/* Sidebar Footer Extras */}
+      <div className="px-6 pb-8 mt-auto flex items-center justify-center gap-2 border-t border-gray-100 pt-6">
+        {/* Language selector */}
+        <button className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-gray-200 px-3 py-2.5 text-[12px] font-bold text-gray-500 transition-all hover:bg-gray-50 hover:border-gray-300">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="w-4 h-4">
+            <circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          TH
+        </button>
       </div>
     </aside>
   );
 }
-
