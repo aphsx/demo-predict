@@ -14,8 +14,7 @@ export default async function TopRiskPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="glass glass-strong rounded-2xl px-8 py-8">
+      <div className="glass glass-strong rounded-[20px] px-8 py-8">
         <div className="relative">
           <span
             className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.38em] mb-4"
@@ -36,7 +35,7 @@ export default async function TopRiskPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left" style={{ borderColor: "rgba(11,25,55,0.08)" }}>
-                {["#","Account ID","Status","Credit","Churn Prob.","Risk","Days Inactive","Total Payments","Amount Paid","Expire"].map(h => (
+                {["#", "Account ID", "Status", "Credit", "Churn Prob.", "Risk", "Days Inactive", "Total Payments", "Amount Paid", "Expire"].map(h => (
                   <th key={h} className="pb-3 pr-4 text-[11px] font-semibold text-slate-400 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -54,11 +53,10 @@ export default async function TopRiskPage() {
                     </Link>
                   </td>
                   <td className="py-3 pr-4">
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
-                      c.status === "paid"
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${c.status === "paid"
                         ? "bg-brand-50 text-brand-600 border border-brand-200"
                         : "bg-slate-100 text-slate-500 border border-slate-200"
-                    }`}>
+                      }`}>
                       {c.status}
                     </span>
                   </td>

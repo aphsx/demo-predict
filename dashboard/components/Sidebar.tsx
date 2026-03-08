@@ -70,24 +70,22 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="hidden h-screen w-[260px] shrink-0 flex-col overflow-y-auto lg:flex"
-      style={{ background: "linear-gradient(180deg, #0B1937 0%, #0E2155 100%)" }}
+      className="hidden h-screen w-[260px] shrink-0 flex-col overflow-y-auto lg:flex bg-[#0b0b0b] border-r border-[#333333]"
     >
       {/* Logo */}
-      <div className="px-7 py-8 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+      <div className="px-7 py-8 border-b border-[#333333]">
         <div className="flex items-center gap-3 mb-5">
           <div
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-white text-sm font-bold select-none"
-            style={{ background: "linear-gradient(135deg, #1461F0, #38BDF8)" }}
+            className="flex h-9 w-9 items-center justify-center rounded-[10px] text-white text-sm font-bold select-none bg-[#006bff]"
           >
-            CI
+            1M
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.38em] text-sky-400/70">One move</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#fc4c02]">One move</p>
             <h1 className="text-base font-semibold leading-tight text-white">Churn Insight</h1>
           </div>
         </div>
-        <p className="text-xs leading-5 text-slate-400">
+        <p className="text-xs leading-5 text-gray-400">
           Retention intelligence &amp; customer risk command center.
         </p>
       </div>
@@ -95,8 +93,7 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 px-4 py-6 space-y-1">
         <p
-          className="px-3 mb-3 text-[9px] font-semibold uppercase tracking-[0.42em]"
-          style={{ color: "rgba(255,255,255,0.25)" }}
+          className="px-3 mb-3 text-[9px] font-semibold uppercase tracking-[0.42em] text-gray-500"
         >
           Navigation
         </p>
@@ -107,18 +104,13 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={clsx(
-                "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                "group flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium transition-all duration-150",
                 active
-                  ? "text-white"
-                  : "text-slate-400 hover:text-white"
+                  ? "text-white bg-[#006bff]"
+                  : "text-gray-400 hover:text-white"
               )}
-              style={
-                active
-                  ? { background: "linear-gradient(135deg, rgba(20,97,240,0.55), rgba(56,189,248,0.18))", boxShadow: "inset 0 0 0 1px rgba(56,189,248,0.25)" }
-                  : {}
-              }
               onMouseEnter={(e) => {
-                if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                if (!active) (e.currentTarget as HTMLElement).style.background = "#222222";
               }}
               onMouseLeave={(e) => {
                 if (!active) (e.currentTarget as HTMLElement).style.background = "";
@@ -126,8 +118,8 @@ export default function Sidebar() {
             >
               <span
                 className={clsx(
-                  "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-                  active ? "text-sky-300" : "text-slate-500 group-hover:text-slate-300"
+                  "flex h-8 w-8 items-center justify-center rounded-[10px] transition-colors",
+                  active ? "text-white" : "text-gray-500 group-hover:text-gray-300"
                 )}
               >
                 {item.icon}
@@ -135,8 +127,7 @@ export default function Sidebar() {
               <span className="flex-1">{item.label}</span>
               {active && (
                 <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: "#38BDF8" }}
+                  className="h-1.5 w-1.5 rounded-full bg-white"
                 />
               )}
             </Link>
@@ -147,12 +138,11 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="px-4 pb-6">
         <div
-          className="rounded-xl p-4"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+          className="rounded-[10px] p-4 bg-[#111111] border border-[#222222]"
         >
-          <p className="text-[9px] font-semibold uppercase tracking-[0.38em] text-slate-500">Model Stack</p>
+          <p className="text-[9px] font-semibold uppercase tracking-[0.38em] text-gray-500">Model Stack</p>
           <p className="mt-2 text-xs font-semibold text-white">Random Forest + Keras</p>
-          <p className="mt-1 text-[11px] leading-4 text-slate-500">Realtime churn scoring with dual-model ensemble pipeline.</p>
+          <p className="mt-1 text-[11px] leading-4 text-gray-400">Realtime churn scoring with dual-model ensemble pipeline.</p>
         </div>
       </div>
     </aside>

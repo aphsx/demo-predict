@@ -49,7 +49,7 @@ interface StatCardProps {
   dot?: string;
 }
 
-function StatCard({ label, value, sub, accent = "#1461F0", dot }: StatCardProps) {
+function StatCard({ label, value, sub, accent = "#006bff", dot }: StatCardProps) {
   return (
     <div className="glass metric-ring flex flex-col gap-2 p-6">
       <div className="flex items-center gap-2">
@@ -59,7 +59,7 @@ function StatCard({ label, value, sub, accent = "#1461F0", dot }: StatCardProps)
       <p className="text-3xl font-semibold tracking-tight" style={{ color: accent }}>
         {value}
       </p>
-      {sub && <p className="text-xs text-slate-500 leading-5">{sub}</p>}
+      {sub && <p className="text-xs text-gray-500 leading-5">{sub}</p>}
     </div>
   );
 }
@@ -92,80 +92,80 @@ export default async function DashboardPage() {
 
   const spendData = stats
     ? [
-        { label: "Active", value: stats.avg_spend_active },
-        { label: "Churned", value: stats.avg_spend_churned },
-      ]
+      { label: "Active", value: stats.avg_spend_active },
+      { label: "Churned", value: stats.avg_spend_churned },
+    ]
     : [];
 
   const kpiCards = stats
     ? [
-        {
-          label: "Total Customers",
-          value: stats.total_customers.toLocaleString(),
-          sub: `${compact.format(stats.total_customers)} profiles in scoring base`,
-          accent: "#0B1937",
-          dot: "#1461F0",
-        },
-        {
-          label: "Churn Rate",
-          value: formatPercent(stats.churn_rate),
-          sub: `${stats.churned_customers.toLocaleString()} accounts predicted as churned`,
-          accent: "#DC2626",
-          dot: "#EF4444",
-        },
-        {
-          label: "Active Base",
-          value: stats.active_customers.toLocaleString(),
-          sub: "Customers still engaged in current cycle",
-          accent: "#059669",
-          dot: "#10B981",
-        },
-        {
-          label: "Model AUC",
-          value: Number(stats.model_auc).toFixed(3),
-          sub: stats.model_name,
-          accent: "#1461F0",
-          dot: "#38BDF8",
-        },
-      ]
+      {
+        label: "Total Customers",
+        value: stats.total_customers.toLocaleString(),
+        sub: `${compact.format(stats.total_customers)} profiles in scoring base`,
+        accent: "#0b0b0b",
+        dot: "#006bff",
+      },
+      {
+        label: "Churn Rate",
+        value: formatPercent(stats.churn_rate),
+        sub: `${stats.churned_customers.toLocaleString()} accounts predicted as churned`,
+        accent: "#fc4c02",
+        dot: "#fc4c02",
+      },
+      {
+        label: "Active Base",
+        value: stats.active_customers.toLocaleString(),
+        sub: "Customers still engaged in current cycle",
+        accent: "#10B981",
+        dot: "#10B981",
+      },
+      {
+        label: "Model AUC",
+        value: Number(stats.model_auc).toFixed(3),
+        sub: stats.model_name,
+        accent: "#006bff",
+        dot: "#006bff",
+      },
+    ]
     : [];
 
   const riskCards = stats
     ? [
-        {
-          label: "High Risk",
-          range: "≥ 60% probability",
-          value: stats.high_risk,
-          description: "Prioritize intervention and retention outreach immediately.",
-          barColor: "#EF4444",
-          bgColor: "#FEF2F2",
-          borderColor: "#FCA5A5",
-          textColor: "#B91C1C",
-          pct: stats.total_customers ? (stats.high_risk / stats.total_customers) * 100 : 0,
-        },
-        {
-          label: "Medium Risk",
-          range: "30–60% probability",
-          value: stats.medium_risk,
-          description: "Watch closely with proactive campaign triggers.",
-          barColor: "#F59E0B",
-          bgColor: "#FFFBEB",
-          borderColor: "#FCD34D",
-          textColor: "#B45309",
-          pct: stats.total_customers ? (stats.medium_risk / stats.total_customers) * 100 : 0,
-        },
-        {
-          label: "Low Risk",
-          range: "< 30% probability",
-          value: stats.low_risk,
-          description: "Stable accounts with normal engagement trend.",
-          barColor: "#10B981",
-          bgColor: "#F0FDF4",
-          borderColor: "#6EE7B7",
-          textColor: "#047857",
-          pct: stats.total_customers ? (stats.low_risk / stats.total_customers) * 100 : 0,
-        },
-      ]
+      {
+        label: "High Risk",
+        range: "≥ 60% probability",
+        value: stats.high_risk,
+        description: "Prioritize intervention and retention outreach immediately.",
+        barColor: "#fc4c02",
+        bgColor: "#fff0ea",
+        borderColor: "#ffc9b3",
+        textColor: "#cc3d02",
+        pct: stats.total_customers ? (stats.high_risk / stats.total_customers) * 100 : 0,
+      },
+      {
+        label: "Medium Risk",
+        range: "30–60% probability",
+        value: stats.medium_risk,
+        description: "Watch closely with proactive campaign triggers.",
+        barColor: "#ffa400",
+        bgColor: "#fffaf0",
+        borderColor: "#ffe3b3",
+        textColor: "#b37300",
+        pct: stats.total_customers ? (stats.medium_risk / stats.total_customers) * 100 : 0,
+      },
+      {
+        label: "Low Risk",
+        range: "< 30% probability",
+        value: stats.low_risk,
+        description: "Stable accounts with normal engagement trend.",
+        barColor: "#10B981",
+        bgColor: "#F0FDF4",
+        borderColor: "#6EE7B7",
+        textColor: "#047857",
+        pct: stats.total_customers ? (stats.low_risk / stats.total_customers) * 100 : 0,
+      },
+    ]
     : [];
 
   return (
@@ -188,10 +188,10 @@ export default async function DashboardPage() {
           <div className="space-y-6">
             <div>
               <span
-                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.38em]"
-                style={{ background: "rgba(56,189,248,0.15)", color: "#38BDF8", border: "1px solid rgba(56,189,248,0.25)" }}
+                className="inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.38em]"
+                style={{ background: "rgba(0,107,255,0.15)", color: "#006bff", border: "1px solid rgba(0,107,255,0.25)" }}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+                <span className="h-1.5 w-1.5 rounded-full bg-[#006bff] animate-pulse" />
                 Live Dashboard
               </span>
             </div>
@@ -201,7 +201,7 @@ export default async function DashboardPage() {
                 <br />
                 <span className="text-white">endless potential.</span>
               </h2>
-              <p className="mt-4 max-w-xl text-base leading-7 text-slate-400">
+              <p className="mt-4 max-w-xl text-base leading-7 text-gray-400">
                 Monitor churn risk, account health, and revenue exposure in a single intelligence command center.
               </p>
             </div>
@@ -230,13 +230,13 @@ export default async function DashboardPage() {
                   {stats ? formatPercent(stats.churn_rate) : "--"}
                 </p>
                 <span
-                  className="rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em]"
-                  style={{ background: "rgba(239,68,68,0.18)", color: "#FCA5A5", border: "1px solid rgba(239,68,68,0.25)" }}
+                  className="rounded-[10px] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em]"
+                  style={{ background: "rgba(252,76,2,0.18)", color: "#fc4c02", border: "1px solid rgba(252,76,2,0.25)" }}
                 >
                   Risk
                 </span>
               </div>
-              <p className="mt-2 text-xs text-slate-500">Across full tracked customer base</p>
+              <p className="mt-2 text-xs text-gray-500">Across full tracked customer base</p>
             </div>
             <div
               className="rounded-xl p-5"
@@ -245,14 +245,14 @@ export default async function DashboardPage() {
               <p className="section-label" style={{ color: "rgba(148,163,184,0.7)" }}>Revenue Contrast</p>
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-xs text-slate-500">Active</p>
+                  <p className="text-xs text-gray-500">Active</p>
                   <p className="mt-1 text-xl font-semibold text-white">
                     {stats ? currency.format(stats.avg_spend_active) : "--"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500">Churned</p>
-                  <p className="mt-1 text-xl font-semibold text-slate-300">
+                  <p className="text-xs text-gray-500">Churned</p>
+                  <p className="mt-1 text-xl font-semibold text-gray-300">
                     {stats ? currency.format(stats.avg_spend_churned) : "--"}
                   </p>
                 </div>
@@ -302,13 +302,13 @@ export default async function DashboardPage() {
                 </span>
               </div>
               {/* Mini progress bar */}
-              <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all"
                   style={{ width: `${card.pct.toFixed(1)}%`, background: card.barColor }}
                 />
               </div>
-              <p className="text-xs leading-5 text-slate-500">{card.description}</p>
+              <p className="text-xs leading-5 text-gray-500">{card.description}</p>
             </div>
           ))}
         </section>
@@ -321,9 +321,9 @@ export default async function DashboardPage() {
             <div className="mb-6 flex items-center justify-between gap-3">
               <div>
                 <p className="section-label">Risk Distribution</p>
-                <h3 className="mt-1.5 text-lg font-semibold text-navy-900">Portfolio risk mix</h3>
+                <h3 className="mt-1.5 text-lg font-semibold text-gray-900">Portfolio risk mix</h3>
               </div>
-              <span className="rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-600">
+              <span className="rounded-[10px] border border-[#006bff]/20 bg-[#006bff]/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#006bff]">
                 Updated live
               </span>
             </div>
@@ -334,9 +334,9 @@ export default async function DashboardPage() {
             <div className="mb-6 flex items-center justify-between gap-3">
               <div>
                 <p className="section-label">Spend Analysis</p>
-                <h3 className="mt-1.5 text-lg font-semibold text-navy-900">Average spend by lifecycle</h3>
+                <h3 className="mt-1.5 text-lg font-semibold text-gray-900">Average spend by lifecycle</h3>
               </div>
-              <div className="text-right text-xs text-slate-500">
+              <div className="text-right text-xs text-gray-500">
                 <p>Active: {currency.format(stats.avg_spend_active)}</p>
                 <p>Churned: {currency.format(stats.avg_spend_churned)}</p>
               </div>
@@ -352,11 +352,11 @@ export default async function DashboardPage() {
           <div className="mb-5 flex items-center justify-between gap-4">
             <div>
               <p className="section-label">Priority Accounts</p>
-              <h3 className="mt-1.5 text-lg font-semibold text-navy-900">Top 10 churn-risk customers</h3>
+              <h3 className="mt-1.5 text-lg font-semibold text-gray-900">Top 10 churn-risk customers</h3>
             </div>
             <Link
               href="/top-risk"
-              className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-4 py-2 text-xs font-semibold text-brand-600 transition-colors hover:bg-brand-100"
+              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[#006bff]/20 bg-[#006bff]/5 px-4 py-2 text-xs font-semibold text-[#006bff] transition-colors hover:bg-[#006bff]/10"
             >
               View all
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -366,40 +366,39 @@ export default async function DashboardPage() {
           </div>
 
           {topRisk.length === 0 ? (
-            <p className="text-sm text-slate-400">ไม่มีข้อมูล</p>
+            <p className="text-sm text-gray-400">ไม่มีข้อมูล</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] text-sm">
                 <thead>
-                  <tr className="border-b text-left" style={{ borderColor: "rgba(11,25,55,0.08)" }}>
+                  <tr className="border-b text-left" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
                     {["#", "Account ID", "Status", "Churn Prob.", "Risk", "Days Inactive", "Payments", "Expire"].map((h) => (
-                      <th key={h} className="pb-3 pr-4 text-[11px] font-semibold text-slate-400 whitespace-nowrap">
+                      <th key={h} className="pb-3 pr-4 text-[11px] font-semibold text-gray-400 whitespace-nowrap">
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y" style={{ borderColor: "rgba(11,25,55,0.05)" }}>
+                <tbody className="divide-y" style={{ borderColor: "rgba(0,0,0,0.05)" }}>
                   {topRisk.map((customer, index) => {
                     const probability = customer.churn_probability * 100;
                     return (
-                      <tr key={customer.acc_id} className="transition-colors hover:bg-brand-50/40">
-                        <td className="py-3 pr-4 font-mono text-xs text-slate-400">{index + 1}</td>
+                      <tr key={customer.acc_id} className="transition-colors hover:bg-gray-50">
+                        <td className="py-3 pr-4 font-mono text-xs text-gray-400">{index + 1}</td>
                         <td className="py-3 pr-4">
                           <Link
                             href={`/customers/${customer.acc_id}`}
-                            className="font-mono text-sm font-semibold text-brand-600 transition-colors hover:text-brand-500 hover:underline"
+                            className="font-mono text-sm font-semibold text-[#006bff] transition-colors hover:text-[#0056cc] hover:underline"
                           >
                             {customer.acc_id}
                           </Link>
                         </td>
                         <td className="py-3 pr-4">
                           <span
-                            className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                              customer.status === "paid"
-                                ? "bg-brand-50 text-brand-600 border border-brand-200"
-                                : "bg-slate-100 text-slate-500 border border-slate-200"
-                            }`}
+                            className={`rounded-[10px] px-2.5 py-0.5 text-[11px] font-semibold ${customer.status === "paid"
+                                ? "bg-[#006bff]/5 text-[#006bff] border border-[#006bff]/20"
+                                : "bg-gray-100 text-gray-500 border border-gray-200"
+                              }`}
                           >
                             {customer.status}
                           </span>
@@ -413,10 +412,10 @@ export default async function DashboardPage() {
                                   width: `${probability.toFixed(0)}%`,
                                   background:
                                     probability >= 60
-                                      ? "#EF4444"
+                                      ? "#fc4c02"
                                       : probability >= 30
-                                      ? "#F59E0B"
-                                      : "#10B981",
+                                        ? "#ffa400"
+                                        : "#10B981",
                                 }}
                               />
                             </div>
@@ -424,7 +423,7 @@ export default async function DashboardPage() {
                               className="font-mono text-xs font-semibold"
                               style={{
                                 color:
-                                  probability >= 60 ? "#DC2626" : probability >= 30 ? "#D97706" : "#059669",
+                                  probability >= 60 ? "#cc3d02" : probability >= 30 ? "#b37300" : "#059669",
                               }}
                             >
                               {probability.toFixed(1)}%
@@ -434,11 +433,11 @@ export default async function DashboardPage() {
                         <td className="py-3 pr-4">
                           <RiskBadge risk={customer.risk ?? "High"} />
                         </td>
-                        <td className="py-3 pr-4 font-mono text-xs text-slate-500">
+                        <td className="py-3 pr-4 font-mono text-xs text-gray-500">
                           {customer.days_since_last_access?.toLocaleString() ?? 0} d
                         </td>
-                        <td className="py-3 pr-4 text-xs text-slate-500">{customer.total_payments ?? 0}</td>
-                        <td className="py-3 text-xs text-slate-400">{customer.expire ?? "-"}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-500">{customer.total_payments ?? 0}</td>
+                        <td className="py-3 text-xs text-gray-400">{customer.expire ?? "-"}</td>
                       </tr>
                     );
                   })}
@@ -452,22 +451,22 @@ export default async function DashboardPage() {
         {stats && (
           <div className="glass p-6 sm:p-7 flex flex-col">
             <p className="section-label">Insight Summary</p>
-            <h3 className="mt-1.5 text-lg font-semibold text-navy-900">Retention actions</h3>
+            <h3 className="mt-1.5 text-lg font-semibold text-gray-900">Retention actions</h3>
             <div className="mt-5 space-y-4 flex-1">
               {[
                 {
                   title: "Highest urgency",
                   body: `Focus first on ${stats.high_risk.toLocaleString()} high-risk accounts and deploy outreach before next expiry cycle.`,
                   icon: "🔴",
-                  bg: "#FEF2F2",
-                  border: "#FECACA",
+                  bg: "#fff0ea",
+                  border: "#ffc9b3",
                 },
                 {
                   title: "Revenue signal",
                   body: `Active vs churned spend differs by ${currency.format(Math.abs(stats.avg_spend_active - stats.avg_spend_churned))} — significant uplift potential.`,
                   icon: "📈",
-                  bg: "#EFF6FF",
-                  border: "#BFDBFE",
+                  bg: "#e6f0ff",
+                  border: "#cce1ff",
                 },
                 {
                   title: "Model confidence",
@@ -479,13 +478,13 @@ export default async function DashboardPage() {
               ].map((ins) => (
                 <div
                   key={ins.title}
-                  className="rounded-xl p-4"
+                  className="rounded-[10px] p-4"
                   style={{ background: ins.bg, border: `1px solid ${ins.border}` }}
                 >
-                  <p className="flex items-center gap-2 text-sm font-semibold text-navy-900">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-gray-900">
                     <span>{ins.icon}</span> {ins.title}
                   </p>
-                  <p className="mt-1.5 text-xs leading-5 text-slate-600">{ins.body}</p>
+                  <p className="mt-1.5 text-xs leading-5 text-gray-600">{ins.body}</p>
                 </div>
               ))}
             </div>

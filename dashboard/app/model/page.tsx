@@ -16,8 +16,7 @@ export default async function ModelPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="glass glass-strong rounded-2xl px-8 py-8">
+      <div className="glass glass-strong rounded-[20px] px-8 py-8">
         <div className="relative">
           <p className="section-label mb-3" style={{ color: "rgba(148,163,184,0.7)" }}>AI Engine</p>
           <h2 className="text-3xl font-bold text-white">Model Information</h2>

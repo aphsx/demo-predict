@@ -63,8 +63,7 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="glass glass-strong rounded-2xl px-8 py-8">
+      <div className="glass glass-strong rounded-[20px] px-8 py-8">
         <div className="relative">
           <p className="section-label mb-3" style={{ color: "rgba(148,163,184,0.7)" }}>Customer Intelligence</p>
           <h2 className="text-3xl font-bold text-white">ลูกค้าทั้งหมด</h2>
@@ -115,7 +114,7 @@ export default function CustomersPage() {
         {(search || risk || status) && (
           <button
             onClick={() => { setSearch(""); setRisk(""); setStatus(""); }}
-            className="text-xs text-slate-500 hover:text-red-500 transition-colors px-3 py-2 rounded-lg border border-slate-200 hover:border-red-200 hover:bg-red-50"
+            className="text-xs text-gray-500 hover:text-red-500 transition-colors px-3 py-2 rounded-[10px] border border-gray-200 hover:border-red-200 hover:bg-red-50"
           >
             ✕ ล้าง filter
           </button>
@@ -131,7 +130,7 @@ export default function CustomersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left" style={{ borderColor: "rgba(11,25,55,0.08)" }}>
-                  {["Account ID","Status","Churn Prob.","Risk","Churned","Days Inactive","Payments","Amount Paid","Expire",""].map((h) => (
+                  {["Account ID", "Status", "Churn Prob.", "Risk", "Churned", "Days Inactive", "Payments", "Amount Paid", "Expire", ""].map((h) => (
                     <th key={h} className="pb-3 pr-4 text-[11px] font-semibold text-slate-400 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -141,11 +140,10 @@ export default function CustomersPage() {
                   <tr key={c.acc_id} className="hover:bg-brand-50/40 transition-colors">
                     <td className="py-2.5 pr-4 font-mono text-brand-600 font-semibold text-xs">{c.acc_id}</td>
                     <td className="py-2.5 pr-4">
-                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
-                        c.status === "paid"
-                          ? "bg-brand-50 text-brand-600 border border-brand-200"
-                          : "bg-slate-100 text-slate-500 border border-slate-200"
-                      }`}>{c.status}</span>
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${c.status === "paid"
+                        ? "bg-brand-50 text-brand-600 border border-brand-200"
+                        : "bg-slate-100 text-slate-500 border border-slate-200"
+                        }`}>{c.status}</span>
                     </td>
                     <td className="py-2.5 pr-4">
                       <div className="flex items-center gap-2">
@@ -212,11 +210,10 @@ export default function CustomersPage() {
                   <button
                     key={pageNum}
                     onClick={() => setPage(pageNum)}
-                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-medium ${
-                      pageNum === page
-                        ? "bg-brand-600 text-white shadow-sm"
-                        : "bg-white border border-slate-200 hover:bg-brand-50 hover:border-brand-300 hover:text-brand-600 text-slate-600"
-                    }`}
+                    className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-medium ${pageNum === page
+                      ? "bg-brand-600 text-white shadow-sm"
+                      : "bg-white border border-slate-200 hover:bg-brand-50 hover:border-brand-300 hover:text-brand-600 text-slate-600"
+                      }`}
                   >
                     {pageNum}
                   </button>
@@ -233,6 +230,6 @@ export default function CustomersPage() {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 }
