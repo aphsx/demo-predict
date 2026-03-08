@@ -69,140 +69,176 @@ export default function ChatbotPage() {
     };
 
     return (
-        <div className="glass glass-strong relative flex min-h-[600px] h-[calc(100vh-3rem)] lg:h-[calc(100vh-4rem)] flex-col overflow-hidden rounded-2xl">
-            {/* Background Dots Pattern (Matching Hero Section) */}
-            <div
-                className="pointer-events-none absolute inset-0 opacity-[0.04]"
-                style={{
-                    backgroundImage: "radial-gradient(circle, #fff 1px, transparent 1px)",
-                    backgroundSize: "28px 28px",
-                }}
-            />
-            {/* Glowing orbs */}
-            <div className="pointer-events-none absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-[#38BDF8]/10 blur-[120px] rounded-full" />
-            <div className="pointer-events-none absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-[#1461F0]/10 blur-[120px] rounded-full" />
-
-            {/* Header */}
-            <div className="relative flex items-center justify-between border-b px-6 py-5" style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(11,25,55,0.4)", backdropFilter: "blur(12px)" }}>
-                <div className="flex items-center gap-4">
-                    <div className="relative flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: "linear-gradient(135deg, rgba(20,97,240,0.2), rgba(56,189,248,0.2))", border: "1px solid rgba(56,189,248,0.3)" }}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-6 h-6 text-[#38BDF8]">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-                        </svg>
-                        <div className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-[#0B1937] bg-emerald-400 animate-pulse" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg font-bold text-white">One Move Assistant</h1>
-                        <p className="text-xs font-medium uppercase tracking-wider text-[#38BDF8]">Enterprise AI Intelligence</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.38em]" style={{ background: "rgba(56,189,248,0.15)", color: "#38BDF8", border: "1px solid rgba(56,189,248,0.25)" }}>
-                        <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
-                        Online
-                    </span>
-                </div>
+        <div className="relative flex flex-col flex-1 w-full max-w-6xl mx-auto overflow-hidden rounded-[2rem] bg-[#0A0F1C] border border-white/10 shadow-2xl min-h-[600px]">
+            {/* Background Effects */}
+            <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden rounded-[2rem]">
+                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/20 blur-[100px] rounded-full animate-pulse opacity-50 transition-all duration-[5000ms]" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/20 blur-[100px] rounded-full animate-pulse opacity-50 transition-all duration-[7000ms]" />
+                <div
+                    className="absolute inset-0 opacity-[0.03]"
+                    style={{
+                        backgroundImage: "radial-gradient(circle at center, white 1px, transparent 1px)",
+                        backgroundSize: "24px 24px"
+                    }}
+                />
             </div>
 
+            {/* Header */}
+            <header className="relative z-10 flex items-center justify-between px-6 sm:px-8 py-5 border-b border-white/5 bg-white/[0.02] backdrop-blur-xl">
+                <div className="flex items-center gap-4">
+                    <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.15)] overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/10 to-transparent" />
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-6 h-6 text-blue-400 relative z-10">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                        </svg>
+                        <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#0A0F1C] bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] z-20" />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-semibold text-white tracking-tight">One Move Intelligence</h1>
+                        <p className="text-sm text-blue-400/80 font-medium">Enterprise AI Assistant Active</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button className="p-2.5 rounded-xl bg-white/5 border border-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
             {/* Chat Area */}
-            <div className="relative flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth">
-                {messages.map((msg) => (
-                    <div key={msg.id} className={clsx("flex w-full box-border", msg.role === "user" ? "justify-end" : "justify-start")}>
+            <div className="relative z-10 flex-1 overflow-y-auto p-4 sm:p-8 space-y-8 scroll-smooth" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                <div className="flex flex-col space-y-6 max-w-4xl mx-auto w-full">
+                    {messages.map((msg, index) => (
                         <div
+                            key={msg.id}
                             className={clsx(
-                                "max-w-[80%] rounded-2xl px-5 py-4 shadow-xl relative",
-                                msg.role === "user" ? "text-white rounded-tr-sm" : "text-slate-200 rounded-tl-sm"
+                                "flex w-full group animate-in fade-in slide-in-from-bottom-2 duration-300",
+                                msg.role === "user" ? "justify-end" : "justify-start"
                             )}
-                            style={
-                                msg.role === "user"
-                                    ? { background: "linear-gradient(135deg, #1461F0 0%, #2B72FF 100%)", boxShadow: "0 4px 18px rgba(20, 97, 240, 0.25)" }
-                                    : { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" }
-                            }
+                            style={{ animationFillMode: "both", animationDelay: `${index * 50}ms` }}
                         >
-                            <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                            <div
-                                className={clsx("text-[10px] mt-2 font-medium opacity-60", msg.role === "user" ? "text-right text-[#C8DEFF]" : "text-left text-slate-400")}
-                            >
-                                {msg.timestamp}
+                            <div className="flex flex-col gap-1.5 max-w-[85%] sm:max-w-[75%]">
+                                <div className={clsx("flex items-end gap-3", msg.role === "user" ? "flex-row-reverse" : "flex-row")}>
+
+                                    {/* AI Avatar for AI messages */}
+                                    {msg.role === "ai" && (
+                                        <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5 text-blue-400">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                                            </svg>
+                                        </div>
+                                    )}
+
+                                    <div
+                                        className={clsx(
+                                            "relative px-5 py-3.5 text-[15px] leading-relaxed shadow-sm transition-all",
+                                            msg.role === "user"
+                                                ? "text-white bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[24px] rounded-tr-[8px] shadow-blue-500/20 shadow-lg"
+                                                : "text-slate-200 bg-white/5 border border-white/10 rounded-[24px] rounded-tl-[8px] backdrop-blur-md"
+                                        )}
+                                    >
+                                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                                    </div>
+                                </div>
+                                <span className={clsx("text-xs font-medium text-slate-500 px-1", msg.role === "user" ? "text-right" : "text-left ml-12")}>
+                                    {msg.timestamp}
+                                </span>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    ))}
 
-                {isTyping && (
-                    <div className="flex w-full justify-start">
-                        <div
-                            className="rounded-2xl rounded-tl-sm px-5 py-4 flex items-center gap-2 shadow-xl"
-                            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" }}
-                        >
-                            <div className="w-2 h-2 rounded-full bg-[#38BDF8] animate-bounce" style={{ animationDelay: "0ms" }} />
-                            <div className="w-2 h-2 rounded-full bg-[#38BDF8] animate-bounce" style={{ animationDelay: "150ms" }} />
-                            <div className="w-2 h-2 rounded-full bg-[#38BDF8] animate-bounce" style={{ animationDelay: "300ms" }} />
+                    {isTyping && (
+                        <div className="flex w-full justify-start animate-in fade-in duration-300">
+                            <div className="flex gap-3 max-w-[85%] sm:max-w-[75%]">
+                                <div className="shrink-0 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5 text-blue-400">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                                    </svg>
+                                </div>
+                                <div className="px-5 py-4 bg-white/5 border border-white/10 rounded-[24px] rounded-tl-[8px] backdrop-blur-md flex items-center gap-1.5 h-[52px]">
+                                    <div className="w-2 h-2 rounded-full bg-blue-400/80 animate-bounce" style={{ animationDelay: "0ms" }} />
+                                    <div className="w-2 h-2 rounded-full bg-blue-400/80 animate-bounce" style={{ animationDelay: "150ms" }} />
+                                    <div className="w-2 h-2 rounded-full bg-blue-400/80 animate-bounce" style={{ animationDelay: "300ms" }} />
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                )}
-                <div ref={messagesEndRef} className="h-4" />
+                    )}
+                    <div ref={messagesEndRef} className="h-2" />
+                </div>
             </div>
 
             {/* Input Area */}
-            <div className="relative mt-auto border-t bg-black/20 p-4 shrink-0 transition-all backdrop-blur-md" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-                {/* Suggestions */}
+            <div className="relative z-20 w-full max-w-4xl mx-auto px-4 pb-6 pt-2">
                 {messages.length <= 2 && !isTyping && (
-                    <div className="mb-4 flex flex-wrap gap-2 px-1">
+                    <div className="mb-4 flex flex-wrap gap-2.5 justify-center sm:justify-start">
                         {SUGGESTIONS.map((sug, i) => (
                             <button
                                 key={i}
                                 onClick={() => handleSend(undefined, sug)}
-                                className="px-4 py-2 text-xs font-semibold text-[#C8DEFF] transition-all whitespace-nowrap rounded-full hover:scale-[1.02]"
-                                style={{ background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.2)" }}
+                                className="group relative px-4 py-2 text-[13px] font-medium text-slate-300 transition-all rounded-full overflow-hidden hover:text-white"
+                                style={{
+                                    background: "rgba(255,255,255,0.03)",
+                                    border: "1px solid rgba(255,255,255,0.08)"
+                                }}
                             >
-                                {sug}
+                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <span className="relative z-10">{sug}</span>
                             </button>
                         ))}
                     </div>
                 )}
 
-                <form onSubmit={handleSend} className="flex items-end gap-3 rounded-2xl p-2 transition-all shadow-inner" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                    <button type="button" className="p-3 text-slate-400 hover:text-[#38BDF8] transition-colors rounded-xl hover:bg-white/5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-                        </svg>
-                    </button>
+                <div className="relative group rounded-3xl bg-[#0F1423] border border-white/10 shadow-xl transition-all hover:border-white/20 focus-within:border-blue-500/50 focus-within:shadow-[0_0_20px_rgba(59,130,246,0.1)] focus-within:bg-[#131929]">
+                    <form onSubmit={handleSend} className="flex items-end gap-2 p-2">
+                        <button type="button" className="p-3 text-slate-400 hover:text-blue-400 transition-colors rounded-2xl hover:bg-white/5 shrink-0">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm3.65 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75z" />
+                            </svg>
+                        </button>
 
-                    <textarea
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                handleSend();
-                            }
-                        }}
-                        placeholder="พิมพ์ข้อความวิเคราะห์ลูกค้า หรือกดเลือกจากคำแนะนำ..."
-                        className="flex-1 max-h-32 min-h-[44px] bg-transparent border-none resize-none focus:outline-none text-slate-100 placeholder:text-slate-500 py-3 text-[15px]"
-                        rows={1}
-                        style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.1) transparent" }}
-                    />
+                        <button type="button" className="p-3 text-slate-400 hover:text-blue-400 transition-colors rounded-2xl hover:bg-white/5 shrink-0 hidden sm:block">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                            </svg>
+                        </button>
 
-                    <button
-                        type="submit"
-                        disabled={!input.trim()}
-                        className="p-3 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all mb-0.5 hover:-translate-y-0.5"
-                        style={{
-                            background: input.trim() ? "linear-gradient(135deg, #1461F0, #38BDF8)" : "rgba(255,255,255,0.1)",
-                            boxShadow: input.trim() ? "0 4px 18px rgba(20, 97, 240, 0.35)" : "none",
-                        }}
-                    >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-5 h-5 translate-x-[1px] translate-y-[-1px]">
-                            <line x1="22" y1="2" x2="11" y2="13" />
-                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                        </svg>
-                    </button>
-                </form>
-                <div className="text-center mt-3">
-                    <p className="text-[10px] uppercase font-semibold tracking-widest text-slate-500/70">
-                        AI Generated Content — Always verify customer risk outputs
+                        <textarea
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSend();
+                                }
+                            }}
+                            placeholder="Ask anything about your customers' data, trends, or predictions..."
+                            className="flex-1 max-h-32 min-h-[52px] bg-transparent border-none resize-none focus:outline-none text-slate-100 placeholder:text-slate-500 py-3.5 text-[15px] leading-relaxed"
+                            rows={1}
+                            style={{ scrollbarWidth: "none" }}
+                        />
+
+                        <button
+                            type="submit"
+                            disabled={!input.trim()}
+                            className={clsx(
+                                "p-3.5 rounded-2xl transition-all duration-200 shrink-0 mb-0.5",
+                                input.trim()
+                                    ? "bg-blue-600 text-white shadow-lg shadow-blue-500/25 hover:bg-blue-500 hover:scale-105 active:scale-95"
+                                    : "bg-white/5 text-slate-500 cursor-not-allowed"
+                            )}
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+
+                <div className="text-center mt-4">
+                    <p className="text-[11px] font-medium text-slate-500/80">
+                        One Move GenAI might occasionally make mistakes. Verify important information.
                     </p>
                 </div>
             </div>

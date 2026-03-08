@@ -24,17 +24,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="th" suppressHydrationWarning>
-      <body className={`${notoSansThai.variable} ${inter.variable} dashboard-shell min-h-screen`}>
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar />
-          <main className="flex-1 overflow-auto">
-            <div className="mx-auto min-h-screen max-w-[1600px] px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
-              {children}
-            </div>
-          </main>
-        </div>
+      <body className={`${notoSansThai.variable} ${inter.variable} dashboard-shell min-h-screen flex`}>
+        <Sidebar />
+        <main className="flex-1 overflow-auto flex flex-col h-screen">
+          <div className="mx-auto w-full max-w-[1600px] flex-1 flex flex-col px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
+            {children}
+          </div>
+        </main>
       </body>
     </html>
   );
 }
-
