@@ -72,7 +72,7 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
               { label: "Expire", value: customer.expire },
               { label: "Days Inactive", value: `${customer.days_since_last_access} d` },
               { label: "Total Payments", value: customer.total_payments ?? 0 },
-              { label: "Amount Paid", value: `฿${Number(customer.total_amount_paid ?? 0).toLocaleString()}` },
+              { label: "LTV (Amount Paid)", value: `฿${Number(customer.ltv ?? customer.total_amount_paid ?? 0).toLocaleString()}` },
             ].map((item) => (
               <div key={item.label} className="bg-brand-50 border border-brand-100 rounded-xl p-3">
                 <p className="text-xs text-slate-500">{item.label}</p>
@@ -163,6 +163,79 @@ export default async function CustomerDetailPage({ params }: { params: { id: str
             <p className="text-xs text-slate-500">Actual Status</p>
             <p className={`text-2xl font-bold mt-1 ${customer.churned ? "text-red-400" : "text-emerald-400"}`}>
               {customer.churned ? "CHURNED" : "ACTIVE"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Customer 360 — RFM + Explainable AI + Recommended Action */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* RFM Segment */}
+        <div className="glass p-5 flex flex-col gap-3">
+          <h3 className="text-sm font-semibold text-navy-900">📊 RFM Segment</h3>
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 py-3">
+            <span className="rounded-full bg-brand-50 border border-brand-200 px-4 py-2 text-sm font-bold text-brand-600">
+              {customer.rfm_segment ?? "—"}
+            </span>
+            <p className="text-xs text-slate-500 text-center mt-1">
+              จัดกลุ่มจาก Recency · Frequency · Monetary
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: "Recency", value: `${customer.days_since_last_access ?? 0} d` },
+              { label: "Frequency", value: customer.total_payments ?? 0 },
+              { label: "Monetary", value: `฿${Number(customer.ltv ?? customer.total_amount_paid ?? 0).toLocaleString()}` },
+            ].map((item) => (
+              <div key={item.label} className="bg-slate-50 rounded-lg p-2">
+                <p className="text-[10px] text-slate-400">{item.label}</p>
+                <p className="text-xs font-semibold text-navy-900 mt-0.5">{item.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Key Reason — Explainable AI */}
+        <div className="glass p-5 flex flex-col gap-3" style={{ borderLeft: `3px solid ${ringColor}` }}>
+          <h3 className="text-sm font-semibold text-navy-900">🔍 Key Reason (Explainable AI)</h3>
+          {customer.risk_factor && customer.risk_factor !== "ปกติ" && (
+            <div className="rounded-lg bg-red-50 border border-red-100 p-3">
+              <p className="text-[10px] text-red-500 font-semibold uppercase tracking-widest mb-1">Risk Factor</p>
+              <p className="text-xs text-red-700 font-medium">{customer.risk_factor}</p>
+            </div>
+          )}
+          {customer.key_reason && (
+            <div className="rounded-lg bg-amber-50 border border-amber-100 p-3">
+              <p className="text-[10px] text-amber-600 font-semibold uppercase tracking-widest mb-1">Top Feature Signal</p>
+              <p className="text-xs text-amber-800 font-medium leading-relaxed">{customer.key_reason}</p>
+            </div>
+          )}
+          {!customer.risk_factor && !customer.key_reason && (
+            <p className="text-xs text-slate-400">ไม่มีข้อมูล</p>
+          )}
+        </div>
+
+        {/* Recommended Action */}
+        <div className="glass p-5 flex flex-col gap-3">
+          <h3 className="text-sm font-semibold text-navy-900">⚡ Recommended Action</h3>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 py-3">
+            <div
+              className="w-full rounded-xl p-4 text-center"
+              style={{
+                background: prob >= 0.6 ? "#fff0ea" : prob >= 0.3 ? "#fffaf0" : "#F0FDF4",
+                border: `1px solid ${prob >= 0.6 ? "#ffc9b3" : prob >= 0.3 ? "#ffe3b3" : "#A7F3D0"}`,
+              }}
+            >
+              <p className="text-sm font-bold" style={{ color: prob >= 0.6 ? "#cc3d02" : prob >= 0.3 ? "#b37300" : "#047857" }}>
+                {customer.recommended_action ?? "ติดตาม Newsletter รายเดือน"}
+              </p>
+            </div>
+            <p className="text-xs text-slate-500 text-center">
+              {prob >= 0.6
+                ? "ลูกค้ากลุ่มนี้ต้องการการดูแลเร่งด่วน"
+                : prob >= 0.3
+                  ? "ส่งข้อเสนอพิเศษเพื่อกระตุ้นการใช้งาน"
+                  : "ลูกค้ากลุ่มนี้มีความเสี่ยงต่ำ ติดตามปกติ"}
             </p>
           </div>
         </div>
