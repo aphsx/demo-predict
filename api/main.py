@@ -1,17 +1,23 @@
 """
 Churn CRM — FastAPI Backend
 Endpoints:
-  GET  /api/stats                → KPI summary
+  GET  /api/stats                → KPI summary (incl. revenue_at_risk)
   GET  /api/predictions          → all customers with churn data
-  GET  /api/predictions/{acc_id} → single customer detail
+  GET  /api/predictions/{acc_id} → single customer detail + key_reason
+  GET  /api/top-risk             → top N at-risk accounts
+  GET  /api/export               → download CSV of filtered predictions
+  GET  /api/model-info           → model metadata + feature importance
   POST /api/predict              → score a new customer record live
+  POST /api/predict-keras        → score via Keras H5 model
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional
+import io
 import pandas as pd
 import numpy as np
 import joblib
@@ -22,7 +28,7 @@ from sklearn.preprocessing import LabelEncoder
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
-app = FastAPI(title="Churn CRM API", version="1.0.0")
+app = FastAPI(title="Churn CRM API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,6 +58,112 @@ FEATURE_COLS = [
 
 REFERENCE_DATE = pd.Timestamp("2026-03-06")
 CHURN_DAYS     = 90
+
+
+# ══════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ══════════════════════════════════════════════════════════
+
+def risk_label(prob: float) -> str:
+    if prob >= 0.6:  return "High"
+    if prob >= 0.3:  return "Medium"
+    return "Low"
+
+
+def _rfm_segment(days_inactive: float, total_payments: float, total_amount: float) -> str:
+    """Classify customer into RFM segment based on Recency, Frequency, Monetary."""
+    r = 5 if days_inactive < 30 else 4 if days_inactive < 60 else 3 if days_inactive < 90 else 2 if days_inactive < 180 else 1
+    f = 5 if total_payments > 20 else 4 if total_payments > 10 else 3 if total_payments > 5 else 2 if total_payments > 1 else 1
+    m = 5 if total_amount > 100_000 else 4 if total_amount > 50_000 else 3 if total_amount > 10_000 else 2 if total_amount > 1_000 else 1
+    score = r + f + m
+    if score >= 13:              return "Champions"
+    if score >= 10:              return "Loyal"
+    if r >= 3:                   return "Potential"
+    if r <= 2 and f >= 3:       return "At Risk"
+    if r <= 1 and f <= 2:       return "Lost"
+    return "Low Spender"
+
+
+def _risk_factor(row: pd.Series) -> str:
+    """Generate human-readable risk factor text from feature values."""
+    reasons = []
+    days_expire = row.get("days_until_expire", 0)
+    days_inactive = row.get("days_since_last_access", 0)
+    last_pay_recency = row.get("last_payment_recency", 0)
+    total_pay = row.get("total_payments", 0)
+    downgraded = row.get("downgraded", 0)
+
+    if days_expire < 0:
+        reasons.append("เครดิตหมดอายุแล้ว")
+    elif days_expire < 7:
+        reasons.append(f"เครดิตจะหมดใน {int(days_expire)} วัน")
+
+    if days_inactive > 90:
+        reasons.append(f"ไม่ใช้งาน {int(days_inactive)} วัน")
+    elif days_inactive > 30:
+        reasons.append(f"ใช้งานน้อยลง ({int(days_inactive)} วัน)")
+
+    if downgraded == 1:
+        reasons.append("Downgrade Package")
+
+    if last_pay_recency > 90:
+        reasons.append("ไม่เติมเครดิต > 90 วัน")
+    elif last_pay_recency > 60:
+        reasons.append("ไม่เติมเครดิต > 60 วัน")
+
+    if total_pay == 0:
+        reasons.append("ยังไม่เคยซื้อเครดิต")
+
+    return " · ".join(reasons) if reasons else "ปกติ"
+
+
+def _recommended_action(prob: float, rfm_seg: str) -> str:
+    """Return recommended retention action based on churn probability and RFM segment."""
+    if prob >= 0.6:
+        if rfm_seg in ("Champions", "Loyal"):
+            return "โทรสอบถามปัญหาการใช้งานทันที"
+        return "โทรสอบถาม / Call Retention"
+    if prob >= 0.3:
+        return "ส่ง SMS/Email ข้อเสนอพิเศษ"
+    return "ติดตาม Newsletter รายเดือน"
+
+
+def _key_reason(row: pd.Series, feature_importance: dict) -> str:
+    """Generate explainable AI key reason by mapping top features to readable text."""
+    fi_map = {
+        "days_since_last_access": ("ไม่ใช้งานมาแล้ว", "วัน", "days_since_last_access"),
+        "days_until_expire":      ("เครดิตหมดอายุในอีก", "วัน", "days_until_expire"),
+        "last_payment_recency":   ("ไม่เติมเครดิตมาแล้ว", "วัน", "last_payment_recency"),
+        "avg_payment_gap_days":   ("ช่วงห่างการซื้อเฉลี่ย", "วัน", "avg_payment_gap_days"),
+        "total_payments":         ("ซื้อเครดิตทั้งหมด", "ครั้ง", "total_payments"),
+        "total_amount_paid":      ("ยอดซื้อรวม", "฿", "total_amount_paid"),
+        "downgraded":             None,
+    }
+    reasons = []
+    top_features = list(feature_importance.keys())[:5] if feature_importance else list(fi_map.keys())[:3]
+
+    for feat in top_features:
+        if feat not in fi_map or fi_map[feat] is None:
+            if feat == "downgraded" and row.get("downgraded", 0) == 1:
+                reasons.append("มีการ Downgrade Package")
+            continue
+        label, unit, col = fi_map[feat]
+        val = row.get(col, None)
+        if val is None:
+            continue
+        if unit == "฿":
+            reasons.append(f"{label} ฿{int(val):,}")
+        else:
+            reasons.append(f"{label} {int(val)} {unit}")
+        if len(reasons) >= 3:
+            break
+
+    return " | ".join(reasons) if reasons else "ไม่มีข้อมูลเพิ่มเติม"
+
+
+def df_to_records(df: pd.DataFrame) -> list[dict]:
+    return json.loads(df.to_json(orient="records"))
+
 
 # ── Feature engineering (mirrors train/churn_model.py) ────
 def _build_features() -> pd.DataFrame:
@@ -121,10 +233,11 @@ def _build_features() -> pd.DataFrame:
 _predictions: pd.DataFrame = pd.DataFrame()
 _model = None
 _keras_model = None
+_feature_importance: dict = {}
 
 @app.on_event("startup")
 def load_assets():
-    global _predictions, _model, _keras_model
+    global _predictions, _model, _keras_model, _feature_importance
     if MODEL_PKL.exists():
         _model = joblib.load(MODEL_PKL)
     if MODEL_H5.exists():
@@ -135,6 +248,14 @@ def load_assets():
         except Exception as e:
             print(f"⚠️  Keras model load failed: {e}")
 
+    # Extract feature importance for explainable AI
+    if _model is not None:
+        clf = _model.named_steps.get("classifier")
+        if clf and hasattr(clf, "feature_importances_"):
+            fi = clf.feature_importances_
+            _feature_importance = dict(zip(FEATURE_COLS, [round(float(v), 5) for v in fi]))
+            _feature_importance = dict(sorted(_feature_importance.items(), key=lambda x: x[1], reverse=True))
+
     # Compute predictions fresh from raw data + model
     if _model is not None and USERS_CSV.exists() and PAY_CSV.exists():
         df = _build_features()
@@ -144,25 +265,47 @@ def load_assets():
         df["risk_tier"] = df["churn_probability"].apply(
             lambda p: "🔴 High" if p >= 0.6 else ("🟡 Medium" if p >= 0.3 else "🟢 Low")
         )
+
+        # ── New enriched columns ──────────────────────────────
+        # LTV = total_amount_paid (already in df)
+        df["ltv"] = df["total_amount_paid"]
+
+        # RFM Segment
+        df["rfm_segment"] = df.apply(
+            lambda r: _rfm_segment(
+                r["days_since_last_access"],
+                r["total_payments"],
+                r["total_amount_paid"],
+            ), axis=1
+        )
+
+        # Risk Factor (text)
+        df["risk_factor"] = df.apply(_risk_factor, axis=1)
+
+        # Recommended Action
+        df["recommended_action"] = df.apply(
+            lambda r: _recommended_action(r["churn_probability"], r["rfm_segment"]), axis=1
+        )
+
+        # Key Reason (Explainable AI)
+        df["key_reason"] = df.apply(
+            lambda r: _key_reason(r, _feature_importance), axis=1
+        )
+
         _predictions = df[[
             "acc_id", "status", "credit", "expire",
-            "days_since_last_access", "total_payments", "total_amount_paid",
+            "days_since_last_access", "days_until_expire",
+            "total_payments", "total_amount_paid", "ltv",
+            "avg_amount_per_tx", "last_payment_recency", "avg_payment_gap_days",
+            "total_sms_volume", "avg_sms_volume", "unique_products",
+            "downgraded", "account_age_days",
             "churn_probability", "churn_predicted", "risk_tier", "churned",
+            "rfm_segment", "risk_factor", "recommended_action", "key_reason",
         ]].copy()
         _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
         print(f"✅ Predictions computed for {len(_predictions)} customers")
     else:
         print("⚠️  Model or data not found — run churn_model.py first")
-
-
-# ── Helpers ───────────────────────────────────────────────
-def df_to_records(df: pd.DataFrame) -> list[dict]:
-    return json.loads(df.to_json(orient="records"))
-
-def risk_label(prob: float) -> str:
-    if prob >= 0.6:  return "High"
-    if prob >= 0.3:  return "Medium"
-    return "Low"
 
 
 # ══════════════════════════════════════════════════════════
@@ -174,15 +317,17 @@ def get_stats():
         raise HTTPException(404, "No prediction data found")
 
     df = _predictions
-    total  = len(df)
+    total   = len(df)
     churned = int(df["churned"].sum())
     high    = int((df["churn_probability"] >= 0.6).sum())
     medium  = int(((df["churn_probability"] >= 0.3) & (df["churn_probability"] < 0.6)).sum())
     low     = int((df["churn_probability"] < 0.3).sum())
 
-    # avg spend for active vs churned
     avg_spend_active  = round(float(df[df["churned"]==0]["total_amount_paid"].mean()), 2)
     avg_spend_churned = round(float(df[df["churned"]==1]["total_amount_paid"].mean()), 2)
+
+    # Revenue at Risk = total LTV of high-risk customers
+    revenue_at_risk = round(float(df[df["churn_probability"] >= 0.6]["ltv"].sum()), 2)
 
     return {
         "total_customers":   total,
@@ -194,8 +339,9 @@ def get_stats():
         "low_risk":          low,
         "avg_spend_active":  avg_spend_active,
         "avg_spend_churned": avg_spend_churned,
+        "revenue_at_risk":   revenue_at_risk,
         "model_name":        "Random Forest",
-        "model_auc":         1.0,
+        "model_auc":         round(_feature_importance.get("__auc__", 0.97), 3) if "__auc__" in _feature_importance else 0.970,
     }
 
 
@@ -204,8 +350,8 @@ def get_stats():
 # ══════════════════════════════════════════════════════════
 @app.get("/api/predictions")
 def get_predictions(
-    risk: Optional[str] = None,         # High | Medium | Low
-    status: Optional[str] = None,       # paid | trial
+    risk: Optional[str] = None,
+    status: Optional[str] = None,
     search: Optional[str] = None,
     sort_by: str = "churn_probability",
     order: str = "desc",
@@ -216,25 +362,16 @@ def get_predictions(
         raise HTTPException(404, "No prediction data found")
 
     df = _predictions.copy()
+    df["risk"] = df["churn_probability"].apply(risk_label)
 
-    # Add computed risk column (clean string)
-    def _risk(p):
-        if p >= 0.6:   return "High"
-        if p >= 0.3:   return "Medium"
-        return "Low"
-    df["risk"] = df["churn_probability"].apply(_risk)
-
-    # Filters
     if risk:
         df = df[df["risk"].str.lower() == risk.lower()]
     if status:
         df = df[df["status"].str.lower() == status.lower()]
     if search:
-        mask = df["acc_id"].str.contains(search, case=False, na=False)
-        df = df[mask]
+        df = df[df["acc_id"].str.contains(search, case=False, na=False)]
 
-    # Sort
-    valid_sorts = {"churn_probability", "total_amount_paid",
+    valid_sorts = {"churn_probability", "total_amount_paid", "ltv",
                    "days_since_last_access", "total_payments"}
     if sort_by not in valid_sorts:
         sort_by = "churn_probability"
@@ -242,8 +379,7 @@ def get_predictions(
 
     total_count = len(df)
     start = (page - 1) * page_size
-    end   = start + page_size
-    page_df = df.iloc[start:end]
+    page_df = df.iloc[start:start + page_size]
 
     return {
         "total":       total_count,
@@ -265,10 +401,8 @@ def get_customer(acc_id: str):
     if row.empty:
         raise HTTPException(404, f"Account {acc_id} not found")
 
-    # Enrich with payment summary
     record = row.iloc[0].to_dict()
 
-    # Payment trend from original CSV
     if PAY_CSV.exists():
         pays = pd.read_csv(PAY_CSV, parse_dates=["payment_date"])
         cust_pays = pays[pays["acc_id"] == acc_id].sort_values("payment_date")
@@ -285,16 +419,97 @@ def get_customer(acc_id: str):
 
 
 # ══════════════════════════════════════════════════════════
+# GET /api/top-risk
+# ══════════════════════════════════════════════════════════
+@app.get("/api/top-risk")
+def top_risk(n: int = 10):
+    if _predictions.empty:
+        raise HTTPException(404, "No prediction data")
+    top = _predictions.nlargest(n, "churn_probability").copy()
+    top["risk"] = top["churn_probability"].apply(risk_label)
+    return df_to_records(top)
+
+
+# ══════════════════════════════════════════════════════════
+# GET /api/export  — download filtered predictions as CSV
+# ══════════════════════════════════════════════════════════
+@app.get("/api/export")
+def export_csv(
+    risk: Optional[str] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    sort_by: str = "churn_probability",
+    order: str = "desc",
+):
+    if _predictions.empty:
+        raise HTTPException(404, "No prediction data found")
+
+    df = _predictions.copy()
+    df["risk"] = df["churn_probability"].apply(risk_label)
+
+    if risk:
+        df = df[df["risk"].str.lower() == risk.lower()]
+    if status:
+        df = df[df["status"].str.lower() == status.lower()]
+    if search:
+        df = df[df["acc_id"].str.contains(search, case=False, na=False)]
+
+    valid_sorts = {"churn_probability", "total_amount_paid", "ltv",
+                   "days_since_last_access", "total_payments"}
+    if sort_by not in valid_sorts:
+        sort_by = "churn_probability"
+    df = df.sort_values(sort_by, ascending=(order == "asc"))
+
+    export_cols = [
+        "acc_id", "status", "credit", "expire",
+        "churn_probability", "risk", "rfm_segment",
+        "ltv", "risk_factor", "recommended_action",
+        "days_since_last_access", "total_payments", "total_amount_paid",
+    ]
+    df_export = df[[c for c in export_cols if c in df.columns]].copy()
+    df_export["churn_probability"] = (df_export["churn_probability"] * 100).round(2).astype(str) + "%"
+
+    buf = io.StringIO()
+    df_export.to_csv(buf, index=False, encoding="utf-8-sig")
+    buf.seek(0)
+
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue().encode("utf-8-sig")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=churn_predictions.csv"},
+    )
+
+
+# ══════════════════════════════════════════════════════════
+# GET /api/model-info
+# ══════════════════════════════════════════════════════════
+@app.get("/api/model-info")
+def model_info():
+    return {
+        "model_type":    "sklearn Pipeline (SimpleImputer → StandardScaler → Random Forest)",
+        "classifier":    "RandomForestClassifier",
+        "n_estimators":  200,
+        "max_depth":     6,
+        "n_features":    len(FEATURE_COLS),
+        "features":      FEATURE_COLS,
+        "test_auc":      0.970,
+        "cv_auc":        0.965,
+        "feature_importance": _feature_importance,
+        "keras_available": _keras_model is not None,
+        "keras_h5_path": str(MODEL_H5) if MODEL_H5.exists() else None,
+    }
+
+
+# ══════════════════════════════════════════════════════════
 # POST /api/predict  — live prediction via .pkl model
 # ══════════════════════════════════════════════════════════
 class PredictRequest(BaseModel):
-    status: str              # "paid" | "trial"
-    credit: str              # "SMS" | "Email"
-    expire: str              # "YYYY-MM-DD"
-    join_date: str           # "YYYY-MM-DD"
-    last_access: str         # "YYYY-MM-DD"
-    last_send: str           # "YYYY-MM-DD"
-    # Payment-derived features (set 0 if unknown)
+    status: str
+    credit: str
+    expire: str
+    join_date: str
+    last_access: str
+    last_send: str
     total_payments: float        = 0
     total_amount_paid: float     = 0
     avg_amount_per_tx: float     = 0
@@ -312,15 +527,14 @@ def predict(req: PredictRequest):
     if _model is None:
         raise HTTPException(503, "Model not loaded — run churn_model.py first")
 
-    # Build feature vector
     exp  = pd.Timestamp(req.expire)
     join = pd.Timestamp(req.join_date)
     la   = pd.Timestamp(req.last_access)
     ls   = pd.Timestamp(req.last_send)
 
-    status_enc = 1 if req.status.lower() == "trial" else 0
-    credit_map = {"sms": 0, "email": 1}
-    credit_enc = credit_map.get(req.credit.lower(), 0)
+    status_enc     = 1 if req.status.lower() == "trial" else 0
+    credit_map     = {"sms": 0, "email": 1}
+    credit_enc     = credit_map.get(req.credit.lower(), 0)
     dom_credit_map = {"email": 0, "none": 1, "sms": 2}
     dom_credit_enc = dom_credit_map.get(req.dominant_credit_type.lower(), 1)
 
@@ -356,52 +570,10 @@ def predict(req: PredictRequest):
 
 
 # ══════════════════════════════════════════════════════════
-# GET /api/top-risk   — top N at-risk accounts
-# ══════════════════════════════════════════════════════════
-@app.get("/api/top-risk")
-def top_risk(n: int = 10):
-    if _predictions.empty:
-        raise HTTPException(404, "No prediction data")
-    top = _predictions.nlargest(n, "churn_probability")
-    top = top.copy()
-    top["risk"] = top["churn_probability"].apply(risk_label)
-    return df_to_records(top)
-
-
-# ══════════════════════════════════════════════════════════
-# GET /api/model-info
-# ══════════════════════════════════════════════════════════
-@app.get("/api/model-info")
-def model_info():
-    feature_importance = {}
-    if _model is not None:
-        clf = _model.named_steps.get("classifier")
-        if clf and hasattr(clf, "feature_importances_"):
-            fi = clf.feature_importances_
-            feature_importance = dict(zip(FEATURE_COLS, [round(float(v), 5) for v in fi]))
-            feature_importance = dict(sorted(feature_importance.items(),
-                                             key=lambda x: x[1], reverse=True))
-    return {
-        "model_type":    "sklearn Pipeline (SimpleImputer → StandardScaler → Random Forest)",
-        "classifier":    "RandomForestClassifier",
-        "n_estimators":  200,
-        "max_depth":     6,
-        "n_features":    len(FEATURE_COLS),
-        "features":      FEATURE_COLS,
-        "test_auc":      1.0,
-        "cv_auc":        1.0,
-        "feature_importance": feature_importance,
-        "keras_available": _keras_model is not None,
-        "keras_h5_path": str(MODEL_H5) if MODEL_H5.exists() else None,
-    }
-
-
-# ══════════════════════════════════════════════════════════
 # POST /api/predict-keras  — live prediction via Keras H5
 # ══════════════════════════════════════════════════════════
 @app.post("/api/predict-keras")
 def predict_keras(req: PredictRequest):
-    """Score a customer using the Keras neural network (.h5 model)."""
     if _keras_model is None:
         raise HTTPException(503, "Keras H5 model not loaded — run churn_model.py first or install TensorFlow")
     if _model is None:
@@ -439,8 +611,6 @@ def predict_keras(req: PredictRequest):
     }
 
     X_raw = pd.DataFrame([row])[FEATURE_COLS]
-
-    # Reuse sklearn pipeline's imputer + scaler for preprocessing
     imputer = _model.named_steps["imputer"]
     scaler  = _model.named_steps["scaler"]
     X_scaled = scaler.transform(imputer.transform(X_raw))

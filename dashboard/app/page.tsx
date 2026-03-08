@@ -17,6 +17,7 @@ interface DashboardStats {
   low_risk: number;
   avg_spend_active: number;
   avg_spend_churned: number;
+  revenue_at_risk: number;
 }
 
 interface TopRiskCustomer {
@@ -27,6 +28,10 @@ interface TopRiskCustomer {
   days_since_last_access?: number;
   total_payments?: number;
   expire?: string;
+  ltv?: number;
+  rfm_segment?: string;
+  risk_factor?: string;
+  recommended_action?: string;
 }
 
 async function getStats() {
@@ -128,6 +133,13 @@ export default async function DashboardPage() {
         dot: "#10B981", // Green
       },
       {
+        label: "Revenue at Risk",
+        value: currency.format(stats.revenue_at_risk ?? 0),
+        sub: `LTV รวมของลูกค้า High Risk ${stats.high_risk.toLocaleString()} ราย`,
+        accent: "#7c3aed",
+        dot: "#7c3aed",
+      },
+      {
         label: "Model AUC",
         value: Number(stats.model_auc).toFixed(3),
         sub: stats.model_name,
@@ -211,7 +223,7 @@ export default async function DashboardPage() {
 
       {/* ── KPI Cards (Overlapping Banner) ── */}
       {stats && (
-        <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4 relative z-30 mt-[-80px] px-2 sm:px-0">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 relative z-30 mt-[-80px] px-2 sm:px-0">
           {kpiCards.map((card) => (
             <StatCard key={card.label} {...card} />
           ))}
@@ -314,7 +326,7 @@ export default async function DashboardPage() {
               <table className="w-full min-w-[620px] text-sm">
                 <thead>
                   <tr className="border-b text-left" style={{ borderColor: "rgba(0,0,0,0.08)" }}>
-                    {["#", "Account ID", "Status", "Churn Prob.", "Risk", "Days Inactive", "Payments", "Expire"].map((h) => (
+                    {["#", "Account ID", "Churn Prob.", "Risk", "LTV", "RFM Segment", "Risk Factor", "Recommended Action"].map((h) => (
                       <th key={h} className="pb-3 pr-4 text-[11px] font-semibold text-gray-400 whitespace-nowrap">
                         {h}
                       </th>
@@ -336,37 +348,19 @@ export default async function DashboardPage() {
                           </Link>
                         </td>
                         <td className="py-3 pr-4">
-                          <span
-                            className={`rounded-[10px] px-2.5 py-0.5 text-[11px] font-semibold ${customer.status === "paid"
-                              ? "bg-[#006bff]/5 text-[#006bff] border border-[#006bff]/20"
-                              : "bg-gray-100 text-gray-500 border border-gray-200"
-                              }`}
-                          >
-                            {customer.status}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-4">
                           <div className="flex items-center gap-2">
-                            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
                               <div
                                 className="h-full rounded-full"
                                 style={{
                                   width: `${probability.toFixed(0)}%`,
-                                  background:
-                                    probability >= 60
-                                      ? "#fc4c02"
-                                      : probability >= 30
-                                        ? "#ffa400"
-                                        : "#10B981",
+                                  background: probability >= 60 ? "#fc4c02" : probability >= 30 ? "#ffa400" : "#10B981",
                                 }}
                               />
                             </div>
                             <span
                               className="font-mono text-xs font-semibold"
-                              style={{
-                                color:
-                                  probability >= 60 ? "#cc3d02" : probability >= 30 ? "#b37300" : "#059669",
-                              }}
+                              style={{ color: probability >= 60 ? "#cc3d02" : probability >= 30 ? "#b37300" : "#059669" }}
                             >
                               {probability.toFixed(1)}%
                             </span>
@@ -375,11 +369,20 @@ export default async function DashboardPage() {
                         <td className="py-3 pr-4">
                           <RiskBadge risk={customer.risk ?? "High"} />
                         </td>
-                        <td className="py-3 pr-4 font-mono text-xs text-gray-500">
-                          {customer.days_since_last_access?.toLocaleString() ?? 0} d
+                        <td className="py-3 pr-4 text-xs font-semibold text-gray-700">
+                          {currency.format(customer.ltv ?? 0)}
                         </td>
-                        <td className="py-3 pr-4 text-xs text-gray-500">{customer.total_payments ?? 0}</td>
-                        <td className="py-3 text-xs text-gray-400">{customer.expire ?? "-"}</td>
+                        <td className="py-3 pr-4">
+                          <span className="rounded-full bg-[#006bff]/5 border border-[#006bff]/20 px-2.5 py-0.5 text-[10px] font-semibold text-[#006bff] whitespace-nowrap">
+                            {customer.rfm_segment ?? "-"}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 text-xs text-gray-500 max-w-[180px]">
+                          {customer.risk_factor ?? "-"}
+                        </td>
+                        <td className="py-3 text-xs text-gray-600 font-medium whitespace-nowrap">
+                          {customer.recommended_action ?? "-"}
+                        </td>
                       </tr>
                     );
                   })}
