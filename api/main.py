@@ -7,8 +7,8 @@ Endpoints:
   GET  /api/top-risk             → top N at-risk accounts
   GET  /api/export               → download CSV of filtered predictions
   GET  /api/model-info           → model metadata + feature importance
+  GET  /api/explain/{acc_id}     → SHAP values for a customer
   POST /api/predict              → score a new customer record live
-  POST /api/predict-keras        → score via Keras H5 model
 """
 
 from fastapi import FastAPI, HTTPException, Query
@@ -22,11 +22,8 @@ import pandas as pd
 import numpy as np
 import joblib
 import json
-import os
+import shap
 from sklearn.preprocessing import LabelEncoder
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 app = FastAPI(title="Churn CRM API", version="2.0.0")
 
@@ -43,7 +40,7 @@ TRAIN_DIR   = BASE_DIR / "train"
 USERS_CSV   = TRAIN_DIR / "data" / "sample_users.csv"
 PAY_CSV     = TRAIN_DIR / "data" / "sample_payments.csv"
 MODEL_PKL   = TRAIN_DIR / "output" / "churn_model.pkl"
-MODEL_H5    = TRAIN_DIR / "output" / "churn_model_keras.h5"
+SHAP_PKL    = TRAIN_DIR / "output" / "shap_explainer.pkl"
 
 # ── Feature columns (must match training order) ───────────
 FEATURE_COLS = [
@@ -128,37 +125,30 @@ def _recommended_action(prob: float, rfm_seg: str) -> str:
     return "ติดตาม Newsletter รายเดือน"
 
 
-def _key_reason(row: pd.Series, feature_importance: dict) -> str:
-    """Generate explainable AI key reason by mapping top features to readable text."""
-    fi_map = {
-        "days_since_last_access": ("ไม่ใช้งานมาแล้ว", "วัน", "days_since_last_access"),
-        "days_until_expire":      ("เครดิตหมดอายุในอีก", "วัน", "days_until_expire"),
-        "last_payment_recency":   ("ไม่เติมเครดิตมาแล้ว", "วัน", "last_payment_recency"),
-        "avg_payment_gap_days":   ("ช่วงห่างการซื้อเฉลี่ย", "วัน", "avg_payment_gap_days"),
-        "total_payments":         ("ซื้อเครดิตทั้งหมด", "ครั้ง", "total_payments"),
-        "total_amount_paid":      ("ยอดซื้อรวม", "฿", "total_amount_paid"),
-        "downgraded":             None,
-    }
+_FEAT_LABEL = {
+    "days_since_last_access": ("ไม่ใช้งานมาแล้ว",     "วัน"),
+    "days_until_expire":      ("เครดิตหมดอายุในอีก",  "วัน"),
+    "last_payment_recency":   ("ไม่เติมเครดิตมาแล้ว", "วัน"),
+    "avg_payment_gap_days":   ("ช่วงห่างการซื้อเฉลี่ย","วัน"),
+    "total_payments":         ("ซื้อเครดิตทั้งหมด",   "ครั้ง"),
+    "total_amount_paid":      ("ยอดซื้อรวม ฿",        ""),
+    "downgraded":             ("Downgrade Package",    ""),
+    "account_age_days":       ("อายุบัญชี",            "วัน"),
+}
+
+
+def _key_reason_from_shap(shap_vals_row: np.ndarray) -> str:
+    """Generate key reason text from per-row SHAP values (positive = push toward churn)."""
+    feat_shap = list(zip(FEATURE_COLS, shap_vals_row))
+    # Sort by absolute impact, keep top 3 that push toward churn (positive SHAP)
+    top = sorted(feat_shap, key=lambda x: x[1], reverse=True)[:3]
     reasons = []
-    top_features = list(feature_importance.keys())[:5] if feature_importance else list(fi_map.keys())[:3]
-
-    for feat in top_features:
-        if feat not in fi_map or fi_map[feat] is None:
-            if feat == "downgraded" and row.get("downgraded", 0) == 1:
-                reasons.append("มีการ Downgrade Package")
+    for feat, val in top:
+        if val <= 0:
             continue
-        label, unit, col = fi_map[feat]
-        val = row.get(col, None)
-        if val is None:
-            continue
-        if unit == "฿":
-            reasons.append(f"{label} ฿{int(val):,}")
-        else:
-            reasons.append(f"{label} {int(val)} {unit}")
-        if len(reasons) >= 3:
-            break
-
-    return " | ".join(reasons) if reasons else "ไม่มีข้อมูลเพิ่มเติม"
+        label, unit = _FEAT_LABEL.get(feat, (feat, ""))
+        reasons.append(f"{label}" + (f" {unit}" if unit else ""))
+    return " | ".join(reasons) if reasons else "ปกติ"
 
 
 def df_to_records(df: pd.DataFrame) -> list[dict]:
@@ -232,21 +222,21 @@ def _build_features() -> pd.DataFrame:
 # ── Load assets at startup ────────────────────────────────
 _predictions: pd.DataFrame = pd.DataFrame()
 _model = None
-_keras_model = None
+_shap_explainer = None
 _feature_importance: dict = {}
 
 @app.on_event("startup")
 def load_assets():
-    global _predictions, _model, _keras_model, _feature_importance
+    global _predictions, _model, _shap_explainer, _feature_importance
     if MODEL_PKL.exists():
         _model = joblib.load(MODEL_PKL)
-    if MODEL_H5.exists():
+    if SHAP_PKL.exists():
         try:
-            from tensorflow import keras
-            _keras_model = keras.models.load_model(str(MODEL_H5))
-            print("✅ Keras H5 model loaded")
+            obj = joblib.load(SHAP_PKL)
+            _shap_explainer = obj["explainer"]
+            print("✅ SHAP explainer loaded")
         except Exception as e:
-            print(f"⚠️  Keras model load failed: {e}")
+            print(f"⚠️  SHAP load failed: {e}")
 
     # Extract feature importance for explainable AI
     if _model is not None:
@@ -287,10 +277,17 @@ def load_assets():
             lambda r: _recommended_action(r["churn_probability"], r["rfm_segment"]), axis=1
         )
 
-        # Key Reason (Explainable AI)
-        df["key_reason"] = df.apply(
-            lambda r: _key_reason(r, _feature_importance), axis=1
-        )
+        # Key Reason — use SHAP if available, else rule-based fallback
+        if _shap_explainer is not None:
+            X_scaled = _model.named_steps["scaler"].transform(
+                _model.named_steps["imputer"].transform(X)
+            )
+            shap_vals = _shap_explainer.shap_values(X_scaled)
+            # For binary classification shap_values returns [neg_class, pos_class]
+            churn_shap = shap_vals[1] if isinstance(shap_vals, list) else shap_vals
+            df["key_reason"] = [_key_reason_from_shap(row) for row in churn_shap]
+        else:
+            df["key_reason"] = df.apply(_risk_factor, axis=1)
 
         _predictions = df[[
             "acc_id", "status", "credit", "expire",
@@ -495,8 +492,7 @@ def model_info():
         "test_auc":      0.970,
         "cv_auc":        0.965,
         "feature_importance": _feature_importance,
-        "keras_available": _keras_model is not None,
-        "keras_h5_path": str(MODEL_H5) if MODEL_H5.exists() else None,
+        "shap_available": _shap_explainer is not None,
     }
 
 
@@ -570,57 +566,41 @@ def predict(req: PredictRequest):
 
 
 # ══════════════════════════════════════════════════════════
-# POST /api/predict-keras  — live prediction via Keras H5
+# GET /api/explain/{acc_id}  — SHAP explanation per customer
 # ══════════════════════════════════════════════════════════
-@app.post("/api/predict-keras")
-def predict_keras(req: PredictRequest):
-    if _keras_model is None:
-        raise HTTPException(503, "Keras H5 model not loaded — run churn_model.py first or install TensorFlow")
+@app.get("/api/explain/{acc_id}")
+def explain_customer(acc_id: str):
+    if _predictions.empty:
+        raise HTTPException(404, "No prediction data")
+    if _shap_explainer is None:
+        raise HTTPException(503, "SHAP explainer not loaded — run churn_model.py first")
     if _model is None:
-        raise HTTPException(503, "sklearn pipeline not loaded (needed for preprocessing)")
+        raise HTTPException(503, "Model not loaded")
 
-    exp  = pd.Timestamp(req.expire)
-    join = pd.Timestamp(req.join_date)
-    la   = pd.Timestamp(req.last_access)
-    ls   = pd.Timestamp(req.last_send)
+    row = _predictions[_predictions["acc_id"] == acc_id]
+    if row.empty:
+        raise HTTPException(404, f"Account {acc_id} not found")
 
-    status_enc     = 1 if req.status.lower() == "trial" else 0
-    credit_map     = {"sms": 0, "email": 1}
-    credit_enc     = credit_map.get(req.credit.lower(), 0)
-    dom_credit_map = {"email": 0, "none": 1, "sms": 2}
-    dom_credit_enc = dom_credit_map.get(req.dominant_credit_type.lower(), 1)
+    X_raw    = row[FEATURE_COLS]
+    X_scaled = _model.named_steps["scaler"].transform(
+        _model.named_steps["imputer"].transform(X_raw)
+    )
+    shap_vals = _shap_explainer.shap_values(X_scaled)
+    # For binary tree models shap_values returns list [neg, pos]
+    vals = shap_vals[1][0] if isinstance(shap_vals, list) else shap_vals[0]
 
-    row = {
-        "status_enc":             status_enc,
-        "credit_enc":             credit_enc,
-        "days_since_last_access": (REFERENCE_DATE - la).days,
-        "days_since_last_send":   (REFERENCE_DATE - ls).days,
-        "days_until_expire":      (exp - REFERENCE_DATE).days,
-        "account_age_days":       (REFERENCE_DATE - join).days,
-        "total_payments":         req.total_payments,
-        "total_amount_paid":      req.total_amount_paid,
-        "avg_amount_per_tx":      req.avg_amount_per_tx,
-        "total_sms_volume":       req.total_sms_volume,
-        "avg_sms_volume":         req.avg_sms_volume,
-        "unique_products":        req.unique_products,
-        "last_payment_recency":   req.last_payment_recency,
-        "avg_payment_gap_days":   req.avg_payment_gap_days,
-        "last_payment_amount":    req.last_payment_amount,
-        "downgraded":             req.downgraded,
-        "dom_credit_enc":         dom_credit_enc,
-    }
-
-    X_raw = pd.DataFrame([row])[FEATURE_COLS]
-    imputer = _model.named_steps["imputer"]
-    scaler  = _model.named_steps["scaler"]
-    X_scaled = scaler.transform(imputer.transform(X_raw))
-
-    prob = float(_keras_model.predict(X_scaled, verbose=0).flatten()[0])
+    contributions = [
+        {
+            "feature":     feat,
+            "shap_value":  round(float(val), 5),
+            "label":       _FEAT_LABEL.get(feat, (feat, ""))[0],
+            "direction":   "churn" if val > 0 else "retain",
+        }
+        for feat, val in sorted(zip(FEATURE_COLS, vals), key=lambda x: abs(x[1]), reverse=True)
+    ]
 
     return {
-        "churn_probability": round(prob, 4),
-        "churn_predicted":   int(prob >= 0.5),
-        "risk":              risk_label(prob),
-        "model":             "Keras Neural Network (H5)",
-        "features_used":     row,
+        "acc_id":        acc_id,
+        "churn_probability": round(float(row.iloc[0]["churn_probability"]), 4),
+        "contributions": contributions,
     }

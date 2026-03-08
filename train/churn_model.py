@@ -7,8 +7,8 @@
   - Engineers churn label based on expiry + last_access
   - Builds rich behavioral features from payment history
   - Trains & evaluates multiple ML classifiers
-  - Saves best sklearn model as  output/churn_model.pkl
-  - Saves Keras neural network as output/churn_model_keras.h5
+  - Saves best sklearn model as output/churn_model.pkl
+  - Saves SHAP TreeExplainer as output/shap_explainer.pkl
 ======================================================="""
 
 import pandas as pd
@@ -32,9 +32,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (classification_report, confusion_matrix,
                              roc_auc_score, roc_curve, ConfusionMatrixDisplay)
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import seaborn as sns
 import joblib
+import shap
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────
@@ -343,78 +343,28 @@ def save_sklearn_pkl(results: dict, best_model: str, scaler: StandardScaler):
     return pipeline
 
 
-def save_keras_h5(df: pd.DataFrame, results: dict, scaler: StandardScaler):
+def save_shap_explainer(results: dict, best_model: str, scaler: StandardScaler, df: pd.DataFrame):
     """
-    Trains a Keras Dense neural network on the same feature set
-    and saves it as churn_output/churn_model_keras.h5
+    Builds a SHAP TreeExplainer from the best classifier and saves it.
+    The explainer operates on scaled features (post-imputer+scaler).
     """
-    try:
-        import tensorflow as tf
-        from tensorflow import keras
-    except ImportError:
-        print("  ⚠️  TensorFlow not installed — skipping .h5 export.")
-        return None
-
-    os_env_suppress = {"TF_CPP_MIN_LOG_LEVEL": "3",
-                       "TF_ENABLE_ONEDNN_OPTS": "0"}
-    import os
-    for k, v in os_env_suppress.items():
-        os.environ[k] = v
-
+    bm      = results[best_model]["model"]
     imputer = results["_imputer"]
-    X = scaler.transform(imputer.transform(df[FEATURE_COLS]))
-    y = df["churned"].values
 
-    X_tr, X_te, y_tr, y_te = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    X_raw    = df[FEATURE_COLS]
+    X_scaled = scaler.transform(imputer.transform(X_raw))
 
-    n_features = X_tr.shape[1]
+    explainer = shap.TreeExplainer(bm)
+    # Compute a background summary for faster API calls later
+    background = shap.sample(X_scaled, 100, random_state=42)
+    explainer_fast = shap.TreeExplainer(bm, background)
 
-    model = keras.Sequential([
-        keras.layers.Input(shape=(n_features,)),
-        keras.layers.Dense(128, activation="relu"),
-        keras.layers.BatchNormalization(),
-        keras.layers.Dropout(0.3),
-        keras.layers.Dense(64, activation="relu"),
-        keras.layers.BatchNormalization(),
-        keras.layers.Dropout(0.2),
-        keras.layers.Dense(32, activation="relu"),
-        keras.layers.Dense(1, activation="sigmoid"),
-    ], name="churn_neural_net")
-
-    model.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
-        loss="binary_crossentropy",
-        metrics=["accuracy", keras.metrics.AUC(name="auc")],
-    )
-
-    cb = [
-        keras.callbacks.EarlyStopping(monitor="val_auc", patience=10,
-                                       restore_best_weights=True, mode="max"),
-        keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5,
-                                           patience=5, verbose=0),
-    ]
-
-    print("\n  [Keras Neural Network] training …")
-    history = model.fit(
-        X_tr, y_tr,
-        validation_split=0.15,
-        epochs=100,
-        batch_size=256,
-        callbacks=cb,
-        verbose=0,
-    )
-
-    loss, acc, auc = model.evaluate(X_te, y_te, verbose=0)
-    print(f"  Keras — Test Accuracy: {acc:.4f}  |  AUC: {auc:.4f}")
-
-    h5_path = OUTPUT_DIR / "churn_model_keras.h5"
-    model.save(str(h5_path))
-    print(f"  💾 Keras model saved  → {h5_path}")
-    print(f"     Load with: model = keras.models.load_model('{h5_path}')")
-    print(f"     Predict  : probs = model.predict(X_new).flatten()")
-    return model
+    shap_path = OUTPUT_DIR / "shap_explainer.pkl"
+    joblib.dump({"explainer": explainer_fast, "feature_names": FEATURE_COLS}, shap_path)
+    print(f"\n  💾 SHAP explainer saved → {shap_path}")
+    print(f"     Load with: obj = joblib.load('{shap_path}')")
+    print(f"     Explain  : shap_vals = obj['explainer'].shap_values(X_scaled)[1]")
+    return explainer_fast
 
 
 # ══════════════════════════════════════════════════════
@@ -499,7 +449,7 @@ def main():
     print("  Saving Models")
     print("═" * 60)
     save_sklearn_pkl(results, best_model, scaler)
-    save_keras_h5(df, results, scaler)
+    save_shap_explainer(results, best_model, scaler, df)
 
     print("\n  ✅  Pipeline complete!\n")
 
