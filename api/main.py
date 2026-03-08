@@ -11,7 +11,7 @@ Endpoints:
   POST /api/predict              → score a new customer record live
 """
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -219,15 +219,51 @@ def _build_features() -> pd.DataFrame:
     return df
 
 
-# ── Load assets at startup ────────────────────────────────
+# ── In-memory state ──────────────────────────────────────
 _predictions: pd.DataFrame = pd.DataFrame()
 _model = None
 _shap_explainer = None
 _feature_importance: dict = {}
 
+
+def _rebuild_predictions() -> int:
+    """Build predictions from current CSV files. Returns number of rows, or 0 if failed."""
+    global _predictions
+    if _model is None or not USERS_CSV.exists() or not PAY_CSV.exists():
+        return 0
+    df = _build_features()
+    X  = df[FEATURE_COLS]
+    df["churn_probability"] = _model.predict_proba(X)[:, 1]
+    df["churn_predicted"]   = (df["churn_probability"] >= 0.5).astype(int)
+    df["risk_tier"] = df["churn_probability"].apply(
+        lambda p: "High" if p >= 0.6 else ("Medium" if p >= 0.3 else "Low")
+    )
+    df["ltv"] = df["total_amount_paid"]
+    df["rfm_segment"] = df.apply(
+        lambda r: _rfm_segment(r["days_since_last_access"], r["total_payments"], r["total_amount_paid"]), axis=1
+    )
+    df["risk_factor"] = df.apply(_risk_factor, axis=1)
+    df["recommended_action"] = df.apply(
+        lambda r: _recommended_action(r["churn_probability"], r["rfm_segment"]), axis=1
+    )
+    df["key_reason"] = df.apply(_risk_factor, axis=1)
+    _predictions = df[[
+        "acc_id", "status", "credit", "expire",
+        "days_since_last_access", "days_until_expire",
+        "total_payments", "total_amount_paid", "ltv",
+        "avg_amount_per_tx", "last_payment_recency", "avg_payment_gap_days",
+        "total_sms_volume", "avg_sms_volume", "unique_products",
+        "downgraded", "account_age_days",
+        "churn_probability", "churn_predicted", "risk_tier", "churned",
+        "rfm_segment", "risk_factor", "recommended_action", "key_reason",
+    ]].copy()
+    _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
+    return len(_predictions)
+
+
 @app.on_event("startup")
 def load_assets():
-    global _predictions, _model, _shap_explainer, _feature_importance
+    global _model, _shap_explainer, _feature_importance
     if MODEL_PKL.exists():
         _model = joblib.load(MODEL_PKL)
     if SHAP_PKL.exists():
@@ -237,63 +273,13 @@ def load_assets():
             print("[OK] SHAP explainer loaded")
         except Exception as e:
             print(f"[WARN] SHAP load failed: {e}")
-
-    # Extract feature importance for explainable AI
     if _model is not None:
         clf = _model.named_steps.get("classifier")
         if clf and hasattr(clf, "feature_importances_"):
             fi = clf.feature_importances_
             _feature_importance = dict(zip(FEATURE_COLS, [round(float(v), 5) for v in fi]))
             _feature_importance = dict(sorted(_feature_importance.items(), key=lambda x: x[1], reverse=True))
-
-    # Compute predictions fresh from raw data + model
-    if _model is not None and USERS_CSV.exists() and PAY_CSV.exists():
-        df = _build_features()
-        X  = df[FEATURE_COLS]
-        df["churn_probability"] = _model.predict_proba(X)[:, 1]
-        df["churn_predicted"]   = (df["churn_probability"] >= 0.5).astype(int)
-        df["risk_tier"] = df["churn_probability"].apply(
-            lambda p: "High" if p >= 0.6 else ("Medium" if p >= 0.3 else "Low")
-        )
-
-        # ── New enriched columns ──────────────────────────────
-        # LTV = total_amount_paid (already in df)
-        df["ltv"] = df["total_amount_paid"]
-
-        # RFM Segment
-        df["rfm_segment"] = df.apply(
-            lambda r: _rfm_segment(
-                r["days_since_last_access"],
-                r["total_payments"],
-                r["total_amount_paid"],
-            ), axis=1
-        )
-
-        # Risk Factor (text)
-        df["risk_factor"] = df.apply(_risk_factor, axis=1)
-
-        # Recommended Action
-        df["recommended_action"] = df.apply(
-            lambda r: _recommended_action(r["churn_probability"], r["rfm_segment"]), axis=1
-        )
-
-        # Key Reason — rule-based at startup (fast); use /api/explain/{acc_id} for SHAP per-customer
-        df["key_reason"] = df.apply(_risk_factor, axis=1)
-
-        _predictions = df[[
-            "acc_id", "status", "credit", "expire",
-            "days_since_last_access", "days_until_expire",
-            "total_payments", "total_amount_paid", "ltv",
-            "avg_amount_per_tx", "last_payment_recency", "avg_payment_gap_days",
-            "total_sms_volume", "avg_sms_volume", "unique_products",
-            "downgraded", "account_age_days",
-            "churn_probability", "churn_predicted", "risk_tier", "churned",
-            "rfm_segment", "risk_factor", "recommended_action", "key_reason",
-        ]].copy()
-        _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
-        print(f"[OK] Predictions computed for {len(_predictions)} customers")
-    else:
-        print("[WARN] Model or data not found — run churn_model.py first")
+    print("[OK] Model loaded — waiting for CSV import to generate predictions")
 
 
 # ══════════════════════════════════════════════════════════
@@ -328,8 +314,8 @@ def get_stats():
         "avg_spend_active":  avg_spend_active,
         "avg_spend_churned": avg_spend_churned,
         "revenue_at_risk":   revenue_at_risk,
-        "model_name":        "Random Forest",
-        "model_auc":         round(_feature_importance.get("__auc__", 0.97), 3) if "__auc__" in _feature_importance else 0.970,
+        "model_name":        type(_model.named_steps.get("classifier")).__name__ if _model and _model.named_steps.get("classifier") else "Unknown",
+        "model_auc":         None,  # computed dynamically via /api/model-info
     }
 
 
@@ -473,15 +459,29 @@ def export_csv(
 # ══════════════════════════════════════════════════════════
 @app.get("/api/model-info")
 def model_info():
+    # Read real hyperparameters from the loaded model
+    clf = _model.named_steps.get("classifier") if _model else None
+    n_estimators = getattr(clf, "n_estimators", None)
+    max_depth = getattr(clf, "max_depth", None)
+    classifier_name = type(clf).__name__ if clf else "Unknown"
+
+    # Compute real AUC from current predictions if available
+    real_auc = None
+    if not _predictions.empty and "churned" in _predictions.columns and "churn_probability" in _predictions.columns:
+        from sklearn.metrics import roc_auc_score
+        try:
+            real_auc = round(float(roc_auc_score(_predictions["churned"], _predictions["churn_probability"])), 4)
+        except Exception:
+            pass
+
     return {
-        "model_type":    "sklearn Pipeline (SimpleImputer → StandardScaler → Random Forest)",
-        "classifier":    "RandomForestClassifier",
-        "n_estimators":  200,
-        "max_depth":     6,
+        "model_type":    type(_model).__name__ if _model else "Not loaded",
+        "classifier":    classifier_name,
+        "n_estimators":  n_estimators,
+        "max_depth":     max_depth,
         "n_features":    len(FEATURE_COLS),
         "features":      FEATURE_COLS,
-        "test_auc":      0.970,
-        "cv_auc":        0.965,
+        "test_auc":      real_auc,
         "feature_importance": _feature_importance,
         "shap_available": _shap_explainer is not None,
     }
@@ -595,3 +595,83 @@ def explain_customer(acc_id: str):
         "churn_probability": round(float(row.iloc[0]["churn_probability"]), 4),
         "contributions": contributions,
     }
+
+
+# ══════════════════════════════════════════════════════════
+# POST /api/chat  — AI Chatbot (Qwen via Ollama + PostgreSQL)
+# ══════════════════════════════════════════════════════════
+from database     import AsyncSessionLocal
+from chat_service import chat as _chat_service
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[dict] = []
+
+@app.post("/api/chat")
+async def api_chat(req: ChatRequest):
+    """
+    AI chatbot endpoint.
+
+    Body:
+        message  — user's question (Thai or English)
+        history  — list of {role, content} for conversation context
+
+    Returns:
+        reply       — AI's Thai-language answer
+        tools_used  — list of DB tools the AI called
+    """
+    if not req.message.strip():
+        raise HTTPException(400, "message cannot be empty")
+
+    async with AsyncSessionLocal() as db:
+        result = await _chat_service(
+            message = req.message.strip(),
+            history = req.history,
+            db      = db,
+        )
+    return result
+
+
+# ══════════════════════════════════════════════════════════
+# POST /api/import-csv  — upload users or payments CSV
+# ══════════════════════════════════════════════════════════
+@app.post("/api/import-csv")
+async def import_csv(file: UploadFile = File(...)):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(400, "กรุณาอัปโหลดไฟล์ .csv เท่านั้น")
+
+    content = await file.read()
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception as e:
+        raise HTTPException(400, f"ไม่สามารถอ่านไฟล์ CSV ได้: {e}")
+
+    cols = set(df.columns.str.lower())
+    # Detect file type by columns
+    if "acc_id" in cols and "payment_date" in cols:
+        target = PAY_CSV
+        kind = "payments"
+    elif "acc_id" in cols and ("join_date" in cols or "expire" in cols):
+        target = USERS_CSV
+        kind = "users"
+    else:
+        raise HTTPException(
+            400,
+            "ไม่รู้จักรูปแบบไฟล์ — ต้องมีคอลัมน์ acc_id และ (payment_date สำหรับ payments / join_date สำหรับ users)"
+        )
+
+    target.write_bytes(content)
+
+    # Rebuild predictions if both files are now present
+    rebuilt = 0
+    if USERS_CSV.exists() and PAY_CSV.exists():
+        rebuilt = _rebuild_predictions()
+
+    return {
+        "message": f"Import {kind} สำเร็จ {len(df):,} แถว ({file.filename})" + (f" — คำนวณ predictions {rebuilt:,} รายการแล้ว" if rebuilt else " — รอ import อีกไฟล์"),
+        "rows": len(df),
+        "type": kind,
+        "predictions_ready": rebuilt > 0,
+        "predictions_count": rebuilt,
+    }
+
