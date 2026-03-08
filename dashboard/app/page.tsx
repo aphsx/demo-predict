@@ -49,17 +49,24 @@ interface StatCardProps {
   dot?: string;
 }
 
-function StatCard({ label, value, sub, accent = "#006bff", dot }: StatCardProps) {
+function StatCard({ label, value, sub, accent = "#005AE2", dot }: StatCardProps) {
   return (
-    <div className="glass metric-ring flex flex-col gap-2 p-6">
-      <div className="flex items-center gap-2">
-        {dot && <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: dot }} />}
-        <p className="section-label">{label}</p>
+    <div className="flex flex-col gap-2 p-6 bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] h-full justify-between transition-shadow hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
+      <div className="flex items-center gap-2 mb-1">
+        {dot && (
+          <span
+            className="h-2 w-2 rounded-full flex-shrink-0"
+            style={{ background: dot }}
+          />
+        )}
+        <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#5A6B8A]">{label}</p>
       </div>
-      <p className="text-3xl font-semibold tracking-tight" style={{ color: accent }}>
-        {value}
-      </p>
-      {sub && <p className="text-xs text-gray-500 leading-5">{sub}</p>}
+      <div>
+        <p className="text-[32px] font-bold tracking-tight text-gray-900 leading-none">
+          {value}
+        </p>
+        {sub && <p className="mt-3 text-xs font-medium text-gray-500">{sub}</p>}
+      </div>
     </div>
   );
 }
@@ -103,29 +110,29 @@ export default async function DashboardPage() {
         label: "Total Customers",
         value: stats.total_customers.toLocaleString(),
         sub: `${compact.format(stats.total_customers)} profiles in scoring base`,
-        accent: "#0b0b0b",
-        dot: "#006bff",
+        accent: "#005AE2",
+        dot: "#005AE2", // 1Moby Blue
       },
       {
         label: "Churn Rate",
         value: formatPercent(stats.churn_rate),
         sub: `${stats.churned_customers.toLocaleString()} accounts predicted as churned`,
         accent: "#fc4c02",
-        dot: "#fc4c02",
+        dot: "#fc4c02", // 1Moby Orange/Red
       },
       {
         label: "Active Base",
         value: stats.active_customers.toLocaleString(),
         sub: "Customers still engaged in current cycle",
         accent: "#10B981",
-        dot: "#10B981",
+        dot: "#10B981", // Green
       },
       {
         label: "Model AUC",
         value: Number(stats.model_auc).toFixed(3),
         sub: stats.model_name,
-        accent: "#006bff",
-        dot: "#006bff",
+        accent: "#005AE2",
+        dot: "#005AE2",
       },
     ]
     : [];
@@ -204,11 +211,9 @@ export default async function DashboardPage() {
 
       {/* ── KPI Cards (Overlapping Banner) ── */}
       {stats && (
-        <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4 relative z-30 mt-[-80px] px-2">
+        <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4 relative z-30 mt-[-80px] px-2 sm:px-0">
           {kpiCards.map((card) => (
-            <div key={card.label} className="bg-white rounded-[20px] shadow-[0_12px_32px_-12px_rgba(0,0,0,0.1)] border border-gray-100/50">
-              <StatCard {...card} />
-            </div>
+            <StatCard key={card.label} {...card} />
           ))}
         </section>
       )}
@@ -219,31 +224,33 @@ export default async function DashboardPage() {
           {riskCards.map((card) => (
             <div
               key={card.label}
-              className="glass flex flex-col gap-4 p-6"
-              style={{ borderLeft: `4px solid ${card.barColor}` }}
+              className="flex flex-col gap-4 p-6 bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)]"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="section-label">{card.label}</p>
-                  <p className="mt-2 text-4xl font-bold" style={{ color: card.textColor }}>
+                  <div className="flex flex-col gap-1 mb-2">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#5A6B8A]">{card.label}</p>
+                  </div>
+                  <p className="text-[32px] font-bold tracking-tight leading-none" style={{ color: card.textColor }}>
                     {card.value.toLocaleString()}
                   </p>
                 </div>
                 <span
-                  className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                  className="rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-wide"
                   style={{ background: card.bgColor, color: card.textColor, border: `1px solid ${card.borderColor}` }}
                 >
                   {card.range}
                 </span>
               </div>
-              {/* Mini progress bar */}
-              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+
+              {/* Minimal progress bar */}
+              <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden mt-1">
                 <div
-                  className="h-full rounded-full transition-all"
+                  className="h-full rounded-full"
                   style={{ width: `${card.pct.toFixed(1)}%`, background: card.barColor }}
                 />
               </div>
-              <p className="text-xs leading-5 text-gray-500">{card.description}</p>
+              <p className="text-[13px] font-medium text-gray-500 mt-1">{card.description}</p>
             </div>
           ))}
         </section>

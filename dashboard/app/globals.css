@@ -5,19 +5,23 @@
 /* ─── 1moby Design System ─── */
 :root {
   --sidebar-width: 260px;
-  --bg: #ffffff;
+  --bg: #f2f6fa;
   --panel: #ffffff;
-  --line: rgba(0, 0, 0, 0.08);
+  --line: rgba(0, 0, 0, 0.06);
   --text: #0b0b0b;
   --muted: #6b6b6b;
-  --accent: #006bff;
+  --accent: #005AE2;
   --accent-light: #e2ebf2;
   --navy: #0b0b0b;
 }
 
 body {
   @apply antialiased;
-  background: var(--bg);
+  background-color: #F4F5F6;
+  background-image: 
+    radial-gradient(ellipse at 0% 50%, rgba(219, 150, 140, 0.25) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 0%, rgba(240, 242, 245, 0.6) 0%, transparent 50%);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
@@ -47,10 +51,13 @@ html {
 }
 /* ─── Card ─── */
 .glass {
-  @apply bg-white;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-radius: 20px;
-  border: 1px solid rgba(0,0,0,0.08);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 1);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
 }
 
 .glass-strong {

@@ -98,26 +98,21 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={clsx(
-                "group flex items-center gap-3.5 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
+                "group flex items-center gap-3.5 rounded-xl px-4 py-3 text-sm font-bold transition-all duration-200",
                 active
-                  ? "text-[#006bff] bg-blue-50/80"
-                  : "text-gray-600 hover:text-[#006bff] hover:bg-gray-50"
+                  ? "text-white bg-[#005AE2] shadow-[0_4px_12px_rgba(0,90,226,0.25)]"
+                  : "text-gray-600 hover:text-[#005AE2] hover:bg-gray-50"
               )}
             >
               <span
                 className={clsx(
                   "flex h-5 w-5 items-center justify-center transition-colors",
-                  active ? "text-[#006bff]" : "text-gray-400 group-hover:text-[#006bff]"
+                  active ? "text-white flex-shrink-0" : "text-gray-400 flex-shrink-0 group-hover:text-[#005AE2]"
                 )}
               >
                 {item.icon}
               </span>
               <span className="flex-1">{item.label}</span>
-              {active && (
-                <span
-                  className="h-1.5 w-1.5 rounded-full bg-[#006bff]"
-                />
-              )}
             </Link>
           );
         })}
