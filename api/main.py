@@ -151,6 +151,17 @@ def _key_reason_from_shap(shap_vals_row: np.ndarray) -> str:
     return " | ".join(reasons) if reasons else "ปกติ"
 
 
+def _compute_auc() -> float | None:
+    """Compute AUC from current predictions (churned vs churn_probability)."""
+    if _predictions.empty or "churned" not in _predictions.columns:
+        return None
+    from sklearn.metrics import roc_auc_score
+    try:
+        return round(float(roc_auc_score(_predictions["churned"], _predictions["churn_probability"])), 4)
+    except Exception:
+        return None
+
+
 def df_to_records(df: pd.DataFrame) -> list[dict]:
     return json.loads(df.to_json(orient="records"))
 
@@ -248,7 +259,7 @@ def _rebuild_predictions() -> int:
     )
     df["key_reason"] = df.apply(_risk_factor, axis=1)
     _predictions = df[[
-        "acc_id", "status", "credit", "expire",
+        "acc_id", "status", "credit", "expire", "join_date",
         "days_since_last_access", "days_until_expire",
         "total_payments", "total_amount_paid", "ltv",
         "avg_amount_per_tx", "last_payment_recency", "avg_payment_gap_days",
@@ -315,8 +326,54 @@ def get_stats():
         "avg_spend_churned": avg_spend_churned,
         "revenue_at_risk":   revenue_at_risk,
         "model_name":        type(_model.named_steps.get("classifier")).__name__ if _model and _model.named_steps.get("classifier") else "Unknown",
-        "model_auc":         None,  # computed dynamically via /api/model-info
+        "model_auc":         _compute_auc(),
     }
+
+
+# ══════════════════════════════════════════════════════════
+# GET /api/churn-trend  — monthly churn rate by join cohort
+# ══════════════════════════════════════════════════════════
+@app.get("/api/churn-trend")
+def churn_trend():
+    if _predictions.empty:
+        raise HTTPException(404, "No prediction data found")
+
+    df = _predictions.copy()
+    df["join_month"] = pd.to_datetime(df["join_date"]).dt.to_period("M")
+    grouped = df.groupby("join_month").agg(
+        total=("acc_id", "count"),
+        churned=("churned", "sum"),
+    ).reset_index()
+    grouped["rate"] = (grouped["churned"] / grouped["total"] * 100).round(1)
+    grouped = grouped.sort_values("join_month")
+
+    return [
+        {"month": str(r["join_month"]), "rate": float(r["rate"]), "total": int(r["total"]), "churned": int(r["churned"])}
+        for _, r in grouped.iterrows()
+    ]
+
+
+# ══════════════════════════════════════════════════════════
+# GET /api/retention-trend  — monthly churned vs retained
+# ══════════════════════════════════════════════════════════
+@app.get("/api/retention-trend")
+def retention_trend():
+    if _predictions.empty:
+        raise HTTPException(404, "No prediction data found")
+
+    df = _predictions.copy()
+    df["join_month"] = pd.to_datetime(df["join_date"]).dt.to_period("M")
+    grouped = df.groupby("join_month").agg(
+        churned=("churned", "sum"),
+        total=("acc_id", "count"),
+    ).reset_index()
+    grouped["retained"] = grouped["total"] - grouped["churned"]
+    grouped = grouped.sort_values("join_month")
+
+    return [
+        {"month": str(r["join_month"]), "churned": int(r["churned"]), "retained": int(r["retained"])}
+        for _, r in grouped.iterrows()
+    ]
 
 
 # ══════════════════════════════════════════════════════════
@@ -465,14 +522,7 @@ def model_info():
     max_depth = getattr(clf, "max_depth", None)
     classifier_name = type(clf).__name__ if clf else "Unknown"
 
-    # Compute real AUC from current predictions if available
-    real_auc = None
-    if not _predictions.empty and "churned" in _predictions.columns and "churn_probability" in _predictions.columns:
-        from sklearn.metrics import roc_auc_score
-        try:
-            real_auc = round(float(roc_auc_score(_predictions["churned"], _predictions["churn_probability"])), 4)
-        except Exception:
-            pass
+    real_auc = _compute_auc()
 
     return {
         "model_type":    type(_model).__name__ if _model else "Not loaded",

@@ -47,6 +47,18 @@ async function getTopRisk(n = 10) {
   return res.json() as Promise<TopRiskCustomer[]>;
 }
 
+async function getChurnTrend() {
+  const res = await fetch(`${API}/api/churn-trend`, { cache: "no-store" });
+  if (!res.ok) return [];
+  return res.json() as Promise<{ month: string; rate: number }[]>;
+}
+
+async function getRetentionTrend() {
+  const res = await fetch(`${API}/api/retention-trend`, { cache: "no-store" });
+  if (!res.ok) return [];
+  return res.json() as Promise<{ month: string; churned: number; retained: number }[]>;
+}
+
 interface StatCardProps {
   label: string;
   value: string | number;
@@ -95,10 +107,14 @@ function formatPercent(value: number) {
 export default async function DashboardPage() {
   let stats: DashboardStats | null = null;
   let topRisk: TopRiskCustomer[] = [];
+  let churnTrend: { month: string; rate: number }[] = [];
+  let retentionTrend: { month: string; churned: number; retained: number }[] = [];
   let error: string | null = null;
 
   try {
-    [stats, topRisk] = await Promise.all([getStats(), getTopRisk(10)]);
+    [stats, topRisk, churnTrend, retentionTrend] = await Promise.all([
+      getStats(), getTopRisk(10), getChurnTrend(), getRetentionTrend(),
+    ]);
   } catch (e: any) {
     error = "ไม่สามารถเชื่อมต่อ API ได้ — ตรวจสอบว่า FastAPI กำลังรันที่ port 8000";
   }
@@ -135,7 +151,7 @@ export default async function DashboardPage() {
       },
       {
         label: "Model AUC",
-        value: Number(stats.model_auc).toFixed(3),
+        value: stats.model_auc != null ? Number(stats.model_auc).toFixed(4) : "—",
         sub: stats.model_name,
         accent: "#005AE2",
         dot: "#005AE2",
@@ -265,10 +281,10 @@ export default async function DashboardPage() {
       {/* ── Charts (3 in a row) ── */}
       {stats && (
         <section className="grid gap-5 xl:grid-cols-3">
-          {/* Churn Rate Trends — [DEMO] ยังไม่มี historical data API */}
+          {/* Churn Rate Trends — by join-month cohort */}
           <div className="bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-6 relative overflow-hidden">
             <h3 className="text-base font-bold text-gray-900 mb-4">Churn Rate Trends</h3>
-            <ChurnTrendChart />
+            <ChurnTrendChart data={churnTrend} />
           </div>
 
           {/* Customer Risk Distribution */}
@@ -277,10 +293,10 @@ export default async function DashboardPage() {
             <RiskPieChart high={stats.high_risk} medium={stats.medium_risk} low={stats.low_risk} />
           </div>
 
-          {/* Monthly Customer Retention — [DEMO] ยังไม่มี historical data API */}
+          {/* Monthly Customer Retention — by join-month cohort */}
           <div className="bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-6 relative overflow-hidden">
             <h3 className="text-base font-bold text-gray-900 mb-4">Monthly Customer Retention</h3>
-            <RetentionBarChart />
+            <RetentionBarChart data={retentionTrend} />
           </div>
         </section>
       )}

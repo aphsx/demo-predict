@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx next build)",
+      "Bash(git reset HEAD)",
+      "Bash(git add .env.example docker-compose.yml db/init.sql api/database.py api/db_models.py)",
+      "Bash(git commit:*)",
+      "Bash(git add api/seed_db.py api/chat_service.py api/requirements.txt)",
+      "Bash(git add api/main.py)",
+      "Bash(git add dashboard/components/FloatingChat.tsx dashboard/components/Sidebar.tsx)",
+      "Bash(git add dashboard/components/ChurnTrendChart.tsx dashboard/components/RetentionBarChart.tsx)",
+      "Bash(git add \"dashboard/app/page.tsx\" \"dashboard/app/customers/page.tsx\" \"dashboard/app/customers/[id]/page.tsx\" \"dashboard/app/model/page.tsx\")",
+      "Bash(git add dashboard/next-env.d.ts)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''main.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''OK''\\)\")"
+    ]
+  }
+}

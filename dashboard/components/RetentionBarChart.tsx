@@ -3,21 +3,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"];
-
 interface Props {
   data?: { month: string; churned: number; retained: number }[];
 }
 
-/**
- * [DEMO DATA] — ข้อมูล Retention รายเดือนเป็นตัวอย่าง (hardcoded)
- * ยังไม่มี API endpoint สำหรับ monthly retention history
- * ต้องสร้าง time-series data collection ก่อนจึงจะแสดงข้อมูลจริงได้
- */
 export default function RetentionBarChart({ data }: Props) {
   const isDemo = !data || data.length === 0;
   const chartData = isDemo
-    ? MONTHS.map((m, i) => ({
+    ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"].map((m, i) => ({
         month: m,
         churned: [5, 6, 8, 7, 6, 5, 4, 5, 4][i],
         retained: [8, 10, 14, 15, 18, 19, 20, 17, 19][i],
@@ -36,9 +29,12 @@ export default function RetentionBarChart({ data }: Props) {
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
         <XAxis
           dataKey="month"
-          tick={{ fill: "#888", fontSize: 12 }}
+          tick={{ fill: "#888", fontSize: 11 }}
           axisLine={false}
           tickLine={false}
+          angle={-30}
+          textAnchor="end"
+          height={40}
         />
         <YAxis
           tick={{ fill: "#aaa", fontSize: 12 }}
