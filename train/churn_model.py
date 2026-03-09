@@ -81,12 +81,18 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 #   OOT Split = Train on accounts whose fate resolved before OOT_SPLIT_DATE;
 #               Test on accounts whose fate resolved in the prediction window.
 # =========================================================================
-CUTOFF_DATE    = datetime(2025, 12, 31)   # Observation snapshot ("model deployment date")
-OOT_SPLIT_DATE = datetime(2025, 10,  1)   # OOT test window starts here
-REFERENCE_DATE = datetime(2026,  3,  9)   # "Today" — we check final outcomes up to here
+# ── Configurable offsets (days) — the ONLY values you need to touch ──────
+# All three dates below are computed automatically from the data.
+# Change these offsets to adjust the temporal windows.
+CUTOFF_LOOKBACK_DAYS = 90    # CUTOFF_DATE  = latest data date - this many days
+OOT_LOOKBACK_DAYS    = 90    # OOT_SPLIT_DATE = CUTOFF_DATE   - this many days
+DECAY_SHORT_DAYS     = 90    # "recent"  activity window (usage-decay features)
+DECAY_LONG_DAYS      = 180   # "prior"   activity window (usage-decay baseline)
 
-DECAY_SHORT_DAYS = 90    # "recent" activity window  (for usage-decay features)
-DECAY_LONG_DAYS  = 180   # "prior"  activity window  (for usage-decay baseline)
+# Populated by setup_temporal_config() — do not set manually
+CUTOFF_DATE: datetime    = None   # noqa: F821
+OOT_SPLIT_DATE: datetime = None   # noqa: F821
+REFERENCE_DATE: datetime = None   # noqa: F821
 
 
 # =========================================================================
@@ -103,6 +109,40 @@ def load_data():
     payments.dropna(subset=["payment_date"], inplace=True)
 
     return users, payments
+
+
+# =========================================================================
+# SECTION 2b — TEMPORAL CONFIGURATION  (auto-derived from data)
+#
+# REFERENCE_DATE  = latest date seen anywhere in payments or user activity.
+#                   Think of it as "the day you run the model".
+# CUTOFF_DATE     = REFERENCE_DATE − CUTOFF_LOOKBACK_DAYS
+#                   Features are frozen here; nothing after leaks in.
+# OOT_SPLIT_DATE  = CUTOFF_DATE − OOT_LOOKBACK_DAYS
+#                   Accounts expiring between here and REFERENCE_DATE form
+#                   the held-out evaluation cohort.
+#
+# Swap in any dataset → dates recalibrate automatically.
+# =========================================================================
+def setup_temporal_config(payments: pd.DataFrame, users: pd.DataFrame):
+    global CUTOFF_DATE, OOT_SPLIT_DATE, REFERENCE_DATE
+
+    # "Today" = latest evidence of activity in either table
+    latest_payment = payments["payment_date"].max()
+    latest_access  = users["last_access"].max()
+    REFERENCE_DATE  = max(latest_payment, latest_access).to_pydatetime().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    from datetime import timedelta
+    CUTOFF_DATE    = REFERENCE_DATE - timedelta(days=CUTOFF_LOOKBACK_DAYS)
+    OOT_SPLIT_DATE = CUTOFF_DATE    - timedelta(days=OOT_LOOKBACK_DAYS)
+
+    print(f"         Reference date  : {REFERENCE_DATE.date()}  (latest data point)")
+    print(f"         Cutoff date     : {CUTOFF_DATE.date()}  "
+          f"(features frozen here, {CUTOFF_LOOKBACK_DAYS}d lookback)")
+    print(f"         OOT split date  : {OOT_SPLIT_DATE.date()}  "
+          f"(OOT window: {OOT_LOOKBACK_DAYS}d before cutoff)")
 
 
 # =========================================================================
@@ -820,17 +860,19 @@ def main():
     print("\n" + "═" * 72)
     print("  Customer Churn Prediction Pipeline  v2")
     print("  Anti-Leakage | OOT Validation | RFM + Decay | SHAP")
-    print(f"  Cutoff : {CUTOFF_DATE.date()}  |  OOT from : {OOT_SPLIT_DATE.date()}"
-          f"  |  Reference : {REFERENCE_DATE.date()}")
+    print(f"  Offsets : cutoff={CUTOFF_LOOKBACK_DAYS}d, OOT={OOT_LOOKBACK_DAYS}d"
+          f"  (dates computed from data)")
     print("═" * 72)
 
-    # [1] Load
+    # [1] Load + auto-configure dates from data
     print("\n  [1/7]  Loading data …")
     users, payments = load_data()
     print(f"         Users    : {len(users):,}")
     print(f"         Payments : {len(payments):,}  "
           f"({payments['payment_date'].min().date()} → "
           f"{payments['payment_date'].max().date()})")
+    print("         Auto-configuring temporal windows from data …")
+    setup_temporal_config(payments, users)
 
     # [2] Label — using only post-cutoff outcomes
     print("\n  [2/7]  Labelling churn (post-cutoff outcomes, no leakage) …")
