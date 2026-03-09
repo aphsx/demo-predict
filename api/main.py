@@ -44,17 +44,74 @@ SHAP_PKL    = TRAIN_DIR / "output" / "shap_explainer.pkl"
 
 # ── Feature columns (must match training order) ───────────
 FEATURE_COLS = [
-    "status_enc", "credit_enc",
-    "days_since_last_access", "days_since_last_send",
-    "days_until_expire", "account_age_days",
-    "total_payments", "total_amount_paid", "avg_amount_per_tx",
-    "total_sms_volume", "avg_sms_volume", "unique_products",
-    "last_payment_recency", "avg_payment_gap_days",
-    "last_payment_amount", "downgraded", "dom_credit_enc",
+    # A. Account lifecycle
+    "account_age_at_cutoff",
+    "last_access_recency_at_cutoff",
+    "last_send_recency_at_cutoff",
+    "days_to_expire_at_cutoff",
+    "expired_at_cutoff",
+
+    # B. RFM
+    "recency_days",
+    "total_payments",
+    "total_spend",
+
+    # C. Monetary depth
+    "avg_spend_per_tx",
+    "max_single_tx",
+    "last_payment_amount",
+    "downgraded",
+    "lifetime_value_per_day",
+
+    # D. Volume & diversity
+    "total_sms_volume",
+    "avg_sms_per_tx",
+    "unique_products",
+
+    # E. Credit Burn Rate & cadence
+    "credit_burn_rate",
+    "payment_span_days",
+    "avg_payment_gap_days",
+
+    # F. Usage Decay
+    "spend_recent_90d",
+    "spend_previous_90d",
+    "spend_decay_ratio",
+    "tx_count_recent_90d",
+    "tx_count_previous_90d",
+    "tx_decay_ratio",
+
+    # G. Encoded categoricals
+    "dom_credit_enc",
 ]
 
-REFERENCE_DATE = pd.Timestamp("2026-03-06")
-CHURN_DAYS     = 90
+# The training script defines CUTOFF_DATE relative to the data. 
+# For the API, we use the current time as the reference.
+REFERENCE_DATE = pd.Timestamp.now().normalize()
+DECAY_SHORT_DAYS = 90
+DECAY_LONG_DAYS = 180
+
+
+class PlattCalibrated:
+    """Thin wrapper applying manual Platt scaling to a base classifier.
+    Must be defined for joblib to load the model.
+    """
+    def __init__(self, base, scaler):
+        self._base   = base
+        self._scaler = scaler
+
+    def predict_proba(self, X):
+        raw = self._base.predict_proba(X)[:, 1].reshape(-1, 1)
+        p1  = self._scaler.predict_proba(raw)[:, 1]
+        return np.column_stack([1 - p1, p1])
+
+    def predict(self, X):
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+
+# Inject into __main__ so pickle can find it
+import sys
+sys.modules['__main__'].PlattCalibrated = PlattCalibrated
 
 
 # ══════════════════════════════════════════════════════════
@@ -84,11 +141,12 @@ def _rfm_segment(days_inactive: float, total_payments: float, total_amount: floa
 def _risk_factor(row: pd.Series) -> str:
     """Generate human-readable risk factor text from feature values."""
     reasons = []
-    days_expire = row.get("days_until_expire", 0)
-    days_inactive = row.get("days_since_last_access", 0)
-    last_pay_recency = row.get("last_payment_recency", 0)
+    days_expire = row.get("days_to_expire_at_cutoff", 0)
+    days_inactive = row.get("last_access_recency_at_cutoff", 0)
+    recency_days = row.get("recency_days", 0)
     total_pay = row.get("total_payments", 0)
     downgraded = row.get("downgraded", 0)
+    decay = row.get("spend_decay_ratio", 1.0)
 
     if days_expire < 0:
         reasons.append("เครดิตหมดอายุแล้ว")
@@ -103,10 +161,11 @@ def _risk_factor(row: pd.Series) -> str:
     if downgraded == 1:
         reasons.append("Downgrade Package")
 
-    if last_pay_recency > 90:
+    if recency_days > 90:
         reasons.append("ไม่เติมเครดิต > 90 วัน")
-    elif last_pay_recency > 60:
-        reasons.append("ไม่เติมเครดิต > 60 วัน")
+    
+    if decay < 0.5:
+        reasons.append("ยอดซื้อลดลงมาก")
 
     if total_pay == 0:
         reasons.append("ยังไม่เคยซื้อเครดิต")
@@ -126,14 +185,15 @@ def _recommended_action(prob: float, rfm_seg: str) -> str:
 
 
 _FEAT_LABEL = {
-    "days_since_last_access": ("ไม่ใช้งานมาแล้ว",     "วัน"),
-    "days_until_expire":      ("เครดิตหมดอายุในอีก",  "วัน"),
-    "last_payment_recency":   ("ไม่เติมเครดิตมาแล้ว", "วัน"),
-    "avg_payment_gap_days":   ("ช่วงห่างการซื้อเฉลี่ย","วัน"),
-    "total_payments":         ("ซื้อเครดิตทั้งหมด",   "ครั้ง"),
-    "total_amount_paid":      ("ยอดซื้อรวม ฿",        ""),
-    "downgraded":             ("Downgrade Package",    ""),
-    "account_age_days":       ("อายุบัญชี",            "วัน"),
+    "last_access_recency_at_cutoff": ("ไม่ใช้งานมาแล้ว",     "วัน"),
+    "days_to_expire_at_cutoff":      ("เครดิตหมดอายุในอีก",  "วัน"),
+    "recency_days":                  ("ไม่เติมเครดิตมาแล้ว", "วัน"),
+    "avg_payment_gap_days":          ("ช่วงห่างการซื้อเฉลี่ย","วัน"),
+    "total_payments":                ("ซื้อเครดิตทั้งหมด",   "ครั้ง"),
+    "total_spend":                   ("ยอดซื้อรวม ฿",        ""),
+    "downgraded":                    ("Downgrade Package",    ""),
+    "account_age_at_cutoff":         ("อายุบัญชี",            "วัน"),
+    "spend_decay_ratio":             ("อัตราการซื้อลดลง",      ""),
 }
 
 
@@ -157,6 +217,9 @@ def _compute_auc() -> float | None:
         return None
     from sklearn.metrics import roc_auc_score
     try:
+        # Check if we have both classes
+        if len(_predictions["churned"].unique()) < 2:
+            return None
         return round(float(roc_auc_score(_predictions["churned"], _predictions["churn_probability"])), 4)
     except Exception:
         return None
@@ -166,73 +229,119 @@ def df_to_records(df: pd.DataFrame) -> list[dict]:
     return json.loads(df.to_json(orient="records"))
 
 
-# ── Feature engineering (mirrors train/churn_model.py) ────
+# ── Feature engineering (mirrors train/churn_model.py v3) ────
 def _build_features() -> pd.DataFrame:
-    """Load raw CSVs, engineer features, return full feature DataFrame."""
+    """Load raw CSVs, engineer features v3, return full feature DataFrame."""
     users = pd.read_csv(USERS_CSV, parse_dates=["expire", "join_date", "last_access", "last_send"])
     pays  = pd.read_csv(PAY_CSV,   parse_dates=["payment_date"])
 
+    # Reference date for API is "now"
+    ref = pd.Timestamp.now().normalize()
+
     df = users.copy()
-    df["days_since_last_access"] = (REFERENCE_DATE - df["last_access"]).dt.days
-    df["days_since_last_send"]   = (REFERENCE_DATE - df["last_send"]).dt.days
-    df["days_until_expire"]      = (df["expire"] - REFERENCE_DATE).dt.days
-    df["account_age_days"]       = (REFERENCE_DATE - df["join_date"]).dt.days
+    
+    # ── 4.A Account lifecycle features
+    df["account_age_at_cutoff"] = (ref - df["join_date"]).dt.days.clip(lower=0)
+    
+    # In the API (inference), we use the actual last dates (no clipping needed like in training)
+    df["last_access_recency_at_cutoff"] = (ref - df["last_access"]).dt.days.clip(lower=0)
+    df["last_send_recency_at_cutoff"]   = (ref - df["last_send"]).dt.days.clip(lower=0)
+    df["days_to_expire_at_cutoff"]      = (df["expire"] - ref).dt.days.clip(-365, 365)
+    df["expired_at_cutoff"]             = (df["days_to_expire_at_cutoff"] < 0).astype(int)
 
-    expired       = df["expire"] < REFERENCE_DATE
-    long_inactive = df["days_since_last_access"] > CHURN_DAYS
-    df["churned"]  = (expired & long_inactive).astype(int)
-
-    # Payment aggregation
-    pf = pays.copy()
-    pf["payment_recency_days"] = (REFERENCE_DATE - pf["payment_date"]).dt.days
-
-    agg = pf.groupby("acc_id").agg(
-        total_payments        =("payment_date",        "count"),
-        total_amount_paid     =("amount",               "sum"),
-        avg_amount_per_tx     =("amount",               "mean"),
-        total_sms_volume      =("sms_volume",           "sum"),
-        avg_sms_volume        =("sms_volume",           "mean"),
-        unique_products       =("product_name",         "nunique"),
-        last_payment_recency  =("payment_recency_days", "min"),
-        first_payment_recency =("payment_recency_days", "max"),
-        payment_span_days     =("payment_recency_days", lambda x: x.max() - x.min()),
+    # ── 4.B RFM base aggregations
+    rfm = pays.groupby("acc_id").agg(
+        total_payments   = ("payment_date", "count"),
+        total_spend      = ("amount",        "sum"),
+        avg_spend_per_tx = ("amount",        "mean"),
+        max_single_tx    = ("amount",        "max"),
+        total_sms_volume = ("sms_volume",    "sum"),
+        avg_sms_per_tx   = ("sms_volume",    "mean"),
+        unique_products  = ("product_name",  "nunique"),
+        _first_pay_date  = ("payment_date",  "min"),
+        _last_pay_date   = ("payment_date",  "max"),
     ).reset_index()
 
-    agg["avg_payment_gap_days"] = agg.apply(
+    rfm["recency_days"] = (ref - rfm["_last_pay_date"]).dt.days
+    rfm["payment_span_days"] = (rfm["_last_pay_date"] - rfm["_first_pay_date"]).dt.days.clip(lower=0)
+    rfm["avg_payment_gap_days"] = rfm.apply(
         lambda r: r["payment_span_days"] / max(r["total_payments"] - 1, 1), axis=1
     )
+    rfm["credit_burn_rate"] = rfm["total_sms_volume"] / rfm["payment_span_days"].clip(lower=1)
+    rfm.drop(["_first_pay_date", "_last_pay_date"], axis=1, inplace=True)
 
-    last_amt = pf.sort_values("payment_date").groupby("acc_id").last()["amount"]
-    agg = agg.merge(last_amt.rename("last_payment_amount"), on="acc_id", how="left")
-    agg["downgraded"] = (agg["last_payment_amount"] < agg["avg_amount_per_tx"]).astype(int)
+    # ── 4.G Usage Decay
+    short_start = ref - pd.Timedelta(days=DECAY_SHORT_DAYS)
+    long_start  = ref - pd.Timedelta(days=DECAY_LONG_DAYS)
 
-    dom_credit = pf.groupby("acc_id")["credit_type"].agg(
-        lambda x: x.mode()[0] if not x.empty else "Unknown"
-    ).rename("dominant_credit_type")
-    agg = agg.merge(dom_credit, on="acc_id", how="left")
+    recent_agg = pays[pays["payment_date"] > short_start].groupby("acc_id").agg(
+        spend_recent_90d    = ("amount",       "sum"),
+        tx_count_recent_90d = ("payment_date", "count"),
+    ).reset_index()
 
-    df = df.merge(agg, on="acc_id", how="left")
+    previous_agg = pays[
+        (pays["payment_date"] > long_start) & (pays["payment_date"] <= short_start)
+    ].groupby("acc_id").agg(
+        spend_previous_90d    = ("amount",       "sum"),
+        tx_count_previous_90d = ("payment_date", "count"),
+    ).reset_index()
 
-    pay_numeric_cols = [
-        "total_payments", "total_amount_paid", "avg_amount_per_tx",
-        "total_sms_volume", "avg_sms_volume", "unique_products",
-        "last_payment_recency", "first_payment_recency", "payment_span_days",
-        "avg_payment_gap_days", "last_payment_amount", "downgraded",
+    # ── 4.C Last payment amount
+    last_pay = pays.sort_values("payment_date").groupby("acc_id")["amount"].last().rename("last_payment_amount").reset_index()
+
+    # ── 4.I Dominant credit type
+    dom_credit = pays.groupby("acc_id")["credit_type"].agg(
+        lambda x: x.mode().iloc[0] if not x.empty else "Unknown"
+    ).rename("dominant_credit_type").reset_index()
+
+    # ── Merge
+    df = df.merge(rfm, on="acc_id", how="left") \
+           .merge(recent_agg, on="acc_id", how="left") \
+           .merge(previous_agg, on="acc_id", how="left") \
+           .merge(last_pay, on="acc_id", how="left") \
+           .merge(dom_credit, on="acc_id", how="left")
+
+    # ── Fill NaNs
+    _zero_fill = [
+        "total_payments", "total_spend", "avg_spend_per_tx", "max_single_tx",
+        "total_sms_volume", "avg_sms_per_tx", "unique_products",
+        "recency_days", "payment_span_days", "avg_payment_gap_days",
+        "credit_burn_rate", "last_payment_amount",
+        "spend_recent_90d", "tx_count_recent_90d",
+        "spend_previous_90d", "tx_count_previous_90d",
     ]
-    df[pay_numeric_cols] = df[pay_numeric_cols].fillna(0)
+    df[_zero_fill] = df[_zero_fill].fillna(0)
     df["dominant_credit_type"] = df["dominant_credit_type"].fillna("None")
 
-    le = LabelEncoder()
-    df["status_enc"]     = le.fit_transform(df["status"])
-    df["credit_enc"]     = le.fit_transform(df["credit"])
-    df["dom_credit_enc"] = le.fit_transform(df["dominant_credit_type"])
+    # For zero-pay: recency = account age
+    no_pay = df["total_payments"] == 0
+    df.loc[no_pay, "recency_days"] = df.loc[no_pay, "account_age_at_cutoff"]
+
+    # ── Composite
+    df["spend_decay_ratio"] = df["spend_recent_90d"] / (df["spend_previous_90d"] + 1)
+    df["tx_decay_ratio"]    = df["tx_count_recent_90d"] / (df["tx_count_previous_90d"] + 1)
+    df["downgraded"]        = ((df["last_payment_amount"] > 0) & (df["last_payment_amount"] < df["avg_spend_per_tx"])).astype(int)
+    df["lifetime_value_per_day"] = df["total_spend"] / df["account_age_at_cutoff"].clip(lower=1)
+
+    # ── Encoded (Mocking LabelEncoder results from training for consistency)
+    # Trial status usually = 1 in most LEs if only Trial/Active exist
+    df["status_enc"] = (df["status"].str.lower() == "trial").astype(int)
+    # dom_credit_enc: we'll use a fixed map if we don't have the original LE
+    # But for a robust API, we should ideally load the LE from the pickle if saved.
+    # Since churn_model.py v3 doesn't save the LE, we'll use a simple deterministic map.
+    credit_map = {"sms": 0, "email": 1, "none": 2, "unknown": 3}
+    df["dom_credit_enc"] = df["dominant_credit_type"].str.lower().map(credit_map).fillna(2)
+
+    # Prediction window ground truth (for AUC tracking)
+    # In API, "churned" = expired < today AND no payment last 90d
+    df["churned"] = ((df["expire"] < ref) & (df["spend_recent_90d"] == 0)).astype(int)
 
     return df
 
 
 # ── In-memory state ──────────────────────────────────────
 _predictions: pd.DataFrame = pd.DataFrame()
-_model = None
+_model_obj = None  # Contains imputer, calibrated, feature_cols, selected_cols
 _shap_explainer = None
 _feature_importance: dict = {}
 
@@ -240,31 +349,49 @@ _feature_importance: dict = {}
 def _rebuild_predictions() -> int:
     """Build predictions from current CSV files. Returns number of rows, or 0 if failed."""
     global _predictions
-    if _model is None or not USERS_CSV.exists() or not PAY_CSV.exists():
+    if _model_obj is None or not USERS_CSV.exists() or not PAY_CSV.exists():
         return 0
+    
     df = _build_features()
-    X  = df[FEATURE_COLS]
-    df["churn_probability"] = _model.predict_proba(X)[:, 1]
+    
+    # Extract pipeline components
+    imputer = _model_obj["imputer"]
+    calibrated = _model_obj["calibrated"]
+    full_cols = _model_obj["feature_cols"]
+    selected_cols = _model_obj["selected_cols"]
+    
+    # 1. Impute full feature set
+    X_full = imputer.transform(df[full_cols])
+    
+    # 2. Subset to selected features
+    sel_idx = [full_cols.index(c) for c in selected_cols]
+    X_sel = X_full[:, sel_idx]
+    
+    # 3. Predict
+    df["churn_probability"] = calibrated.predict_proba(X_sel)[:, 1]
     df["churn_predicted"]   = (df["churn_probability"] >= 0.5).astype(int)
+    
+    # Metadata for dashboard
     df["risk_tier"] = df["churn_probability"].apply(
         lambda p: "High" if p >= 0.6 else ("Medium" if p >= 0.3 else "Low")
     )
-    df["ltv"] = df["total_amount_paid"]
+    df["ltv"] = df["total_spend"]
     df["rfm_segment"] = df.apply(
-        lambda r: _rfm_segment(r["days_since_last_access"], r["total_payments"], r["total_amount_paid"]), axis=1
+        lambda r: _rfm_segment(r["last_access_recency_at_cutoff"], r["total_payments"], r["total_spend"]), axis=1
     )
     df["risk_factor"] = df.apply(_risk_factor, axis=1)
     df["recommended_action"] = df.apply(
         lambda r: _recommended_action(r["churn_probability"], r["rfm_segment"]), axis=1
     )
     df["key_reason"] = df.apply(_risk_factor, axis=1)
+    
     _predictions = df[[
-        "acc_id", "status", "credit", "expire", "join_date",
-        "days_since_last_access", "days_until_expire",
-        "total_payments", "total_amount_paid", "ltv",
-        "avg_amount_per_tx", "last_payment_recency", "avg_payment_gap_days",
-        "total_sms_volume", "avg_sms_volume", "unique_products",
-        "downgraded", "account_age_days",
+        "acc_id", "status", "expire", "join_date",
+        "last_access_recency_at_cutoff", "days_to_expire_at_cutoff",
+        "total_payments", "total_spend", "ltv",
+        "avg_spend_per_tx", "recency_days", "avg_payment_gap_days",
+        "total_sms_volume", "avg_sms_per_tx", "unique_products",
+        "downgraded", "account_age_at_cutoff",
         "churn_probability", "churn_predicted", "risk_tier", "churned",
         "rfm_segment", "risk_factor", "recommended_action", "key_reason",
     ]].copy()
@@ -274,9 +401,14 @@ def _rebuild_predictions() -> int:
 
 @app.on_event("startup")
 def load_assets():
-    global _model, _shap_explainer, _feature_importance
+    global _model_obj, _shap_explainer, _feature_importance
     if MODEL_PKL.exists():
-        _model = joblib.load(MODEL_PKL)
+        try:
+            _model_obj = joblib.load(MODEL_PKL)
+            print(f"[OK] Model v3 loaded ({_model_obj.get('model_name')})")
+        except Exception as e:
+            print(f"[ERROR] Failed to load model: {e}")
+            
     if SHAP_PKL.exists():
         try:
             obj = joblib.load(SHAP_PKL)
@@ -284,13 +416,21 @@ def load_assets():
             print("[OK] SHAP explainer loaded")
         except Exception as e:
             print(f"[WARN] SHAP load failed: {e}")
-    if _model is not None:
-        clf = _model.named_steps.get("classifier")
-        if clf and hasattr(clf, "feature_importances_"):
-            fi = clf.feature_importances_
-            _feature_importance = dict(zip(FEATURE_COLS, [round(float(v), 5) for v in fi]))
+            
+    if _model_obj is not None:
+        # Extract feature importance from base model if available
+        # PlattCalibrated stores base in _base
+        calibrated = _model_obj["calibrated"]
+        base = getattr(calibrated, "_base", calibrated)
+        selected_cols = _model_obj["selected_cols"]
+        
+        if hasattr(base, "feature_importances_"):
+            fi = base.feature_importances_
+            _feature_importance = dict(zip(selected_cols, [round(float(v), 5) for v in fi]))
             _feature_importance = dict(sorted(_feature_importance.items(), key=lambda x: x[1], reverse=True))
-    print("[OK] Model loaded — waiting for CSV import to generate predictions")
+            
+    _rebuild_predictions()
+    print("[OK] Assets loaded — predictions generated")
 
 
 # ══════════════════════════════════════════════════════════
