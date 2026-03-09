@@ -24,7 +24,7 @@ export default function RetentionBarChart({ data }: Props) {
           Demo Data
         </div>
       )}
-    <ResponsiveContainer width="100%" height={220}>
+    <ResponsiveContainer width="100%" height={210}>
       <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }} barGap={2}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
         <XAxis
@@ -34,7 +34,7 @@ export default function RetentionBarChart({ data }: Props) {
           tickLine={false}
           angle={-30}
           textAnchor="end"
-          height={40}
+          height={28}
         />
         <YAxis
           tick={{ fill: "#aaa", fontSize: 12 }}

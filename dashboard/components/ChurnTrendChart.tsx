@@ -33,7 +33,7 @@ export default function ChurnTrendChart({ data }: Props) {
           tickLine={false}
           angle={-30}
           textAnchor="end"
-          height={40}
+          height={28}
         />
         <YAxis
           tick={{ fill: "#aaa", fontSize: 12 }}
