@@ -385,6 +385,15 @@ def _rebuild_predictions() -> int:
     )
     df["key_reason"] = df.apply(_risk_factor, axis=1)
     
+    # Legacy aliases for frontend compatibility
+    df["total_amount_paid"]      = df["total_spend"]
+    df["days_since_last_access"] = df["last_access_recency_at_cutoff"]
+    df["days_until_expire"]      = df["days_to_expire_at_cutoff"]
+    df["account_age_days"]       = df["account_age_at_cutoff"]
+    df["last_payment_recency"]   = df["recency_days"]
+    df["avg_amount_per_tx"]      = df["avg_spend_per_tx"]
+    df["avg_sms_volume"]         = df["avg_sms_per_tx"]
+
     _predictions = df[[
         "acc_id", "status", "expire", "join_date",
         "last_access_recency_at_cutoff", "days_to_expire_at_cutoff",
@@ -394,6 +403,9 @@ def _rebuild_predictions() -> int:
         "downgraded", "account_age_at_cutoff",
         "churn_probability", "churn_predicted", "risk_tier", "churned",
         "rfm_segment", "risk_factor", "recommended_action", "key_reason",
+        # Keep legacy names for API response consistency
+        "total_amount_paid", "days_since_last_access", "days_until_expire", 
+        "account_age_days", "last_payment_recency", "avg_amount_per_tx", "avg_sms_volume"
     ]].copy()
     _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
     return len(_predictions)
@@ -448,11 +460,15 @@ def get_stats():
     medium  = int(((df["churn_probability"] >= 0.3) & (df["churn_probability"] < 0.6)).sum())
     low     = int((df["churn_probability"] < 0.3).sum())
 
-    avg_spend_active  = round(float(df[df["churned"]==0]["total_amount_paid"].mean()), 2)
-    avg_spend_churned = round(float(df[df["churned"]==1]["total_amount_paid"].mean()), 2)
+    avg_spend_active  = round(float(df[df["churned"]==0]["total_spend"].mean()), 2)
+    avg_spend_churned = round(float(df[df["churned"]==1]["total_spend"].mean()), 2)
 
     # Revenue at Risk = total LTV of high-risk customers
     revenue_at_risk = round(float(df[df["churn_probability"] >= 0.6]["ltv"].sum()), 2)
+
+    calibrated = _model_obj.get("calibrated") if _model_obj else None
+    base = getattr(calibrated, "_base", calibrated)
+    model_name = type(base).__name__ if base else "Unknown"
 
     return {
         "total_customers":   total,
@@ -465,7 +481,7 @@ def get_stats():
         "avg_spend_active":  avg_spend_active,
         "avg_spend_churned": avg_spend_churned,
         "revenue_at_risk":   revenue_at_risk,
-        "model_name":        type(_model.named_steps.get("classifier")).__name__ if _model and _model.named_steps.get("classifier") else "Unknown",
+        "model_name":        model_name,
         "model_auc":         _compute_auc(),
     }
 
@@ -656,19 +672,17 @@ def export_csv(
 # ══════════════════════════════════════════════════════════
 @app.get("/api/model-info")
 def model_info():
-    # Read real hyperparameters from the loaded model
-    clf = _model.named_steps.get("classifier") if _model else None
-    n_estimators = getattr(clf, "n_estimators", None)
-    max_depth = getattr(clf, "max_depth", None)
-    classifier_name = type(clf).__name__ if clf else "Unknown"
+    calibrated = _model_obj.get("calibrated") if _model_obj else None
+    base = getattr(calibrated, "_base", calibrated)
+    classifier_name = type(base).__name__ if base else "Unknown"
 
     real_auc = _compute_auc()
 
     return {
-        "model_type":    type(_model).__name__ if _model else "Not loaded",
+        "model_type":    "Pipeline v3 (Calibrated)" if _model_obj else "Not loaded",
         "classifier":    classifier_name,
-        "n_estimators":  n_estimators,
-        "max_depth":     max_depth,
+        "n_estimators":  getattr(base, "n_estimators", "N/A"),
+        "max_depth":     getattr(base, "max_depth", "N/A"),
         "n_features":    len(FEATURE_COLS),
         "features":      FEATURE_COLS,
         "test_auc":      real_auc,
@@ -701,42 +715,70 @@ class PredictRequest(BaseModel):
 
 @app.post("/api/predict")
 def predict(req: PredictRequest):
-    if _model is None:
+    if _model_obj is None:
         raise HTTPException(503, "Model not loaded — run churn_model.py first")
 
-    exp  = pd.Timestamp(req.expire)
+    # This endpoint mimics the v3 feature engineering for a single record
+    # Since v3 uses complex decay features, we'll use a simplified version for live hits
+    # or better: we expect the request to eventually match v3 or we map it.
+    
+    # Deriving v3 features from request
+    ref = pd.Timestamp.now().normalize()
+    exp = pd.Timestamp(req.expire)
     join = pd.Timestamp(req.join_date)
-    la   = pd.Timestamp(req.last_access)
-    ls   = pd.Timestamp(req.last_send)
+    la = pd.Timestamp(req.last_access)
+    ls = pd.Timestamp(req.last_send)
 
-    status_enc     = 1 if req.status.lower() == "trial" else 0
-    credit_map     = {"sms": 0, "email": 1}
-    credit_enc     = credit_map.get(req.credit.lower(), 0)
-    dom_credit_map = {"email": 0, "none": 1, "sms": 2}
-    dom_credit_enc = dom_credit_map.get(req.dominant_credit_type.lower(), 1)
-
+    # Base features
     row = {
-        "status_enc":            status_enc,
-        "credit_enc":            credit_enc,
-        "days_since_last_access":(REFERENCE_DATE - la).days,
-        "days_since_last_send":  (REFERENCE_DATE - ls).days,
-        "days_until_expire":     (exp - REFERENCE_DATE).days,
-        "account_age_days":      (REFERENCE_DATE - join).days,
-        "total_payments":        req.total_payments,
-        "total_amount_paid":     req.total_amount_paid,
-        "avg_amount_per_tx":     req.avg_amount_per_tx,
-        "total_sms_volume":      req.total_sms_volume,
-        "avg_sms_volume":        req.avg_sms_volume,
-        "unique_products":       req.unique_products,
-        "last_payment_recency":  req.last_payment_recency,
-        "avg_payment_gap_days":  req.avg_payment_gap_days,
-        "last_payment_amount":   req.last_payment_amount,
-        "downgraded":            req.downgraded,
-        "dom_credit_enc":        dom_credit_enc,
+        "account_age_at_cutoff": (ref - join).days,
+        "last_access_recency_at_cutoff": (ref - la).days,
+        "last_send_recency_at_cutoff": (ref - ls).days,
+        "days_to_expire_at_cutoff": (exp - ref).days,
+        "expired_at_cutoff": 1 if (exp < ref) else 0,
+        "recency_days": req.last_payment_recency,
+        "total_payments": req.total_payments,
+        "total_spend": req.total_amount_paid,
+        "avg_spend_per_tx": req.avg_amount_per_tx,
+        "max_single_tx": req.avg_amount_per_tx, # approx
+        "last_payment_amount": req.last_payment_amount,
+        "downgraded": req.downgraded,
+        "lifetime_value_per_day": req.total_amount_paid / max((ref - join).days, 1),
+        "total_sms_volume": req.total_sms_volume,
+        "avg_sms_per_tx": req.avg_sms_volume,
+        "unique_products": req.unique_products,
+        "credit_burn_rate": req.total_sms_volume / max(req.avg_payment_gap_days * req.total_payments, 1),
+        "payment_span_days": req.avg_payment_gap_days * req.total_payments,
+        "avg_payment_gap_days": req.avg_payment_gap_days,
+        
+        # Decay features (approximated for single hit if not provided)
+        "spend_recent_90d": req.total_amount_paid * 0.5, # mock
+        "spend_previous_90d": req.total_amount_paid * 0.5, # mock
+        "spend_decay_ratio": 1.0,
+        "tx_count_recent_90d": req.total_payments * 0.5, # mock
+        "tx_count_previous_90d": req.total_payments * 0.5, # mock
+        "tx_decay_ratio": 1.0,
+        
+        "dom_credit_enc": 1 # mock
     }
 
-    X = pd.DataFrame([row])[FEATURE_COLS]
-    prob = float(_model.predict_proba(X)[0, 1])
+    # Transform
+    X_df = pd.DataFrame([row])
+    imputer = _model_obj["imputer"]
+    calibrated = _model_obj["calibrated"]
+    full_cols = _model_obj["feature_cols"]
+    selected_cols = _model_obj["selected_cols"]
+    
+    # Ensure all columns exist in X_df
+    for c in full_cols:
+        if c not in X_df.columns:
+            X_df[c] = 0
+            
+    X_imp = imputer.transform(X_df[full_cols])
+    sel_idx = [full_cols.index(c) for c in selected_cols]
+    X_sel = X_imp[:, sel_idx]
+    
+    prob = float(calibrated.predict_proba(X_sel)[0, 1])
 
     return {
         "churn_probability": round(prob, 4),
@@ -754,21 +796,26 @@ def explain_customer(acc_id: str):
     if _predictions.empty:
         raise HTTPException(404, "No prediction data")
     if _shap_explainer is None:
-        raise HTTPException(503, "SHAP explainer not loaded — run churn_model.py first")
-    if _model is None:
+        raise HTTPException(503, "SHAP explainer not loaded")
+    if _model_obj is None:
         raise HTTPException(503, "Model not loaded")
 
-    row = _predictions[_predictions["acc_id"] == acc_id]
-    if row.empty:
+    row_df = _predictions[_predictions["acc_id"] == acc_id]
+    if row_df.empty:
         raise HTTPException(404, f"Account {acc_id} not found")
 
-    X_raw    = row[FEATURE_COLS]
-    X_scaled = _model.named_steps["scaler"].transform(
-        _model.named_steps["imputer"].transform(X_raw)
-    )
-    shap_vals = _shap_explainer.shap_values(X_scaled)
-    # For binary tree models shap_values returns list [neg, pos]
+    imputer = _model_obj["imputer"]
+    full_cols = _model_obj["feature_cols"]
+    selected_cols = _model_obj["selected_cols"]
+    
+    X_full = imputer.transform(row_df[full_cols])
+    sel_idx = [full_cols.index(c) for c in selected_cols]
+    X_sel = X_full[:, sel_idx]
+
+    shap_vals = _shap_explainer.shap_values(X_sel)
+    # Binary classifiers might return list [neg, pos]
     vals = shap_vals[1][0] if isinstance(shap_vals, list) else shap_vals[0]
+    if hasattr(vals, "values"): vals = vals.values # handle Explanation objects
 
     contributions = [
         {
@@ -777,12 +824,12 @@ def explain_customer(acc_id: str):
             "label":       _FEAT_LABEL.get(feat, (feat, ""))[0],
             "direction":   "churn" if val > 0 else "retain",
         }
-        for feat, val in sorted(zip(FEATURE_COLS, vals), key=lambda x: abs(x[1]), reverse=True)
+        for feat, val in sorted(zip(selected_cols, vals), key=lambda x: abs(x[1]), reverse=True)
     ]
 
     return {
         "acc_id":        acc_id,
-        "churn_probability": round(float(row.iloc[0]["churn_probability"]), 4),
+        "churn_probability": round(float(row_df.iloc[0]["churn_probability"]), 4),
         "contributions": contributions,
     }
 
