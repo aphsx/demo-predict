@@ -75,8 +75,8 @@ export default async function TopRiskPage() {
                   </td>
                   <td className="py-3 pr-4">
                     <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${c.status === "paid"
-                        ? "bg-brand-50 text-brand-600 border border-brand-200"
-                        : "bg-slate-100 text-slate-500 border border-slate-200"
+                      ? "bg-brand-50 text-brand-600 border border-brand-200"
+                      : "bg-slate-100 text-slate-500 border border-slate-200"
                       }`}>
                       {c.status}
                     </span>
@@ -88,13 +88,13 @@ export default async function TopRiskPage() {
                           className="h-full rounded-full"
                           style={{
                             width: `${(c.churn_probability * 100).toFixed(0)}%`,
-                            background: c.churn_probability >= 0.6 ? "#F56200" : c.churn_probability >= 0.3 ? "#FFB020" : "#1A6BFF",
+                            background: c.churn_probability >= 0.6 ? "#FF4D00" : c.churn_probability >= 0.3 ? "#FFAB00" : "#0870FF",
                           }}
                         />
                       </div>
                       <span
                         className="font-mono text-xs font-semibold"
-                        style={{ color: c.churn_probability >= 0.6 ? "#C74E00" : c.churn_probability >= 0.3 ? "#A07000" : "#1243C2" }}
+                        style={{ color: c.churn_probability >= 0.6 ? "#FF4D00" : c.churn_probability >= 0.3 ? "#FFAB00" : "#0870FF" }}
                       >
                         {(c.churn_probability * 100).toFixed(1)}%
                       </span>

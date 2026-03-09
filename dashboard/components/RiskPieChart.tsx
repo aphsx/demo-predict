@@ -4,7 +4,7 @@ import {
 } from "recharts";
 
 // 1moby brand: Orange = High risk, Amber = Medium, Blue = Low (safe)
-const COLORS = ["#F56200", "#FFB020", "#1A6BFF"];
+const COLORS = ["#FF4D00", "#FFAB00", "#0870FF"];
 
 interface Props {
   high: number;
