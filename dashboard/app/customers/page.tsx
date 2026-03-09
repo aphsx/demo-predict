@@ -127,13 +127,12 @@ export default function CustomersPage() {
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState("churn_probability");
-  const [viewMode, setViewMode] = useState<"card" | "table">("card");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams({
       page: String(page),
-      page_size: viewMode === "card" ? "24" : "50",
+      page_size: "24",
       sort_by: sortBy,
       order: "desc",
       ...(search && { search }),
@@ -146,7 +145,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, risk, status, sortBy, viewMode]);
+  }, [page, search, risk, status, sortBy]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setPage(1); }, [search, risk, status, sortBy]);
@@ -164,21 +163,6 @@ export default function CustomersPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {/* View toggle */}
-            <div className="flex bg-gray-100 rounded-[10px] p-1 gap-1">
-              <button
-                onClick={() => setViewMode("card")}
-                className={`px-3 py-1.5 rounded-[8px] text-xs font-semibold transition-all ${viewMode === "card" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              >
-                Cards
-              </button>
-              <button
-                onClick={() => setViewMode("table")}
-                className={`px-3 py-1.5 rounded-[8px] text-xs font-semibold transition-all ${viewMode === "table" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
-              >
-                Table
-              </button>
-            </div>
             <a
               href={`/api/export?sort_by=${sortBy}&order=desc${risk ? `&risk=${risk}` : ""}${status ? `&status=${status}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`}
               download="churn_customers.csv"
@@ -259,57 +243,9 @@ export default function CustomersPage() {
           </svg>
           กำลังโหลดข้อมูล...
         </div>
-      ) : viewMode === "card" ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {data?.data.map((c) => <CustomerCard key={c.acc_id} c={c} />)}
-        </div>
       ) : (
-        <div className="bg-white rounded-[16px] border border-gray-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-5 sm:p-6">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-left">
-                  {["Account ID", "Status", "Churn Prob.", "Risk", "LTV", "RFM Segment", "Risk Factor", "Recommended Action", ""].map((h) => (
-                    <th key={h} className="pb-3 pr-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {data?.data.map((c) => (
-                  <tr key={c.acc_id} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="py-3 pr-4 font-mono text-blue-600 font-semibold text-xs">{c.acc_id}</td>
-                    <td className="py-3 pr-4">
-                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${c.status === "paid" ? "bg-blue-50 text-blue-600 border border-blue-100" : "bg-gray-100 text-gray-500"}`}>{c.status}</span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${(c.churn_probability * 100).toFixed(0)}%`, background: c.churn_probability >= 0.6 ? "#EF4444" : c.churn_probability >= 0.3 ? "#F59E0B" : "#10B981" }} />
-                        </div>
-                        <span className="font-mono text-xs font-semibold" style={{ color: c.churn_probability >= 0.6 ? "#DC2626" : c.churn_probability >= 0.3 ? "#D97706" : "#059669" }}>
-                          {(c.churn_probability * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <RiskBadge risk={c.risk ?? (c.churn_probability >= 0.6 ? "High" : c.churn_probability >= 0.3 ? "Medium" : "Low")} />
-                    </td>
-                    <td className="py-3 pr-4 text-gray-700 text-xs font-semibold">฿{Number(c.ltv ?? c.total_amount_paid ?? 0).toLocaleString()}</td>
-                    <td className="py-3 pr-4">
-                      <span className="rounded-full bg-blue-50 border border-blue-100 px-2.5 py-0.5 text-[10px] font-semibold text-blue-600 whitespace-nowrap">{c.rfm_segment ?? "-"}</span>
-                    </td>
-                    <td className="py-3 pr-4 text-gray-500 text-xs max-w-[180px] truncate">{c.risk_factor ?? "-"}</td>
-                    <td className="py-3 pr-4 text-gray-600 text-xs font-medium whitespace-nowrap">{c.recommended_action ?? "-"}</td>
-                    <td className="py-3">
-                      <Link href={`/customers/${c.acc_id}`} className="inline-flex items-center gap-1 px-3 py-1 rounded-[7px] bg-gray-900 text-white text-xs font-semibold hover:bg-blue-700 transition-colors">
-                        View Details
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="flex flex-col gap-4">
+          {data?.data.map((c) => <CustomerCard key={c.acc_id} c={c} />)}
         </div>
       )}
 
