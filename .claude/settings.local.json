@@ -12,7 +12,11 @@
       "Bash(git add \"dashboard/app/page.tsx\" \"dashboard/app/customers/page.tsx\" \"dashboard/app/customers/[id]/page.tsx\" \"dashboard/app/model/page.tsx\")",
       "Bash(git add dashboard/next-env.d.ts)",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''main.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''OK''\\)\")",
-      "Bash(ls -la /c/Github/demo-predict/api/*.py)"
+      "Bash(ls -la /c/Github/demo-predict/api/*.py)",
+      "Bash(git reset HEAD -- .)",
+      "Bash(git add dashboard/app/customers/page.tsx)",
+      "Bash(git add dashboard/components/RiskPieChart.tsx dashboard/components/RiskBadge.tsx dashboard/components/ChurnTrendChart.tsx dashboard/components/RetentionBarChart.tsx dashboard/app/top-risk/page.tsx)",
+      "Bash(git add dashboard/app/page.tsx dashboard/app/model/page.tsx)"
     ]
   }
 }

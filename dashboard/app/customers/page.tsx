@@ -34,85 +34,92 @@ interface ApiResponse {
 
 function CustomerCard({ c }: { c: Customer }) {
   const prob = c.churn_probability;
-  const risk = c.risk ?? (prob >= 0.6 ? "High" : prob >= 0.3 ? "Medium" : "Low");
-  const riskScore = (prob * 10).toFixed(1);
-  const riskColor = prob >= 0.6 ? "#EF4444" : prob >= 0.3 ? "#F59E0B" : "#10B981";
-  const iconBg = prob >= 0.6 ? "#FEE2E2" : prob >= 0.3 ? "#FEF3C7" : "#D1FAE5";
+  const riskLabel = prob >= 0.6 ? "High Risk" : prob >= 0.3 ? "Medium Risk" : "Low Risk";
+
+  const theme = {
+    high: "#FF4D00",
+    medium: "#FFAB00",
+    low: "#0870FF",
+    gradient: "linear-gradient(135deg, #005AE2 0%, #38BDF8 100%)"
+  };
+
+  const riskColor = prob >= 0.6 ? theme.high : prob >= 0.3 ? theme.medium : theme.low;
+  const badgeColors = prob >= 0.6
+    ? "bg-[#FF4D00] text-white"
+    : prob >= 0.3
+      ? "bg-[#FFAB00] text-white"
+      : "bg-[#0870FF] text-white";
+
   const ltv = Number(c.ltv ?? c.total_amount_paid ?? 0);
   const initials = c.acc_id.slice(0, 2).toUpperCase();
 
   return (
-    <div className="bg-white rounded-[16px] border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-5 hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all">
-      {/* Top row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+    <div className="bg-white rounded-[16px] border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-4 hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] transition-all">
+      <div className="flex items-center gap-6">
+        {/* 1. Identity */}
+        <div className="flex items-center gap-4 flex-1 min-w-0">
           <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-            style={{ background: "linear-gradient(135deg, #005AE2 0%, #38BDF8 100%)" }}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+            style={{ background: theme.gradient }}
           >
             {initials}
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-gray-900 font-mono text-sm leading-tight truncate">{c.acc_id}</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              {c.rfm_segment
-                ? <span className="text-blue-600 font-medium">{c.rfm_segment}</span>
-                : <span>{c.status}</span>}
-            </p>
+            <h3 className="font-bold text-gray-900 text-base leading-tight truncate">{c.acc_id}</h3>
+            <p className="text-[11px] text-gray-500 truncate font-medium uppercase tracking-wider">{c.rfm_segment || "Standard"}</p>
           </div>
         </div>
-        {/* Revenue + Churn Risk Score */}
-        <div className="text-right flex-shrink-0">
-          <p className="text-base font-bold text-gray-900">฿{ltv.toLocaleString()}</p>
-          <p className="text-[10px] text-gray-400 mb-1.5">Revenue</p>
-          <div className="flex items-center justify-end gap-1.5">
-            <span className="p-0.5 rounded" style={{ background: iconBg, color: riskColor }}>
-              {prob >= 0.6
-                ? <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
-                : prob >= 0.3
-                  ? <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
-                  : <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>
-              }
+
+        {/* 2. Revenue (Divider) */}
+        <div className="border-l border-gray-100 pl-6 text-center">
+          <p className="text-sm font-bold text-gray-900">฿{ltv.toLocaleString()}</p>
+          <p className="text-[10px] font-bold text-[#5A6B8A] uppercase tracking-wider">Revenue</p>
+        </div>
+
+        {/* 3. Risk Score (Divider) */}
+        <div className="border-l border-gray-100 pl-6 text-center">
+          <div className="flex items-center justify-center gap-1.5 pt-0.5">
+            <span style={{ color: riskColor }}>
+              {prob >= 0.6 ? (
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M7 17l9.2-9.2M17 17V7H7" /></svg>
+              ) : prob >= 0.3 ? (
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+              ) : (
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17" /><polyline points="16 7 22 7 22 13" /></svg>
+              )}
             </span>
-            <span className="text-sm font-bold" style={{ color: riskColor }}>{riskScore}</span>
-            <span className="text-xs text-gray-400">Churn Risk</span>
+            <span className="text-sm font-bold text-gray-900">{(prob * 10).toFixed(1)}</span>
+          </div>
+          <p className="text-[10px] font-bold text-[#5A6B8A] uppercase tracking-wider whitespace-nowrap">Score</p>
+        </div>
+
+        {/* 4. Risk Badge */}
+        <span className={`px-3 py-1 rounded-md text-[10px] font-bold whitespace-nowrap shadow-sm ${badgeColors}`}>
+          {riskLabel.toUpperCase()}
+        </span>
+
+        {/* 5. Meta Info Group (Divider) */}
+        <div className="border-l border-gray-100 pl-6 flex items-center gap-5 text-[12px] text-gray-500 whitespace-nowrap">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Date</span>
+            <span className="text-gray-900 font-semibold">{c.expire ? String(c.expire).slice(0, 10) : "2024-02-06"}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Idle</span>
+            <span className="text-gray-900 font-semibold">{c.days_since_last_access}d</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Orders</span>
+            <span className="text-gray-900 font-semibold">{c.total_payments ?? 0}</span>
           </div>
         </div>
-      </div>
 
-      {/* Meta info */}
-      <div className="mt-3.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-        <span>
-          Signed up:{" "}
-          <span className="text-gray-700 font-medium">{c.expire ? String(c.expire).slice(0, 10) : "—"}</span>
-        </span>
-        <span>
-          Last active:{" "}
-          <span className="text-gray-700 font-medium">{c.days_since_last_access}d ago</span>
-        </span>
-        <span>
-          Interventions:{" "}
-          <span className="text-gray-700 font-medium">{c.total_payments ?? 0}</span>
-        </span>
-      </div>
-
-      {c.recommended_action && c.recommended_action !== "-" && (
-        <p className="mt-2 text-[11px] text-slate-400 italic line-clamp-1 leading-relaxed">
-          → {c.recommended_action}
-        </p>
-      )}
-
-      {/* Bottom row */}
-      <div className="mt-3.5 pt-3.5 border-t border-gray-100 flex items-center justify-between gap-2">
-        <RiskBadge risk={risk} />
+        {/* 6. Action */}
         <Link
           href={`/customers/${c.acc_id}`}
-          className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-[8px] bg-gray-900 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
+          className="inline-flex items-center px-4 py-2 rounded-lg bg-gray-900 text-white text-[12px] font-bold hover:bg-black transition-colors flex-shrink-0"
         >
-          View Details
-          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M9 18l6-6-6-6" />
-          </svg>
+          View
         </Link>
       </div>
     </div>
