@@ -157,14 +157,14 @@ export default async function ModelPage() {
               <RiskPieChart high={stats.high_risk} medium={stats.medium_risk} low={stats.low_risk} />
               <div className="mt-4 grid grid-cols-3 gap-3">
                 {[
-                  { label: "High Risk", value: stats.high_risk, color: "#F56200", bg: "#FFF3EB" },
-                  { label: "Medium Risk", value: stats.medium_risk, color: "#A07000", bg: "#FFFBF0" },
-                  { label: "Low Risk", value: stats.low_risk, color: "#1243C2", bg: "#EEF3FF" },
+                  { label: "High Risk", value: stats.high_risk, color: "white", bg: "#FF4D00" },
+                  { label: "Medium Risk", value: stats.medium_risk, color: "white", bg: "#FFAB00" },
+                  { label: "Low Risk", value: stats.low_risk, color: "white", bg: "#0870FF" },
                 ].map((seg) => (
                   <div key={seg.label} className="text-center rounded-[10px] p-3" style={{ background: seg.bg }}>
                     <p className="text-lg font-black" style={{ color: seg.color }}>{seg.value.toLocaleString()}</p>
                     <p className="text-[10px] font-semibold mt-0.5" style={{ color: seg.color }}>{seg.label}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
+                    <p className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,0.8)" }}>
                       {stats.total_customers > 0 ? ((seg.value / stats.total_customers) * 100).toFixed(0) : 0}%
                     </p>
                   </div>

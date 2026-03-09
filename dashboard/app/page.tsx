@@ -160,10 +160,13 @@ export default async function DashboardPage() {
       range: "≥ 60% probability",
       value: s ? s.high_risk : 0,
       description: "Prioritize intervention and retention outreach immediately.",
-      barColor: "#F56200",
-      bgColor: "#FFF3EB",
-      borderColor: "#FFCFA0",
-      textColor: "#C74E00",
+      cardBg: "bg-[#FF4D00]",
+      textColor: "text-white",
+      subTextColor: "text-white/90",
+      badgeBg: "rgba(255, 255, 255, 0.2)",
+      badgeBorder: "rgba(255, 255, 255, 0.3)",
+      barTrack: "bg-white/30",
+      barFill: "white",
       pct: s?.total_customers ? (s.high_risk / s.total_customers) * 100 : 0,
     },
     {
@@ -171,10 +174,13 @@ export default async function DashboardPage() {
       range: "30–60% probability",
       value: s ? s.medium_risk : 0,
       description: "Watch closely with proactive campaign triggers.",
-      barColor: "#FFB020",
-      bgColor: "#FFFBF0",
-      borderColor: "#FFE4A0",
-      textColor: "#A07000",
+      cardBg: "bg-[#FFAB00]",
+      textColor: "text-white",
+      subTextColor: "text-white/90",
+      badgeBg: "rgba(255, 255, 255, 0.2)",
+      badgeBorder: "rgba(255, 255, 255, 0.3)",
+      barTrack: "bg-white/30",
+      barFill: "white",
       pct: s?.total_customers ? (s.medium_risk / s.total_customers) * 100 : 0,
     },
     {
@@ -182,10 +188,13 @@ export default async function DashboardPage() {
       range: "< 30% probability",
       value: s ? s.low_risk : 0,
       description: "Stable accounts with normal engagement trend.",
-      barColor: "#1A6BFF",
-      bgColor: "#EEF3FF",
-      borderColor: "#BFCFFF",
-      textColor: "#1243C2",
+      cardBg: "bg-[#0870FF]",
+      textColor: "text-white",
+      subTextColor: "text-white/90",
+      badgeBg: "rgba(255, 255, 255, 0.2)",
+      badgeBorder: "rgba(255, 255, 255, 0.3)",
+      barTrack: "bg-white/30",
+      barFill: "white",
       pct: s?.total_customers ? (s.low_risk / s.total_customers) * 100 : 0,
     },
   ];
@@ -229,33 +238,33 @@ export default async function DashboardPage() {
         {riskCards.map((card) => (
           <div
             key={card.label}
-            className="flex flex-col gap-4 p-6 bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)]"
+            className={`flex flex-col gap-4 p-6 rounded-[16px] shadow-[0_2px_12px_rgba(0,0,0,0.04)] ${card.cardBg} ${card.textColor}`}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="flex flex-col gap-1 mb-2">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#5A6B8A]">{card.label}</p>
+                  <p className={`text-[11px] font-bold uppercase tracking-[0.15em] ${card.subTextColor}`}>{card.label}</p>
                 </div>
-                <p className="text-[32px] font-bold tracking-tight leading-none" style={{ color: card.textColor }}>
+                <p className="text-[32px] font-bold tracking-tight leading-none">
                   {card.value.toLocaleString()}
                 </p>
               </div>
               <span
                 className="rounded-full px-2.5 py-1 text-[10px] font-semibold tracking-wide"
-                style={{ background: card.bgColor, color: card.textColor, border: `1px solid ${card.borderColor}` }}
+                style={{ background: card.badgeBg, color: "white", border: `1px solid ${card.badgeBorder}` }}
               >
                 {card.range}
               </span>
             </div>
 
             {/* Minimal progress bar */}
-            <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden mt-1">
+            <div className={`h-1.5 w-full rounded-full overflow-hidden mt-1 ${card.barTrack}`}>
               <div
                 className="h-full rounded-full"
-                style={{ width: `${card.pct.toFixed(1)}%`, background: card.barColor }}
+                style={{ width: `${card.pct.toFixed(1)}%`, background: card.barFill }}
               />
             </div>
-            <p className="text-[13px] font-medium text-gray-500 mt-1">{card.description}</p>
+            <p className={`text-[13px] font-medium mt-1 ${card.subTextColor}`}>{card.description}</p>
           </div>
         ))}
       </section>
