@@ -37,6 +37,10 @@ import joblib
 import shap
 from pathlib import Path
 
+# ── Custom Modules ────────────────────────────────────
+import training_config
+import ml_utils
+
 # ── Config ────────────────────────────────────────────
 REFERENCE_DATE = datetime(2026, 3, 6)          # "today" for computing recency
 CHURN_DAYS     = 90                             # inactive > 90 d since expire → churned
@@ -152,24 +156,14 @@ def build_features(users_labeled: pd.DataFrame,
 # ══════════════════════════════════════════════════════
 # 5. TRAIN MODELS
 # ══════════════════════════════════════════════════════
-FEATURE_COLS = [
-    "status_enc", "credit_enc",
-    "days_since_last_access", "days_since_last_send",
-    "days_until_expire", "account_age_days",
-    "total_payments", "total_amount_paid", "avg_amount_per_tx",
-    "total_sms_volume", "avg_sms_volume", "unique_products",
-    "last_payment_recency", "avg_payment_gap_days",
-    "last_payment_amount", "downgraded", "dom_credit_enc",
-]
+FEATURE_COLS = training_config.FEATURE_COLS
 
 MODELS = {
-    "Random Forest":          RandomForestClassifier(n_estimators=200, max_depth=6,
-                                                      random_state=42, class_weight="balanced"),
+    "Random Forest":          RandomForestClassifier(**training_config.MODEL_PARAMS["Random Forest"]),
     "Hist Gradient Boosting": HistGradientBoostingClassifier(max_iter=150, max_depth=4,
                                                               learning_rate=0.08,
                                                               random_state=42),  # NaN-native
-    "Extra Trees":            ExtraTreesClassifier(n_estimators=200, max_depth=6,
-                                                    random_state=42, class_weight="balanced"),
+    "Extra Trees":            ExtraTreesClassifier(**training_config.MODEL_PARAMS["Extra Trees"]),
     "Logistic Regression":    LogisticRegression(max_iter=1000, class_weight="balanced",
                                                   C=0.5, random_state=42),
 }
@@ -214,6 +208,18 @@ def train_and_evaluate(df: pd.DataFrame):
         print(f"  CV AUC (5-fold): {cv_sc.mean():.4f} ± {cv_sc.std():.4f}")
         print(classification_report(y_te, y_pred, target_names=["Active", "Churned"],
                                     zero_division=0))
+
+        # ── Industry Standard: Experiment Tracking ──
+        ml_utils.log_experiment(
+            model_name=name,
+            metrics={
+                "auc": auc,
+                "cv_auc_mean": cv_sc.mean(),
+                "cv_auc_std": cv_sc.std(),
+                "num_features": len(FEATURE_COLS)
+            },
+            config_name="Modularv1"
+        )
 
         results[name] = {
             "model":   model,
