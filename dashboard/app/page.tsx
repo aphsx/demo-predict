@@ -34,27 +34,43 @@ interface TopRiskCustomer {
 }
 
 async function getStats() {
-  const res = await fetch(`${API}/api/stats`, { cache: "no-store" });
-  if (!res.ok) throw new Error("stats fetch failed");
-  return res.json() as Promise<DashboardStats>;
+  try {
+    const res = await fetch(`${API}/api/stats`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return res.json() as Promise<DashboardStats>;
+  } catch {
+    return null;
+  }
 }
 
 async function getTopRisk(n = 10) {
-  const res = await fetch(`${API}/api/top-risk?n=${n}`, { cache: "no-store" });
-  if (!res.ok) throw new Error("top-risk fetch failed");
-  return res.json() as Promise<TopRiskCustomer[]>;
+  try {
+    const res = await fetch(`${API}/api/top-risk?n=${n}`, { cache: "no-store" });
+    if (!res.ok) return [];
+    return res.json() as Promise<TopRiskCustomer[]>;
+  } catch {
+    return [];
+  }
 }
 
 async function getChurnTrend() {
-  const res = await fetch(`${API}/api/churn-trend`, { cache: "no-store" });
-  if (!res.ok) return [];
-  return res.json() as Promise<{ month: string; rate: number }[]>;
+  try {
+    const res = await fetch(`${API}/api/churn-trend`, { cache: "no-store" });
+    if (!res.ok) return [];
+    return res.json() as Promise<{ month: string; rate: number }[]>;
+  } catch {
+    return [];
+  }
 }
 
 async function getRetentionTrend() {
-  const res = await fetch(`${API}/api/retention-trend`, { cache: "no-store" });
-  if (!res.ok) return [];
-  return res.json() as Promise<{ month: string; churned: number; retained: number }[]>;
+  try {
+    const res = await fetch(`${API}/api/retention-trend`, { cache: "no-store" });
+    if (!res.ok) return [];
+    return res.json() as Promise<{ month: string; churned: number; retained: number }[]>;
+  } catch {
+    return [];
+  }
 }
 
 interface StatCardProps {
@@ -158,8 +174,8 @@ export default async function DashboardPage() {
     {
       label: "High Risk",
       range: "≥ 60% probability",
-      value: s ? s.high_risk : 0,
-      description: "Prioritize intervention and retention outreach immediately.",
+      value: s ? s.high_risk.toLocaleString() : "—",
+      description: s ? "Prioritize intervention and retention outreach immediately." : "ยังไม่มีข้อมูลการวิเคราะห์ความเสี่ยง",
       cardBg: "bg-[#FF4D00]",
       textColor: "text-white",
       subTextColor: "text-white/90",
@@ -172,8 +188,8 @@ export default async function DashboardPage() {
     {
       label: "Medium Risk",
       range: "30–60% probability",
-      value: s ? s.medium_risk : 0,
-      description: "Watch closely with proactive campaign triggers.",
+      value: s ? s.medium_risk.toLocaleString() : "—",
+      description: s ? "Watch closely with proactive campaign triggers." : "ยังไม่มีข้อมูลการวิเคราะห์ความเสี่ยง",
       cardBg: "bg-[#FFAB00]",
       textColor: "text-white",
       subTextColor: "text-white/90",
@@ -186,8 +202,8 @@ export default async function DashboardPage() {
     {
       label: "Low Risk",
       range: "< 30% probability",
-      value: s ? s.low_risk : 0,
-      description: "Stable accounts with normal engagement trend.",
+      value: s ? s.low_risk.toLocaleString() : "—",
+      description: s ? "Stable accounts with normal engagement trend." : "ยังไม่มีข้อมูลการวิเคราะห์ความเสี่ยง",
       cardBg: "bg-[#0870FF]",
       textColor: "text-white",
       subTextColor: "text-white/90",
@@ -246,7 +262,7 @@ export default async function DashboardPage() {
                   <p className={`text-[11px] font-bold uppercase tracking-[0.15em] ${card.subTextColor}`}>{card.label}</p>
                 </div>
                 <p className="text-[32px] font-bold tracking-tight leading-none">
-                  {card.value.toLocaleString()}
+                  {card.value}
                 </p>
               </div>
               <span

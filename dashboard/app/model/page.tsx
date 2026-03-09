@@ -3,15 +3,23 @@ import RiskPieChart from "@/components/RiskPieChart";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 async function getModelInfo() {
-  const res = await fetch(`${API}/api/model-info`, { cache: "no-store" });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(`${API}/api/model-info`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 async function getStats() {
-  const res = await fetch(`${API}/api/stats`, { cache: "no-store" });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(`${API}/api/stats`, { cache: "no-store" });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 interface KpiCardProps {
@@ -64,22 +72,22 @@ export default async function ModelPage() {
   const kpis: KpiCardProps[] = [
     {
       label: "Total Customers",
-      value: stats?.total_customers?.toLocaleString() ?? "—",
-      sub: "Profiles in scoring base",
+      value: stats?.total_customers != null ? stats.total_customers.toLocaleString() : "—",
+      sub: stats ? "Profiles in scoring base" : "รอการเชื่อมต่อ API",
       icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>,
     },
     {
       label: "Average Churn Risk",
-      value: stats?.churn_rate ? `${stats.churn_rate.toFixed(1)}%` : "—",
-      sub: `${stats?.churned_customers?.toLocaleString() ?? "—"} predicted churn`,
+      value: stats?.churn_rate != null ? `${stats.churn_rate.toFixed(1)}%` : "—",
+      sub: stats ? `${stats.churned_customers?.toLocaleString() ?? "—"} predicted churn` : "รอการเชื่อมต่อ API",
       icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>,
     },
     {
       label: "Revenue at Risk",
-      value: stats?.revenue_at_risk
+      value: stats?.revenue_at_risk != null
         ? `฿${(stats.revenue_at_risk / 1000).toFixed(0)}K`
         : "—",
-      sub: `LTV of ${stats?.high_risk?.toLocaleString() ?? "—"} high-risk accounts`,
+      sub: stats ? `LTV of ${stats.high_risk?.toLocaleString() ?? "—"} high-risk accounts` : "รอการเชื่อมต่อ API",
       icon: <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>,
     },
     {

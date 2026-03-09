@@ -6,10 +6,15 @@ import PaymentLineChart from "@/components/PaymentLineChart";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 async function getCustomer(accId: string) {
-  const res = await fetch(`${API}/api/predictions/${accId}`, { cache: "no-store" });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error("fetch failed");
-  return res.json();
+  try {
+    const res = await fetch(`${API}/api/predictions/${accId}`, { cache: "no-store" });
+    if (res.status === 404) return null;
+    if (!res.ok) return null;
+    return res.json();
+  } catch (err) {
+    console.error("fetch customer failed", err);
+    return null;
+  }
 }
 
 function ScoreBar({ score, color }: { score: number; color: string }) {

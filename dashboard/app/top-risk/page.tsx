@@ -4,9 +4,14 @@ import { RiskBadge } from "@/components/RiskBadge";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 async function getTopRisk(n = 50) {
-  const res = await fetch(`${API}/api/top-risk?n=${n}`, { cache: "no-store" });
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    const res = await fetch(`${API}/api/top-risk?n=${n}`, { cache: "no-store" });
+    if (!res.ok) return [];
+    return res.json();
+  } catch (err) {
+    console.error("fetch top-risk failed", err);
+    return [];
+  }
 }
 
 const currency = new Intl.NumberFormat("th-TH", {
@@ -62,61 +67,69 @@ export default async function TopRiskPage() {
               </tr>
             </thead>
             <tbody className="divide-y" style={{ borderColor: "rgba(11,25,55,0.05)" }}>
-              {customers.map((c: any, i: number) => (
-                <tr key={c.acc_id} className="hover:bg-brand-50/40 transition-colors">
-                  <td className="py-3 pr-4 text-slate-400 font-mono text-xs">{i + 1}</td>
-                  <td className="py-3 pr-4">
-                    <Link
-                      href={`/customers/${c.acc_id}`}
-                      className="font-mono text-brand-600 hover:text-brand-500 hover:underline text-sm font-semibold"
-                    >
-                      {c.acc_id}
-                    </Link>
-                  </td>
-                  <td className="py-3 pr-4">
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${c.status === "paid"
-                      ? "bg-brand-50 text-brand-600 border border-brand-200"
-                      : "bg-slate-100 text-slate-500 border border-slate-200"
-                      }`}>
-                      {c.status}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4">
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${(c.churn_probability * 100).toFixed(0)}%`,
-                            background: c.churn_probability >= 0.6 ? "#FF4D00" : c.churn_probability >= 0.3 ? "#FFAB00" : "#0870FF",
-                          }}
-                        />
-                      </div>
-                      <span
-                        className="font-mono text-xs font-semibold"
-                        style={{ color: c.churn_probability >= 0.6 ? "#FF4D00" : c.churn_probability >= 0.3 ? "#FFAB00" : "#0870FF" }}
+              {customers.length > 0 ? (
+                customers.map((c: any, i: number) => (
+                  <tr key={c.acc_id} className="hover:bg-brand-50/40 transition-colors">
+                    <td className="py-3 pr-4 text-slate-400 font-mono text-xs">{i + 1}</td>
+                    <td className="py-3 pr-4">
+                      <Link
+                        href={`/customers/${c.acc_id}`}
+                        className="font-mono text-brand-600 hover:text-brand-500 hover:underline text-sm font-semibold"
                       >
-                        {(c.churn_probability * 100).toFixed(1)}%
+                        {c.acc_id}
+                      </Link>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${c.status === "paid"
+                        ? "bg-brand-50 text-brand-600 border border-brand-200"
+                        : "bg-slate-100 text-slate-500 border border-slate-200"
+                        }`}>
+                        {c.status}
                       </span>
-                    </div>
-                  </td>
-                  <td className="py-3 pr-4"><RiskBadge risk={c.risk ?? "High"} /></td>
-                  <td className="py-3 pr-4 text-slate-700 text-xs font-semibold">
-                    {currency.format(c.ltv ?? c.total_amount_paid ?? 0)}
-                  </td>
-                  <td className="py-3 pr-4">
-                    <span className="rounded-full bg-brand-50 border border-brand-200 px-2.5 py-0.5 text-[10px] font-semibold text-brand-600 whitespace-nowrap">
-                      {c.rfm_segment ?? "-"}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4 text-slate-500 text-xs max-w-[200px]">
-                    {c.risk_factor ?? "-"}
-                  </td>
-                  <td className="py-3 text-slate-600 text-xs font-medium whitespace-nowrap">
-                    {c.recommended_action ?? "-"}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${(c.churn_probability * 100).toFixed(0)}%`,
+                              background: c.churn_probability >= 0.6 ? "#FF4D00" : c.churn_probability >= 0.3 ? "#FFAB00" : "#0870FF",
+                            }}
+                          />
+                        </div>
+                        <span
+                          className="font-mono text-xs font-semibold"
+                          style={{ color: c.churn_probability >= 0.6 ? "#FF4D00" : c.churn_probability >= 0.3 ? "#FFAB00" : "#0870FF" }}
+                        >
+                          {(c.churn_probability * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4"><RiskBadge risk={c.risk ?? "High"} /></td>
+                    <td className="py-3 pr-4 text-slate-700 text-xs font-semibold">
+                      {currency.format(c.ltv ?? c.total_amount_paid ?? 0)}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className="rounded-full bg-brand-50 border border-brand-200 px-2.5 py-0.5 text-[10px] font-semibold text-brand-600 whitespace-nowrap">
+                        {c.rfm_segment ?? "-"}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 text-slate-500 text-xs max-w-[200px]">
+                      {c.risk_factor ?? "-"}
+                    </td>
+                    <td className="py-3 text-slate-600 text-xs font-medium whitespace-nowrap">
+                      {c.recommended_action ?? "-"}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={9} className="py-12 text-center text-gray-400 font-medium">
+                    ไม่พบข้อมูลลูกค้ากลุ่มเสี่ยงสูง
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

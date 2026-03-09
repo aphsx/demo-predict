@@ -250,9 +250,19 @@ export default function CustomersPage() {
           </svg>
           กำลังโหลดข้อมูล...
         </div>
-      ) : (
+      ) : data?.data && data.data.length > 0 ? (
         <div className="flex flex-col gap-4">
-          {data?.data.map((c) => <CustomerCard key={c.acc_id} c={c} />)}
+          {data.data.map((c) => <CustomerCard key={c.acc_id} c={c} />)}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-24 bg-white rounded-[20px] border border-dashed border-gray-200">
+          <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center mb-4">
+            <svg className="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" /><line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+          </div>
+          <p className="text-gray-500 font-medium">ไม่พบข้อมูลลูกค้า</p>
+          <p className="text-gray-400 text-xs mt-1">ลองปรับการค้นหาหรือ Filter ใหม่</p>
         </div>
       )}
 
