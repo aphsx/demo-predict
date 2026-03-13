@@ -14,15 +14,7 @@ const nav = [
       </svg>
     ),
   },
-  {
-    href: "/runs",
-    label: "Prediction Runs",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
-        <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18" />
-      </svg>
-    ),
-  },
+  
   {
     href: "/customers",
     label: "ลูกค้า",
@@ -51,6 +43,15 @@ const nav = [
         <circle cx="12" cy="5" r="3" /><circle cx="5" cy="19" r="3" /><circle cx="19" cy="19" r="3" />
         <line x1="12" y1="8" x2="12" y2="14" /><line x1="12" y1="14" x2="5" y2="16" />
         <line x1="12" y1="14" x2="19" y2="16" />
+      </svg>
+    ),
+  },
+  {
+    href: "/runs",
+    label: "Prediction Runs",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="w-5 h-5">
+        <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18" />
       </svg>
     ),
   },

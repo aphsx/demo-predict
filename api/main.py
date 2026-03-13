@@ -1065,6 +1065,10 @@ async def import_csv(file: UploadFile = File(...)):
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], errors="coerce")
 
+            # FIX Bug 3: Delete old customers first (cascades to payments + predictions)
+            # ensuring each new batch is a clean slate.
+            await conn.execute("DELETE FROM customers")
+
             rows = [
                 (
                     str(r.acc_id),
@@ -1100,20 +1104,32 @@ async def import_csv(file: UploadFile = File(...)):
             )
 
         else:  # payments
+            # FIX Bug 1: Payments upload requires customers to exist first (FK constraint).
+            # Reject early with a clear error if customers table is empty.
+            cust_count = await conn.fetchval("SELECT COUNT(*) FROM customers")
+            if not cust_count:
+                raise HTTPException(
+                    400,
+                    "กรุณา import Users CSV ก่อน — ยังไม่มีข้อมูล customers ใน database"
+                )
+
             df["payment_date"] = pd.to_datetime(df["payment_date"], errors="coerce")
-            # Delete and reload to avoid duplicates
+            # FIX Bug 1: Filter to acc_ids that actually exist in customers (avoid FK violation)
+            existing_accs = set(
+                r["acc_id"] for r in await conn.fetch("SELECT acc_id FROM customers")
+            )
             await conn.execute("DELETE FROM payments")
             rows = [
                 (
                     str(r.acc_id),
                     r["payment_date"].to_pydatetime(),
-                    float(r.get("amount", 0) or 0),
-                    int(r.get("sms_volume", 0) or 0),
+                    0.0 if pd.isna(r.get("amount", None)) else float(r.get("amount") or 0),
+                    0   if pd.isna(r.get("sms_volume", None)) else int(r.get("sms_volume") or 0),
                     str(r["product_name"]) if "product_name" in df.columns and pd.notna(r.get("product_name")) else None,
                     str(r["credit_type"])  if "credit_type"  in df.columns and pd.notna(r.get("credit_type"))  else None,
                 )
                 for _, r in df.iterrows()
-                if pd.notna(r["payment_date"])
+                if pd.notna(r["payment_date"]) and str(r.acc_id) in existing_accs
             ]
             await conn.executemany(
                 """
@@ -1141,7 +1157,19 @@ async def import_csv(file: UploadFile = File(...)):
         c_count = (await db.execute(text("SELECT COUNT(*) FROM customers"))).scalar()
         p_count = (await db.execute(text("SELECT COUNT(*) FROM payments"))).scalar()
     if c_count and p_count:
-        rebuilt = await _rebuild_predictions()
+        # FIX Bug 2: Catch any rebuild failure and mark run as error
+        try:
+            rebuilt = await _rebuild_predictions()
+        except Exception as e:
+            print(f"[ERROR] _rebuild_predictions failed: {e}")
+            if _active_run_id is not None:
+                async with AsyncSessionLocal() as db:
+                    await db.execute(
+                        text("UPDATE prediction_runs SET status = 'error' WHERE id = :rid"),
+                        {"rid": _active_run_id},
+                    )
+                    await db.commit()
+            raise HTTPException(500, f"การคำนวณ predictions ล้มเหลว: {e}")
 
     # ── Mark run as done ─────────────────────────────────
     if rebuilt > 0 and _active_run_id is not None:
@@ -1156,10 +1184,14 @@ async def import_csv(file: UploadFile = File(...)):
             )
             await db.commit()
 
+    inserted = len(rows)
+    skipped  = len(df) - inserted if kind == "payments" else 0
     return {
-        "message": f"Import {kind} สำเร็จ {len(df):,} แถว ({file.filename})"
+        "message": f"Import {kind} สำเร็จ {inserted:,} แถว ({file.filename})"
+                   + (f" (ข้าม {skipped:,} แถวที่ไม่มี customer)" if skipped else "")
                    + (f" — คำนวณ predictions {rebuilt:,} รายการแล้ว" if rebuilt else " — รอ import อีกไฟล์"),
-        "rows":              len(df),
+        "rows":              inserted,
+        "rows_skipped":      skipped,
         "type":              kind,
         "predictions_ready": rebuilt > 0,
         "predictions_count": rebuilt,
