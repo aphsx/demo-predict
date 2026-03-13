@@ -1,41 +1,19 @@
-version: "3.9"
 services:
-  postgres:
+  db:
     image: postgres:16-alpine
     container_name: churn_db
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: churn_crm
-      POSTGRES_USER: crm_user
-      POSTGRES_PASSWORD: crm_secret
+    env_file: .env
     ports:
-      - "5432:5432"
+      - "${DB_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U crm_user -d churn_crm"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
       timeout: 5s
-      retries: 10
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: churn_pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-      # --- เพิ่มส่วนนี้เพื่อให้มัน Auto-Connect และจำรหัสผ่าน ---
-      PGADMIN_CONFIG_SERVER_MODE: 'False' # ปิดระบบ Login (ถ้าใช้คนเดียวจะสะดวกเหมือน phpMyAdmin)
-    ports:
-      - "8888:80"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin # สำคัญมาก! เพื่อให้มันจำค่าที่ตั้งไว้ไม่ให้หายตอน Down
+      retries: 5
 
 volumes:
   postgres_data:
-  pgadmin_data: # สร้างที่เก็บข้อมูลให้ pgadmin
