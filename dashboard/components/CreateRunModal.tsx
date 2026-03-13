@@ -246,6 +246,26 @@ export default function CreateRunModal({ onClose, onCreated }: Props) {
                 </button>
               </div>
 
+              {/* ── Real-time progress bar ── */}
+              {uploading && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold text-blue-700">
+                      {uploading === "payments" && usersUploaded
+                        ? "กำลัง Import + คำนวณ Predictions..."
+                        : `กำลัง Import ${uploading === "users" ? "Users" : "Payments"} CSV...`}
+                    </p>
+                    <span className="text-[10px] text-blue-400 font-bold animate-pulse">●●●</span>
+                  </div>
+                  <div className="relative h-1.5 w-full bg-blue-50 rounded-full overflow-hidden">
+                    <div
+                      className="absolute inset-y-0 w-2/5 bg-gradient-to-r from-blue-300 via-[#005AE2] to-blue-300 rounded-full"
+                      style={{ animation: "bar-slide 1.2s ease-in-out infinite" }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {uploadMsg && (
                 <p className={clsx(
                   "text-[11px] text-center font-medium px-3 py-2 rounded-lg",

@@ -150,3 +150,9 @@ html {
 @layer utilities {
   .text-balance { text-wrap: balance; }
 }
+
+/* ─── Indeterminate progress bar ─── */
+@keyframes bar-slide {
+  0%   { left: -45%; }
+  100% { left: 130%; }
+}

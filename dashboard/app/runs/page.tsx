@@ -59,70 +59,148 @@ function StatusBadge({ run }: { run: Run }) {
   );
 }
 
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-2.5 h-2.5">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
 function RunCard({ run, onDelete }: { run: Run; onDelete: (id: number, e: React.MouseEvent) => void }) {
   const router = useRouter();
   const isClickable = run.status === "done";
+  const isProcessing = run.status === "pending" && (run.users_uploaded || run.payments_uploaded);
 
-  const content = (
+  return (
     <div
       onClick={() => isClickable && router.push(`/runs/${run.id}`)}
       className={clsx(
-        "flex items-center gap-4 p-5 bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition-all",
+        "p-5 bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition-all",
         isClickable && "hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:border-[#005AE2]/30 cursor-pointer"
       )}
     >
-      {/* Run number */}
-      <div className={clsx(
-        "w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0",
-        run.status === "done" ? "bg-[#005AE2]/10 text-[#005AE2]"
-          : run.status === "error" ? "bg-red-50 text-red-400"
-          : "bg-gray-100 text-gray-400"
-      )}>
-        #{run.id}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-bold text-gray-900 text-sm truncate">{run.name}</p>
-          <StatusBadge run={run} />
+      {/* ── Main row ── */}
+      <div className="flex items-center gap-4">
+        {/* Run number */}
+        <div className={clsx(
+          "w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0",
+          run.status === "done" ? "bg-[#005AE2]/10 text-[#005AE2]"
+            : run.status === "error" ? "bg-red-50 text-red-400"
+            : "bg-gray-100 text-gray-400"
+        )}>
+          #{run.id}
         </div>
-        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-          {run.customers_count != null && (
-            <span className="text-xs text-gray-500 font-medium">
-              {run.customers_count.toLocaleString()} คน
-            </span>
-          )}
-          {run.customers_count != null && <span className="text-gray-300">·</span>}
-          <span className="text-xs text-gray-400">{formatDate(run.created_at)}</span>
-        </div>
-      </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {isClickable && (
-          <div className="w-8 h-8 rounded-full bg-[#005AE2]/5 flex items-center justify-center text-[#005AE2]">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-bold text-gray-900 text-sm truncate">{run.name}</p>
+            <StatusBadge run={run} />
           </div>
-        )}
-        {(run.status === "error" || run.status === "pending") && (
-          <button
-            onClick={(e) => onDelete(run.id, e)}
-            className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors"
-            title="ลบ Run"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-              <path d="M3 6h18M19 6l-1 14H6L5 6m5 0V4h4v2" />
-            </svg>
-          </button>
-        )}
+          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+            {run.customers_count != null && (
+              <span className="text-xs text-gray-500 font-medium">
+                {run.customers_count.toLocaleString()} คน
+              </span>
+            )}
+            {run.customers_count != null && <span className="text-gray-300">·</span>}
+            <span className="text-xs text-gray-400">{formatDate(run.created_at)}</span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {isClickable && (
+            <div className="w-8 h-8 rounded-full bg-[#005AE2]/5 flex items-center justify-center text-[#005AE2]">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </div>
+          )}
+          {(run.status === "error" || run.status === "pending") && (
+            <button
+              onClick={(e) => onDelete(run.id, e)}
+              className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors"
+              title="ลบ Run"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                <path d="M3 6h18M19 6l-1 14H6L5 6m5 0V4h4v2" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* ── Progress (pending + at least one file uploaded) ── */}
+      {isProcessing && (
+        <div className="mt-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+          {/* Step indicators */}
+          <div className="flex items-center">
+            {/* Step: Users */}
+            <div className={clsx(
+              "flex items-center gap-1 text-[10px] font-bold",
+              run.users_uploaded ? "text-green-600" : "text-gray-300"
+            )}>
+              <span className={clsx(
+                "w-4 h-4 rounded-full flex items-center justify-center",
+                run.users_uploaded ? "bg-green-100" : "border-2 border-gray-200"
+              )}>
+                {run.users_uploaded && <CheckIcon />}
+              </span>
+              Users
+            </div>
+
+            <div className={clsx("flex-1 h-px mx-2", run.users_uploaded ? "bg-blue-200" : "bg-gray-200")} />
+
+            {/* Step: Payments */}
+            <div className={clsx(
+              "flex items-center gap-1 text-[10px] font-bold",
+              run.payments_uploaded ? "text-green-600" : run.users_uploaded ? "text-yellow-500" : "text-gray-300"
+            )}>
+              <span className={clsx(
+                "w-4 h-4 rounded-full flex items-center justify-center",
+                run.payments_uploaded ? "bg-green-100"
+                  : run.users_uploaded ? "bg-yellow-100"
+                  : "border-2 border-gray-200"
+              )}>
+                {run.payments_uploaded
+                  ? <CheckIcon />
+                  : run.users_uploaded && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />}
+              </span>
+              Payments
+            </div>
+
+            <div className={clsx("flex-1 h-px mx-2", run.payments_uploaded ? "bg-blue-200" : "bg-gray-200")} />
+
+            {/* Step: Predicting */}
+            <div className={clsx(
+              "flex items-center gap-1 text-[10px] font-bold",
+              run.payments_uploaded ? "text-blue-600" : "text-gray-300"
+            )}>
+              <span className={clsx(
+                "w-4 h-4 rounded-full flex items-center justify-center",
+                run.payments_uploaded ? "bg-blue-100" : "border-2 border-gray-200"
+              )}>
+                {run.payments_uploaded && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                )}
+              </span>
+              Predicting
+            </div>
+          </div>
+
+          {/* Animated loading bar */}
+          <div className="relative h-1 w-full bg-blue-50 rounded-full overflow-hidden">
+            <div
+              className="absolute inset-y-0 w-2/5 bg-gradient-to-r from-blue-200 via-[#005AE2] to-blue-200 rounded-full"
+              style={{ animation: "bar-slide 1.4s ease-in-out infinite" }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
-
-  return content;
 }
 
 export default function RunsPage() {

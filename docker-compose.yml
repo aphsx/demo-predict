@@ -1,5 +1,4 @@
 version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -25,14 +24,18 @@ services:
     container_name: churn_pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com  # เปลี่ยนจาก .local เป็น .com
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
       PGADMIN_DEFAULT_PASSWORD: admin
+      # --- เพิ่มส่วนนี้เพื่อให้มัน Auto-Connect และจำรหัสผ่าน ---
+      PGADMIN_CONFIG_SERVER_MODE: 'False' # ปิดระบบ Login (ถ้าใช้คนเดียวจะสะดวกเหมือน phpMyAdmin)
     ports:
       - "8888:80"
-  
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin # สำคัญมาก! เพื่อให้มันจำค่าที่ตั้งไว้ไม่ให้หายตอน Down
 
 volumes:
   postgres_data:
+  pgadmin_data: # สร้างที่เก็บข้อมูลให้ pgadmin
