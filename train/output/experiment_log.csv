@@ -32,3 +32,6 @@ timestamp,config,model,auc,cv_auc_mean,cv_auc_std,num_features,train_auc,oot_auc
 2026-03-09 14:03:36,v3_FeatureSelect_Calibrated,HistGradientBoosting,,,,26,1.0,0.8566,0.9578,0.1434,8994.0,1006.0,0.2002,0.8529,
 2026-03-09 14:03:37,v3_FeatureSelect_Calibrated,Random Forest,,,,26,1.0,0.824,0.9697,0.176,8994.0,1006.0,0.2002,0.8529,
 2026-03-09 14:03:37,v3_FeatureSelect_Calibrated,HistGradientBoosting_calibrated,,,,26,1.0,0.8566,0.9578,0.1434,8994.0,1006.0,0.2002,0.8529,0.2448
+2026-03-13 14:23:11,v3_FeatureSelect_Calibrated,HistGradientBoosting,,,,26,1.0,0.8566,0.9578,0.1434,8994.0,1006.0,0.2002,0.8529,
+2026-03-13 14:23:12,v3_FeatureSelect_Calibrated,Random Forest,,,,26,1.0,0.824,0.9697,0.176,8994.0,1006.0,0.2002,0.8529,
+2026-03-13 14:23:12,v3_FeatureSelect_Calibrated,HistGradientBoosting_calibrated,,,,26,1.0,0.8566,0.9578,0.1434,8994.0,1006.0,0.2002,0.8529,0.2448

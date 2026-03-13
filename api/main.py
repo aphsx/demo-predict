@@ -1171,6 +1171,18 @@ async def import_csv(file: UploadFile = File(...)):
                     await db.commit()
             raise HTTPException(500, f"การคำนวณ predictions ล้มเหลว: {e}")
 
+        # If both files uploaded but rebuilt=0, mark as error (e.g. model not loaded)
+        if rebuilt == 0 and _active_run_id is not None:
+            reason = "โมเดลยังไม่ได้ train — กรุณารัน churn_model.py ก่อน" if _model_obj is None else "ไม่สามารถคำนวณ predictions ได้"
+            print(f"[WARN] rebuild returned 0: {reason}")
+            async with AsyncSessionLocal() as db:
+                await db.execute(
+                    text("UPDATE prediction_runs SET status = 'error' WHERE id = :rid"),
+                    {"rid": _active_run_id},
+                )
+                await db.commit()
+            raise HTTPException(500, reason)
+
     # ── Mark run as done ─────────────────────────────────
     if rebuilt > 0 and _active_run_id is not None:
         async with AsyncSessionLocal() as db:
