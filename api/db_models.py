@@ -6,6 +6,7 @@ from sqlalchemy import (
     BigInteger, Boolean, Column, Date, DateTime,
     Float, ForeignKey, Integer, Numeric, String, Text,
     func,
+    TIMESTAMP,
 )
 from sqlalchemy.orm import relationship
 
@@ -74,3 +75,16 @@ class Prediction(Base):
     computed_at            = Column(DateTime, server_default=func.now())
 
     customer = relationship("Customer", back_populates="prediction")
+
+
+class PredictionRun(Base):
+    __tablename__ = "prediction_runs"
+
+    id                = Column(Integer,     primary_key=True, autoincrement=True)
+    name              = Column(String(100), nullable=False)
+    status            = Column(String(20),  nullable=False, default="pending")
+    users_uploaded    = Column(Boolean,     nullable=False, default=False)
+    payments_uploaded = Column(Boolean,     nullable=False, default=False)
+    customers_count   = Column(Integer,     nullable=False, default=0)
+    created_at        = Column(DateTime,    server_default=func.now())
+    completed_at      = Column(DateTime)

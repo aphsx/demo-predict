@@ -65,3 +65,18 @@ CREATE INDEX IF NOT EXISTS idx_pred_risk  ON predictions(risk_tier);
 CREATE INDEX IF NOT EXISTS idx_pred_churn ON predictions(churn_probability DESC);
 CREATE INDEX IF NOT EXISTS idx_pred_ltv   ON predictions(ltv DESC);
 CREATE INDEX IF NOT EXISTS idx_pred_rfm   ON predictions(rfm_segment);
+
+-- ── Prediction Runs (named sessions for each predict batch) ──
+CREATE TABLE IF NOT EXISTS prediction_runs (
+    id               SERIAL        PRIMARY KEY,
+    name             VARCHAR(100)  NOT NULL,
+    status           VARCHAR(20)   NOT NULL DEFAULT 'pending',
+    users_uploaded    BOOLEAN       NOT NULL DEFAULT FALSE,
+    payments_uploaded BOOLEAN       NOT NULL DEFAULT FALSE,
+    customers_count   INTEGER       NOT NULL DEFAULT 0,
+    created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    completed_at      TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_runs_status     ON prediction_runs(status);
+CREATE INDEX IF NOT EXISTS idx_runs_created_at ON prediction_runs(created_at DESC);

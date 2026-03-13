@@ -18,12 +18,17 @@ from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional
 import io
+import os
+import asyncpg
 import pandas as pd
 import numpy as np
 import joblib
 import json
 import shap
+from sqlalchemy import text
 from sklearn.preprocessing import LabelEncoder
+
+from database import AsyncSessionLocal
 
 app = FastAPI(title="Churn CRM API", version="2.0.0")
 
@@ -37,10 +42,16 @@ app.add_middleware(
 # ── Paths ─────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent.parent
 TRAIN_DIR   = BASE_DIR / "train"
-USERS_CSV   = TRAIN_DIR / "data" / "sample_users.csv"
-PAY_CSV     = TRAIN_DIR / "data" / "sample_payments.csv"
+USERS_CSV   = TRAIN_DIR / "data" / "sample_users.csv"   # kept as fallback only
+PAY_CSV     = TRAIN_DIR / "data" / "sample_payments.csv" # kept as fallback only
 MODEL_PKL   = TRAIN_DIR / "output" / "churn_model.pkl"
 SHAP_PKL    = TRAIN_DIR / "output" / "shap_explainer.pkl"
+
+# ── DB DSN (asyncpg native, no +asyncpg prefix) ───────────
+_DB_DSN = os.getenv(
+    "DATABASE_URL_ASYNCPG",
+    "postgresql://crm_user:crm_secret@localhost:5432/churn_crm",
+)
 
 # ── Feature columns (must match training order) ───────────
 FEATURE_COLS = [
@@ -230,10 +241,20 @@ def df_to_records(df: pd.DataFrame) -> list[dict]:
 
 
 # ── Feature engineering (mirrors train/churn_model.py v3) ────
-def _build_features() -> pd.DataFrame:
-    """Load raw CSVs, engineer features v3, return full feature DataFrame."""
-    users = pd.read_csv(USERS_CSV, parse_dates=["expire", "join_date", "last_access", "last_send"])
-    pays  = pd.read_csv(PAY_CSV,   parse_dates=["payment_date"])
+def _build_features(users_df: pd.DataFrame = None, pays_df: pd.DataFrame = None) -> pd.DataFrame:
+    """Engineer features v3 from DataFrames (or fall back to CSV files)."""
+    if users_df is None:
+        users = pd.read_csv(USERS_CSV, parse_dates=["expire", "join_date", "last_access", "last_send"])
+    else:
+        users = users_df.copy()
+        for col in ["expire", "join_date", "last_access", "last_send"]:
+            if col in users.columns:
+                users[col] = pd.to_datetime(users[col])
+    if pays_df is None:
+        pays = pd.read_csv(PAY_CSV, parse_dates=["payment_date"])
+    else:
+        pays = pays_df.copy()
+        pays["payment_date"] = pd.to_datetime(pays["payment_date"])
 
     # Reference date for API is "now"
     ref = pd.Timestamp.now().normalize()
@@ -344,34 +365,112 @@ _predictions: pd.DataFrame = pd.DataFrame()
 _model_obj = None  # Contains imputer, calibrated, feature_cols, selected_cols
 _shap_explainer = None
 _feature_importance: dict = {}
+_active_run_id: int | None = None  # kept in memory; source of truth is DB
 
 
-def _rebuild_predictions() -> int:
-    """Build predictions from current CSV files. Returns number of rows, or 0 if failed."""
-    global _predictions
-    if _model_obj is None or not USERS_CSV.exists() or not PAY_CSV.exists():
-        return 0
-    
-    df = _build_features()
-    
-    # Extract pipeline components
-    imputer = _model_obj["imputer"]
-    calibrated = _model_obj["calibrated"]
-    full_cols = _model_obj["feature_cols"]
+# ══════════════════════════════════════════════════════════
+# DB HELPERS
+# ══════════════════════════════════════════════════════════
+
+async def _load_dfs_from_db() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Read customers + payments from PostgreSQL, return as DataFrames."""
+    async with AsyncSessionLocal() as db:
+        c_result = await db.execute(text("SELECT * FROM customers"))
+        p_result = await db.execute(text("SELECT * FROM payments"))
+        users_df = pd.DataFrame(c_result.mappings().all())
+        pays_df  = pd.DataFrame(p_result.mappings().all())
+    return users_df, pays_df
+
+
+def _float_or_none(v):
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return None
+    return float(v)
+
+
+async def _save_predictions_to_db(df: pd.DataFrame) -> None:
+    """Bulk-upsert prediction rows into PostgreSQL predictions table."""
+    conn = await asyncpg.connect(_DB_DSN)
+    try:
+        rows = [
+            (
+                str(row.acc_id),
+                _float_or_none(row.churn_probability),
+                bool(row.churn_predicted),
+                str(row.risk_tier),
+                str(row.rfm_segment),
+                str(row.risk_factor),
+                str(row.recommended_action),
+                _float_or_none(row.last_access_recency_at_cutoff),
+                _float_or_none(row.days_to_expire_at_cutoff),
+                _float_or_none(row.account_age_at_cutoff),
+                _float_or_none(row.total_payments),
+                _float_or_none(row.total_spend),
+                _float_or_none(row.ltv),
+                _float_or_none(row.avg_spend_per_tx),
+                _float_or_none(row.recency_days),
+                _float_or_none(row.avg_payment_gap_days),
+                _float_or_none(row.total_sms_volume),
+                _float_or_none(row.avg_sms_per_tx),
+                _float_or_none(row.unique_products),
+                int(row.downgraded or 0),
+                int(row.churned or 0),
+            )
+            for _, row in df.iterrows()
+        ]
+        await conn.executemany(
+            """
+            INSERT INTO predictions (
+                acc_id, churn_probability, churn_predicted, risk_tier, rfm_segment,
+                risk_factor, recommended_action, days_since_last_access, days_until_expire,
+                account_age_days, total_payments, total_amount_paid, ltv, avg_amount_per_tx,
+                last_payment_recency, avg_payment_gap_days, total_sms_volume, avg_sms_volume,
+                unique_products, downgraded, churned
+            )
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+            ON CONFLICT (acc_id) DO UPDATE SET
+                churn_probability      = EXCLUDED.churn_probability,
+                churn_predicted        = EXCLUDED.churn_predicted,
+                risk_tier              = EXCLUDED.risk_tier,
+                rfm_segment            = EXCLUDED.rfm_segment,
+                risk_factor            = EXCLUDED.risk_factor,
+                recommended_action     = EXCLUDED.recommended_action,
+                days_since_last_access = EXCLUDED.days_since_last_access,
+                days_until_expire      = EXCLUDED.days_until_expire,
+                account_age_days       = EXCLUDED.account_age_days,
+                total_payments         = EXCLUDED.total_payments,
+                total_amount_paid      = EXCLUDED.total_amount_paid,
+                ltv                    = EXCLUDED.ltv,
+                avg_amount_per_tx      = EXCLUDED.avg_amount_per_tx,
+                last_payment_recency   = EXCLUDED.last_payment_recency,
+                avg_payment_gap_days   = EXCLUDED.avg_payment_gap_days,
+                total_sms_volume       = EXCLUDED.total_sms_volume,
+                avg_sms_volume         = EXCLUDED.avg_sms_volume,
+                unique_products        = EXCLUDED.unique_products,
+                downgraded             = EXCLUDED.downgraded,
+                churned                = EXCLUDED.churned,
+                computed_at            = NOW()
+            """,
+            rows,
+        )
+    finally:
+        await conn.close()
+
+
+def _run_ml_pipeline(df: pd.DataFrame) -> pd.DataFrame:
+    """Run feature imputation + model inference on feature DataFrame. Returns enriched df."""
+    imputer       = _model_obj["imputer"]
+    calibrated    = _model_obj["calibrated"]
+    full_cols     = _model_obj["feature_cols"]
     selected_cols = _model_obj["selected_cols"]
-    
-    # 1. Impute full feature set
+
     X_full = imputer.transform(df[full_cols])
-    
-    # 2. Subset to selected features
     sel_idx = [full_cols.index(c) for c in selected_cols]
     X_sel = X_full[:, sel_idx]
-    
-    # 3. Predict
+
     df["churn_probability"] = calibrated.predict_proba(X_sel)[:, 1]
     df["churn_predicted"]   = (df["churn_probability"] >= 0.5).astype(int)
-    
-    # Metadata for dashboard
+
     df["risk_tier"] = df["churn_probability"].apply(
         lambda p: "High" if p >= 0.6 else ("Medium" if p >= 0.3 else "Low")
     )
@@ -379,12 +478,12 @@ def _rebuild_predictions() -> int:
     df["rfm_segment"] = df.apply(
         lambda r: _rfm_segment(r["last_access_recency_at_cutoff"], r["total_payments"], r["total_spend"]), axis=1
     )
-    df["risk_factor"] = df.apply(_risk_factor, axis=1)
+    df["risk_factor"]        = df.apply(_risk_factor, axis=1)
     df["recommended_action"] = df.apply(
         lambda r: _recommended_action(r["churn_probability"], r["rfm_segment"]), axis=1
     )
     df["key_reason"] = df.apply(_risk_factor, axis=1)
-    
+
     # Legacy aliases for frontend compatibility
     df["total_amount_paid"]      = df["total_spend"]
     df["days_since_last_access"] = df["last_access_recency_at_cutoff"]
@@ -393,34 +492,54 @@ def _rebuild_predictions() -> int:
     df["last_payment_recency"]   = df["recency_days"]
     df["avg_amount_per_tx"]      = df["avg_spend_per_tx"]
     df["avg_sms_volume"]         = df["avg_sms_per_tx"]
+    return df
 
-    _predictions = df[[
-        "acc_id", "status", "expire", "join_date",
-        "last_access_recency_at_cutoff", "days_to_expire_at_cutoff",
-        "total_payments", "total_spend", "ltv",
-        "avg_spend_per_tx", "recency_days", "avg_payment_gap_days",
-        "total_sms_volume", "avg_sms_per_tx", "unique_products",
-        "downgraded", "account_age_at_cutoff",
-        "churn_probability", "churn_predicted", "risk_tier", "churned",
-        "rfm_segment", "risk_factor", "recommended_action", "key_reason",
-        # Keep legacy names for API response consistency
-        "total_amount_paid", "days_since_last_access", "days_until_expire", 
-        "account_age_days", "last_payment_recency", "avg_amount_per_tx", "avg_sms_volume"
-    ]].copy()
+
+_PRED_CACHE_COLS = [
+    "acc_id", "status", "expire", "join_date",
+    "last_access_recency_at_cutoff", "days_to_expire_at_cutoff",
+    "total_payments", "total_spend", "ltv",
+    "avg_spend_per_tx", "recency_days", "avg_payment_gap_days",
+    "total_sms_volume", "avg_sms_per_tx", "unique_products",
+    "downgraded", "account_age_at_cutoff",
+    "churn_probability", "churn_predicted", "risk_tier", "churned",
+    "rfm_segment", "risk_factor", "recommended_action", "key_reason",
+    "total_amount_paid", "days_since_last_access", "days_until_expire",
+    "account_age_days", "last_payment_recency", "avg_amount_per_tx", "avg_sms_volume",
+]
+
+
+async def _rebuild_predictions() -> int:
+    """Read from DB → feature engineering → ML → save to DB + update memory cache."""
+    global _predictions
+    if _model_obj is None:
+        return 0
+
+    users_df, pays_df = await _load_dfs_from_db()
+    if users_df.empty or pays_df.empty:
+        return 0
+
+    df = _build_features(users_df=users_df, pays_df=pays_df)
+    df = _run_ml_pipeline(df)
+
+    await _save_predictions_to_db(df)
+
+    _predictions = df[[c for c in _PRED_CACHE_COLS if c in df.columns]].copy()
     _predictions["risk_tier"] = _predictions["risk_tier"].astype(str)
     return len(_predictions)
 
 
 @app.on_event("startup")
-def load_assets():
-    global _model_obj, _shap_explainer, _feature_importance
+async def load_assets():
+    global _model_obj, _shap_explainer, _feature_importance, _active_run_id
+
     if MODEL_PKL.exists():
         try:
             _model_obj = joblib.load(MODEL_PKL)
             print(f"[OK] Model v3 loaded ({_model_obj.get('model_name')})")
         except Exception as e:
             print(f"[ERROR] Failed to load model: {e}")
-            
+
     if SHAP_PKL.exists():
         try:
             obj = joblib.load(SHAP_PKL)
@@ -428,21 +547,59 @@ def load_assets():
             print("[OK] SHAP explainer loaded")
         except Exception as e:
             print(f"[WARN] SHAP load failed: {e}")
-            
+
     if _model_obj is not None:
-        # Extract feature importance from base model if available
-        # PlattCalibrated stores base in _base
-        calibrated = _model_obj["calibrated"]
-        base = getattr(calibrated, "_base", calibrated)
+        calibrated    = _model_obj["calibrated"]
+        base          = getattr(calibrated, "_base", calibrated)
         selected_cols = _model_obj["selected_cols"]
-        
         if hasattr(base, "feature_importances_"):
             fi = base.feature_importances_
             _feature_importance = dict(zip(selected_cols, [round(float(v), 5) for v in fi]))
             _feature_importance = dict(sorted(_feature_importance.items(), key=lambda x: x[1], reverse=True))
-            
-    _rebuild_predictions()
-    print("[OK] Assets loaded — predictions generated")
+
+    # Load predictions + active run from DB
+    try:
+        async with AsyncSessionLocal() as db:
+            # predictions joined with customers (for join_date, expire, status)
+            p_result = await db.execute(text("""
+                SELECT p.*, c.join_date, c.expire, c.status
+                FROM predictions p
+                LEFT JOIN customers c ON p.acc_id = c.acc_id
+            """))
+            rows = p_result.mappings().all()
+            if rows:
+                global _predictions
+                _predictions = pd.DataFrame(rows)
+                # Ensure legacy alias columns exist
+                if "last_access_recency_at_cutoff" not in _predictions.columns and "days_since_last_access" in _predictions.columns:
+                    _predictions["last_access_recency_at_cutoff"] = _predictions["days_since_last_access"]
+                if "days_to_expire_at_cutoff" not in _predictions.columns and "days_until_expire" in _predictions.columns:
+                    _predictions["days_to_expire_at_cutoff"] = _predictions["days_until_expire"]
+                if "account_age_at_cutoff" not in _predictions.columns and "account_age_days" in _predictions.columns:
+                    _predictions["account_age_at_cutoff"] = _predictions["account_age_days"]
+                if "recency_days" not in _predictions.columns and "last_payment_recency" in _predictions.columns:
+                    _predictions["recency_days"] = _predictions["last_payment_recency"]
+                if "avg_spend_per_tx" not in _predictions.columns and "avg_amount_per_tx" in _predictions.columns:
+                    _predictions["avg_spend_per_tx"] = _predictions["avg_amount_per_tx"]
+                if "avg_sms_per_tx" not in _predictions.columns and "avg_sms_volume" in _predictions.columns:
+                    _predictions["avg_sms_per_tx"] = _predictions["avg_sms_volume"]
+                if "total_spend" not in _predictions.columns and "total_amount_paid" in _predictions.columns:
+                    _predictions["total_spend"] = _predictions["total_amount_paid"]
+                print(f"[OK] Loaded {len(_predictions)} predictions from DB")
+            else:
+                print("[INFO] No predictions in DB yet")
+
+            # active run (most recent)
+            r_result = await db.execute(
+                text("SELECT id FROM prediction_runs ORDER BY id DESC LIMIT 1")
+            )
+            run_row = r_result.mappings().first()
+            if run_row:
+                _active_run_id = run_row["id"]
+    except Exception as e:
+        print(f"[WARN] Could not load from DB on startup: {e}")
+
+    print("[OK] Assets loaded")
 
 
 # ══════════════════════════════════════════════════════════
@@ -581,7 +738,7 @@ def get_predictions(
 # GET /api/predictions/{acc_id}
 # ══════════════════════════════════════════════════════════
 @app.get("/api/predictions/{acc_id}")
-def get_customer(acc_id: str):
+async def get_customer(acc_id: str):
     if _predictions.empty:
         raise HTTPException(404, "No prediction data")
     row = _predictions[_predictions["acc_id"] == acc_id]
@@ -590,15 +747,22 @@ def get_customer(acc_id: str):
 
     record = row.iloc[0].to_dict()
 
-    if PAY_CSV.exists():
-        pays = pd.read_csv(PAY_CSV, parse_dates=["payment_date"])
-        cust_pays = pays[pays["acc_id"] == acc_id].sort_values("payment_date")
-        record["payment_history"] = json.loads(
-            cust_pays[["payment_date", "amount", "sms_volume", "product_name"]]
-            .assign(payment_date=lambda d: d["payment_date"].astype(str))
-            .to_json(orient="records")
-        )
-    else:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("""
+                    SELECT payment_date, amount, sms_volume, product_name
+                    FROM payments
+                    WHERE acc_id = :acc_id
+                    ORDER BY payment_date
+                """),
+                {"acc_id": acc_id},
+            )
+            pay_rows = result.mappings().all()
+        record["payment_history"] = [
+            {**dict(r), "payment_date": str(r["payment_date"])} for r in pay_rows
+        ]
+    except Exception:
         record["payment_history"] = []
 
     record["risk"] = risk_label(record.get("churn_probability", 0))
@@ -837,7 +1001,6 @@ def explain_customer(acc_id: str):
 # ══════════════════════════════════════════════════════════
 # POST /api/chat  — AI Chatbot (Qwen via Ollama + PostgreSQL)
 # ══════════════════════════════════════════════════════════
-from database     import AsyncSessionLocal
 from chat_service import chat as _chat_service
 
 class ChatRequest(BaseModel):
@@ -870,7 +1033,7 @@ async def api_chat(req: ChatRequest):
 
 
 # ══════════════════════════════════════════════════════════
-# POST /api/import-csv  — upload users or payments CSV
+# POST /api/import-csv  — upload users or payments CSV → PostgreSQL
 # ══════════════════════════════════════════════════════════
 @app.post("/api/import-csv")
 async def import_csv(file: UploadFile = File(...)):
@@ -884,12 +1047,9 @@ async def import_csv(file: UploadFile = File(...)):
         raise HTTPException(400, f"ไม่สามารถอ่านไฟล์ CSV ได้: {e}")
 
     cols = set(df.columns.str.lower())
-    # Detect file type by columns
     if "acc_id" in cols and "payment_date" in cols:
-        target = PAY_CSV
         kind = "payments"
     elif "acc_id" in cols and ("join_date" in cols or "expire" in cols):
-        target = USERS_CSV
         kind = "users"
     else:
         raise HTTPException(
@@ -897,18 +1057,208 @@ async def import_csv(file: UploadFile = File(...)):
             "ไม่รู้จักรูปแบบไฟล์ — ต้องมีคอลัมน์ acc_id และ (payment_date สำหรับ payments / join_date สำหรับ users)"
         )
 
-    target.write_bytes(content)
+    # ── Upsert into PostgreSQL ────────────────────────────
+    conn = await asyncpg.connect(_DB_DSN)
+    try:
+        if kind == "users":
+            for col in ["expire", "join_date", "last_access", "last_send"]:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], errors="coerce")
 
-    # Rebuild predictions if both files are now present
+            rows = [
+                (
+                    str(r.acc_id),
+                    str(r.status) if pd.notna(r.get("status", None)) else "trial",
+                    int(r.get("credit", 0) or 0),
+                    int(r.get("credit_premium", 0) or 0),
+                    int(r.get("credit_email", 0) or 0),
+                    r["expire"].date()      if "expire"      in df.columns and pd.notna(r["expire"])      else None,
+                    r["join_date"].date()   if "join_date"   in df.columns and pd.notna(r["join_date"])   else None,
+                    r["last_access"].to_pydatetime() if "last_access" in df.columns and pd.notna(r["last_access"]) else None,
+                    r["last_send"].to_pydatetime()   if "last_send"   in df.columns and pd.notna(r["last_send"])   else None,
+                    str(r["paid_email"]) if "paid_email" in df.columns and pd.notna(r.get("paid_email")) else None,
+                )
+                for _, r in df.iterrows()
+            ]
+            await conn.executemany(
+                """
+                INSERT INTO customers
+                    (acc_id, status, credit, credit_premium, credit_email,
+                     expire, join_date, last_access, last_send, paid_email)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                ON CONFLICT (acc_id) DO UPDATE SET
+                    status         = EXCLUDED.status,
+                    credit         = EXCLUDED.credit,
+                    credit_premium = EXCLUDED.credit_premium,
+                    credit_email   = EXCLUDED.credit_email,
+                    expire         = EXCLUDED.expire,
+                    last_access    = EXCLUDED.last_access,
+                    last_send      = EXCLUDED.last_send,
+                    updated_at     = NOW()
+                """,
+                rows,
+            )
+
+        else:  # payments
+            df["payment_date"] = pd.to_datetime(df["payment_date"], errors="coerce")
+            # Delete and reload to avoid duplicates
+            await conn.execute("DELETE FROM payments")
+            rows = [
+                (
+                    str(r.acc_id),
+                    r["payment_date"].to_pydatetime(),
+                    float(r.get("amount", 0) or 0),
+                    int(r.get("sms_volume", 0) or 0),
+                    str(r["product_name"]) if "product_name" in df.columns and pd.notna(r.get("product_name")) else None,
+                    str(r["credit_type"])  if "credit_type"  in df.columns and pd.notna(r.get("credit_type"))  else None,
+                )
+                for _, r in df.iterrows()
+                if pd.notna(r["payment_date"])
+            ]
+            await conn.executemany(
+                """
+                INSERT INTO payments (acc_id, payment_date, amount, sms_volume, product_name, credit_type)
+                VALUES ($1,$2,$3,$4,$5,$6)
+                """,
+                rows,
+            )
+    finally:
+        await conn.close()
+
+    # ── Update active run upload flags in DB ──────────────
+    if _active_run_id is not None:
+        col_flag = "users_uploaded" if kind == "users" else "payments_uploaded"
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text(f"UPDATE prediction_runs SET {col_flag} = TRUE WHERE id = :rid"),
+                {"rid": _active_run_id},
+            )
+            await db.commit()
+
+    # ── Check if both tables have data → rebuild predictions ──
     rebuilt = 0
-    if USERS_CSV.exists() and PAY_CSV.exists():
-        rebuilt = _rebuild_predictions()
+    async with AsyncSessionLocal() as db:
+        c_count = (await db.execute(text("SELECT COUNT(*) FROM customers"))).scalar()
+        p_count = (await db.execute(text("SELECT COUNT(*) FROM payments"))).scalar()
+    if c_count and p_count:
+        rebuilt = await _rebuild_predictions()
+
+    # ── Mark run as done ─────────────────────────────────
+    if rebuilt > 0 and _active_run_id is not None:
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text("""
+                    UPDATE prediction_runs
+                    SET status = 'done', completed_at = NOW(), customers_count = :cnt
+                    WHERE id = :rid AND status != 'done'
+                """),
+                {"cnt": rebuilt, "rid": _active_run_id},
+            )
+            await db.commit()
 
     return {
-        "message": f"Import {kind} สำเร็จ {len(df):,} แถว ({file.filename})" + (f" — คำนวณ predictions {rebuilt:,} รายการแล้ว" if rebuilt else " — รอ import อีกไฟล์"),
-        "rows": len(df),
-        "type": kind,
+        "message": f"Import {kind} สำเร็จ {len(df):,} แถว ({file.filename})"
+                   + (f" — คำนวณ predictions {rebuilt:,} รายการแล้ว" if rebuilt else " — รอ import อีกไฟล์"),
+        "rows":              len(df),
+        "type":              kind,
         "predictions_ready": rebuilt > 0,
         "predictions_count": rebuilt,
     }
+
+
+# ══════════════════════════════════════════════════════════
+# Prediction Run management  (DB-backed)
+# ══════════════════════════════════════════════════════════
+
+class RunCreateBody(BaseModel):
+    name: str
+
+
+def _row_to_run(row) -> dict:
+    d = dict(row)
+    for k in ("created_at", "completed_at"):
+        if d.get(k) is not None:
+            d[k] = str(d[k])
+    return d
+
+
+@app.post("/api/runs")
+async def create_run(body: RunCreateBody):
+    global _active_run_id
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "กรุณาระบุชื่อ Prediction Run")
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("""
+                INSERT INTO prediction_runs (name, status, users_uploaded, payments_uploaded, customers_count)
+                VALUES (:name, 'pending', FALSE, FALSE, 0)
+                RETURNING *
+            """),
+            {"name": name},
+        )
+        await db.commit()
+        row = result.mappings().first()
+    run = _row_to_run(row)
+    _active_run_id = run["id"]
+    return run
+
+
+@app.get("/api/runs")
+async def list_runs():
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("SELECT * FROM prediction_runs ORDER BY id DESC")
+        )
+        rows = result.mappings().all()
+    return [_row_to_run(r) for r in rows]
+
+
+@app.get("/api/runs/active")
+async def get_active_run():
+    if _active_run_id is None:
+        return None
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("SELECT * FROM prediction_runs WHERE id = :rid"),
+            {"rid": _active_run_id},
+        )
+        row = result.mappings().first()
+    return _row_to_run(row) if row else None
+
+
+@app.get("/api/runs/{run_id}")
+async def get_run(run_id: int):
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("SELECT * FROM prediction_runs WHERE id = :rid"),
+            {"rid": run_id},
+        )
+        row = result.mappings().first()
+    if not row:
+        raise HTTPException(404, f"Run {run_id} not found")
+    return _row_to_run(row)
+
+
+@app.delete("/api/runs/{run_id}")
+async def delete_run(run_id: int):
+    global _active_run_id
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            text("DELETE FROM prediction_runs WHERE id = :rid RETURNING id"),
+            {"rid": run_id},
+        )
+        await db.commit()
+        deleted = result.fetchone()
+    if not deleted:
+        raise HTTPException(404, f"Run {run_id} not found")
+    if _active_run_id == run_id:
+        # Fall back to most recent remaining run
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text("SELECT id FROM prediction_runs ORDER BY id DESC LIMIT 1")
+            )
+            row = result.mappings().first()
+        _active_run_id = row["id"] if row else None
+    return {"ok": True}
 
