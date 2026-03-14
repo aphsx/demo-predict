@@ -118,11 +118,13 @@ async def chat(
     messages.append({"role": "user", "content": message})
 
     sql_executed: list[str] = []
-    max_rounds = 3  # LLM → SQL → LLM → SQL → LLM (กัน loop)
+    max_rounds = 5  # LLM สามารถดึงข้อมูลได้หลาย round สำหรับคำถามซับซ้อน
 
     try:
         async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-            for _ in range(max_rounds):
+            for round_num in range(max_rounds):
+                is_last_round = (round_num == max_rounds - 1)
+
                 # Phase 1: LLM สร้าง SQL (หรือตอบตรงถ้าไม่ต้อง DB)
                 data = await _call_llm(client, messages)
                 llm_reply = data.get("message", {}).get("content", "")
@@ -136,7 +138,7 @@ async def chat(
                         "sql_executed": sql_executed,
                     }
 
-                # Phase 2: Execute SQL ทุก block
+                # Phase 2: Execute SQL ทุก block ที่อยู่ใน round นี้
                 messages.append({"role": "assistant", "content": llm_reply})
 
                 results_text = ""
@@ -145,10 +147,15 @@ async def chat(
                     result = await _execute_sql(sql, db)
                     results_text += _format_sql_result(i, sql, result)
 
-                # Phase 3: ส่งผลลัพธ์กลับ LLM เพื่อวิเคราะห์
+                # Phase 3: ส่งผลลัพธ์กลับ LLM — round สุดท้ายบังคับให้ตอบ
+                if is_last_round:
+                    instruction = "นี่คือข้อมูลทั้งหมดที่ได้ กรุณาสรุปและตอบคำถามเป็นภาษาไทย ห้ามสร้าง SQL เพิ่มอีก"
+                else:
+                    instruction = "กรุณาวิเคราะห์ผลลัพธ์ข้างต้น ถ้าได้ข้อมูลครบแล้วให้ตอบคำถามเลย ถ้าต้องการข้อมูลเพิ่มให้เขียน SQL ได้อีก"
+
                 messages.append({
                     "role":    "user",
-                    "content": results_text + "\nกรุณาวิเคราะห์ผลลัพธ์ข้างต้นและตอบคำถามเป็นภาษาไทย",
+                    "content": results_text + "\n" + instruction,
                 })
 
             # เกิน max_rounds

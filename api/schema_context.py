@@ -83,15 +83,29 @@ def build_system_prompt(run_id: int | None = None, run_name: str | None = None) 
 
 {DB_SCHEMA}
 
+=== เทคนิคสำคัญ ===
+- "คนที่ N" หรือ "อันดับ N" → ใช้ OFFSET N-1 LIMIT 1 หรือดึงมา N แถวแล้วเอาตัวสุดท้าย
+- ถามข้อมูลทั้งหมดของลูกค้า 1 คน → ใช้ <SQL_1> profile, <SQL_2> payments ในคราวเดียว
+- JOIN customers กับ predictions ด้วย acc_id เสมอเพื่อได้ข้อมูลครบ
+
 === ตัวอย่าง ===
-คำถาม: "ลูกค้าที่เสี่ยง churn สูงสุด 5 คน"
-<SQL>
-SELECT p.acc_id, c.status,
-       ROUND(p.churn_probability::numeric, 3) AS churn_prob,
-       p.risk_tier, p.ltv, p.risk_factor, p.recommended_action
-FROM predictions p
-JOIN customers c ON c.acc_id = p.acc_id
-ORDER BY p.churn_probability DESC
-LIMIT 5
-</SQL>
+คำถาม: "ลูกค้าคนที่ 99 มีประวัติอะไรบ้าง"
+<SQL_1>
+SELECT c.acc_id, c.status, c.credit, c.expire, c.join_date, c.last_access,
+       p.churn_probability, p.risk_tier, p.rfm_segment, p.ltv,
+       p.total_payments, p.days_since_last_access, p.risk_factor, p.recommended_action
+FROM customers c
+LEFT JOIN predictions p ON p.acc_id = c.acc_id
+ORDER BY c.acc_id
+LIMIT 1 OFFSET 98
+</SQL_1>
+<SQL_2>
+SELECT pay.payment_date, pay.amount, pay.sms_volume, pay.product_name, pay.credit_type
+FROM payments pay
+WHERE pay.acc_id = (
+    SELECT acc_id FROM customers ORDER BY acc_id LIMIT 1 OFFSET 98
+)
+ORDER BY pay.payment_date DESC
+LIMIT 50
+</SQL_2>
 """
