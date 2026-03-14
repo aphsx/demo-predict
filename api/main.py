@@ -1004,30 +1004,36 @@ def explain_customer(acc_id: str):
 from chat_service import chat as _chat_service
 
 class ChatRequest(BaseModel):
-    message: str
-    history: list[dict] = []
+    message:  str
+    history:  list[dict] = []
+    run_id:   int | None = None
+    run_name: str | None = None
 
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest):
     """
-    AI chatbot endpoint.
+    AI chatbot endpoint — Text-to-SQL (LLM เขียน SQL เองตามคำถาม)
 
     Body:
-        message  — user's question (Thai or English)
-        history  — list of {role, content} for conversation context
+        message  — คำถามจากผู้ใช้ (ภาษาไทยหรืออังกฤษ)
+        history  — list of {role, content} บทสนทนาย้อนหลัง
+        run_id   — ID ของ Prediction Run (optional)
+        run_name — ชื่อ Prediction Run (optional)
 
     Returns:
-        reply       — AI's Thai-language answer
-        tools_used  — list of DB tools the AI called
+        reply        — คำตอบภาษาไทย
+        sql_executed — SQL ที่ LLM สร้างและรันจริง
     """
     if not req.message.strip():
         raise HTTPException(400, "message cannot be empty")
 
     async with AsyncSessionLocal() as db:
         result = await _chat_service(
-            message = req.message.strip(),
-            history = req.history,
-            db      = db,
+            message  = req.message.strip(),
+            history  = req.history,
+            db       = db,
+            run_id   = req.run_id,
+            run_name = req.run_name,
         )
     return result
 

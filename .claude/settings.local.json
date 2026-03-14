@@ -36,7 +36,14 @@
       "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d '{\"\"\"\"message\"\"\"\":\"\"\"\"ดูสถิติภาพรวมให้หน่อย\"\"\"\",\"\"\"\"history\"\"\"\":[]}')",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''tools_used:'''', d.get\\(''''tools_used''''\\)\\); print\\(''''reply:'''', d.get\\(''''reply'''',''''''''\\)[:300]\\)\")",
       "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d '{\"\"\"\"message\"\"\"\":\"\"\"\"เรียก get_churn_stats เพื่อดูสถิติภาพรวมของลูกค้าทั้งหมด\"\"\"\",\"\"\"\"history\"\"\"\":[]}')",
-      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''tools_used:'''', d.get\\(''''tools_used''''\\)\\); print\\(''''reply:'''', d.get\\(''''reply'''',''''''''\\)[:400]\\)\")"
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''tools_used:'''', d.get\\(''''tools_used''''\\)\\); print\\(''''reply:'''', d.get\\(''''reply'''',''''''''\\)[:400]\\)\")",
+      "Bash(ls c:/Github/demo-predict/dashboard/app/runs/[id]/)",
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d '{\"\"\"\"message\"\"\"\":\"\"\"\"ลูกค้าที่เสี่ยง churn สูงสุด 5 คนคือใคร และ LTV เท่าไหร่\"\"\"\",\"\"\"\"history\"\"\"\":[],\"\"\"\"run_id\"\"\"\":1,\"\"\"\"run_name\"\"\"\":\"\"\"\"ทดสอบ\"\"\"\"}')",
+      "Bash(python -c \":*)",
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\"\"message\"\":\"\"top 5 customers by churn probability with ltv\"\",\"\"history\"\":[],\"\"run_id\"\":1,\"\"run_name\"\":\"\"test\"\"}\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''SQL:'''', bool\\(d.get\\(''''sql_executed''''\\)\\)\\); print\\(''''REPLY:'''', repr\\(d.get\\(''''reply'''',''''''''\\)[:400]\\)\\)\")",
+      "Bash(git diff:*)",
+      "Bash(git add:*)"
     ]
   }
 }
