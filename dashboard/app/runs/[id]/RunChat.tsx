@@ -10,6 +10,7 @@ interface ChatMessage {
 }
 
 interface Props {
+  runId:   number;
   runName: string;
 }
 
@@ -20,7 +21,7 @@ const EXAMPLE_QUESTIONS = [
   "ภาพรวม High Risk ทั้งหมดเป็นยังไง?",
 ];
 
-export default function RunChat({ runName }: Props) {
+export default function RunChat({ runId, runName }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -48,7 +49,7 @@ export default function RunChat({ runName }: Props) {
       const res = await fetch(`${API}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: content, history }),
+        body: JSON.stringify({ message: content, history, run_id: runId, run_name: runName }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json();

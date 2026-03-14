@@ -247,7 +247,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
               <p className="text-[11px] text-gray-400">ถามอะไรก็ได้เกี่ยวกับข้อมูล {run.name}</p>
             </div>
           </div>
-          <RunChat runName={run.name} />
+          <RunChat runId={run.id} runName={run.name} />
         </section>
       )}
 
