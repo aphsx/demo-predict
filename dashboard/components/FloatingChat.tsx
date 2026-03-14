@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
@@ -8,6 +10,50 @@ interface ChatMessage {
     role: "user" | "assistant";
     content: string;
     tools_used?: string[];
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+    return (
+        <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+                h1: ({ children }) => <p className="font-bold text-sm mb-1">{children}</p>,
+                h2: ({ children }) => <p className="font-bold text-sm mb-1">{children}</p>,
+                h3: ({ children }) => <p className="font-semibold text-sm mb-0.5">{children}</p>,
+                p:  ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 space-y-0.5">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 space-y-0.5">{children}</ol>,
+                li: ({ children }) => <li className="text-sm">{children}</li>,
+                code: ({ children }) => (
+                    <code className="bg-gray-100 text-gray-700 rounded px-1 py-0.5 text-[11px] font-mono">
+                        {children}
+                    </code>
+                ),
+                table: ({ children }) => (
+                    <div className="overflow-x-auto mb-2">
+                        <table className="text-xs border-collapse w-full">{children}</table>
+                    </div>
+                ),
+                th: ({ children }) => (
+                    <th className="border border-gray-200 bg-gray-50 px-2 py-1 text-left font-semibold whitespace-nowrap">
+                        {children}
+                    </th>
+                ),
+                td: ({ children }) => (
+                    <td className="border border-gray-200 px-2 py-1">{children}</td>
+                ),
+                blockquote: ({ children }) => (
+                    <blockquote className="border-l-2 border-gray-300 pl-3 text-gray-500 italic mb-1.5">
+                        {children}
+                    </blockquote>
+                ),
+                hr: () => <hr className="my-2 border-gray-200" />,
+            }}
+        >
+            {content}
+        </ReactMarkdown>
+    );
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -123,12 +169,12 @@ export default function FloatingChat() {
                                     <div className="w-6 h-6 rounded-full bg-[#006bff] flex-shrink-0 flex items-center justify-center text-white text-[9px] font-bold">AI</div>
                                 )}
                                 <div className={`max-w-[82%] flex flex-col gap-1 ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                                    <div className={`px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap ${
+                                    <div className={`px-4 py-2.5 rounded-2xl text-sm ${
                                         msg.role === "user"
-                                            ? "bg-[#006bff] text-white rounded-br-sm"
+                                            ? "bg-[#006bff] text-white rounded-br-sm whitespace-pre-wrap"
                                             : "bg-white text-gray-700 border border-gray-100 shadow-sm rounded-bl-sm"
                                     }`}>
-                                        {msg.content}
+                                        {msg.role === "user" ? msg.content : <MarkdownMessage content={msg.content} />}
                                     </div>
                                     {msg.tools_used && msg.tools_used.length > 0 && (
                                         <div className="flex flex-wrap gap-1 px-1">
