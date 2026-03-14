@@ -16,7 +16,14 @@
       "Bash(git reset HEAD -- .)",
       "Bash(git add dashboard/app/customers/page.tsx)",
       "Bash(git add dashboard/components/RiskPieChart.tsx dashboard/components/RiskBadge.tsx dashboard/components/ChurnTrendChart.tsx dashboard/components/RetentionBarChart.tsx dashboard/app/top-risk/page.tsx)",
-      "Bash(git add dashboard/app/page.tsx dashboard/app/model/page.tsx)"
+      "Bash(git add dashboard/app/page.tsx dashboard/app/model/page.tsx)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker exec:*)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist /FI \"PID eq 6996\")",
+      "Bash(tasklist /FI \"PID eq 21772\")",
+      "Bash(powershell -Command \"Get-Process -Id 6996,21772 | Select-Object Id,ProcessName\")"
     ]
   }
 }

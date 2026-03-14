@@ -6,6 +6,9 @@ DATABASE_URL env var (default points to Docker Compose service):
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncSession,
