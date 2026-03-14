@@ -23,7 +23,8 @@
       "Bash(netstat -ano)",
       "Bash(tasklist /FI \"PID eq 6996\")",
       "Bash(tasklist /FI \"PID eq 21772\")",
-      "Bash(powershell -Command \"Get-Process -Id 6996,21772 | Select-Object Id,ProcessName\")"
+      "Bash(powershell -Command \"Get-Process -Id 6996,21772 | Select-Object Id,ProcessName\")",
+      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"qwen3.5:9b\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"สวัสดี\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')"
     ]
   }
 }
