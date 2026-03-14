@@ -24,7 +24,19 @@
       "Bash(tasklist /FI \"PID eq 6996\")",
       "Bash(tasklist /FI \"PID eq 21772\")",
       "Bash(powershell -Command \"Get-Process -Id 6996,21772 | Select-Object Id,ProcessName\")",
-      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"qwen3.5:9b\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"สวัสดี\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')"
+      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"qwen3.5:9b\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"สวัสดี\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')",
+      "Bash(OLLAMA_NUM_GPU=0 curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"qwen3.5:9b\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"สวัสดี\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')",
+      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"qwen3.5:9b\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"สวัสดี ตอบสั้นๆ\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\(''''message'''',{}\\).get\\(''''content'''',''''''''\\) or d.get\\(''''error'''',''''''''\\)\\)\")",
+      "Bash(ollama list:*)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(curl -s http://localhost:11434/api/chat -d '{\"\"\"\"model\"\"\"\":\"\"\"\"qwen3.5:397b-cloud\"\"\"\",\"\"\"\"messages\"\"\"\":[{\"\"\"\"role\"\"\"\":\"\"\"\"user\"\"\"\",\"\"\"\"content\"\"\"\":\"\"\"\"สวัสดี ตอบสั้นๆ\"\"\"\"}],\"\"\"\"stream\"\"\"\":false}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); msg=d.get\\(''''message'''',{}\\); print\\(''''tool_calls:'''', bool\\(msg.get\\(''''tool_calls''''\\)\\)\\); print\\(''''content:'''', msg.get\\(''''content'''',''''''''\\)[:200]\\)\")",
+      "Bash(curl -s http://localhost:8000/api/stats)",
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d '{\"\"\"\"message\"\"\"\":\"\"\"\"ดูสถิติภาพรวมให้หน่อย\"\"\"\",\"\"\"\"history\"\"\"\":[]}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''tools_used:'''', d.get\\(''''tools_used''''\\)\\); print\\(''''reply:'''', d.get\\(''''reply'''',''''''''\\)[:300]\\)\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d '{\"\"\"\"message\"\"\"\":\"\"\"\"เรียก get_churn_stats เพื่อดูสถิติภาพรวมของลูกค้าทั้งหมด\"\"\"\",\"\"\"\"history\"\"\"\":[]}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''tools_used:'''', d.get\\(''''tools_used''''\\)\\); print\\(''''reply:'''', d.get\\(''''reply'''',''''''''\\)[:400]\\)\")"
     ]
   }
 }
