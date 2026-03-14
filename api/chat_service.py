@@ -1,71 +1,98 @@
 """
 chat_service.py — Text-to-SQL AI Chat
-Flow: คำถาม → LLM สร้าง SQL → Execute → LLM วิเคราะห์ผล → ตอบภาษาไทย
+LLM เขียน SQL เองตามคำถาม ไม่มี pre-defined tools
+Schema ดึงจาก DB จริงแบบ dynamic (cached)
 
-ไม่ใช้ pre-defined tools — LLM เขียน SQL เองได้ทุกคำถาม
+Flow:
+  คำถาม → LLM สร้าง <SQL> → execute → LLM วิเคราะห์ผล → ตอบภาษาไทย
 """
 
 import json
 import os
+import textwrap
 
 import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from schema_context import build_system_prompt
+from db_introspect import get_schema
 from sql_safety import validate, inject_limit, parse_sql_blocks
 
 OLLAMA_URL   = os.getenv("OLLAMA_URL",   "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:397b-cloud")
 
-_SQL_TIMEOUT = 10.0   # วินาที สำหรับแต่ละ DB query
-_LLM_TIMEOUT = 120.0  # วินาที สำหรับ LLM response
+_LLM_TIMEOUT = 180.0
+_MAX_DISPLAY_ROWS = 30   # แสดงสูงสุดกี่แถวให้ LLM ก่อน truncate
+
+
+# ─────────────────────────────────────────────────────────────
+# System prompt — สั้น ชัด ไม่ขยายเกินจำเป็น
+# ─────────────────────────────────────────────────────────────
+
+def _build_prompt(schema: str, run_id: int | None, run_name: str | None) -> str:
+    ctx = f'\nคุณกำลังวิเคราะห์ข้อมูล Prediction Run #{run_id}: "{run_name}"' if run_id else ""
+    return textwrap.dedent(f"""\
+        คุณเป็น AI วิเคราะห์ข้อมูลลูกค้าสำหรับระบบ CRM ของ 1MOBY{ctx}
+        ตอบภาษาไทยเสมอ ให้ข้อมูลตรง มีประโยชน์ และอธิบายเหตุผล
+
+        === วิธีใช้ SQL ===
+        - ถ้าต้องการข้อมูล → เขียน SQL ใน <SQL>...</SQL>
+        - ถ้าต้องหลาย query พร้อมกัน → <SQL_1>...</SQL_1> <SQL_2>...</SQL_2>
+        - เมื่อได้ผล SQL แล้ว → ตอบทันที ไม่ต้องเขียน SQL เพิ่มอีก
+        - ถ้าไม่ต้องการข้อมูล → ตอบได้เลย ไม่ต้องเขียน SQL
+
+        === กฎ SQL ===
+        - SELECT เท่านั้น ห้าม INSERT / UPDATE / DELETE / DROP
+        - aggregate (COUNT/SUM/AVG + GROUP BY) ไม่ต้อง LIMIT
+        - raw rows → LIMIT ≤ 100
+        - "คนที่ N" หรือ "อันดับ N" → ORDER BY ... LIMIT 1 OFFSET N-1
+
+        {schema}
+    """)
 
 
 # ─────────────────────────────────────────────────────────────
 # DB execution
 # ─────────────────────────────────────────────────────────────
 
-async def _execute_sql(sql: str, db: AsyncSession) -> dict:
-    """
-    Validate, inject LIMIT, execute, return result dict.
-    Returns {"rows": [...], "error": "..."}
-    """
+async def _run_sql(sql: str, db: AsyncSession) -> dict:
     ok, err = validate(sql)
     if not ok:
-        return {"error": f"SQL ไม่ปลอดภัย: {err}", "rows": []}
-
-    safe_sql = inject_limit(sql)
-
+        return {"error": f"SQL ไม่ผ่าน safety check: {err}", "rows": [], "count": 0}
     try:
-        result = await db.execute(text(safe_sql))
+        result = await db.execute(text(inject_limit(sql)))
         rows = [dict(r) for r in result.mappings()]
         return {"rows": rows, "count": len(rows)}
     except Exception as exc:
-        return {"error": str(exc), "rows": []}
+        return {"error": str(exc), "rows": [], "count": 0}
 
 
-def _format_sql_result(idx: int, sql: str, result: dict) -> str:
-    """แปลงผล SQL เป็น string สำหรับส่งกลับ LLM"""
-    label = f"[ผลลัพธ์ SQL_{idx}]" if idx > 0 else "[ผลลัพธ์ SQL]"
+def _format_result(idx: int, result: dict) -> str:
+    label = f"[ผลลัพธ์ SQL_{idx}]" if idx else "[ผลลัพธ์ SQL]"
 
-    if "error" in result and result["error"]:
-        return f"{label}\nERROR: {result['error']}\n"
+    if result.get("error"):
+        return f"{label} ERROR: {result['error']}\n"
 
-    rows = result.get("rows", [])
+    rows = result["rows"]
+    count = result["count"]
+
     if not rows:
-        return f"{label}\nไม่พบข้อมูล (0 แถว)\n"
+        return f"{label} ไม่พบข้อมูล (0 แถว)\n"
 
-    count = result.get("count", len(rows))
-    return f"{label} ({count} แถว)\n{json.dumps(rows, ensure_ascii=False, default=str)}\n"
+    display = rows[:_MAX_DISPLAY_ROWS]
+    truncate_note = f"\n... (แสดง {_MAX_DISPLAY_ROWS}/{count} แถว)" if count > _MAX_DISPLAY_ROWS else ""
+    return (
+        f"{label} ({count} แถว):\n"
+        + json.dumps(display, ensure_ascii=False, default=str)
+        + truncate_note + "\n"
+    )
 
 
 # ─────────────────────────────────────────────────────────────
 # LLM call
 # ─────────────────────────────────────────────────────────────
 
-async def _call_llm(client: httpx.AsyncClient, messages: list[dict]) -> dict:
-    """Send messages to Ollama, return parsed response dict."""
+async def _call_llm(client: httpx.AsyncClient, messages: list[dict]) -> str:
     resp = await client.post(
         f"{OLLAMA_URL}/api/chat",
         json={
@@ -77,11 +104,11 @@ async def _call_llm(client: httpx.AsyncClient, messages: list[dict]) -> dict:
         timeout=_LLM_TIMEOUT,
     )
     resp.raise_for_status()
-    return resp.json()
+    return resp.json().get("message", {}).get("content", "")
 
 
 # ─────────────────────────────────────────────────────────────
-# Main chat function
+# Main
 # ─────────────────────────────────────────────────────────────
 
 async def chat(
@@ -92,95 +119,52 @@ async def chat(
     run_name: str | None = None,
 ) -> dict:
     """
-    Text-to-SQL AI chat — LLM เขียน SQL เองตามคำถาม ไม่ต้องสร้าง tool ใหม่
-
-    Parameters
-    ----------
-    message  : คำถามจากผู้ใช้
-    history  : list of {role, content} — บทสนทนาย้อนหลัง
-    db       : AsyncSession
-    run_id   : ID ของ Prediction Run (ถ้ามี)
-    run_name : ชื่อ Prediction Run (ถ้ามี)
-
-    Returns
-    -------
-    {"reply": str, "sql_executed": list[str]}
+    Returns {"reply": str, "sql_executed": list[str]}
     """
-    system_prompt = build_system_prompt(run_id=run_id, run_name=run_name)
+    schema = await get_schema(db)
+    system = _build_prompt(schema, run_id, run_name)
 
-    messages: list[dict] = [{"role": "system", "content": system_prompt}]
-
-    # เก็บ 10 turn ล่าสุดสำหรับ context
+    messages: list[dict] = [{"role": "system", "content": system}]
     for turn in history[-10:]:
         if turn.get("role") in ("user", "assistant") and turn.get("content"):
             messages.append({"role": turn["role"], "content": turn["content"]})
-
     messages.append({"role": "user", "content": message})
 
     sql_executed: list[str] = []
-    max_rounds = 5  # LLM สามารถดึงข้อมูลได้หลาย round สำหรับคำถามซับซ้อน
 
     try:
         async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
-            for round_num in range(max_rounds):
-                is_last_round = (round_num == max_rounds - 1)
-
-                # Phase 1: LLM สร้าง SQL (หรือตอบตรงถ้าไม่ต้อง DB)
-                data = await _call_llm(client, messages)
-                llm_reply = data.get("message", {}).get("content", "")
-
-                sql_blocks = parse_sql_blocks(llm_reply)
+            for round_num in range(5):
+                reply = await _call_llm(client, messages)
+                sql_blocks = parse_sql_blocks(reply)
 
                 if not sql_blocks:
-                    # ไม่มี SQL → นี่คือคำตอบสุดท้าย
-                    return {
-                        "reply":        llm_reply,
-                        "sql_executed": sql_executed,
-                    }
+                    return {"reply": reply, "sql_executed": sql_executed}
 
-                # Phase 2: Execute SQL ทุก block ที่อยู่ใน round นี้
-                messages.append({"role": "assistant", "content": llm_reply})
+                # มี SQL — execute แล้วส่งผลกลับ
+                messages.append({"role": "assistant", "content": reply})
 
-                results_text = ""
+                results = ""
                 for i, sql in enumerate(sql_blocks, start=1 if len(sql_blocks) > 1 else 0):
                     sql_executed.append(sql)
-                    result = await _execute_sql(sql, db)
-                    results_text += _format_sql_result(i, sql, result)
+                    results += _format_result(i, await _run_sql(sql, db))
 
-                # Phase 3: ส่งผลลัพธ์กลับ LLM — round สุดท้ายบังคับให้ตอบ
-                if is_last_round:
-                    instruction = "นี่คือข้อมูลทั้งหมดที่ได้ กรุณาสรุปและตอบคำถามเป็นภาษาไทย ห้ามสร้าง SQL เพิ่มอีก"
-                else:
-                    instruction = "กรุณาวิเคราะห์ผลลัพธ์ข้างต้น ถ้าได้ข้อมูลครบแล้วให้ตอบคำถามเลย ถ้าต้องการข้อมูลเพิ่มให้เขียน SQL ได้อีก"
+                # round สุดท้าย: บังคับตอบ ห้าม SQL เพิ่ม
+                instruction = (
+                    "นี่คือข้อมูลทั้งหมด กรุณาสรุปและตอบเป็นภาษาไทย ห้ามเขียน SQL เพิ่มอีก"
+                    if round_num >= 3 else
+                    "ได้ข้อมูลมาแล้ว ถ้าครบ → ตอบเลย ถ้ายังต้องการข้อมูลเพิ่ม → เขียน SQL ได้อีก"
+                )
+                messages.append({"role": "user", "content": results + "\n" + instruction})
 
-                messages.append({
-                    "role":    "user",
-                    "content": results_text + "\n" + instruction,
-                })
-
-            # เกิน max_rounds
-            return {
-                "reply":        "ขออภัย ไม่สามารถวิเคราะห์ได้ในขณะนี้ กรุณาลองถามใหม่อีกครั้ง",
-                "sql_executed": sql_executed,
-            }
+        return {"reply": "ขออภัย ไม่สามารถวิเคราะห์ได้ กรุณาลองใหม่", "sql_executed": sql_executed}
 
     except httpx.ConnectError:
         return {
-            "reply": (
-                "⚠️ ไม่สามารถเชื่อมต่อกับ Ollama ได้\n\n"
-                f"กรุณาตรวจสอบว่า Ollama กำลังทำงานอยู่:\n"
-                f"  ollama serve\n"
-                f"  ollama pull {OLLAMA_MODEL}"
-            ),
+            "reply": f"⚠️ เชื่อมต่อ Ollama ไม่ได้ ตรวจสอบว่า `ollama serve` กำลังรันอยู่ (model: {OLLAMA_MODEL})",
             "sql_executed": [],
         }
-    except httpx.HTTPStatusError as exc:
-        return {
-            "reply":        f"⚠️ Ollama error {exc.response.status_code}: {exc.response.text[:200]}",
-            "sql_executed": sql_executed,
-        }
-    except Exception as exc:
-        return {
-            "reply":        f"⚠️ เกิดข้อผิดพลาด: {exc}",
-            "sql_executed": sql_executed,
-        }
+    except httpx.HTTPStatusError as e:
+        return {"reply": f"⚠️ Ollama error {e.response.status_code}", "sql_executed": sql_executed}
+    except Exception as e:
+        return {"reply": f"⚠️ Error: {e}", "sql_executed": sql_executed}

@@ -44,7 +44,8 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''SQL:'''', bool\\(d.get\\(''''sql_executed''''\\)\\)\\); print\\(''''REPLY:'''', repr\\(d.get\\(''''reply'''',''''''''\\)[:400]\\)\\)\")",
       "Bash(git diff:*)",
       "Bash(git add:*)",
-      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\"\"message\"\":\"\"customer number 99 - show all profile, usage history and all purchases\"\",\"\"history\"\":[],\"\"run_id\"\":1,\"\"run_name\"\":\"\"test\"\"}\")"
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\"\"message\"\":\"\"customer number 99 - show all profile, usage history and all purchases\"\",\"\"history\"\":[],\"\"run_id\"\":1,\"\"run_name\"\":\"\"test\"\"}\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\"\"message\"\":\"\"customer number 99 - show all info profile and purchase history\"\",\"\"history\"\":[],\"\"run_id\"\":1,\"\"run_name\"\":\"\"test\"\"}\")"
     ]
   }
 }
