@@ -7,9 +7,11 @@ Flow:
   คำถาม → LLM สร้าง <SQL> → execute → LLM วิเคราะห์ผล → ตอบภาษาไทย
 """
 
+import asyncio
 import json
 import os
 import textwrap
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import httpx
@@ -185,3 +187,82 @@ async def chat(
         return {"reply": f"⚠️ Ollama error {e.response.status_code}", "sql_executed": sql_executed}
     except Exception as e:
         return {"reply": f"⚠️ Error: {e}", "sql_executed": sql_executed}
+
+
+# ─────────────────────────────────────────────────────────────
+# Streaming (SSE)
+# ─────────────────────────────────────────────────────────────
+
+def _chunk_text(text: str, size: int = 4) -> list[str]:
+    return [text[i:i + size] for i in range(0, len(text), size)]
+
+
+async def chat_stream(
+    message:  str,
+    history:  list[dict],
+    db:       AsyncSession,
+    run_id:   int | None = None,
+    run_name: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """
+    SSE generator — yields newline-delimited JSON:
+      {"t": "<chunk>"}              — text token
+      {"sql": "<query>"}            — SQL being executed (status)
+      {"done": true, "sql_executed": [...]}  — finished
+      {"error": "<msg>"}            — error (followed by done)
+    """
+    def sse(data: dict) -> str:
+        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    schema = await get_schema(db)
+    system = _build_prompt(schema, run_id, run_name)
+
+    messages: list[dict] = [{"role": "system", "content": system}]
+    for turn in history[-10:]:
+        if turn.get("role") in ("user", "assistant") and turn.get("content"):
+            messages.append({"role": turn["role"], "content": turn["content"]})
+    messages.append({"role": "user", "content": message})
+
+    sql_executed: list[str] = []
+
+    try:
+        async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
+            for round_num in range(5):
+                reply = await _call_llm(client, messages)
+                sql_blocks = parse_sql_blocks(reply)
+
+                if not sql_blocks:
+                    # Stream final answer in small chunks
+                    for chunk in _chunk_text(reply):
+                        yield sse({"t": chunk})
+                        await asyncio.sleep(0.008)
+                    yield sse({"done": True, "sql_executed": sql_executed})
+                    return
+
+                messages.append({"role": "assistant", "content": reply})
+
+                results = ""
+                for i, sql in enumerate(sql_blocks, start=1 if len(sql_blocks) > 1 else 0):
+                    yield sse({"sql": sql[:120] + "…" if len(sql) > 120 else sql})
+                    sql_executed.append(sql)
+                    results += _format_result(i, await _run_sql(sql, db))
+
+                instruction = (
+                    "นี่คือข้อมูลทั้งหมด กรุณาสรุปและตอบเป็นภาษาไทย ห้ามเขียน SQL เพิ่มอีก"
+                    if round_num >= 3 else
+                    "ได้ข้อมูลมาแล้ว ถ้าครบ → ตอบเลย ถ้ายังต้องการข้อมูลเพิ่ม → เขียน SQL ได้อีก"
+                )
+                messages.append({"role": "user", "content": results + "\n" + instruction})
+
+        yield sse({"error": "ขออภัย ไม่สามารถวิเคราะห์ได้ กรุณาลองใหม่"})
+        yield sse({"done": True, "sql_executed": sql_executed})
+
+    except httpx.ConnectError:
+        yield sse({"error": f"⚠️ เชื่อมต่อ Ollama ไม่ได้ ตรวจสอบว่า `ollama serve` กำลังรันอยู่ (model: {OLLAMA_MODEL})"})
+        yield sse({"done": True, "sql_executed": []})
+    except httpx.HTTPStatusError as e:
+        yield sse({"error": f"⚠️ Ollama error {e.response.status_code}"})
+        yield sse({"done": True, "sql_executed": sql_executed})
+    except Exception as e:
+        yield sse({"error": f"⚠️ Error: {e}"})
+        yield sse({"done": True, "sql_executed": sql_executed})

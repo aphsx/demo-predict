@@ -74,39 +74,80 @@ export default function RunChat({ runId, runName }: Props) {
       content: `สวัสดีครับ! ผมพร้อมวิเคราะห์ข้อมูล **${runName}** ให้คุณแล้วครับ\n\nถามได้ทั้งข้อมูลลูกค้า, การ predict, หรือคำถามทั่วไปเกี่ยวกับระบบและบริษัทได้เลยครับ`,
     },
   ]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [input,            setInput]            = useState("");
+  const [loading,          setLoading]          = useState(false);
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  const [sqlStatus,        setSqlStatus]        = useState<string | null>(null);
+  const streamingRef = useRef("");
+  const bottomRef    = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, streamingContent, loading]);
 
   async function sendMessage(text?: string) {
     const content = (text ?? input).trim();
     if (!content || loading) return;
 
+    const history = messages.map((m) => ({ role: m.role, content: m.content }));
     setMessages((prev) => [...prev, { role: "user", content }]);
     setInput("");
     setLoading(true);
+    setSqlStatus(null);
+    setStreamingContent("");
+    streamingRef.current = "";
 
     try {
-      const history = messages.map((m) => ({ role: m.role, content: m.content }));
-      const res = await fetch(`${API}/api/chat`, {
+      const res = await fetch(`${API}/api/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: content, history, run_id: runId, run_name: runName }),
       });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "ขออภัย ไม่ได้รับคำตอบ" }]);
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          if (!part.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(part.slice(6));
+            if (data.t !== undefined) {
+              setSqlStatus(null);
+              streamingRef.current += data.t;
+              setStreamingContent(streamingRef.current);
+            } else if (data.sql) {
+              setSqlStatus("กำลังค้นหาข้อมูล...");
+            } else if (data.error) {
+              streamingRef.current = data.error;
+              setStreamingContent(data.error);
+            } else if (data.done) {
+              setMessages((prev) => [...prev, { role: "assistant", content: streamingRef.current || "ขออภัย ไม่ได้รับคำตอบ" }]);
+              setStreamingContent(null);
+              streamingRef.current = "";
+            }
+          } catch { /* ignore malformed chunks */ }
+        }
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "⚠️ ไม่สามารถติดต่อ AI ได้ กรุณาตรวจสอบว่า API และ Ollama ทำงานอยู่" },
       ]);
+      setStreamingContent(null);
+      streamingRef.current = "";
     } finally {
       setLoading(false);
+      setSqlStatus(null);
     }
   }
 
@@ -137,15 +178,25 @@ export default function RunChat({ runId, runName }: Props) {
           </div>
         ))}
 
-        {loading && (
+        {streamingContent !== null && (
           <div className="flex items-end gap-2">
-            <div className="w-6 h-6 rounded-full bg-[#005AE2] flex-shrink-0 flex items-center justify-center text-white text-[9px] font-bold">
+            <div className="w-6 h-6 rounded-full bg-[#005AE2] flex-shrink-0 flex items-center justify-center text-white text-[9px] font-bold self-start mt-1">
               AI
             </div>
-            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1 items-center">
-              {[0, 0.15, 0.3].map((delay, j) => (
-                <span key={j} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${delay}s` }} />
-              ))}
+            <div className="max-w-[85%] bg-white text-gray-700 border border-gray-100 shadow-sm rounded-2xl rounded-bl-sm px-4 py-3 text-sm leading-relaxed">
+              {streamingContent === "" ? (
+                sqlStatus ? (
+                  <span className="text-[11px] text-gray-400">{sqlStatus}</span>
+                ) : (
+                  <div className="flex gap-1 items-center">
+                    {[0, 0.15, 0.3].map((delay, j) => (
+                      <span key={j} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${delay}s` }} />
+                    ))}
+                  </div>
+                )
+              ) : (
+                <MarkdownMessage content={streamingContent} />
+              )}
             </div>
           </div>
         )}
