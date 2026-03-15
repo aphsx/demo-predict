@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import RunChat from "./RunChat";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
@@ -232,13 +231,6 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
               </tbody>
             </table>
           </div>
-        </section>
-      )}
-
-      {/* Chat */}
-      {run.status === "done" && (
-        <section className="bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden">
-          <RunChat runId={run.id} runName={run.name} />
         </section>
       )}
 
