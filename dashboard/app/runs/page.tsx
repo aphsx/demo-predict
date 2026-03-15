@@ -133,17 +133,15 @@ function RunCard({ run, isActive, onDelete }: { run: Run; isActive: boolean; onD
               </svg>
             </div>
           )}
-          {(run.status === "error" || run.status === "pending") && (
-            <button
-              onClick={(e) => onDelete(run.id, e)}
-              className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors"
-              title="ลบ Run"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                <path d="M3 6h18M19 6l-1 14H6L5 6m5 0V4h4v2" />
-              </svg>
-            </button>
-          )}
+          <button
+            onClick={(e) => onDelete(run.id, e)}
+            className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors"
+            title="ลบ Run"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+              <path d="M3 6h18M19 6l-1 14H6L5 6m5 0V4h4v2" />
+            </svg>
+          </button>
         </div>
       </div>
 
