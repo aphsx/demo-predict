@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -81,13 +81,10 @@ function MarkdownMessage({ content }: { content: string }) {
 
 export default function RunChat({ runId, runName }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([makeWelcome(runName)]);
-  const [hydrated,         setHydrated]         = useState(false);
-  const [input,            setInput]            = useState("");
-  const [loading,          setLoading]          = useState(false);
-  const [streamingContent, setStreamingContent] = useState<string | null>(null);
-  const [sqlStatus,        setSqlStatus]        = useState<string | null>(null);
-  const streamingRef = useRef("");
-  const bottomRef    = useRef<HTMLDivElement>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [input,    setInput]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   // Load history from localStorage on mount
   useEffect(() => {
@@ -107,20 +104,18 @@ export default function RunChat({ runId, runName }: Props) {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      const toStore = messages.slice(-MAX_STORED_MESSAGES);
-      localStorage.setItem(storageKey(runId), JSON.stringify(toStore));
+      localStorage.setItem(storageKey(runId), JSON.stringify(messages.slice(-MAX_STORED_MESSAGES)));
     } catch { /* ignore quota errors */ }
   }, [messages, hydrated, runId]);
 
   function clearChat() {
-    const fresh = [makeWelcome(runName)];
-    setMessages(fresh);
+    setMessages([makeWelcome(runName)]);
     try { localStorage.removeItem(storageKey(runId)); } catch { /* ignore */ }
   }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingContent, loading]);
+  }, [messages, loading]);
 
   async function sendMessage(text?: string) {
     const content = (text ?? input).trim();
@@ -130,83 +125,29 @@ export default function RunChat({ runId, runName }: Props) {
     setMessages((prev) => [...prev, { role: "user", content }]);
     setInput("");
     setLoading(true);
-    setSqlStatus(null);
-    setStreamingContent("");
-    streamingRef.current = "";
-    let accumulated = "";  // local closure var — immune to ref timing issues
 
     try {
-      const res = await fetch(`${API}/api/chat/stream`, {
+      const res = await fetch(`${API}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: content, history, run_id: runId, run_name: runName }),
       });
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-
-      const reader  = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer    = "";
-
-      const processSSE = (raw: string) => {
-        if (!raw.startsWith("data: ")) return;
-        try {
-          const data = JSON.parse(raw.slice(6));
-          if (data.t !== undefined) {
-            setSqlStatus(null);
-            accumulated += data.t;
-            streamingRef.current = accumulated;
-            setStreamingContent(accumulated);
-          } else if (data.sql) {
-            setSqlStatus("กำลังค้นหาข้อมูล...");
-          } else if (data.error) {
-            accumulated = data.error;
-            streamingRef.current = accumulated;
-            setStreamingContent(accumulated);
-          } else if (data.done) {
-            setMessages((prev) => [...prev, { role: "assistant", content: accumulated || "ขออภัย ไม่ได้รับคำตอบ" }]);
-            setStreamingContent(null);
-            accumulated = "";
-            streamingRef.current = "";
-          }
-        } catch { /* ignore malformed chunks */ }
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          // Flush decoder + process any remaining buffer
-          buffer += decoder.decode();
-          buffer.split("\n\n").forEach(processSSE);
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        parts.forEach(processSSE);
-      }
-
-      // Safety net: stream ended without a done event
-      if (accumulated) {
-        setMessages((prev) => [...prev, { role: "assistant", content: accumulated }]);
-        setStreamingContent(null);
-        streamingRef.current = "";
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
     } catch {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "⚠️ ไม่สามารถติดต่อ AI ได้ กรุณาตรวจสอบว่า API และ Ollama ทำงานอยู่" },
       ]);
-      setStreamingContent(null);
-      streamingRef.current = "";
     } finally {
       setLoading(false);
-      setSqlStatus(null);
     }
   }
 
   return (
     <div className="flex flex-col h-[560px]">
-      {/* ── Header (Hostinger-style) ── */}
+      {/* ── Header ── */}
       <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-white">
         <div className="w-8 h-8 rounded-full bg-[#005AE2] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
           AI
@@ -215,7 +156,6 @@ export default function RunChat({ runId, runName }: Props) {
           <p className="text-sm font-bold text-gray-900 leading-tight truncate">1MOBY AI Assistant</p>
           <p className="text-[11px] text-gray-400 leading-tight truncate">{runName}</p>
         </div>
-        {/* New Chat button — Hostinger style */}
         <button
           onClick={clearChat}
           disabled={loading}
@@ -229,6 +169,7 @@ export default function RunChat({ runId, runName }: Props) {
           <span className="hidden sm:inline">New Chat</span>
         </button>
       </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
         {messages.map((msg, i) => (
@@ -254,25 +195,17 @@ export default function RunChat({ runId, runName }: Props) {
           </div>
         ))}
 
-        {streamingContent !== null && (
+        {loading && (
           <div className="flex items-end gap-2">
             <div className="w-6 h-6 rounded-full bg-[#005AE2] flex-shrink-0 flex items-center justify-center text-white text-[9px] font-bold self-start mt-1">
               AI
             </div>
-            <div className="max-w-[85%] bg-white text-gray-700 border border-gray-100 shadow-sm rounded-2xl rounded-bl-sm px-4 py-3 text-sm leading-relaxed">
-              {streamingContent === "" ? (
-                sqlStatus ? (
-                  <span className="text-[11px] text-gray-400">{sqlStatus}</span>
-                ) : (
-                  <div className="flex gap-1 items-center">
-                    {[0, 0.15, 0.3].map((delay, j) => (
-                      <span key={j} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${delay}s` }} />
-                    ))}
-                  </div>
-                )
-              ) : (
-                <MarkdownMessage content={streamingContent} />
-              )}
+            <div className="bg-white border border-gray-100 shadow-sm rounded-2xl rounded-bl-sm px-4 py-3">
+              <div className="flex gap-1 items-center">
+                {[0, 0.15, 0.3].map((delay, j) => (
+                  <span key={j} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${delay}s` }} />
+                ))}
+              </div>
             </div>
           </div>
         )}

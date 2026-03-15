@@ -1001,7 +1001,7 @@ def explain_customer(acc_id: str):
 # ══════════════════════════════════════════════════════════
 # POST /api/chat  — AI Chatbot (Qwen via Ollama + PostgreSQL)
 # ══════════════════════════════════════════════════════════
-from chat_service import chat as _chat_service, chat_stream as _chat_stream
+from chat_service import chat as _chat_service
 
 class ChatRequest(BaseModel):
     message:  str
@@ -1037,29 +1037,6 @@ async def api_chat(req: ChatRequest):
         )
     return result
 
-
-@app.post("/api/chat/stream")
-async def api_chat_stream(req: ChatRequest):
-    """Streaming version of /api/chat — returns text/event-stream (SSE)"""
-    if not req.message.strip():
-        raise HTTPException(400, "message cannot be empty")
-
-    async def generate():
-        async with AsyncSessionLocal() as db:
-            async for chunk in _chat_stream(
-                message  = req.message.strip(),
-                history  = req.history,
-                db       = db,
-                run_id   = req.run_id,
-                run_name = req.run_name,
-            ):
-                yield chunk
-
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 # ══════════════════════════════════════════════════════════
