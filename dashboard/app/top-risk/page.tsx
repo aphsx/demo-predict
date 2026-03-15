@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { RiskBadge } from "@/components/RiskBadge";
+import { getActiveRunId } from "@/lib/activeRun";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
-async function getTopRisk(n = 50) {
+async function getTopRisk(n = 50, runId?: number | null) {
   try {
-    const res = await fetch(`${API}/api/top-risk?n=${n}`, { cache: "no-store" });
+    const q = runId ? `&run_id=${runId}` : "";
+    const res = await fetch(`${API}/api/top-risk?n=${n}${q}`, { cache: "no-store" });
     if (!res.ok) return [];
     return res.json();
   } catch (err) {
@@ -21,7 +23,8 @@ const currency = new Intl.NumberFormat("th-TH", {
 });
 
 export default async function TopRiskPage() {
-  const customers = await getTopRisk(50);
+  const runId = await getActiveRunId();
+  const customers = await getTopRisk(50, runId);
 
   return (
     <div className="space-y-6">

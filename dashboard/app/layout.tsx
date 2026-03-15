@@ -3,6 +3,7 @@ import { Noto_Sans_Thai, Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import FloatingChat from "@/components/FloatingChat";
+import { getActiveRunName } from "@/lib/activeRun";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,11 +23,12 @@ export const metadata: Metadata = {
   description: "Customer churn prediction, risk monitoring, and retention intelligence dashboard.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const activeRunName = await getActiveRunName();
   return (
     <html lang="th" suppressHydrationWarning>
       <body className={`${notoSansThai.variable} ${inter.variable} dashboard-shell min-h-screen flex`}>
-        <Sidebar />
+        <Sidebar activeRunName={activeRunName ?? undefined} />
         <main className="flex-1 overflow-auto flex flex-col h-screen relative">
           <div className="w-full flex-1 flex flex-col px-5 py-6 sm:px-8 lg:px-10 lg:py-8">
             {children}

@@ -134,6 +134,12 @@ export default function CustomersPage() {
   const [status, setStatus] = useState("");
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState("churn_probability");
+  const [runId, setRunId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const match = document.cookie.match(/active_run_id=(\d+)/);
+    setRunId(match ? match[1] : null);
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -145,6 +151,7 @@ export default function CustomersPage() {
       ...(search && { search }),
       ...(risk && { risk }),
       ...(status && { status }),
+      ...(runId && { run_id: runId }),
     });
     try {
       const res = await fetch(`/api/predictions?${params}`);
@@ -152,7 +159,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, risk, status, sortBy]);
+  }, [page, search, risk, status, sortBy, runId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setPage(1); }, [search, risk, status, sortBy]);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import CreateRunModal from "@/components/CreateRunModal";
+import { setActiveRun } from "@/app/actions";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
@@ -67,16 +68,24 @@ function CheckIcon() {
   );
 }
 
-function RunCard({ run, onDelete }: { run: Run; onDelete: (id: number, e: React.MouseEvent) => void }) {
+function RunCard({ run, isActive, onDelete }: { run: Run; isActive: boolean; onDelete: (id: number, e: React.MouseEvent) => void }) {
   const router = useRouter();
   const isClickable = run.status === "done";
   const isProcessing = run.status === "pending" && (run.users_uploaded || run.payments_uploaded);
 
+  async function handleSelect() {
+    if (!isClickable) return;
+    await setActiveRun(run.id, run.name);
+    router.push("/");
+    router.refresh();
+  }
+
   return (
     <div
-      onClick={() => isClickable && router.push(`/runs/${run.id}`)}
+      onClick={handleSelect}
       className={clsx(
         "p-5 bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition-all",
+        isActive && "border-green-300 ring-1 ring-green-200",
         isClickable && "hover:shadow-[0_8px_30px_rgba(0,0,0,0.08)] hover:border-[#005AE2]/30 cursor-pointer"
       )}
     >
@@ -97,6 +106,12 @@ function RunCard({ run, onDelete }: { run: Run; onDelete: (id: number, e: React.
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-bold text-gray-900 text-sm truncate">{run.name}</p>
             <StatusBadge run={run} />
+            {isActive && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 border border-green-200 px-2.5 py-1 text-[11px] font-bold text-green-700">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                กำลังดูอยู่
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 mt-1.5 flex-wrap">
             {run.customers_count != null && (
@@ -208,6 +223,12 @@ export default function RunsPage() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const match = document.cookie.match(/active_run_id=(\d+)/);
+    if (match) setActiveRunId(parseInt(match[1], 10));
+  }, []);
 
   const fetchRuns = useCallback(async () => {
     try {
@@ -310,7 +331,7 @@ export default function RunsPage() {
           </div>
         ) : (
           runs.map((run) => (
-            <RunCard key={run.id} run={run} onDelete={handleDelete} />
+            <RunCard key={run.id} run={run} isActive={run.id === activeRunId} onDelete={handleDelete} />
           ))
         )}
       </div>

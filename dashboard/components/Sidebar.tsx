@@ -57,7 +57,7 @@ const nav = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ activeRunName }: { activeRunName?: string }) {
   const path = usePathname();
 
   return (
@@ -100,6 +100,23 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Current Run Indicator */}
+      {activeRunName && (
+        <div className="mx-4 mb-3 rounded-xl border border-green-200 bg-green-50/70 p-3">
+          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-green-600 mb-1.5">Current Run</p>
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+            <p className="text-[11px] font-semibold text-gray-800 leading-tight truncate">{activeRunName}</p>
+          </div>
+          <Link
+            href="/runs"
+            className="text-[10px] font-bold text-green-700 hover:text-green-900 transition-colors"
+          >
+            เปลี่ยน Run →
+          </Link>
+        </div>
+      )}
 
       {/* Bottom */}
       <div className="px-5 pb-6 border-t border-gray-100 pt-5">

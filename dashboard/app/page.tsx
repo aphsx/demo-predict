@@ -1,6 +1,7 @@
 import RiskPieChart from "@/components/RiskPieChart";
 import ChurnTrendChart from "@/components/ChurnTrendChart";
 import RetentionBarChart from "@/components/RetentionBarChart";
+import { getActiveRunId, getActiveRunName } from "@/lib/activeRun";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
@@ -33,9 +34,10 @@ interface TopRiskCustomer {
   recommended_action?: string;
 }
 
-async function getStats() {
+async function getStats(runId?: number | null) {
   try {
-    const res = await fetch(`${API}/api/stats`, { cache: "no-store" });
+    const q = runId ? `?run_id=${runId}` : "";
+    const res = await fetch(`${API}/api/stats${q}`, { cache: "no-store" });
     if (!res.ok) return null;
     return res.json() as Promise<DashboardStats>;
   } catch {
@@ -43,9 +45,10 @@ async function getStats() {
   }
 }
 
-async function getTopRisk(n = 10) {
+async function getTopRisk(n = 10, runId?: number | null) {
   try {
-    const res = await fetch(`${API}/api/top-risk?n=${n}`, { cache: "no-store" });
+    const q = runId ? `&run_id=${runId}` : "";
+    const res = await fetch(`${API}/api/top-risk?n=${n}${q}`, { cache: "no-store" });
     if (!res.ok) return [];
     return res.json() as Promise<TopRiskCustomer[]>;
   } catch {
@@ -53,9 +56,10 @@ async function getTopRisk(n = 10) {
   }
 }
 
-async function getChurnTrend() {
+async function getChurnTrend(runId?: number | null) {
   try {
-    const res = await fetch(`${API}/api/churn-trend`, { cache: "no-store" });
+    const q = runId ? `?run_id=${runId}` : "";
+    const res = await fetch(`${API}/api/churn-trend${q}`, { cache: "no-store" });
     if (!res.ok) return [];
     return res.json() as Promise<{ month: string; rate: number }[]>;
   } catch {
@@ -63,9 +67,10 @@ async function getChurnTrend() {
   }
 }
 
-async function getRetentionTrend() {
+async function getRetentionTrend(runId?: number | null) {
   try {
-    const res = await fetch(`${API}/api/retention-trend`, { cache: "no-store" });
+    const q = runId ? `?run_id=${runId}` : "";
+    const res = await fetch(`${API}/api/retention-trend${q}`, { cache: "no-store" });
     if (!res.ok) return [];
     return res.json() as Promise<{ month: string; churned: number; retained: number }[]>;
   } catch {
@@ -119,13 +124,15 @@ function formatPercent(value: number) {
 }
 
 export default async function DashboardPage() {
+  const [runId, runName] = await Promise.all([getActiveRunId(), getActiveRunName()]);
+
   let stats: DashboardStats | null = null;
   let topRisk: TopRiskCustomer[] = [];
   let churnTrend: { month: string; rate: number }[] = [];
   let retentionTrend: { month: string; churned: number; retained: number }[] = [];
   try {
     [stats, topRisk, churnTrend, retentionTrend] = await Promise.all([
-      getStats(), getTopRisk(10), getChurnTrend(), getRetentionTrend(),
+      getStats(runId), getTopRisk(10, runId), getChurnTrend(runId), getRetentionTrend(runId),
     ]);
   } catch {
     // API not available — show empty layout
@@ -239,6 +246,7 @@ export default async function DashboardPage() {
           <p className="mt-4 max-w-lg text-[13px] leading-relaxed text-blue-50/90 font-medium">
             ระบบวิเคราะห์พฤติกรรมลูกค้าและประเมินความเสี่ยงในการยกเลิกบริการ (Churn Risk) แบบ Real-time เพื่อช่วยให้ทีมดูแลลูกค้าสามารถเข้าไปรักษาฐานลูกค้าได้ทันท่วงที
           </p>
+          
         </div>
       </section>
 
