@@ -1,59 +1,109 @@
 """
 =========================================================================
-  Customer Churn Prediction Pipeline  v2
-  Architecture: Strict No-Leakage | Out-of-Time Validation |
-                Advanced RFM + Decay Features | SHAP Explainability
+  Customer Churn Prediction Pipeline  v4
 =========================================================================
+  Architecture
+  ---------------------------------------------------------------------
+  Anti-Leakage        Features computed exclusively from <= CUTOFF_DATE.
+                      Labels derived from POST-CUTOFF outcomes only.
+
+  Out-of-Time (OOT)   Train / test are different *time windows*, not
+                      random rows -- the only realistic validation for
+                      subscription churn.
+
+  5-Fold CV           Model selection is done by cross-validation on the
+                      training set, so OOT is a pure holdout and is never
+                      peeked at during model selection.
+
+  OOF Calibration     Isotonic regression is fit on out-of-fold (OOF)
+                      predictions from the same k-fold splits.  This uses
+                      100% of training data for the final model (no
+                      hold-out data loss) while still producing calibrated
+                      probabilities without any leakage.
+
+  Threshold opt.      Decision threshold is tuned on OOF predictions using
+                      F-beta (beta=2, recall-weighted) then validated on OOT.
+
+  SHAP                Per-account explanations so the business understands
+                      *why* a customer is flagged.
+
+  ---------------------------------------------------------------------
+  What changed from v3
+  ---------------------------------------------------------------------
+  FIX  MIN_OBSERVE_DAYS     -- now actually filters uncertain labels
+                              (was defined but never applied)
+  FIX  Final model trained  -- on 100% of training data, not 80%
+  FIX  Calibration          -- OOF isotonic (no hold-out data loss)
+  FIX  training_config.py   -- now the single source of truth; churn_model
+                              imports constants and FEATURE_COLS from it
+  NEW  5-Fold CV            -- unbiased model selection (no OOT peek)
+  NEW  Optimal threshold    -- F-beta tuned on OOF, validated on OOT
+  NEW  payment_amount_std   -- payment volatility feature
+  NEW  missed_renewal_cycles-- recency / avg_payment_gap (cycles missed)
+  NEW  compound_risk        -- recency x expired interaction feature
+  NEW  KS statistic         -- separation metric in evaluation + log
+  NEW  Lift @ top-20%       -- business-relevant retention targeting metric
+  NEW  Lift / Gain chart    -- plot 06 (cumulative gain decile table)
+  NEW  model_card.json      -- machine-readable metadata artifact
+  ---------------------------------------------------------------------
   Section map
-  ───────────
-  1.  Temporal Configuration & Constants
-  2.  Data Loading
-  3.  Churn Label Engineering        ← post-cutoff outcomes ONLY (no leakage)
-  4.  Behavioral Feature Engineering ← pre-cutoff data ONLY
-  5.  Out-of-Time (OOT) Split Logic
-  6.  Model Training & Hyperparameters (LightGBM / XGBoost / sklearn)
-  7.  Realistic Evaluation  (AUC, Precision, Recall, F1, Confusion Matrix)
-  8.  SHAP Explainability
-  9.  Visualisations
-  10. Model Saving & Prediction Report
+  ---------------------------------------------------------------------
+  1.  Imports & path setup
+  2.  Data loading
+  3.  Temporal configuration  (auto-derived from data)
+  4.  Churn label engineering (post-cutoff outcomes, MIN_OBSERVE_DAYS)
+  5.  Behavioral feature engineering (pre-cutoff, 3 new features)
+  6.  Out-of-Time split
+  7.  Model building helpers
+  8.  Threshold optimisation
+  9.  Feature selection
+  10. Main training: Phase 1 CV -> Phase 2 OOF calibration -> Phase 3 OOT
+  11. SHAP explainability
+  12. Visualisations (6 plots incl. Lift/Gain chart)
+  13. Model saving + model_card.json
+  14. Prediction report
+  15. Main pipeline
 =========================================================================
 """
 
-import pandas as pd
-import numpy as np
-from datetime import datetime
+import json
 import warnings
-warnings.filterwarnings("ignore")
+from datetime import datetime, timedelta
 from pathlib import Path
-import joblib
 
-# ── ML Libraries ──────────────────────────────────────────────────────────
-from sklearn.preprocessing import LabelEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
-from sklearn.calibration import CalibratedClassifierCV, calibration_curve
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    classification_report,
-    confusion_matrix,
-    ConfusionMatrixDisplay,
-    roc_auc_score,
-    roc_curve,
-    average_precision_score,
-    brier_score_loss,
-)
+import joblib
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
 import shap
+from sklearn.base import clone
+from sklearn.calibration import calibration_curve
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.isotonic import IsotonicRegression
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    average_precision_score,
+    brier_score_loss,
+    classification_report,
+    confusion_matrix,
+    fbeta_score,
+    roc_auc_score,
+    roc_curve,
+)
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.preprocessing import LabelEncoder
 
-# ── Optional state-of-the-art boosting libs (install if available) ────────
+warnings.filterwarnings("ignore")
+
+# -- Optional SOTA gradient boosting libraries -----------------------------
 try:
     import lightgbm as lgb
     _LGBM = True
 except ImportError:
     _LGBM = False
-    print("  [warn] LightGBM not installed — falling back to HistGradientBoosting")
+    print("  [warn] LightGBM not installed -- falling back to HistGradientBoosting")
 
 try:
     import xgboost as xgb
@@ -61,48 +111,39 @@ try:
 except ImportError:
     _XGB = False
 
-# ── Custom utilities ───────────────────────────────────────────────────────
+# -- Project utilities -----------------------------------------------------
 import ml_utils
 
-# ── Paths ──────────────────────────────────────────────────────────────────
+# -- Paths -----------------------------------------------------------------
 SCRIPT_DIR = Path(__file__).parent
 OUTPUT_DIR = SCRIPT_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 # =========================================================================
-# SECTION 1 — TEMPORAL CONFIGURATION
-#
-# The cut-off date is the primary anti-leakage control.
-#
-#   Features  = computed exclusively from data  ≤  CUTOFF_DATE
-#               (what a real model would have "seen" at deployment)
-#
-#   Labels    = ground-truth outcome observed from CUTOFF_DATE
-#               to REFERENCE_DATE  (what actually happened afterwards)
-#
-#   OOT Split = Train on accounts whose fate resolved before OOT_SPLIT_DATE;
-#               Test on accounts whose fate resolved in the prediction window.
+# SECTION 1 -- CONFIGURATION  (sourced from training_config.py)
 # =========================================================================
-# ── Configurable offsets (days) — the ONLY values you need to touch ──────
-# All three dates below are computed automatically from the data.
-# Change these offsets to adjust the temporal windows.
-CUTOFF_LOOKBACK_DAYS = 90    # CUTOFF_DATE  = latest data date - this many days
-OOT_LOOKBACK_DAYS    = 90    # OOT_SPLIT_DATE = CUTOFF_DATE   - this many days
-DECAY_SHORT_DAYS     = 90    # "recent"  activity window (usage-decay features)
-DECAY_LONG_DAYS      = 180   # "prior"   activity window (usage-decay baseline)
-MIN_OBSERVE_DAYS     = 21    # accounts expired < this many days before REFERENCE_DATE
-                             # are excluded (insufficient observation window to confirm churn)
-IMPORTANCE_THRESHOLD = 0.005 # drop features with mean importance below this value
+from training_config import (
+    CUTOFF_LOOKBACK_DAYS,
+    DECAY_LONG_DAYS,
+    DECAY_SHORT_DAYS,
+    FBETA_BETA,
+    FEATURE_COLS,
+    IMPORTANCE_THRESHOLD,
+    MIN_OBSERVE_DAYS,
+    MODEL_PARAMS,
+    N_CV_FOLDS,
+    OOT_LOOKBACK_DAYS,
+)
 
-# Populated by setup_temporal_config() — do not set manually
-CUTOFF_DATE: datetime    = None   # noqa: F821
-OOT_SPLIT_DATE: datetime = None   # noqa: F821
-REFERENCE_DATE: datetime = None   # noqa: F821
+# Runtime-populated temporal globals (set by setup_temporal_config)
+CUTOFF_DATE: datetime    = None   # noqa: E231
+OOT_SPLIT_DATE: datetime = None   # noqa: E231
+REFERENCE_DATE: datetime = None   # noqa: E231
 
 
 # =========================================================================
-# SECTION 2 — DATA LOADING
+# SECTION 2 -- DATA LOADING
 # =========================================================================
 def load_data():
     users    = pd.read_csv(SCRIPT_DIR / "data" / "sample_users.csv")
@@ -118,202 +159,152 @@ def load_data():
 
 
 # =========================================================================
-# SECTION 2b — TEMPORAL CONFIGURATION  (auto-derived from data)
+# SECTION 3 -- TEMPORAL CONFIGURATION  (auto-derived from data)
 #
-# REFERENCE_DATE  = latest date seen anywhere in payments or user activity.
-#                   Think of it as "the day you run the model".
-# CUTOFF_DATE     = REFERENCE_DATE − CUTOFF_LOOKBACK_DAYS
-#                   Features are frozen here; nothing after leaks in.
-# OOT_SPLIT_DATE  = CUTOFF_DATE − OOT_LOOKBACK_DAYS
-#                   Accounts expiring between here and REFERENCE_DATE form
-#                   the held-out evaluation cohort.
-#
-# Swap in any dataset → dates recalibrate automatically.
+# REFERENCE_DATE  = latest evidence of activity (payment or login)
+#                   -- think of it as "the day you run the model"
+# CUTOFF_DATE     = REFERENCE_DATE - CUTOFF_LOOKBACK_DAYS
+#                   Features are frozen here; nothing after this leaks in.
+# OOT_SPLIT_DATE  = CUTOFF_DATE - OOT_LOOKBACK_DAYS
+#                   Accounts expiring in [OOT_SPLIT_DATE, REFERENCE_DATE]
+#                   form the held-out evaluation cohort.
 # =========================================================================
 def setup_temporal_config(payments: pd.DataFrame, users: pd.DataFrame):
     global CUTOFF_DATE, OOT_SPLIT_DATE, REFERENCE_DATE
 
-    # "Today" = latest evidence of activity in either table
     latest_payment = payments["payment_date"].max()
     latest_access  = users["last_access"].max()
-    REFERENCE_DATE  = max(latest_payment, latest_access).to_pydatetime().replace(
+    REFERENCE_DATE = max(latest_payment, latest_access).to_pydatetime().replace(
         hour=0, minute=0, second=0, microsecond=0
     )
-
-    from datetime import timedelta
     CUTOFF_DATE    = REFERENCE_DATE - timedelta(days=CUTOFF_LOOKBACK_DAYS)
     OOT_SPLIT_DATE = CUTOFF_DATE    - timedelta(days=OOT_LOOKBACK_DAYS)
 
     print(f"         Reference date  : {REFERENCE_DATE.date()}  (latest data point)")
-    print(f"         Cutoff date     : {CUTOFF_DATE.date()}  "
-          f"(features frozen here, {CUTOFF_LOOKBACK_DAYS}d lookback)")
-    print(f"         OOT split date  : {OOT_SPLIT_DATE.date()}  "
-          f"(OOT window: {OOT_LOOKBACK_DAYS}d before cutoff)")
+    print(f"         Cutoff date     : {CUTOFF_DATE.date()}"
+          f"  (features frozen here, {CUTOFF_LOOKBACK_DAYS}d lookback)")
+    print(f"         OOT split date  : {OOT_SPLIT_DATE.date()}"
+          f"  (OOT window: {OOT_LOOKBACK_DAYS}d before cutoff)")
 
 
 # =========================================================================
-# SECTION 3 — CHURN LABEL ENGINEERING  (strictly zero leakage)
+# SECTION 4 -- CHURN LABEL ENGINEERING  (strictly zero leakage)
 #
-# Ground truth is derived from POST-CUTOFF outcomes only.
-#   churned = 1  ↔  account expired before REFERENCE_DATE
-#                   AND no renewal payment was made after CUTOFF_DATE
-#   churned = 0  ↔  account still active (expire ≥ REFERENCE_DATE)
-#                   OR renewed after CUTOFF_DATE
+# churned = 1  <->  account expired before REFERENCE_DATE
+#                 AND no renewal payment was recorded after CUTOFF_DATE
+# churned = 0  <->  account still active (expire >= REFERENCE_DATE)
+#                 OR a renewal was made after CUTOFF_DATE
 #
-# Important: no column from this section ever appears in FEATURE_COLS.
+# v4 FIX: MIN_OBSERVE_DAYS filter is now applied.
+#   Accounts whose subscription ended within MIN_OBSERVE_DAYS of
+#   REFERENCE_DATE are excluded -- there has not been enough time to
+#   confirm that they will not renew, so their label is ambiguous and
+#   contaminates the training signal.
+#
+# No column derived from this section ever appears in FEATURE_COLS.
 # =========================================================================
 def label_churn(users: pd.DataFrame, payments: pd.DataFrame) -> pd.DataFrame:
     df = users.copy()
 
-    # Step A — who renewed during the prediction window?
-    renewed_ids = set(
-        payments.loc[payments["payment_date"] > CUTOFF_DATE, "acc_id"]
-    )
+    # Who renewed during the prediction window?
+    renewed_ids = set(payments.loc[payments["payment_date"] > CUTOFF_DATE, "acc_id"])
     df["renewed_post_cutoff"] = df["acc_id"].isin(renewed_ids)
 
-    # Step B — is the subscription expired as of today?
+    # is the subscription expired as of today?
     df["account_expired"] = df["expire"] < pd.Timestamp(REFERENCE_DATE)
 
-    # Step C — final binary label
+    # Binary churn label
     df["churned"] = (df["account_expired"] & ~df["renewed_post_cutoff"]).astype(int)
+
+    # v4 FIX -- drop accounts with insufficient observation window
+    min_observe_cutoff = pd.Timestamp(REFERENCE_DATE) - timedelta(days=MIN_OBSERVE_DAYS)
+    uncertain_mask = (
+        df["account_expired"] &
+        (df["expire"] >= min_observe_cutoff) &
+        ~df["renewed_post_cutoff"]
+    )
+    n_removed = int(uncertain_mask.sum())
+    if n_removed > 0:
+        df = df[~uncertain_mask].reset_index(drop=True)
+        print(f"         Removed {n_removed} accounts with ambiguous labels "
+              f"(expired < {MIN_OBSERVE_DAYS}d before reference date)")
 
     return df
 
 
 # =========================================================================
-# SECTION 4 — BEHAVIORAL FEATURE ENGINEERING ENGINE
+# SECTION 5 -- BEHAVIORAL FEATURE ENGINEERING ENGINE
 #
-# ALL features are computed from data ≤ CUTOFF_DATE.
-# Columns explicitly excluded (current-state leakage):
+# ALL features are computed from data <= CUTOFF_DATE.
+# Columns excluded (current-state leakage):
 #   status, credit, credit_premium, credit_email, paid_email
 #
-# Engineered feature groups:
+# Feature groups:
 #   A.  Account lifecycle   (tenure, contract schedule)
-#   B.  RFM metrics         (Recency, Frequency, Monetary)
-#   C.  Monetary depth      (avg / max / last transaction, downgrade flag)
+#   B.  RFM                 (Recency, Frequency, Monetary)
+#   C.  Monetary depth      (avg / max / last tx, downgrade flag)
 #   D.  Volume & diversity  (SMS volume, product breadth)
-#   E.  Credit Burn Rate    (SMS consumed per day of account life)
-#   F.  Purchase cadence    (span, avg gap between payments)
-#   G.  Usage Decay         (recent 90 d vs prior 90 d spend & TX count)
-#   H.  Composite signals   (lifetime value per day, decay ratios)
-#   I.  Encoded categoricals
+#   E.  Credit burn rate & payment cadence
+#   F.  Usage decay         (recent 90d vs prior 90d spend + tx count)
+#   G.  NEW v4 -- Payment volatility    (std dev of payment amounts)
+#   H.  NEW v4 -- Missed renewal cycles (recency / avg_payment_gap)
+#   I.  NEW v4 -- Compound risk         (recency x expired_at_cutoff)
+#   J.  Encoded categoricals
 # =========================================================================
-
-# Model feature list — the single source of truth
-FEATURE_COLS = [
-    # A. Account lifecycle
-    "account_age_at_cutoff",         # how long the account has existed
-    "last_access_recency_at_cutoff", # days since last login (capped at cutoff)
-    "last_send_recency_at_cutoff",   # days since last SMS send (capped at cutoff)
-    "days_to_expire_at_cutoff",      # days until expiry at observation point (neg = already expired)
-    "expired_at_cutoff",             # binary: was account already expired at cutoff?
-
-    # B. RFM
-    "recency_days",       # R — days since last payment (as of CUTOFF_DATE)
-    "total_payments",     # F — lifetime purchase count
-    "total_spend",        # M — lifetime gross spend
-
-    # C. Monetary depth
-    "avg_spend_per_tx",
-    "max_single_tx",
-    "last_payment_amount",
-    "downgraded",             # 1 if last payment < historical average
-    "lifetime_value_per_day", # total spend / account age (revenue efficiency)
-
-    # D. Volume & diversity
-    "total_sms_volume",
-    "avg_sms_per_tx",
-    "unique_products",
-
-    # E. Credit Burn Rate & cadence
-    "credit_burn_rate",      # SMS credits consumed per day
-    "payment_span_days",     # days between first and last payment
-    "avg_payment_gap_days",  # time-between-purchases (inter-arrival time)
-
-    # F. Usage Decay  (most powerful churn signal for SaaS)
-    "spend_recent_90d",
-    "spend_previous_90d",
-    "spend_decay_ratio",       # recent / (prior + 1); <1 → declining spend
-    "tx_count_recent_90d",
-    "tx_count_previous_90d",
-    "tx_decay_ratio",          # recent / (prior + 1); <1 → declining activity
-
-    # G. Encoded categoricals
-    "dom_credit_enc",
-]
-
-
 def engineer_features(users_labeled: pd.DataFrame, payments: pd.DataFrame) -> pd.DataFrame:
-    # ── 4.0  Restrict to pre-cutoff payment history ───────────────────────
     pay_hist = payments[payments["payment_date"] <= CUTOFF_DATE].copy()
+    df       = users_labeled.copy()
 
-    df = users_labeled.copy()
-
-    # ── 4.A  Account lifecycle features ──────────────────────────────────
+    # -- A. Account lifecycle ----------------------------------------------
     df["account_age_at_cutoff"] = (
         (pd.Timestamp(CUTOFF_DATE) - df["join_date"]).dt.days.clip(lower=0)
     )
-
-    # Cap post-cutoff access/send dates — activity AFTER cutoff belongs to the
-    # label domain, not the feature domain.
+    # Cap post-cutoff access/send dates -- post-cutoff activity belongs to
+    # the label domain, not the feature domain.
     last_access_safe = df["last_access"].clip(upper=pd.Timestamp(CUTOFF_DATE))
     last_send_safe   = df["last_send"].clip(upper=pd.Timestamp(CUTOFF_DATE))
-
     df["last_access_recency_at_cutoff"] = (
         (pd.Timestamp(CUTOFF_DATE) - last_access_safe).dt.days.clip(lower=0)
     )
     df["last_send_recency_at_cutoff"] = (
         (pd.Timestamp(CUTOFF_DATE) - last_send_safe).dt.days.clip(lower=0)
     )
-
-    # Contract schedule (safe: scheduled expiry ≠ actual churn outcome)
-    # Clipped to [-365, 365] — extreme negatives in training that don't appear in
-    # OOT create a distribution shift and inflate train AUC without adding signal.
+    # Contract schedule: clipped to [-365, 365] to prevent extreme outliers
+    # causing distribution shift between train and OOT.
     df["days_to_expire_at_cutoff"] = (
         (df["expire"] - pd.Timestamp(CUTOFF_DATE)).dt.days.clip(-365, 365)
     )
     df["expired_at_cutoff"] = (df["days_to_expire_at_cutoff"] < 0).astype(int)
 
-    # ── 4.B  RFM base aggregations ────────────────────────────────────────
+    # -- B + C + D + E + G. Core RFM aggregations -------------------------
     rfm = (
         pay_hist
         .groupby("acc_id")
         .agg(
-            total_payments   = ("payment_date", "count"),
-            total_spend      = ("amount",        "sum"),
-            avg_spend_per_tx = ("amount",        "mean"),
-            max_single_tx    = ("amount",        "max"),
-            total_sms_volume = ("sms_volume",    "sum"),
-            avg_sms_per_tx   = ("sms_volume",    "mean"),
-            unique_products  = ("product_name",  "nunique"),
-            _first_pay_date  = ("payment_date",  "min"),
-            _last_pay_date   = ("payment_date",  "max"),
+            total_payments     = ("payment_date", "count"),
+            total_spend        = ("amount",        "sum"),
+            avg_spend_per_tx   = ("amount",        "mean"),
+            max_single_tx      = ("amount",        "max"),
+            payment_amount_std = ("amount",        "std"),   # G -- volatility
+            total_sms_volume   = ("sms_volume",    "sum"),
+            avg_sms_per_tx     = ("sms_volume",    "mean"),
+            unique_products    = ("product_name",  "nunique"),
+            _first_pay_date    = ("payment_date",  "min"),
+            _last_pay_date     = ("payment_date",  "max"),
         )
         .reset_index()
     )
 
-    # Recency — days since last purchase, relative to observation point
-    rfm["recency_days"] = (
-        (pd.Timestamp(CUTOFF_DATE) - rfm["_last_pay_date"]).dt.days
-    )
-
-    # ── 4.F  Purchase cadence (time-between-purchases) ───────────────────
-    rfm["payment_span_days"] = (
-        (rfm["_last_pay_date"] - rfm["_first_pay_date"]).dt.days.clip(lower=0)
-    )
+    rfm["recency_days"]        = (pd.Timestamp(CUTOFF_DATE) - rfm["_last_pay_date"]).dt.days
+    rfm["payment_span_days"]   = (rfm["_last_pay_date"] - rfm["_first_pay_date"]).dt.days.clip(lower=0)
     rfm["avg_payment_gap_days"] = rfm.apply(
         lambda r: r["payment_span_days"] / max(r["total_payments"] - 1, 1), axis=1
     )
-
-    # ── 4.E  Credit Burn Rate ─────────────────────────────────────────────
-    # How fast is the account consuming SMS credits per day of active life?
-    rfm["credit_burn_rate"] = (
-        rfm["total_sms_volume"] / rfm["payment_span_days"].clip(lower=1)
-    )
-
+    rfm["credit_burn_rate"]    = rfm["total_sms_volume"] / rfm["payment_span_days"].clip(lower=1)
+    rfm["payment_amount_std"]  = rfm["payment_amount_std"].fillna(0)   # single-payment accounts
     rfm.drop(["_first_pay_date", "_last_pay_date"], axis=1, inplace=True)
 
-    # ── 4.G  Usage Decay: recent 90 d vs prior 90-180 d ─────────────────
+    # -- F. Usage decay: recent 90d vs prior 90-180d -----------------------
     CUT         = pd.Timestamp(CUTOFF_DATE)
     short_start = CUT - pd.Timedelta(days=DECAY_SHORT_DAYS)
     long_start  = CUT - pd.Timedelta(days=DECAY_LONG_DAYS)
@@ -327,7 +318,6 @@ def engineer_features(users_labeled: pd.DataFrame, payments: pd.DataFrame) -> pd
         )
         .reset_index()
     )
-
     previous_agg = (
         pay_hist[
             (pay_hist["payment_date"] > long_start) &
@@ -341,7 +331,7 @@ def engineer_features(users_labeled: pd.DataFrame, payments: pd.DataFrame) -> pd
         .reset_index()
     )
 
-    # ── 4.C  Last payment amount (downgrade detection) ────────────────────
+    # Last payment amount (downgrade detection)
     last_pay = (
         pay_hist
         .sort_values("payment_date")
@@ -351,7 +341,7 @@ def engineer_features(users_labeled: pd.DataFrame, payments: pd.DataFrame) -> pd
         .reset_index()
     )
 
-    # ── 4.I  Dominant credit type ─────────────────────────────────────────
+    # Dominant credit type
     dom_credit = (
         pay_hist
         .groupby("acc_id")["credit_type"]
@@ -360,7 +350,7 @@ def engineer_features(users_labeled: pd.DataFrame, payments: pd.DataFrame) -> pd
         .reset_index()
     )
 
-    # ── Merge all feature frames ──────────────────────────────────────────
+    # Merge all feature frames
     df = (
         df
         .merge(rfm,          on="acc_id", how="left")
@@ -370,42 +360,44 @@ def engineer_features(users_labeled: pd.DataFrame, payments: pd.DataFrame) -> pd
         .merge(dom_credit,   on="acc_id", how="left")
     )
 
-    # ── Fill NaN for accounts with zero payment history ───────────────────
+    # Zero-fill for accounts with no payment history
     _zero_fill = [
         "total_payments", "total_spend", "avg_spend_per_tx", "max_single_tx",
-        "total_sms_volume", "avg_sms_per_tx", "unique_products",
-        "recency_days", "payment_span_days", "avg_payment_gap_days",
-        "credit_burn_rate", "last_payment_amount",
-        "spend_recent_90d", "tx_count_recent_90d",
+        "payment_amount_std", "total_sms_volume", "avg_sms_per_tx", "unique_products",
+        "recency_days", "payment_span_days", "avg_payment_gap_days", "credit_burn_rate",
+        "last_payment_amount", "spend_recent_90d", "tx_count_recent_90d",
         "spend_previous_90d", "tx_count_previous_90d",
     ]
     for col in _zero_fill:
         if col in df.columns:
             df[col] = df[col].fillna(0)
 
-    # For zero-payment accounts, recency = full account age (worst-case signal)
+    # Accounts with zero payments: recency = full account age (worst-case signal)
     no_payment = df["total_payments"] == 0
     df.loc[no_payment, "recency_days"] = df.loc[no_payment, "account_age_at_cutoff"]
 
-    # ── 4.H  Composite derived features ──────────────────────────────────
-    # Spend decay ratio: 0 → total collapse, 1 → stable, >1 → growing
-    df["spend_decay_ratio"] = df["spend_recent_90d"] / (df["spend_previous_90d"] + 1)
-
-    # Transaction frequency decay
-    df["tx_decay_ratio"] = df["tx_count_recent_90d"] / (df["tx_count_previous_90d"] + 1)
-
-    # Downgrade flag: last purchase cheaper than historical average
-    df["downgraded"] = (
+    # -- Composite / derived features --------------------------------------
+    df["spend_decay_ratio"]      = df["spend_recent_90d"]    / (df["spend_previous_90d"] + 1)
+    df["tx_decay_ratio"]         = df["tx_count_recent_90d"] / (df["tx_count_previous_90d"] + 1)
+    df["downgraded"]             = (
         (df["last_payment_amount"] > 0) &
         (df["last_payment_amount"] < df["avg_spend_per_tx"])
     ).astype(int)
+    df["lifetime_value_per_day"] = df["total_spend"] / df["account_age_at_cutoff"].clip(lower=1)
 
-    # Revenue efficiency: how much value does this customer generate per day?
-    df["lifetime_value_per_day"] = (
-        df["total_spend"] / df["account_age_at_cutoff"].clip(lower=1)
-    )
+    # H. NEW v4 -- Missed renewal cycles
+    # "How many expected payment intervals have passed since the last payment?"
+    # Capped at 20 to limit the effect of extreme outliers on tree splits.
+    df["missed_renewal_cycles"] = (
+        df["recency_days"] / df["avg_payment_gap_days"].clip(lower=1)
+    ).clip(upper=20)
 
-    # ── 4.I  Encode categoricals ──────────────────────────────────────────
+    # I. NEW v4 -- Compound risk interaction
+    # High value when the customer is BOTH overdue AND already expired --
+    # a combined signal that is far more predictive than either alone.
+    df["compound_risk"] = df["recency_days"] * df["expired_at_cutoff"]
+
+    # J. Encode dominant credit type
     df["dominant_credit_type"] = df["dominant_credit_type"].fillna("None")
     df["dom_credit_enc"]       = LabelEncoder().fit_transform(df["dominant_credit_type"])
 
@@ -413,383 +405,359 @@ def engineer_features(users_labeled: pd.DataFrame, payments: pd.DataFrame) -> pd
 
 
 # =========================================================================
-# SECTION 5 — OUT-OF-TIME (OOT) SPLIT LOGIC
+# SECTION 6 -- OUT-OF-TIME (OOT) SPLIT
 #
 # Train cohort : accounts whose subscription resolved BEFORE OOT_SPLIT_DATE
-#                → model learns from well-resolved historical churn events
+# OOT cohort   : accounts whose subscription expired in
+#                [OOT_SPLIT_DATE, REFERENCE_DATE]
 #
-# OOT cohort   : accounts whose subscription resolved between
-#                OOT_SPLIT_DATE and REFERENCE_DATE
-#                → the "live" cohort the business actually wants scored
-#
-# This perfectly replicates real deployment: train on past outcomes,
-# evaluate on a future time window that the model has never seen.
+# This replicates real deployment: train on past outcomes, evaluate on a
+# forward time window the model has never seen.
 # =========================================================================
 def oot_split(df: pd.DataFrame):
-    # OOT = accounts whose expiry falls in the evaluation window.
-    # We use expire in [OOT_SPLIT_DATE, REFERENCE_DATE] matching the original v2 design.
-    # The high OOT churn rate (~85%) is a real characteristic of this dataset: accounts
-    # with recent expire dates that didn't renew. AUC-based metrics are base-rate invariant.
     oot_mask = (
         (df["expire"] >= pd.Timestamp(OOT_SPLIT_DATE)) &
         (df["expire"] <= pd.Timestamp(REFERENCE_DATE))
     )
-
     df_train = df[~oot_mask].copy()
     df_oot   = df[oot_mask].copy()
 
-    # Fallback: if OOT lacks both classes or is too small, use temporal 80/20 split.
-    # Restrict to expired accounts only to prevent the fallback from placing all-active
-    # accounts (expire > REFERENCE_DATE) into OOT, which yields 0% churn.
+    # Fallback: if the OOT window is too thin, use a temporal 80/20 split on
+    # expired accounts only (avoids putting all-active accounts in OOT which
+    # would yield 0% churn).
     if df_oot["churned"].nunique() < 2 or len(df_oot) < 20:
-        print("  [warn] OOT window too thin — using temporal 80/20 split by expiry date")
-        df_exp   = df[df["account_expired"] == 1].sort_values("expire").reset_index(drop=True)
-        cut_idx  = int(len(df_exp) * 0.80)
+        print("  [warn] OOT window too thin -- using temporal 80/20 split by expiry date")
+        df_exp  = df[df["account_expired"] == 1].sort_values("expire").reset_index(drop=True)
+        cut_idx = int(len(df_exp) * 0.80)
         df_train = df_exp.iloc[:cut_idx].copy()
         df_oot   = df_exp.iloc[cut_idx:].copy()
 
     return df_train, df_oot
 
 
-class PlattCalibrated:
-    """Thin wrapper applying manual Platt scaling to a base classifier.
-
-    Defined at module level so joblib can pickle it across sessions.
-    """
-    def __init__(self, base, scaler):
-        self._base   = base
-        self._scaler = scaler
-
-    def predict_proba(self, X):
-        raw = self._base.predict_proba(X)[:, 1].reshape(-1, 1)
-        p1  = self._scaler.predict_proba(raw)[:, 1]
-        return np.column_stack([1 - p1, p1])
-
-    def predict(self, X):
-        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
-
-
 # =========================================================================
-# SECTION 6 — MODEL TRAINING & HYPERPARAMETER SETUP
-#
-# Strategy:
-#   • LightGBM / XGBoost (if installed) as primary SOTA gradient boosters
-#   • HistGradientBoosting as reliable sklearn-native fallback
-#   • Random Forest as interpretable baseline
-#   • Class imbalance handled INSIDE the estimator (scale_pos_weight /
-#     class_weight) — no SMOTE or synthetic oversampling that would
-#     contaminate the feature space.
+# SECTION 7 -- MODEL BUILDING
 # =========================================================================
 def _build_models(neg: int, pos: int) -> dict:
-    """Instantiate all models with proper imbalance corrections."""
-    spw   = max(neg / max(pos, 1), 1.0)   # scale_pos_weight for LGB / XGB
+    """Instantiate candidate models with imbalance corrections."""
+    spw    = max(neg / max(pos, 1), 1.0)   # scale_pos_weight for LGB / XGB
     models = {}
 
     if _LGBM:
         models["LightGBM"] = lgb.LGBMClassifier(
-            n_estimators      = 300,   # ↓ from 500 (reduces memorisation)
-            max_depth         = 4,     # ↓ from 5
-            num_leaves        = 20,    # ↓ from 31 (key overfitting lever for LGB)
-            learning_rate     = 0.05,
-            min_child_samples = 30,    # ↑ from 15 (require more evidence per leaf)
-            subsample         = 0.75,  # ↓ from 0.8
-            colsample_bytree  = 0.75,  # ↓ from 0.8
-            reg_alpha         = 0.3,   # ↑ from 0.1 (stronger L1)
-            reg_lambda        = 1.0,   # ↑ from 0.2 (stronger L2)
-            scale_pos_weight  = spw,
-            random_state      = 42,
-            n_jobs            = -1,
-            verbose           = -1,
+            **MODEL_PARAMS["LightGBM"],
+            scale_pos_weight = spw,
         )
 
     if _XGB:
         models["XGBoost"] = xgb.XGBClassifier(
-            n_estimators      = 300,   # ↓ from 500
-            max_depth         = 3,     # ↓ from 4 (shallower = less overfit)
-            learning_rate     = 0.05,
-            subsample         = 0.75,  # ↓ from 0.8
-            colsample_bytree  = 0.75,  # ↓ from 0.8
-            gamma             = 0.3,   # ↑ from 0.1 (min split gain)
-            reg_alpha         = 0.3,   # ↑ from 0.1
-            reg_lambda        = 2.0,   # ↑ from 1.0
-            min_child_weight  = 10,    # new: require 10 samples per leaf
-            scale_pos_weight  = spw,
-            eval_metric       = "auc",
-            random_state      = 42,
-            n_jobs            = -1,
-            verbosity         = 0,
+            **MODEL_PARAMS["XGBoost"],
+            scale_pos_weight = spw,
         )
 
-    # sklearn-native: NaN-safe, competitive, always available
     models["HistGradientBoosting"] = HistGradientBoostingClassifier(
-        max_iter          = 200,   # ↓ from 500
-        max_depth         = 4,     # ↓ from 5
-        learning_rate     = 0.05,
-        min_samples_leaf  = 30,    # ↑ from 15
-        l2_regularization = 1.0,   # ↑ from 0.2
-        max_features      = 0.75,  # new: column subsampling
-        class_weight      = "balanced",
-        random_state      = 42,
+        **MODEL_PARAMS["HistGradientBoosting"],
+        class_weight = "balanced",
     )
 
-    # Interpretable baseline
     models["Random Forest"] = RandomForestClassifier(
-        n_estimators     = 200,   # ↓ from 300
-        max_depth        = 5,     # ↓ from 7
-        min_samples_leaf = 20,    # ↑ from 10
-        max_features     = "sqrt",
-        class_weight     = "balanced",
-        random_state     = 42,
-        n_jobs           = -1,
+        **MODEL_PARAMS["Random Forest"],
+        class_weight = "balanced",
     )
 
     return models
 
 
 # =========================================================================
-# SECTION 7 — REALISTIC EVALUATION
-#
-# Imputer is fit ONLY on training data; OOT is transformed separately.
-# This prevents any statistical leakage through imputation.
-#
-# We report both Train AUC and OOT AUC.  A gap < 0.10 proves the model
-# generalises and is not over-fit.  Realistic OOT AUC target: 0.75–0.88.
+# SECTION 8 -- THRESHOLD OPTIMISATION
+# =========================================================================
+def _optimal_threshold(probs: np.ndarray, y: np.ndarray, beta: float = FBETA_BETA):
+    """
+    Find the decision threshold that maximises F-beta on the given predictions.
+
+    beta > 1 favors recall -- in churn prevention, missing a churner (false
+    negative) is typically more costly than a wasted retention offer
+    (false positive).  beta=2.0 weights recall twice as heavily as precision.
+
+    Parameters
+    ----------
+    probs : np.ndarray  out-of-fold (OOF) predicted probabilities
+    y     : np.ndarray  true binary labels
+    beta  : float       F-beta parameter
+
+    Returns
+    -------
+    best_threshold : float  threshold in [0.05, 0.95]
+    best_fbeta     : float  F-beta score at the best threshold
+    """
+    thresholds = np.linspace(0.05, 0.95, 181)
+    best_t, best_f = 0.5, -1.0
+    for t in thresholds:
+        f = fbeta_score(y, (probs >= t).astype(int), beta=beta, zero_division=0)
+        if f > best_f:
+            best_t, best_f = t, f
+    return float(best_t), float(best_f)
+
+
+# =========================================================================
+# SECTION 9 -- FEATURE SELECTION
 # =========================================================================
 def _select_features(model, feature_cols: list, threshold: float = IMPORTANCE_THRESHOLD) -> list:
-    """Return feature names whose built-in importance exceeds threshold."""
+    """Return features whose built-in importance exceeds threshold (keep >= 5)."""
     if not hasattr(model, "feature_importances_"):
         return feature_cols
-    imps = model.feature_importances_
+
+    imps     = model.feature_importances_
     selected = [f for f, imp in zip(feature_cols, imps) if imp >= threshold]
     dropped  = [f for f, imp in zip(feature_cols, imps) if imp < threshold]
+
     if dropped:
         print(f"  Feature selection: removed {len(dropped)} low-importance features:")
         print(f"    {dropped}")
-    if len(selected) < 5:   # safety guard: keep at least 5 features
-        print(f"  [warn] Too few features after selection — reverting to full set")
+    if len(selected) < 5:
+        print("  [warn] Too few features after selection -- reverting to full set")
         return feature_cols
     return selected
 
 
+# =========================================================================
+# SECTION 10 -- TRAINING PIPELINE
+#
+# Phase 1 -- 5-Fold Stratified CV (model selection, no OOT peek)
+# Phase 2 -- Full-train fit + feature selection + OOF isotonic calibration
+#            + optimal threshold (F-beta on OOF)
+# Phase 3 -- OOT evaluation (pure holdout, no tuning decisions made here)
+# =========================================================================
 def train_and_evaluate(df_train: pd.DataFrame, df_oot: pd.DataFrame):
-    # ── Impute (fit on train only) ────────────────────────────────────────
-    imputer  = SimpleImputer(strategy="median")
-    y_tr     = df_train["churned"].astype(int).reset_index(drop=True)
-    y_ot     = df_oot["churned"].astype(int).reset_index(drop=True)
+    """
+    Full training + evaluation pipeline.
 
-    X_tr_raw = df_train[FEATURE_COLS]
-    X_ot_raw = df_oot[FEATURE_COLS]
-    X_tr     = imputer.fit_transform(X_tr_raw)
-    X_ot     = imputer.transform(X_ot_raw)
+    Returns
+    -------
+    results   : dict   all model artifacts + metrics
+    best_name : str    name of the selected model
+    imputer   : fitted SimpleImputer
+    """
+    # Imputer -- fit ONLY on training data to prevent statistical leakage
+    imputer  = SimpleImputer(strategy="median")
+    y_tr     = df_train["churned"].astype(int).values
+    y_ot     = df_oot["churned"].astype(int).values
+
+    X_tr = imputer.fit_transform(df_train[FEATURE_COLS])
+    X_ot = imputer.transform(df_oot[FEATURE_COLS])
 
     neg, pos = int((y_tr == 0).sum()), int((y_tr == 1).sum())
     models   = _build_models(neg, pos)
-    results  = {"_imputer": imputer, "_feature_cols": FEATURE_COLS}
-    best_name, best_auc = None, -1.0
 
-    print("\n" + "═" * 72)
-    print("  PHASE 1 — Initial training on full feature set (all models)")
-    print(f"  Train  :  {len(X_tr):>6,} accounts  |  churn rate {y_tr.mean()*100:.1f}%")
-    print(f"  OOT    :  {len(X_ot):>6,} accounts  |  churn rate {y_ot.mean()*100:.1f}%")
+    skf = StratifiedKFold(n_splits=N_CV_FOLDS, shuffle=True, random_state=42)
+
+    # -- PHASE 1 -- Stratified CV model comparison --------------------------
+    print("\n" + "=" * 72)
+    print(f"  PHASE 1 -- {N_CV_FOLDS}-Fold Stratified CV  "
+          f"(model selection -- OOT not touched)")
+    print(f"  Train  : {len(X_tr):,} accounts  |  churn rate {y_tr.mean()*100:.1f}%")
+    print(f"  OOT    : {len(X_ot):,} accounts  |  churn rate {y_ot.mean()*100:.1f}%")
     print(f"  Class imbalance (neg:pos) = {neg}:{pos}")
-    print("═" * 72)
+    print("=" * 72)
+
+    cv_scores   = {}
+    best_cv_auc = -1.0
+    best_name   = None
 
     for name, model in models.items():
-        model.fit(X_tr, y_tr)
+        scores = cross_val_score(model, X_tr, y_tr, cv=skf, scoring="roc_auc", n_jobs=-1)
+        cv_scores[name] = {"mean": float(scores.mean()), "std": float(scores.std())}
+        star = "*" if scores.mean() > best_cv_auc else " "
+        if scores.mean() > best_cv_auc:
+            best_cv_auc, best_name = scores.mean(), name
+        print(f"  {star} [{name:<25s}]  "
+              f"CV AUC = {scores.mean():.4f} +/- {scores.std():.4f}")
 
-        y_pred  = model.predict(X_ot)
-        y_prob  = model.predict_proba(X_ot)[:, 1]
-        oot_auc = roc_auc_score(y_ot, y_prob)
-        avg_pr  = average_precision_score(y_ot, y_prob)
-        tr_prob = model.predict_proba(X_tr)[:, 1]
-        tr_auc  = roc_auc_score(y_tr, tr_prob)
-        gap     = tr_auc - oot_auc
-        overfit_flag = "OK" if abs(gap) < 0.10 else "CHECK"
+    print(f"\n  Best model: {best_name}  (CV AUC = {best_cv_auc:.4f})")
 
-        print(f"\n  [{name}]")
-        print(f"  Train AUC : {tr_auc:.4f}  |  OOT AUC : {oot_auc:.4f}"
-              f"  |  Gap : {gap:+.4f}  [{overfit_flag}]")
-        print(f"  OOT PR-AUC (avg precision): {avg_pr:.4f}")
-        print(classification_report(y_ot, y_pred,
-                                    target_names=["Active", "Churned"],
-                                    zero_division=0))
+    # -- PHASE 2 -- Full-train fit + feature selection + OOF calibration ----
+    print("\n" + "-" * 72)
+    print("  PHASE 2 -- Feature selection + OOF isotonic calibration + threshold opt.")
+    print("-" * 72)
 
-        ml_utils.log_experiment(
-            model_name  = name,
-            metrics     = {
-                "train_auc"        : round(tr_auc,  4),
-                "oot_auc"          : round(oot_auc, 4),
-                "oot_pr_auc"       : round(avg_pr,  4),
-                "overfitting_gap"  : round(gap,     4),
-                "train_size"       : len(X_tr),
-                "oot_size"         : len(X_ot),
-                "num_features"     : len(FEATURE_COLS),
-                "churn_rate_train" : round(float(y_tr.mean()), 4),
-                "churn_rate_oot"   : round(float(y_ot.mean()), 4),
-            },
-            config_name = "v3_FeatureSelect_Calibrated",
-            log_path    = str(OUTPUT_DIR / "experiment_log.csv"),
-        )
+    # 2a. Train on full set -> feature selection
+    base_full = clone(models[best_name])
+    base_full.fit(X_tr, y_tr)
 
-        results[name] = {
-            "model"    : model,
-            "train_auc": tr_auc,
-            "oot_auc"  : oot_auc,
-            "avg_pr"   : avg_pr,
-            "gap"      : gap,
-            "y_pred"   : y_pred,
-            "y_prob"   : y_prob,
-            "y_oot"    : y_ot,
-        }
+    selected_cols = _select_features(base_full, FEATURE_COLS)
+    sel_idx       = [FEATURE_COLS.index(c) for c in selected_cols]
+    X_tr_sel      = X_tr[:, sel_idx]
+    X_ot_sel      = X_ot[:, sel_idx]
+    n_dropped     = len(FEATURE_COLS) - len(selected_cols)
+    print(f"  Features : {len(FEATURE_COLS)} -> {len(selected_cols)}  "
+          f"({n_dropped} dropped, importance < {IMPORTANCE_THRESHOLD})")
 
-        if oot_auc > best_auc:
-            best_auc, best_name = oot_auc, name
+    # 2b. Collect out-of-fold (OOF) predictions for calibration
+    #     Each sample is predicted exactly once by a model that never saw it.
+    #     Fitting isotonic regression on these OOF probs produces a calibrator
+    #     without consuming any held-out data.
+    oof_probs = np.zeros(len(y_tr))
+    for tr_idx, val_idx in skf.split(X_tr_sel, y_tr):
+        fold_model = clone(models[best_name])
+        fold_model.fit(X_tr_sel[tr_idx], y_tr[tr_idx])
+        oof_probs[val_idx] = fold_model.predict_proba(X_tr_sel[val_idx])[:, 1]
 
-    print(f"\n  Best model (Phase 1): {best_name}  (OOT AUC = {best_auc:.4f})")
+    calibrator = IsotonicRegression(out_of_bounds="clip")
+    calibrator.fit(oof_probs, y_tr)
+    print("  Isotonic calibration fitted on OOF predictions (100% train used)")
 
-    # ── PHASE 2 — Feature selection + calibration on best model ──────────
-    print("\n" + "─" * 72)
-    print("  PHASE 2 — Feature selection & probability calibration")
-    print("─" * 72)
+    # 2c. Train FINAL model on 100% of training data with selected features
+    final_model = clone(models[best_name])
+    final_model.fit(X_tr_sel, y_tr)
 
-    best_raw        = results[best_name]["model"]
-    selected_cols   = _select_features(best_raw, FEATURE_COLS)
-    n_dropped       = len(FEATURE_COLS) - len(selected_cols)
-    print(f"  Features : {len(FEATURE_COLS)} → {len(selected_cols)}"
-          f"  ({n_dropped} dropped below importance={IMPORTANCE_THRESHOLD})")
+    # 2d. Optimal threshold: maximise F-beta on OOF predictions
+    #     (these are clean -- the model never trained on these observations)
+    best_threshold, best_fbeta = _optimal_threshold(oof_probs, y_tr, beta=FBETA_BETA)
+    print(f"  Optimal threshold (F-{FBETA_BETA:.0f} on OOF): "
+          f"{best_threshold:.2f}  (F-{FBETA_BETA:.0f} = {best_fbeta:.4f})")
 
-    # Re-impute on selected features (same imputer, just subset columns)
-    sel_idx  = [FEATURE_COLS.index(c) for c in selected_cols]
-    X_tr_sel = X_tr[:, sel_idx]
-    X_ot_sel = X_ot[:, sel_idx]
+    # -- PHASE 3 -- OOT evaluation ------------------------------------------
+    print("\n" + "-" * 72)
+    print("  PHASE 3 -- OOT evaluation  (pure holdout, zero leakage)")
+    print("-" * 72)
 
-    # Calibration strategy: split off a 20% stratified holdout from train,
-    # refit the best model on 80%, then apply CalibratedClassifierCV(cv='prefit')
-    # on the holdout.  This prevents the sigmoid from collapsing when the model
-    # achieves near-perfect train accuracy (which happens with cv=5).
-    # NOTE: sklearn >= 1.2 supports cv='prefit' — we implement it manually to
-    # stay compatible with older installs.
-    X_tr_fit, X_cal, y_tr_fit, y_cal = train_test_split(
-        X_tr_sel, y_tr, test_size=0.20, stratify=y_tr, random_state=42
-    )
-    neg2, pos2 = int((y_tr_fit == 0).sum()), int((y_tr_fit == 1).sum())
-    base_model = _build_models(neg2, pos2)[best_name]
-    base_model.fit(X_tr_fit, y_tr_fit)
+    raw_ot    = final_model.predict_proba(X_ot_sel)[:, 1]
+    y_prob_ot = calibrator.transform(raw_ot)
+    y_pred_ot = (y_prob_ot >= best_threshold).astype(int)
 
-    # Platt scaling on the holdout: fit a logistic regression on the raw
-    # probability outputs, mapping them to calibrated probabilities.
-    from sklearn.linear_model import LogisticRegression
-    raw_cal = base_model.predict_proba(X_cal)[:, 1].reshape(-1, 1)
-    platt   = LogisticRegression(C=1.0, solver="lbfgs", max_iter=200)
-    platt.fit(raw_cal, y_cal)
+    raw_tr    = final_model.predict_proba(X_tr_sel)[:, 1]
+    y_prob_tr = calibrator.transform(raw_tr)
 
-    calibrated = PlattCalibrated(base_model, platt)
+    oot_auc  = roc_auc_score(y_ot, y_prob_ot)
+    tr_auc   = roc_auc_score(y_tr, y_prob_tr)
+    avg_pr   = average_precision_score(y_ot, y_prob_ot)
+    brier    = brier_score_loss(y_ot, y_prob_ot)
+    ks_stat  = ml_utils.ks_statistic(y_ot, y_prob_ot)
+    lift_20  = ml_utils.lift_at_percentile(y_ot, y_prob_ot, percentile=20)
+    gap      = tr_auc - oot_auc
+    fit_flag = "OK" if abs(gap) < 0.10 else "CHECK -- gap may indicate overfitting"
 
-    # Evaluate calibrated model on OOT
-    y_prob_cal = calibrated.predict_proba(X_ot_sel)[:, 1]
-    y_pred_cal = (y_prob_cal >= 0.5).astype(int)
-    oot_auc_cal = roc_auc_score(y_ot, y_prob_cal)
-    avg_pr_cal  = average_precision_score(y_ot, y_prob_cal)
-    brier       = brier_score_loss(y_ot, y_prob_cal)
-    tr_prob_cal = calibrated.predict_proba(X_tr_sel)[:, 1]
-    tr_auc_cal  = roc_auc_score(y_tr, tr_prob_cal)
-    gap_cal     = tr_auc_cal - oot_auc_cal
-    overfit_flag_cal = "OK" if abs(gap_cal) < 0.10 else "CHECK"
-
-    print(f"\n  [{best_name} + FeatureSelection + PlattCalibration]")
-    print(f"  Train AUC : {tr_auc_cal:.4f}  |  OOT AUC : {oot_auc_cal:.4f}"
-          f"  |  Gap : {gap_cal:+.4f}  [{overfit_flag_cal}]")
-    print(f"  OOT PR-AUC: {avg_pr_cal:.4f}  |  Brier score: {brier:.4f}"
-          f"  (lower = better calibrated, perfect = 0.0)")
-    print(classification_report(y_ot, y_pred_cal,
+    print(f"\n  [{best_name} + FeatureSelection + OOF-Isotonic + threshold={best_threshold:.2f}]")
+    print(f"  Train AUC  : {tr_auc:.4f}  |  OOT AUC : {oot_auc:.4f}  "
+          f"|  Gap : {gap:+.4f}  [{fit_flag}]")
+    print(f"  PR-AUC     : {avg_pr:.4f}  |  Brier   : {brier:.4f}  "
+          f"|  KS   : {ks_stat:.4f}  |  Lift@20% : {lift_20:.2f}x")
+    print(classification_report(y_ot, y_pred_ot,
                                 target_names=["Active", "Churned"],
                                 zero_division=0))
 
-    # Log calibrated run
     ml_utils.log_experiment(
-        model_name  = f"{best_name}_calibrated",
+        model_name  = f"{best_name}_v4_calibrated",
         metrics     = {
-            "train_auc"        : round(tr_auc_cal,  4),
-            "oot_auc"          : round(oot_auc_cal, 4),
-            "oot_pr_auc"       : round(avg_pr_cal,  4),
-            "overfitting_gap"  : round(gap_cal,     4),
-            "brier_score"      : round(brier,        4),
-            "train_size"       : len(X_tr_sel),
-            "oot_size"         : len(X_ot_sel),
+            "train_auc"        : round(tr_auc,         4),
+            "oot_auc"          : round(oot_auc,         4),
+            "oot_pr_auc"       : round(avg_pr,          4),
+            "overfitting_gap"  : round(gap,             4),
+            "brier_score"      : round(brier,           4),
+            "ks_statistic"     : round(ks_stat,         4),
+            "lift_at_top20pct" : round(lift_20,         4),
+            "cv_auc_mean"      : round(best_cv_auc,     4),
+            "threshold"        : round(best_threshold,  3),
+            "fbeta_oof"        : round(best_fbeta,      4),
+            "train_size"       : len(X_tr),
+            "oot_size"         : len(X_ot),
             "num_features"     : len(selected_cols),
             "churn_rate_train" : round(float(y_tr.mean()), 4),
             "churn_rate_oot"   : round(float(y_ot.mean()), 4),
         },
-        config_name = "v3_FeatureSelect_Calibrated",
+        config_name = "v4_OOF_Calibrated",
         log_path    = str(OUTPUT_DIR / "experiment_log.csv"),
     )
 
-    # Store calibrated model in results under a distinct key
-    results["_calibrated"] = {
-        "model"         : calibrated,
-        "base_model"    : results[best_name]["model"],   # Phase 1 fitted model (for SHAP)
-        "selected_cols" : selected_cols,
-        "train_auc"     : tr_auc_cal,
-        "oot_auc"       : oot_auc_cal,
-        "avg_pr"        : avg_pr_cal,
-        "brier"         : brier,
-        "gap"           : gap_cal,
-        "y_pred"        : y_pred_cal,
-        "y_prob"        : y_prob_cal,
-        "y_oot"         : y_ot,
+    # Re-fit all models on full train for ROC comparison chart.
+    # This is evaluation-only: model selection already happened in Phase 1 (CV),
+    # so visualising OOT scores here introduces no leakage into any decision.
+    roc_results = {}
+    for name, model in models.items():
+        m = clone(model)
+        m.fit(X_tr, y_tr)
+        raw  = m.predict_proba(X_ot)[:, 1]
+        roc_results[name] = {
+            "model"  : m,
+            "oot_auc": roc_auc_score(y_ot, raw),
+            "y_prob" : raw,
+            "y_oot"  : y_ot,
+        }
+
+    results = {
+        # Imputer + column lists
+        "_imputer"      : imputer,
+        "_feature_cols" : FEATURE_COLS,
+        "_selected_cols": selected_cols,
+        # Calibrated final model
+        "_calibrated"   : {
+            "model"        : final_model,
+            "calibrator"   : calibrator,
+            "selected_cols": selected_cols,
+            "threshold"    : best_threshold,
+            "train_auc"    : tr_auc,
+            "oot_auc"      : oot_auc,
+            "avg_pr"       : avg_pr,
+            "brier"        : brier,
+            "ks_stat"      : ks_stat,
+            "lift_20"      : lift_20,
+            "gap"          : gap,
+            "y_pred"       : y_pred_ot,
+            "y_prob"       : y_prob_ot,
+            "y_oot"        : y_ot,
+        },
+        # Phase 1 / ROC chart data
+        **roc_results,
+        # CV summary
+        "_cv_scores"  : cv_scores,
+        "_best_cv_auc": best_cv_auc,
+        "_oof_probs"  : oof_probs,
+        "_y_tr"       : y_tr,
     }
-    results["_selected_cols"] = selected_cols
 
-    print(f"\n  Final model : {best_name} (calibrated, {len(selected_cols)} features)")
-    print(f"  OOT AUC    : {oot_auc_cal:.4f}")
-    print(f"  Brier score: {brier:.4f}")
-    print("  (Realistic 0.75–0.88 AUC range confirms no overfitting on held-out time window)")
-
+    print(f"\n  OK Final : {best_name} (OOF-calibrated, threshold={best_threshold:.2f})")
+    print(f"    OOT AUC={oot_auc:.4f}  Brier={brier:.4f}  "
+          f"KS={ks_stat:.4f}  Lift@20%={lift_20:.2f}x")
     return results, best_name, imputer
 
 
 # =========================================================================
-# SECTION 8 — SHAP EXPLAINABILITY
-#
-# Answers: "Why is customer X flagged as high-risk?"
-# Example output: "Login frequency dropped 60%, no spend in 90 days,
-#                  contract expires in 14 days"
+# SECTION 11 -- SHAP EXPLAINABILITY
 # =========================================================================
 def generate_shap(
     results: dict, best_model: str, df_oot: pd.DataFrame, imputer
 ) -> dict:
-    # Use the uncalibrated base tree model — SHAP requires direct tree access
-    calibrated_entry = results.get("_calibrated", {})
-    base_model       = calibrated_entry.get("base_model", results[best_model]["model"])
-    selected_cols    = results.get("_selected_cols", FEATURE_COLS)
+    """
+    Generate SHAP values for the OOT cohort.
 
-    # Transform OOT using full imputer then subset to selected features
-    X_full = imputer.transform(df_oot[FEATURE_COLS])
+    Uses TreeExplainer (fast, exact) when the underlying model supports it;
+    falls back to PermutationExplainer otherwise.
+
+    Answers: "Why is customer X flagged as high-risk?"
+    """
+    cal_entry     = results.get("_calibrated", {})
+    base_model    = cal_entry.get("model", results[best_model]["model"])
+    selected_cols = results.get("_selected_cols", FEATURE_COLS)
+
+    X_full  = imputer.transform(df_oot[FEATURE_COLS])
     sel_idx = [FEATURE_COLS.index(c) for c in selected_cols]
     X_ot    = X_full[:, sel_idx]
 
     try:
-        # Prefer TreeExplainer (fast, exact); some sklearn estimators
-        # (HistGradientBoosting) don't expose the internal tree structure
-        # that SHAP requires — fall back to a permutation-based explainer
-        # using a small background sample (100 rows) for speed.
         try:
             explainer   = shap.TreeExplainer(base_model)
             shap_values = explainer.shap_values(X_ot)
         except Exception:
             background  = shap.sample(X_ot, min(100, len(X_ot)), random_state=42)
-            explainer   = shap.PermutationExplainer(
-                base_model.predict_proba, background
-            )
-            explanation = explainer(X_ot[:200])  # limit to 200 for speed
-            shap_values = explanation.values[:, :, 1]   # class 1 (churn)
+            explainer   = shap.PermutationExplainer(base_model.predict_proba, background)
+            explanation = explainer(X_ot[:200])
+            shap_values = explanation.values[:, :, 1]
 
-        # Normalise: LightGBM may return list[array] for binary classification;
-        # some explainers wrap values in an Explanation object.
+        # Normalise: handle list / Explanation / ndarray shapes
         if hasattr(shap_values, "values"):
             sv = shap_values.values
             if sv.ndim == 3:
-                sv = sv[:, :, 1]   # class 1 (churn)
+                sv = sv[:, :, 1]
         elif isinstance(shap_values, list):
             sv = shap_values[1] if len(shap_values) > 1 else shap_values[0]
         else:
@@ -804,17 +772,16 @@ def generate_shap(
             },
             OUTPUT_DIR / "shap_explainer.pkl",
         )
-        print(f"  SHAP explainer saved → {OUTPUT_DIR / 'shap_explainer.pkl'}")
+        print(f"  SHAP explainer saved -> {OUTPUT_DIR / 'shap_explainer.pkl'}")
 
-        # Print top drivers for the riskiest OOT account
         if sv is not None and len(sv) > 0:
-            y_prob   = calibrated_entry.get("y_prob", results[best_model]["y_prob"])
-            top_idx  = np.argmax(y_prob)
-            drivers  = pd.Series(sv[top_idx], index=selected_cols).abs().sort_values(ascending=False)
-            print(f"\n  SHAP — Top 5 churn drivers for highest-risk account:")
+            y_prob   = cal_entry.get("y_prob", results[best_model]["y_prob"])
+            top_idx  = int(np.argmax(y_prob))
+            drivers  = pd.Series(np.abs(sv[top_idx]), index=selected_cols).sort_values(ascending=False)
+            print("\n  SHAP -- Top 5 churn drivers for highest-risk account:")
             for feat, val in drivers.head(5).items():
-                direction = "↑ risk" if sv[top_idx][selected_cols.index(feat)] > 0 else "↓ risk"
-                print(f"    {feat:<35s}  |SHAP|={val:.4f}  {direction}")
+                direction = "^ risk" if sv[top_idx][selected_cols.index(feat)] > 0 else "v risk"
+                print(f"    {feat:<38s}  |SHAP|={val:.4f}  {direction}")
 
         return {"shap_values": sv, "explainer": explainer, "feature_names": selected_cols}
 
@@ -824,7 +791,7 @@ def generate_shap(
 
 
 # =========================================================================
-# SECTION 9 — VISUALISATIONS
+# SECTION 12 -- VISUALISATIONS
 # =========================================================================
 def plot_all(
     df_train: pd.DataFrame,
@@ -836,56 +803,46 @@ def plot_all(
     plt.style.use("seaborn-v0_8-whitegrid")
     palette = ["#4C72B0", "#DD8452", "#55A868", "#C44E52", "#8172B2"]
 
-    # ── 01  Customer overview ─────────────────────────────────────────────
+    cal         = results["_calibrated"]
+    sel_cols    = results.get("_selected_cols", FEATURE_COLS)
+    base_model  = cal["model"]
+
+    # -- 01  Customer overview ---------------------------------------------
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     fig.suptitle(
-        f"Customer Overview — OOT Cohort  "
+        f"Customer Overview -- OOT Cohort  "
         f"(n={len(df_oot):,}, churn={df_oot['churned'].mean()*100:.1f}%)",
         fontsize=13, fontweight="bold",
     )
-
-    sns.countplot(
-        data=df_oot, x="churned",
-        palette=["#55A868", "#C44E52"], ax=axes[0],
-    )
+    sns.countplot(data=df_oot, x="churned", palette=["#55A868", "#C44E52"], ax=axes[0])
     axes[0].set_title("Churn Distribution (OOT)")
     axes[0].set_xticklabels(["Active", "Churned"])
-
-    sns.boxplot(
-        data=df_oot, x="churned", y="recency_days",
-        palette=["#55A868", "#C44E52"], ax=axes[1],
-    )
+    sns.boxplot(data=df_oot, x="churned", y="recency_days",
+                palette=["#55A868", "#C44E52"], ax=axes[1])
     axes[1].set_title("Payment Recency at Cutoff (days)")
     axes[1].set_xticklabels(["Active", "Churned"])
-
-    sns.boxplot(
-        data=df_oot, x="churned", y="total_spend",
-        palette=["#55A868", "#C44E52"], ax=axes[2],
-    )
+    sns.boxplot(data=df_oot, x="churned", y="total_spend",
+                palette=["#55A868", "#C44E52"], ax=axes[2])
     axes[2].set_title("Lifetime Spend")
     axes[2].set_xticklabels(["Active", "Churned"])
-
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "01_customer_overview.png", dpi=150)
     plt.close()
 
-    # ── 02  ROC curves (all models) ───────────────────────────────────────
+    # -- 02  ROC curves (all candidates evaluated on OOT) ------------------
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.plot([0, 1], [0, 1], "k--", lw=1, label="Random Baseline")
-
+    ax.plot([0, 1], [0, 1], "k--", lw=1, label="Random baseline")
     for (name, r), col in zip(
         ((k, v) for k, v in results.items() if not k.startswith("_")),
         palette,
     ):
         fpr, tpr, _ = roc_curve(r["y_oot"], r["y_prob"])
-        ax.plot(fpr, tpr, color=col, lw=2,
-                label=f"{name}  (AUC={r['oot_auc']:.3f})")
-
+        ax.plot(fpr, tpr, color=col, lw=2, label=f"{name}  (AUC={r['oot_auc']:.3f})")
     ax.set_xlabel("False Positive Rate")
     ax.set_ylabel("True Positive Rate")
     ax.set_title(
-        "ROC Curves — Out-of-Time Evaluation\n"
-        "(No Data Leakage, Train/Test are different time windows)",
+        "ROC Curves -- Out-of-Time Evaluation\n"
+        "(models selected by 5-fold CV, OOT is a pure holdout)",
         fontweight="bold",
     )
     ax.legend(loc="lower right", fontsize=9)
@@ -893,78 +850,71 @@ def plot_all(
     plt.savefig(OUTPUT_DIR / "02_roc_curves.png", dpi=150)
     plt.close()
 
-    # ── 03  Feature importance (SHAP preferred, built-in fallback) ─────────
-    selected_cols = results.get("_selected_cols", FEATURE_COLS)
-    bm_base = results.get("_calibrated", {}).get("base_model",
-              results[best_model]["model"])
-    fig, ax = plt.subplots(figsize=(10, max(6, len(selected_cols) * 0.4)))
-
-    shap_names = shap_data.get("feature_names", selected_cols)
+    # -- 03  Feature importance (SHAP preferred, built-in fallback) --------
+    fig, ax = plt.subplots(figsize=(10, max(6, len(sel_cols) * 0.4)))
+    shap_names = shap_data.get("feature_names", sel_cols)
     if shap_data.get("shap_values") is not None:
         sv = shap_data["shap_values"]
         fi = pd.Series(np.abs(sv).mean(axis=0), index=shap_names).sort_values()
         fi.plot(kind="barh", color="#4C72B0", ax=ax)
-        ax.set_xlabel("Mean |SHAP Value|  (average impact on predicted churn probability)")
+        ax.set_xlabel("Mean |SHAP Value|")
         ax.set_title(
-            f"SHAP Feature Importance — {best_model} (calibrated, {len(shap_names)} features)\n"
-            "(Higher = stronger driver of churn)",
+            f"SHAP Feature Importance -- {best_model} (calibrated, {len(shap_names)} features)\n"
+            "(Higher = stronger driver of predicted churn probability)",
             fontweight="bold",
         )
-    elif hasattr(bm_base, "feature_importances_"):
-        fi = pd.Series(bm_base.feature_importances_, index=selected_cols).sort_values()
+    elif hasattr(base_model, "feature_importances_"):
+        fi = pd.Series(base_model.feature_importances_, index=sel_cols).sort_values()
         fi.plot(kind="barh", color="#4C72B0", ax=ax)
         ax.set_xlabel("Feature Importance Score")
-        ax.set_title(f"Feature Importances — {best_model} ({len(selected_cols)} features)",
+        ax.set_title(f"Feature Importances -- {best_model} ({len(sel_cols)} features)",
                      fontweight="bold")
-
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "03_feature_importance.png", dpi=150)
     plt.close()
 
-    # ── 04  Confusion matrix (calibrated model) ───────────────────────────
-    r_cal = results.get("_calibrated", results[best_model])
-    cm    = confusion_matrix(r_cal["y_oot"], r_cal["y_pred"])
+    # -- 04  Confusion matrix ----------------------------------------------
+    cm = confusion_matrix(cal["y_oot"], cal["y_pred"])
     fig, ax = plt.subplots(figsize=(6, 5))
     ConfusionMatrixDisplay(cm, display_labels=["Active", "Churned"]).plot(
         ax=ax, colorbar=False, cmap="Blues",
     )
     ax.set_title(
-        f"Confusion Matrix — {best_model} (calibrated)\n"
-        f"OOT Cohort  (no data leakage)",
+        f"Confusion Matrix -- {best_model} (calibrated, threshold={cal['threshold']:.2f})\n"
+        f"OOT Cohort (no data leakage)",
         fontweight="bold",
     )
     plt.tight_layout()
     plt.savefig(OUTPUT_DIR / "04_confusion_matrix.png", dpi=150)
     plt.close()
 
-    # ── 05  Score distribution + calibration curve ───────────────────────
+    # -- 05  Score distribution + calibration (reliability) diagram --------
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-    # Left: churn probability histogram
     ax = axes[0]
     for lbl, col, ls in [(0, "#55A868", "-"), (1, "#C44E52", "--")]:
-        m = r_cal["y_oot"] == lbl
+        m = cal["y_oot"] == lbl
         if m.sum() > 0:
             ax.hist(
-                r_cal["y_prob"][m], bins=15, alpha=0.55,
+                cal["y_prob"][m], bins=15, alpha=0.55,
                 color=col, linestyle=ls, edgecolor="white", density=True,
                 label=f"{'Active' if lbl == 0 else 'Churned'}  (n={int(m.sum())})",
             )
-    ax.axvline(0.5, color="black", lw=1.5, linestyle=":", label="Decision threshold")
+    ax.axvline(cal["threshold"], color="black", lw=1.5, linestyle=":",
+               label=f"Threshold = {cal['threshold']:.2f}")
     ax.set_xlabel("Predicted Churn Probability")
     ax.set_ylabel("Density")
     ax.set_title(
-        "Churn Score Distribution (calibrated)\n"
-        "(Well-separated distributions indicate a useful model)",
+        "Churn Score Distribution (OOF-calibrated)\n"
+        "(Well-separated distributions = useful model)",
         fontweight="bold",
     )
     ax.legend()
 
-    # Right: reliability diagram (calibration curve)
     ax2 = axes[1]
     try:
         frac_pos, mean_pred = calibration_curve(
-            r_cal["y_oot"], r_cal["y_prob"], n_bins=8, strategy="quantile"
+            cal["y_oot"], cal["y_prob"], n_bins=8, strategy="quantile"
         )
         ax2.plot(mean_pred, frac_pos, "s-", color="#4C72B0",
                  label=f"{best_model} (isotonic calibrated)")
@@ -972,8 +922,8 @@ def plot_all(
         ax2.set_xlabel("Mean Predicted Probability")
         ax2.set_ylabel("Fraction of Positives")
         ax2.set_title(
-            "Reliability Diagram — OOT Cohort\n"
-            f"(Brier score = {r_cal.get('brier', float('nan')):.4f})",
+            f"Reliability Diagram -- OOT Cohort\n"
+            f"Brier = {cal['brier']:.4f}  KS = {cal['ks_stat']:.4f}",
             fontweight="bold",
         )
         ax2.legend()
@@ -984,50 +934,149 @@ def plot_all(
     plt.savefig(OUTPUT_DIR / "05_score_distribution.png", dpi=150)
     plt.close()
 
-    print(f"  Plots saved → {OUTPUT_DIR}/")
+    # -- 06  NEW v4 -- Lift / Gain chart ------------------------------------
+    gain_df = ml_utils.gain_table(cal["y_oot"], cal["y_prob"], n_bins=10)
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(
+        f"Lift & Cumulative Gain -- {best_model} (OOT Cohort)\n"
+        f"Lift@20% = {cal['lift_20']:.2f}x   "
+        f"(top-20% captures {cal['lift_20']*20:.0f}% of all churners)",
+        fontsize=12, fontweight="bold",
+    )
+
+    # Cumulative gain curve
+    ax = axes[0]
+    ax.plot(gain_df["cumulative_pct_customers"], gain_df["cumulative_pct_churners"],
+            "o-", color="#4C72B0", lw=2, label="Model")
+    ax.plot([0, 100], [0, 100], "k--", lw=1, label="Random baseline")
+    ax.fill_between(gain_df["cumulative_pct_customers"],
+                    gain_df["cumulative_pct_churners"],
+                    gain_df["cumulative_pct_customers"],
+                    alpha=0.12, color="#4C72B0")
+    ax.set_xlabel("% Customers Contacted (sorted by risk score)")
+    ax.set_ylabel("% Churners Captured")
+    ax.set_title("Cumulative Gain Curve")
+    ax.legend()
+
+    # Lift per decile
+    ax2 = axes[1]
+    ax2.bar(gain_df["decile"], gain_df["lift"], color=["#C44E52" if l >= 1.5
+            else "#4C72B0" for l in gain_df["lift"]], edgecolor="white")
+    ax2.axhline(1.0, color="black", lw=1.5, linestyle="--", label="Random baseline (1.0x)")
+    ax2.set_xlabel("Score Decile  (1 = highest risk)")
+    ax2.set_ylabel("Lift")
+    ax2.set_title("Lift per Decile")
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.savefig(OUTPUT_DIR / "06_lift_gain_chart.png", dpi=150)
+    plt.close()
+
+    print(f"  Plots saved -> {OUTPUT_DIR}/  (6 charts)")
 
 
 # =========================================================================
-# SECTION 10 — MODEL SAVING & PREDICTION REPORT
+# SECTION 13 -- MODEL SAVING + model_card.json
 # =========================================================================
 def save_model(results: dict, best_model: str):
+    """
+    Save model artifacts:
+      churn_model.pkl     -- full scoring pipeline (imputer + model + calibrator)
+      model_card.json     -- machine-readable metadata for reproducibility
+    """
+    cal_entry     = results["_calibrated"]
     imputer       = results["_imputer"]
-    cal_entry     = results.get("_calibrated", {})
-    calibrated    = cal_entry.get("model", results[best_model]["model"])
     selected_cols = results.get("_selected_cols", FEATURE_COLS)
-    oot_auc       = cal_entry.get("oot_auc", results[best_model]["oot_auc"])
-    brier         = cal_entry.get("brier", None)
 
-    # The saved pipeline: impute full features → subset to selected → calibrated model
-    # At inference time, caller passes X_df[full FEATURE_COLS], pipeline handles the rest.
-    # We store imputer + selected indices so the dashboard can replicate scoring.
+    # Scoring pipeline -- three-step inference:
+    #   1.  X_imp  = imputer.transform(X_df[feature_cols])
+    #   2.  X_sel  = X_imp[:, sel_idx]                       (feature subset)
+    #   3.  probs  = calibrator.transform(
+    #                    model.predict_proba(X_sel)[:, 1])    (calibrated scores)
     artifact = {
         "imputer"      : imputer,
-        "calibrated"   : calibrated,
-        "feature_cols" : FEATURE_COLS,       # full 26-feature list (for imputation)
-        "selected_cols": selected_cols,      # subset used by the calibrated model
+        "model"        : cal_entry["model"],
+        "calibrator"   : cal_entry["calibrator"],
+        "feature_cols" : FEATURE_COLS,
+        "selected_cols": selected_cols,
+        "threshold"    : cal_entry["threshold"],
         "model_name"   : best_model,
         "cutoff_date"  : CUTOFF_DATE,
-        "oot_auc"      : oot_auc,
-        "brier_score"  : brier,
+        "oot_auc"      : cal_entry["oot_auc"],
+        "brier_score"  : cal_entry["brier"],
+        "ks_statistic" : cal_entry["ks_stat"],
+        "lift_at_20pct": cal_entry["lift_20"],
     }
     joblib.dump(artifact, OUTPUT_DIR / "churn_model.pkl")
-    print(f"  Model pipeline saved → {OUTPUT_DIR / 'churn_model.pkl'}")
-    print(f"  Load : obj = joblib.load('output/churn_model.pkl')")
-    print(f"  Score: X_imp = obj['imputer'].transform(X_df[obj['feature_cols']])")
-    print(f"         sel   = [obj['feature_cols'].index(c) for c in obj['selected_cols']]")
-    print(f"         probs = obj['calibrated'].predict_proba(X_imp[:, sel])[:, 1]")
+    print(f"  Model pipeline saved -> {OUTPUT_DIR / 'churn_model.pkl'}")
+    print(f"  Inference docs:")
+    print(f"    obj     = joblib.load('output/churn_model.pkl')")
+    print(f"    X_imp   = obj['imputer'].transform(X_df[obj['feature_cols']])")
+    print(f"    sel_idx = [obj['feature_cols'].index(c) for c in obj['selected_cols']]")
+    print(f"    raw_p   = obj['model'].predict_proba(X_imp[:, sel_idx])[:, 1]")
+    print(f"    probs   = obj['calibrator'].transform(raw_p)   # calibrated probabilities")
+    print(f"    pred    = (probs >= obj['threshold']).astype(int)")
+
+    # model_card.json -- NEW v4
+    cv_scores = results.get("_cv_scores", {})
+    card = {
+        "pipeline_version"  : "v4",
+        "trained_at"        : datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "model_name"        : best_model,
+        "calibration"       : "OOF isotonic regression",
+        "threshold"         : cal_entry["threshold"],
+        "threshold_metric"  : f"F-{FBETA_BETA:.0f} (OOF)",
+        "temporal_config"   : {
+            "reference_date"       : str(REFERENCE_DATE.date()),
+            "cutoff_date"          : str(CUTOFF_DATE.date()),
+            "oot_split_date"       : str(OOT_SPLIT_DATE.date()),
+            "cutoff_lookback_days" : CUTOFF_LOOKBACK_DAYS,
+            "oot_lookback_days"    : OOT_LOOKBACK_DAYS,
+            "min_observe_days"     : MIN_OBSERVE_DAYS,
+        },
+        "features"          : {
+            "total"   : len(FEATURE_COLS),
+            "selected": len(selected_cols),
+            "names"   : selected_cols,
+        },
+        "cv_results"        : cv_scores,
+        "oot_metrics"       : {
+            "auc"         : round(cal_entry["oot_auc"],  4),
+            "pr_auc"      : round(cal_entry["avg_pr"],   4),
+            "brier_score" : round(cal_entry["brier"],    4),
+            "ks_statistic": round(cal_entry["ks_stat"],  4),
+            "lift_at_20pct": round(cal_entry["lift_20"], 4),
+            "train_oot_gap": round(cal_entry["gap"],     4),
+        },
+        "anti_leakage_notes": [
+            "Features computed from data <= CUTOFF_DATE only",
+            "Labels derived from post-cutoff outcomes only",
+            "Model selection by 5-fold CV -- OOT never peeked during training",
+            "Calibration via OOF predictions -- OOT not used for calibration",
+            "Threshold set on OOF F-beta -- OOT purely for final reporting",
+        ],
+    }
+    with open(OUTPUT_DIR / "model_card.json", "w") as f:
+        json.dump(card, f, indent=2)
+    print(f"  Model card saved  -> {OUTPUT_DIR / 'model_card.json'}")
 
 
+# =========================================================================
+# SECTION 14 -- PREDICTION REPORT
+# =========================================================================
 def generate_predictions(
     df_oot: pd.DataFrame, results: dict, best_model: str, imputer
 ) -> pd.DataFrame:
-    cal_entry     = results.get("_calibrated", {})
-    bm            = cal_entry.get("model", results[best_model]["model"])
+    cal_entry     = results["_calibrated"]
+    final_model   = cal_entry["model"]
+    calibrator    = cal_entry["calibrator"]
     selected_cols = results.get("_selected_cols", FEATURE_COLS)
     sel_idx       = [FEATURE_COLS.index(c) for c in selected_cols]
-    X_full        = imputer.transform(df_oot[FEATURE_COLS])
-    X             = X_full[:, sel_idx]
+    threshold     = cal_entry["threshold"]
+
+    X_full = imputer.transform(df_oot[FEATURE_COLS])
+    X      = X_full[:, sel_idx]
 
     out = df_oot[[
         "acc_id", "expire",
@@ -1036,11 +1085,13 @@ def generate_predictions(
         "recency_days",
         "total_spend", "total_payments",
         "spend_decay_ratio", "tx_decay_ratio",
+        "missed_renewal_cycles",
         "churned",
     ]].copy()
 
-    out["churn_probability"] = bm.predict_proba(X)[:, 1]
-    out["churn_predicted"]   = (out["churn_probability"] >= 0.5).astype(int)
+    raw_probs              = final_model.predict_proba(X)[:, 1]
+    out["churn_probability"] = calibrator.transform(raw_probs)
+    out["churn_predicted"]   = (out["churn_probability"] >= threshold).astype(int)
     out["risk_tier"] = pd.cut(
         out["churn_probability"],
         bins   = [0, 0.30, 0.60, 1.0],
@@ -1050,93 +1101,100 @@ def generate_predictions(
     out = out.sort_values("churn_probability", ascending=False)
     out.to_csv(OUTPUT_DIR / "churn_predictions.csv", index=False)
 
-    print("\n" + "═" * 72)
-    print("  PREDICTION REPORT — Top 15 At-Risk Accounts (OOT Cohort)")
-    print("═" * 72)
+    # Decile gain table
+    gain_df = ml_utils.gain_table(
+        out["churned"].values, out["churn_probability"].values, n_bins=10
+    )
+    gain_df.to_csv(OUTPUT_DIR / "lift_gain_table.csv", index=False)
+
+    print("\n" + "=" * 72)
+    print(f"  PREDICTION REPORT  (threshold = {threshold:.2f})")
+    print("=" * 72)
+    print(f"  Top 15 At-Risk Accounts (OOT Cohort):")
     print(out.head(15).to_string(index=False))
     print("\n  Risk-Tier Summary:")
     print(out["risk_tier"].value_counts().to_string())
-    print(f"\n  Predictions saved → {OUTPUT_DIR / 'churn_predictions.csv'}")
+    print("\n  Cumulative Gain Table (top -> bottom decile):")
+    print(gain_df.to_string(index=False))
+    print(f"\n  Predictions saved -> {OUTPUT_DIR / 'churn_predictions.csv'}")
+    print(f"  Gain table saved  -> {OUTPUT_DIR / 'lift_gain_table.csv'}")
 
     return out
 
 
 # =========================================================================
-# MAIN PIPELINE
+# SECTION 15 -- MAIN PIPELINE
 # =========================================================================
 def main():
-    print("\n" + "═" * 72)
-    print("  Customer Churn Prediction Pipeline  v3")
-    print("  Anti-Leakage | OOT Validation | Feature Selection | Calibration | SHAP")
-    print(f"  Offsets : cutoff={CUTOFF_LOOKBACK_DAYS}d, OOT={OOT_LOOKBACK_DAYS}d"
-          f"  (dates computed from data)")
-    print("═" * 72)
+    print("\n" + "=" * 72)
+    print("  Customer Churn Prediction Pipeline  v4")
+    print("  Anti-Leakage | 5-Fold CV | OOF Calibration | Threshold Opt | SHAP")
+    print(f"  Offsets : cutoff={CUTOFF_LOOKBACK_DAYS}d, OOT={OOT_LOOKBACK_DAYS}d, "
+          f"min_observe={MIN_OBSERVE_DAYS}d  (dates auto-derived from data)")
+    print("=" * 72)
 
-    # [1] Load + auto-configure dates from data
-    print("\n  [1/7]  Loading data …")
+    # [1] Load + auto-configure temporal windows
+    print("\n  [1/7]  Loading data ...")
     users, payments = load_data()
     print(f"         Users    : {len(users):,}")
     print(f"         Payments : {len(payments):,}  "
-          f"({payments['payment_date'].min().date()} → "
+          f"({payments['payment_date'].min().date()} -> "
           f"{payments['payment_date'].max().date()})")
-    print("         Auto-configuring temporal windows from data …")
+    print("         Auto-configuring temporal windows ...")
     setup_temporal_config(payments, users)
 
-    # [2] Label — using only post-cutoff outcomes
-    print("\n  [2/7]  Labelling churn (post-cutoff outcomes, no leakage) …")
+    # [2] Churn labels (post-cutoff outcomes, MIN_OBSERVE_DAYS applied)
+    print("\n  [2/7]  Labelling churn ...")
     users_lbl = label_churn(users, payments)
     n_c = int(users_lbl["churned"].sum())
     print(f"         Churned  : {n_c} / {len(users_lbl)}"
           f"  ({n_c / len(users_lbl) * 100:.1f}%)")
     print(f"         Rule     : expire < {REFERENCE_DATE.date()}"
-          f" AND no payment after {CUTOFF_DATE.date()}")
+          f" AND no payment > {CUTOFF_DATE.date()}")
 
-    # [3] Feature engineering — strictly pre-cutoff
-    print("\n  [3/7]  Engineering behavioral features (pre-cutoff data only) …")
+    # [3] Feature engineering (all pre-cutoff, 3 new v4 features)
+    print("\n  [3/7]  Engineering behavioral features ...")
     df = engineer_features(users_lbl, payments)
-    print(f"         Feature matrix : {len(df):,} rows × {len(FEATURE_COLS)} features")
-    print(f"         Excluded (leaky): status, credit, credit_premium,")
-    print(f"                           credit_email, paid_email, expire (raw)")
+    print(f"         Feature matrix : {len(df):,} rows x {len(FEATURE_COLS)} features")
+    print(f"         New v4 features: payment_amount_std, missed_renewal_cycles, compound_risk")
 
     # [4] OOT split
-    print("\n  [4/7]  Applying Out-of-Time split …")
+    print("\n  [4/7]  Applying Out-of-Time split ...")
     df_train, df_oot = oot_split(df)
-    print(f"         Train  : {len(df_train):,} accounts"
-          f"  (churn {df_train['churned'].mean()*100:.1f}%)")
-    print(f"         OOT    : {len(df_oot):,} accounts"
-          f"  (churn {df_oot['churned'].mean()*100:.1f}%)")
+    print(f"         Train : {len(df_train):,}  (churn {df_train['churned'].mean()*100:.1f}%)")
+    print(f"         OOT   : {len(df_oot):,}  (churn {df_oot['churned'].mean()*100:.1f}%)")
 
-    # [5] Train & evaluate
-    print("\n  [5/7]  Training models on historical data, evaluating on OOT …")
+    # [5] Train (5-fold CV -> OOF calibration -> OOT evaluation)
+    print("\n  [5/7]  Training ...")
     results, best_model, imputer = train_and_evaluate(df_train, df_oot)
 
     # [6] SHAP
-    print("\n  [6/7]  Generating SHAP explanations …")
+    print("\n  [6/7]  Generating SHAP explanations ...")
     shap_data = generate_shap(results, best_model, df_oot, imputer)
 
-    # [7] Visualise + save
-    print("\n  [7/7]  Saving plots and artefacts …")
+    # [7] Plots + artifacts
+    print("\n  [7/7]  Saving plots and artifacts ...")
     plot_all(df_train, df_oot, results, best_model, shap_data)
     save_model(results, best_model)
     generate_predictions(df_oot, results, best_model, imputer)
 
-    # ── Summary ────────────────────────────────────────────────────────────
-    cal_entry     = results.get("_calibrated", results[best_model])
-    oot_auc       = cal_entry.get("oot_auc", results[best_model]["oot_auc"])
-    gap           = cal_entry.get("gap",     results[best_model]["gap"])
-    brier         = cal_entry.get("brier",   None)
-    selected_cols = results.get("_selected_cols", FEATURE_COLS)
-
-    print("\n" + "═" * 72)
-    print("  Pipeline v3 complete!")
-    print(f"  Best model  : {best_model} (Platt-calibrated)")
-    print(f"  Features    : {len(FEATURE_COLS)} → {len(selected_cols)} selected")
-    print(f"  OOT AUC     : {oot_auc:.4f}")
-    if brier is not None:
-        print(f"  Brier score : {brier:.4f}  (lower = better calibrated)")
-    print(f"  Train-OOT gap: {gap:+.4f}  "
-          f"({'OK — no overfitting' if abs(gap) < 0.10 else 'CHECK — gap too large'})")
-    print("═" * 72 + "\n")
+    # -- Final summary ------------------------------------------------------
+    cal    = results["_calibrated"]
+    sel    = results.get("_selected_cols", FEATURE_COLS)
+    print("\n" + "=" * 72)
+    print("  Pipeline v4 complete!")
+    print(f"  Best model     : {best_model}  (OOF-calibrated, isotonic)")
+    print(f"  Features       : {len(FEATURE_COLS)} total -> {len(sel)} selected")
+    print(f"  Threshold      : {cal['threshold']:.2f}  "
+          f"(F-{FBETA_BETA:.0f}-optimal on OOF predictions)")
+    print(f"  OOT AUC        : {cal['oot_auc']:.4f}")
+    print(f"  Brier score    : {cal['brier']:.4f}  (lower = better calibrated)")
+    print(f"  KS statistic   : {cal['ks_stat']:.4f}  (> 0.40 = good separation)")
+    print(f"  Lift @ top-20% : {cal['lift_20']:.2f}x  "
+          f"(top-20% contains {cal['lift_20']*20:.0f}% of all churners)")
+    print(f"  Train-OOT gap  : {cal['gap']:+.4f}  "
+          f"({'OK -- no overfitting' if abs(cal['gap']) < 0.10 else 'CHECK -- gap too large'})")
+    print("=" * 72 + "\n")
 
 
 if __name__ == "__main__":

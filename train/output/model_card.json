@@ -1,0 +1,76 @@
+{
+  "pipeline_version": "v4",
+  "trained_at": "2026-03-15 12:31:35",
+  "model_name": "HistGradientBoosting",
+  "calibration": "OOF isotonic regression",
+  "threshold": 0.05,
+  "threshold_metric": "F-2 (OOF)",
+  "temporal_config": {
+    "reference_date": "2026-03-09",
+    "cutoff_date": "2025-12-09",
+    "oot_split_date": "2025-09-10",
+    "cutoff_lookback_days": 90,
+    "oot_lookback_days": 90,
+    "min_observe_days": 21
+  },
+  "features": {
+    "total": 29,
+    "selected": 29,
+    "names": [
+      "account_age_at_cutoff",
+      "last_access_recency_at_cutoff",
+      "last_send_recency_at_cutoff",
+      "days_to_expire_at_cutoff",
+      "expired_at_cutoff",
+      "recency_days",
+      "total_payments",
+      "total_spend",
+      "avg_spend_per_tx",
+      "max_single_tx",
+      "last_payment_amount",
+      "downgraded",
+      "lifetime_value_per_day",
+      "total_sms_volume",
+      "avg_sms_per_tx",
+      "unique_products",
+      "credit_burn_rate",
+      "payment_span_days",
+      "avg_payment_gap_days",
+      "spend_recent_90d",
+      "spend_previous_90d",
+      "spend_decay_ratio",
+      "tx_count_recent_90d",
+      "tx_count_previous_90d",
+      "tx_decay_ratio",
+      "payment_amount_std",
+      "missed_renewal_cycles",
+      "compound_risk",
+      "dom_credit_enc"
+    ]
+  },
+  "cv_results": {
+    "HistGradientBoosting": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "Random Forest": {
+      "mean": 1.0,
+      "std": 4.965068306494546e-17
+    }
+  },
+  "oot_metrics": {
+    "auc": 1.0,
+    "pr_auc": 1.0,
+    "brier_score": 0.0029,
+    "ks_statistic": 1.0,
+    "lift_at_20pct": 1.2808,
+    "train_oot_gap": 0.0
+  },
+  "anti_leakage_notes": [
+    "Features computed from data <= CUTOFF_DATE only",
+    "Labels derived from post-cutoff outcomes only",
+    "Model selection by 5-fold CV -- OOT never peeked during training",
+    "Calibration via OOF predictions -- OOT not used for calibration",
+    "Threshold set on OOF F-beta -- OOT purely for final reporting"
+  ]
+}
