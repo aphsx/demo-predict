@@ -238,15 +238,6 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
       {/* Chat */}
       {run.status === "done" && (
         <section className="bg-white rounded-[16px] border border-gray-200 shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-3">
-            <div className="w-7 h-7 rounded-full bg-[#005AE2] flex items-center justify-center text-white text-[10px] font-bold">
-              AI
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Chat กับ AI เกี่ยวกับ Run นี้</h3>
-              <p className="text-[11px] text-gray-400">ถามอะไรก็ได้เกี่ยวกับข้อมูล {run.name}</p>
-            </div>
-          </div>
           <RunChat runId={run.id} runName={run.name} />
         </section>
       )}

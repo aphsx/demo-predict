@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const MAX_STORED_MESSAGES = 100;
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -22,6 +23,17 @@ const EXAMPLE_QUESTIONS = [
   "มีลูกค้าเครดิตหมดภายใน 7 วันกี่คน?",
   "ภาพรวม High Risk ทั้งหมดเป็นยังไง?",
 ];
+
+function storageKey(runId: number) {
+  return `chat_1moby_run_${runId}`;
+}
+
+function makeWelcome(runName: string): ChatMessage {
+  return {
+    role: "assistant",
+    content: `สวัสดีครับ! ผมพร้อมวิเคราะห์ข้อมูล **${runName}** ให้คุณแล้วครับ\n\nถามได้ทั้งข้อมูลลูกค้า, การ predict, หรือคำถามทั่วไปเกี่ยวกับระบบและบริษัทได้เลยครับ`,
+  };
+}
 
 function MarkdownMessage({ content }: { content: string }) {
   return (
@@ -68,18 +80,43 @@ function MarkdownMessage({ content }: { content: string }) {
 }
 
 export default function RunChat({ runId, runName }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      content: `สวัสดีครับ! ผมพร้อมวิเคราะห์ข้อมูล **${runName}** ให้คุณแล้วครับ\n\nถามได้ทั้งข้อมูลลูกค้า, การ predict, หรือคำถามทั่วไปเกี่ยวกับระบบและบริษัทได้เลยครับ`,
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([makeWelcome(runName)]);
+  const [hydrated,         setHydrated]         = useState(false);
   const [input,            setInput]            = useState("");
   const [loading,          setLoading]          = useState(false);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [sqlStatus,        setSqlStatus]        = useState<string | null>(null);
   const streamingRef = useRef("");
   const bottomRef    = useRef<HTMLDivElement>(null);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey(runId));
+      if (saved) {
+        const parsed: ChatMessage[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+    } catch { /* ignore corrupt storage */ }
+    setHydrated(true);
+  }, [runId]);
+
+  // Persist history whenever messages change (after hydration)
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const toStore = messages.slice(-MAX_STORED_MESSAGES);
+      localStorage.setItem(storageKey(runId), JSON.stringify(toStore));
+    } catch { /* ignore quota errors */ }
+  }, [messages, hydrated, runId]);
+
+  function clearChat() {
+    const fresh = [makeWelcome(runName)];
+    setMessages(fresh);
+    try { localStorage.removeItem(storageKey(runId)); } catch { /* ignore */ }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -96,6 +133,7 @@ export default function RunChat({ runId, runName }: Props) {
     setSqlStatus(null);
     setStreamingContent("");
     streamingRef.current = "";
+    let accumulated = "";  // local closure var — immune to ref timing issues
 
     try {
       const res = await fetch(`${API}/api/chat/stream`, {
@@ -109,34 +147,49 @@ export default function RunChat({ runId, runName }: Props) {
       const decoder = new TextDecoder();
       let buffer    = "";
 
+      const processSSE = (raw: string) => {
+        if (!raw.startsWith("data: ")) return;
+        try {
+          const data = JSON.parse(raw.slice(6));
+          if (data.t !== undefined) {
+            setSqlStatus(null);
+            accumulated += data.t;
+            streamingRef.current = accumulated;
+            setStreamingContent(accumulated);
+          } else if (data.sql) {
+            setSqlStatus("กำลังค้นหาข้อมูล...");
+          } else if (data.error) {
+            accumulated = data.error;
+            streamingRef.current = accumulated;
+            setStreamingContent(accumulated);
+          } else if (data.done) {
+            setMessages((prev) => [...prev, { role: "assistant", content: accumulated || "ขออภัย ไม่ได้รับคำตอบ" }]);
+            setStreamingContent(null);
+            accumulated = "";
+            streamingRef.current = "";
+          }
+        } catch { /* ignore malformed chunks */ }
+      };
+
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
-
+        if (done) {
+          // Flush decoder + process any remaining buffer
+          buffer += decoder.decode();
+          buffer.split("\n\n").forEach(processSSE);
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const parts = buffer.split("\n\n");
         buffer = parts.pop() ?? "";
+        parts.forEach(processSSE);
+      }
 
-        for (const part of parts) {
-          if (!part.startsWith("data: ")) continue;
-          try {
-            const data = JSON.parse(part.slice(6));
-            if (data.t !== undefined) {
-              setSqlStatus(null);
-              streamingRef.current += data.t;
-              setStreamingContent(streamingRef.current);
-            } else if (data.sql) {
-              setSqlStatus("กำลังค้นหาข้อมูล...");
-            } else if (data.error) {
-              streamingRef.current = data.error;
-              setStreamingContent(data.error);
-            } else if (data.done) {
-              setMessages((prev) => [...prev, { role: "assistant", content: streamingRef.current || "ขออภัย ไม่ได้รับคำตอบ" }]);
-              setStreamingContent(null);
-              streamingRef.current = "";
-            }
-          } catch { /* ignore malformed chunks */ }
-        }
+      // Safety net: stream ended without a done event
+      if (accumulated) {
+        setMessages((prev) => [...prev, { role: "assistant", content: accumulated }]);
+        setStreamingContent(null);
+        streamingRef.current = "";
       }
     } catch {
       setMessages((prev) => [
@@ -152,7 +205,30 @@ export default function RunChat({ runId, runName }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-[520px]">
+    <div className="flex flex-col h-[560px]">
+      {/* ── Header (Hostinger-style) ── */}
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 bg-white">
+        <div className="w-8 h-8 rounded-full bg-[#005AE2] flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
+          AI
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-gray-900 leading-tight truncate">1MOBY AI Assistant</p>
+          <p className="text-[11px] text-gray-400 leading-tight truncate">{runName}</p>
+        </div>
+        {/* New Chat button — Hostinger style */}
+        <button
+          onClick={clearChat}
+          disabled={loading}
+          title="เริ่มบทสนทนาใหม่"
+          className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 hover:text-[#005AE2] disabled:opacity-40 disabled:cursor-not-allowed transition-colors px-2 py-1.5 rounded-lg hover:bg-blue-50"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+          <span className="hidden sm:inline">New Chat</span>
+        </button>
+      </div>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
         {messages.map((msg, i) => (

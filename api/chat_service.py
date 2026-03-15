@@ -158,7 +158,7 @@ async def chat(
                 sql_blocks = parse_sql_blocks(reply)
 
                 if not sql_blocks:
-                    return {"reply": reply, "sql_executed": sql_executed}
+                    return {"reply": _strip_thinking(reply) or reply, "sql_executed": sql_executed}
 
                 # มี SQL — execute แล้วส่งผลกลับ
                 messages.append({"role": "assistant", "content": reply})
@@ -192,6 +192,12 @@ async def chat(
 # ─────────────────────────────────────────────────────────────
 # Streaming (SSE)
 # ─────────────────────────────────────────────────────────────
+
+def _strip_thinking(text: str) -> str:
+    """Remove <think>...</think> blocks (Qwen3 / DeepSeek thinking models)."""
+    import re as _re
+    return _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL | _re.IGNORECASE).strip()
+
 
 def _chunk_text(text: str, size: int = 4) -> list[str]:
     return [text[i:i + size] for i in range(0, len(text), size)]
@@ -232,8 +238,9 @@ async def chat_stream(
                 sql_blocks = parse_sql_blocks(reply)
 
                 if not sql_blocks:
-                    # Stream final answer in small chunks
-                    for chunk in _chunk_text(reply):
+                    # Strip thinking tags (Qwen3 / DeepSeek), stream final answer
+                    clean_reply = _strip_thinking(reply) or reply
+                    for chunk in _chunk_text(clean_reply):
                         yield sse({"t": chunk})
                         await asyncio.sleep(0.008)
                     yield sse({"done": True, "sql_executed": sql_executed})
