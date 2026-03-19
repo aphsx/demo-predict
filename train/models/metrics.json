@@ -1,0 +1,66 @@
+{
+  "generated_at": "2026-03-19T09:21:18.354468",
+  "cutoff": "2025-07-01",
+  "population": {
+    "total_customers": 25093,
+    "active_customers": 4362,
+    "already_churned": 20731
+  },
+  "churn_model": {
+    "auc": 0.9431,
+    "f1": 0.7778,
+    "precision": 0.7955,
+    "recall": 0.7609,
+    "auc_without_leak_suspects": 1.0,
+    "auc_drop_leakage_test": -0.0551
+  },
+  "churn_competition": {
+    "Logistic Regression": {
+      "auc": 0.8873,
+      "f1": 0.6609,
+      "precision": 0.7125,
+      "recall": 0.6162
+    },
+    "Random Forest": {
+      "auc": 0.9183,
+      "f1": 0.7439,
+      "precision": 0.7419,
+      "recall": 0.7459
+    },
+    "XGBoost": {
+      "auc": 0.9163,
+      "f1": 0.72,
+      "precision": 0.7105,
+      "recall": 0.7297
+    },
+    "LightGBM": {
+      "auc": 0.9244,
+      "f1": 0.7366,
+      "precision": 0.7326,
+      "recall": 0.7405
+    }
+  },
+  "clv_model": {
+    "spearman": 0.7712,
+    "top_decile_lift": 0.6447,
+    "mae": 140510.28,
+    "medae": 21919.33,
+    "avg_p_alive": 0.5421,
+    "avg_clv_6m": 112880.41,
+    "median_clv_6m": 10339.23,
+    "coverage_95": 0.9303,
+    "coverage_80": 0.7909
+  },
+  "credit_model": {
+    "p50_mae": 33.27,
+    "p50_medae": 9.27,
+    "p50_r2": 0.4032,
+    "xgb_baseline_mae": 34.86,
+    "coverage_p10_p90_before": 0.7537,
+    "coverage_p10_p90_after": 0.8031,
+    "coverage_p25_p75_before": 0.4588,
+    "coverage_p25_p75_after": 0.5022,
+    "conformal_mult_80": 1.05,
+    "conformal_mult_50": 1.08
+  }
+}
