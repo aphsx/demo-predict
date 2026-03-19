@@ -18,18 +18,20 @@ env/
 *.ipynb
 
 # ── ML Models & Large Files ───────────────────────────────
-# !! โมเดลไม่ควร commit เพราะไฟล์ใหญ่
-# ถ้าอยากเก็บให้ใช้ Git LFS แทน
-train/output/*.h5
-train/output/*.pkl
+# โมเดล .pkl ไฟล์ใหญ่ - ใช้ Git LFS ถ้าต้องการ commit
+ml/models/*.pkl
+ml/models/*.h5
+ml/models/*.png
 
-# churn_predictions.csv ควร commit ได้ (เป็นผลลัพธ์)
-# ถ้าไม่ต้องการให้ uncomment บรรทัดนี้:
-# train/output/*.csv
+# ── ML Data ───────────────────────────────────────────────
+# ข้อมูล Excel input ไม่ควร commit
+ml/data/
 
 # ── Node.js / Next.js ─────────────────────────────────────
 node_modules/
+web/node_modules/
 .next/
+web/.next/
 out/
 .vercel/
 npm-debug.log*
@@ -51,3 +53,6 @@ desktop.ini
 # ── Logs ──────────────────────────────────────────────────
 *.log
 logs/
+
+# ── Secrets ───────────────────────────────────────────────
+.env

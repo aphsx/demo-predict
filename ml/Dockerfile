@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# สร้าง directories
+# สร้าง directories สำหรับ artifacts
 RUN mkdir -p data models
 
 EXPOSE 8000

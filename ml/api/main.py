@@ -1,14 +1,14 @@
 """
-Churn CRM — FastAPI Backend
+Churn CRM â€” FastAPI Backend
 Endpoints:
-  GET  /api/stats                → KPI summary (incl. revenue_at_risk)
-  GET  /api/predictions          → all customers with churn data
-  GET  /api/predictions/{acc_id} → single customer detail + key_reason
-  GET  /api/top-risk             → top N at-risk accounts
-  GET  /api/export               → download CSV of filtered predictions
-  GET  /api/model-info           → model metadata + feature importance
-  GET  /api/explain/{acc_id}     → SHAP values for a customer
-  POST /api/predict              → score a new customer record live
+  GET  /api/stats                â†’ KPI summary (incl. revenue_at_risk)
+  GET  /api/predictions          â†’ all customers with churn data
+  GET  /api/predictions/{acc_id} â†’ single customer detail + key_reason
+  GET  /api/top-risk             â†’ top N at-risk accounts
+  GET  /api/export               â†’ download CSV of filtered predictions
+  GET  /api/model-info           â†’ model metadata + feature importance
+  GET  /api/explain/{acc_id}     â†’ SHAP values for a customer
+  POST /api/predict              â†’ score a new customer record live
 """
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
@@ -39,21 +39,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Paths ─────────────────────────────────────────────────
-BASE_DIR    = Path(__file__).parent.parent
-TRAIN_DIR   = BASE_DIR / "train"
-USERS_CSV   = TRAIN_DIR / "data" / "sample_users.csv"   # kept as fallback only
-PAY_CSV     = TRAIN_DIR / "data" / "sample_payments.csv" # kept as fallback only
-MODEL_PKL   = TRAIN_DIR / "output" / "churn_model.pkl"
-SHAP_PKL    = TRAIN_DIR / "output" / "shap_explainer.pkl"
+# â”€â”€ Paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+BASE_DIR   = Path(__file__).parent.parent.parent
+ML_DIR     = Path(__file__).parent.parent
+USERS_CSV    = ML_DIR / "data" / "sample_users.csv"   # kept as fallback only
+PAY_CSV      = ML_DIR / "data" / "sample_payments.csv" # kept as fallback only
+MODEL_PKL    = ML_DIR / "models" / "churn_model.pkl"
+SHAP_PKL     = ML_DIR / "models" / "shap_explainer.pkl"
 
-# ── DB DSN (asyncpg native, no +asyncpg prefix) ───────────
+# â”€â”€ DB DSN (asyncpg native, no +asyncpg prefix) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _DB_DSN = os.getenv(
     "DATABASE_URL_ASYNCPG",
     "postgresql://crm_user:crm_secret@localhost:5432/churn_crm",
 )
 
-# ── Feature columns (must match training order) ───────────
+# â”€â”€ Feature columns (must match training order) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 FEATURE_COLS = [
     # A. Account lifecycle
     "account_age_at_cutoff",
@@ -125,9 +125,9 @@ import sys
 sys.modules['__main__'].PlattCalibrated = PlattCalibrated
 
 
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # HELPER FUNCTIONS
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def risk_label(prob: float) -> str:
     if prob >= 0.6:  return "High"
@@ -160,51 +160,51 @@ def _risk_factor(row: pd.Series) -> str:
     decay = row.get("spend_decay_ratio", 1.0)
 
     if days_expire < 0:
-        reasons.append("เครดิตหมดอายุแล้ว")
+        reasons.append("à¹€à¸„à¸£à¸”à¸´à¸•à¸«à¸¡à¸”à¸­à¸²à¸¢à¸¸à¹à¸¥à¹‰à¸§")
     elif days_expire < 7:
-        reasons.append(f"เครดิตจะหมดใน {int(days_expire)} วัน")
+        reasons.append(f"à¹€à¸„à¸£à¸”à¸´à¸•à¸ˆà¸°à¸«à¸¡à¸”à¹ƒà¸™ {int(days_expire)} à¸§à¸±à¸™")
 
     if days_inactive > 90:
-        reasons.append(f"ไม่ใช้งาน {int(days_inactive)} วัน")
+        reasons.append(f"à¹„à¸¡à¹ˆà¹ƒà¸Šà¹‰à¸‡à¸²à¸™ {int(days_inactive)} à¸§à¸±à¸™")
     elif days_inactive > 30:
-        reasons.append(f"ใช้งานน้อยลง ({int(days_inactive)} วัน)")
+        reasons.append(f"à¹ƒà¸Šà¹‰à¸‡à¸²à¸™à¸™à¹‰à¸­à¸¢à¸¥à¸‡ ({int(days_inactive)} à¸§à¸±à¸™)")
 
     if downgraded == 1:
         reasons.append("Downgrade Package")
 
     if recency_days > 90:
-        reasons.append("ไม่เติมเครดิต > 90 วัน")
+        reasons.append("à¹„à¸¡à¹ˆà¹€à¸•à¸´à¸¡à¹€à¸„à¸£à¸”à¸´à¸• > 90 à¸§à¸±à¸™")
     
     if decay < 0.5:
-        reasons.append("ยอดซื้อลดลงมาก")
+        reasons.append("à¸¢à¸­à¸”à¸‹à¸·à¹‰à¸­à¸¥à¸”à¸¥à¸‡à¸¡à¸²à¸")
 
     if total_pay == 0:
-        reasons.append("ยังไม่เคยซื้อเครดิต")
+        reasons.append("à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¹€à¸„à¸¢à¸‹à¸·à¹‰à¸­à¹€à¸„à¸£à¸”à¸´à¸•")
 
-    return " · ".join(reasons) if reasons else "ปกติ"
+    return " Â· ".join(reasons) if reasons else "à¸›à¸à¸•à¸´"
 
 
 def _recommended_action(prob: float, rfm_seg: str) -> str:
     """Return recommended retention action based on churn probability and RFM segment."""
     if prob >= 0.6:
         if rfm_seg in ("Champions", "Loyal"):
-            return "โทรสอบถามปัญหาการใช้งานทันที"
-        return "โทรสอบถาม / Call Retention"
+            return "à¹‚à¸—à¸£à¸ªà¸­à¸šà¸–à¸²à¸¡à¸›à¸±à¸à¸«à¸²à¸à¸²à¸£à¹ƒà¸Šà¹‰à¸‡à¸²à¸™à¸—à¸±à¸™à¸—à¸µ"
+        return "à¹‚à¸—à¸£à¸ªà¸­à¸šà¸–à¸²à¸¡ / Call Retention"
     if prob >= 0.3:
-        return "ส่ง SMS/Email ข้อเสนอพิเศษ"
-    return "ติดตาม Newsletter รายเดือน"
+        return "à¸ªà¹ˆà¸‡ SMS/Email à¸‚à¹‰à¸­à¹€à¸ªà¸™à¸­à¸žà¸´à¹€à¸¨à¸©"
+    return "à¸•à¸´à¸”à¸•à¸²à¸¡ Newsletter à¸£à¸²à¸¢à¹€à¸”à¸·à¸­à¸™"
 
 
 _FEAT_LABEL = {
-    "last_access_recency_at_cutoff": ("ไม่ใช้งานมาแล้ว",     "วัน"),
-    "days_to_expire_at_cutoff":      ("เครดิตหมดอายุในอีก",  "วัน"),
-    "recency_days":                  ("ไม่เติมเครดิตมาแล้ว", "วัน"),
-    "avg_payment_gap_days":          ("ช่วงห่างการซื้อเฉลี่ย","วัน"),
-    "total_payments":                ("ซื้อเครดิตทั้งหมด",   "ครั้ง"),
-    "total_spend":                   ("ยอดซื้อรวม ฿",        ""),
+    "last_access_recency_at_cutoff": ("à¹„à¸¡à¹ˆà¹ƒà¸Šà¹‰à¸‡à¸²à¸™à¸¡à¸²à¹à¸¥à¹‰à¸§",     "à¸§à¸±à¸™"),
+    "days_to_expire_at_cutoff":      ("à¹€à¸„à¸£à¸”à¸´à¸•à¸«à¸¡à¸”à¸­à¸²à¸¢à¸¸à¹ƒà¸™à¸­à¸µà¸",  "à¸§à¸±à¸™"),
+    "recency_days":                  ("à¹„à¸¡à¹ˆà¹€à¸•à¸´à¸¡à¹€à¸„à¸£à¸”à¸´à¸•à¸¡à¸²à¹à¸¥à¹‰à¸§", "à¸§à¸±à¸™"),
+    "avg_payment_gap_days":          ("à¸Šà¹ˆà¸§à¸‡à¸«à¹ˆà¸²à¸‡à¸à¸²à¸£à¸‹à¸·à¹‰à¸­à¹€à¸‰à¸¥à¸µà¹ˆà¸¢","à¸§à¸±à¸™"),
+    "total_payments":                ("à¸‹à¸·à¹‰à¸­à¹€à¸„à¸£à¸”à¸´à¸•à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”",   "à¸„à¸£à¸±à¹‰à¸‡"),
+    "total_spend":                   ("à¸¢à¸­à¸”à¸‹à¸·à¹‰à¸­à¸£à¸§à¸¡ à¸¿",        ""),
     "downgraded":                    ("Downgrade Package",    ""),
-    "account_age_at_cutoff":         ("อายุบัญชี",            "วัน"),
-    "spend_decay_ratio":             ("อัตราการซื้อลดลง",      ""),
+    "account_age_at_cutoff":         ("à¸­à¸²à¸¢à¸¸à¸šà¸±à¸à¸Šà¸µ",            "à¸§à¸±à¸™"),
+    "spend_decay_ratio":             ("à¸­à¸±à¸•à¸£à¸²à¸à¸²à¸£à¸‹à¸·à¹‰à¸­à¸¥à¸”à¸¥à¸‡",      ""),
 }
 
 
@@ -219,7 +219,7 @@ def _key_reason_from_shap(shap_vals_row: np.ndarray) -> str:
             continue
         label, unit = _FEAT_LABEL.get(feat, (feat, ""))
         reasons.append(f"{label}" + (f" {unit}" if unit else ""))
-    return " | ".join(reasons) if reasons else "ปกติ"
+    return " | ".join(reasons) if reasons else "à¸›à¸à¸•à¸´"
 
 
 def _compute_auc() -> float | None:
@@ -240,7 +240,7 @@ def df_to_records(df: pd.DataFrame) -> list[dict]:
     return json.loads(df.to_json(orient="records"))
 
 
-# ── Feature engineering (mirrors train/churn_model.py v3) ────
+# â”€â”€ Feature engineering (mirrors train/churn_model.py v3) â”€â”€â”€â”€
 def _build_features(users_df: pd.DataFrame = None, pays_df: pd.DataFrame = None) -> pd.DataFrame:
     """Engineer features v3 from DataFrames (or fall back to CSV files)."""
     if users_df is None:
@@ -261,7 +261,7 @@ def _build_features(users_df: pd.DataFrame = None, pays_df: pd.DataFrame = None)
 
     df = users.copy()
     
-    # ── 4.A Account lifecycle features
+    # â”€â”€ 4.A Account lifecycle features
     df["account_age_at_cutoff"] = (ref - df["join_date"]).dt.days.clip(lower=0)
     
     # In the API (inference), we use the actual last dates (no clipping needed like in training)
@@ -270,7 +270,7 @@ def _build_features(users_df: pd.DataFrame = None, pays_df: pd.DataFrame = None)
     df["days_to_expire_at_cutoff"]      = (df["expire"] - ref).dt.days.clip(-365, 365)
     df["expired_at_cutoff"]             = (df["days_to_expire_at_cutoff"] < 0).astype(int)
 
-    # ── 4.B RFM base aggregations
+    # â”€â”€ 4.B RFM base aggregations
     rfm = pays.groupby("acc_id").agg(
         total_payments   = ("payment_date", "count"),
         total_spend      = ("amount",        "sum"),
@@ -291,7 +291,7 @@ def _build_features(users_df: pd.DataFrame = None, pays_df: pd.DataFrame = None)
     rfm["credit_burn_rate"] = rfm["total_sms_volume"] / rfm["payment_span_days"].clip(lower=1)
     rfm.drop(["_first_pay_date", "_last_pay_date"], axis=1, inplace=True)
 
-    # ── 4.G Usage Decay
+    # â”€â”€ 4.G Usage Decay
     short_start = ref - pd.Timedelta(days=DECAY_SHORT_DAYS)
     long_start  = ref - pd.Timedelta(days=DECAY_LONG_DAYS)
 
@@ -307,22 +307,22 @@ def _build_features(users_df: pd.DataFrame = None, pays_df: pd.DataFrame = None)
         tx_count_previous_90d = ("payment_date", "count"),
     ).reset_index()
 
-    # ── 4.C Last payment amount
+    # â”€â”€ 4.C Last payment amount
     last_pay = pays.sort_values("payment_date").groupby("acc_id")["amount"].last().rename("last_payment_amount").reset_index()
 
-    # ── 4.I Dominant credit type
+    # â”€â”€ 4.I Dominant credit type
     dom_credit = pays.groupby("acc_id")["credit_type"].agg(
         lambda x: x.mode().iloc[0] if not x.empty else "Unknown"
     ).rename("dominant_credit_type").reset_index()
 
-    # ── Merge
+    # â”€â”€ Merge
     df = df.merge(rfm, on="acc_id", how="left") \
            .merge(recent_agg, on="acc_id", how="left") \
            .merge(previous_agg, on="acc_id", how="left") \
            .merge(last_pay, on="acc_id", how="left") \
            .merge(dom_credit, on="acc_id", how="left")
 
-    # ── Fill NaNs
+    # â”€â”€ Fill NaNs
     _zero_fill = [
         "total_payments", "total_spend", "avg_spend_per_tx", "max_single_tx",
         "total_sms_volume", "avg_sms_per_tx", "unique_products",
@@ -338,13 +338,13 @@ def _build_features(users_df: pd.DataFrame = None, pays_df: pd.DataFrame = None)
     no_pay = df["total_payments"] == 0
     df.loc[no_pay, "recency_days"] = df.loc[no_pay, "account_age_at_cutoff"]
 
-    # ── Composite
+    # â”€â”€ Composite
     df["spend_decay_ratio"] = df["spend_recent_90d"] / (df["spend_previous_90d"] + 1)
     df["tx_decay_ratio"]    = df["tx_count_recent_90d"] / (df["tx_count_previous_90d"] + 1)
     df["downgraded"]        = ((df["last_payment_amount"] > 0) & (df["last_payment_amount"] < df["avg_spend_per_tx"])).astype(int)
     df["lifetime_value_per_day"] = df["total_spend"] / df["account_age_at_cutoff"].clip(lower=1)
 
-    # ── Encoded (Mocking LabelEncoder results from training for consistency)
+    # â”€â”€ Encoded (Mocking LabelEncoder results from training for consistency)
     # Trial status usually = 1 in most LEs if only Trial/Active exist
     df["status_enc"] = (df["status"].str.lower() == "trial").astype(int)
     # dom_credit_enc: we'll use a fixed map if we don't have the original LE
@@ -360,7 +360,7 @@ def _build_features(users_df: pd.DataFrame = None, pays_df: pd.DataFrame = None)
     return df
 
 
-# ── In-memory state ──────────────────────────────────────
+# â”€â”€ In-memory state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _predictions: pd.DataFrame = pd.DataFrame()
 _model_obj = None  # Contains imputer, calibrated, feature_cols, selected_cols
 _shap_explainer = None
@@ -368,9 +368,9 @@ _feature_importance: dict = {}
 _active_run_id: int | None = None  # kept in memory; source of truth is DB
 
 
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # DB HELPERS
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 async def _load_dfs_from_db() -> tuple[pd.DataFrame, pd.DataFrame]:
     """Read customers + payments from PostgreSQL, return as DataFrames."""
@@ -510,7 +510,7 @@ _PRED_CACHE_COLS = [
 
 
 async def _rebuild_predictions() -> int:
-    """Read from DB → feature engineering → ML → save to DB + update memory cache."""
+    """Read from DB â†’ feature engineering â†’ ML â†’ save to DB + update memory cache."""
     global _predictions
     if _model_obj is None:
         return 0
@@ -602,9 +602,9 @@ async def load_assets():
     print("[OK] Assets loaded")
 
 
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # GET /api/stats
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/stats")
 def get_stats():
     if _predictions.empty:
@@ -643,9 +643,9 @@ def get_stats():
     }
 
 
-# ══════════════════════════════════════════════════════════
-# GET /api/churn-trend  — monthly churn rate by join cohort
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# GET /api/churn-trend  â€” monthly churn rate by join cohort
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/churn-trend")
 def churn_trend():
     if _predictions.empty:
@@ -666,9 +666,9 @@ def churn_trend():
     ]
 
 
-# ══════════════════════════════════════════════════════════
-# GET /api/retention-trend  — monthly churned vs retained
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# GET /api/retention-trend  â€” monthly churned vs retained
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/retention-trend")
 def retention_trend():
     if _predictions.empty:
@@ -689,9 +689,9 @@ def retention_trend():
     ]
 
 
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # GET /api/predictions
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/predictions")
 def get_predictions(
     risk: Optional[str] = None,
@@ -734,9 +734,9 @@ def get_predictions(
     }
 
 
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # GET /api/predictions/{acc_id}
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/predictions/{acc_id}")
 async def get_customer(acc_id: str):
     if _predictions.empty:
@@ -769,9 +769,9 @@ async def get_customer(acc_id: str):
     return record
 
 
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # GET /api/top-risk
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/top-risk")
 def top_risk(n: int = 10):
     if _predictions.empty:
@@ -781,9 +781,9 @@ def top_risk(n: int = 10):
     return df_to_records(top)
 
 
-# ══════════════════════════════════════════════════════════
-# GET /api/export  — download filtered predictions as CSV
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# GET /api/export  â€” download filtered predictions as CSV
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/export")
 def export_csv(
     risk: Optional[str] = None,
@@ -831,9 +831,9 @@ def export_csv(
     )
 
 
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # GET /api/model-info
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/model-info")
 def model_info():
     calibrated = _model_obj.get("calibrated") if _model_obj else None
@@ -855,9 +855,9 @@ def model_info():
     }
 
 
-# ══════════════════════════════════════════════════════════
-# POST /api/predict  — live prediction via .pkl model
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# POST /api/predict  â€” live prediction via .pkl model
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 class PredictRequest(BaseModel):
     status: str
     credit: str
@@ -880,7 +880,7 @@ class PredictRequest(BaseModel):
 @app.post("/api/predict")
 def predict(req: PredictRequest):
     if _model_obj is None:
-        raise HTTPException(503, "Model not loaded — run churn_model.py first")
+        raise HTTPException(503, "Model not loaded â€” run churn_model.py first")
 
     # This endpoint mimics the v3 feature engineering for a single record
     # Since v3 uses complex decay features, we'll use a simplified version for live hits
@@ -952,9 +952,9 @@ def predict(req: PredictRequest):
     }
 
 
-# ══════════════════════════════════════════════════════════
-# GET /api/explain/{acc_id}  — SHAP explanation per customer
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# GET /api/explain/{acc_id}  â€” SHAP explanation per customer
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.get("/api/explain/{acc_id}")
 def explain_customer(acc_id: str):
     if _predictions.empty:
@@ -998,9 +998,9 @@ def explain_customer(acc_id: str):
     }
 
 
-# ══════════════════════════════════════════════════════════
-# POST /api/chat  — AI Chatbot (Qwen via Ollama + PostgreSQL)
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# POST /api/chat  â€” AI Chatbot (Qwen via Ollama + PostgreSQL)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 from chat_service import chat as _chat_service
 
 class ChatRequest(BaseModel):
@@ -1012,17 +1012,17 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest):
     """
-    AI chatbot endpoint — Text-to-SQL (LLM เขียน SQL เองตามคำถาม)
+    AI chatbot endpoint â€” Text-to-SQL (LLM à¹€à¸‚à¸µà¸¢à¸™ SQL à¹€à¸­à¸‡à¸•à¸²à¸¡à¸„à¸³à¸–à¸²à¸¡)
 
     Body:
-        message  — คำถามจากผู้ใช้ (ภาษาไทยหรืออังกฤษ)
-        history  — list of {role, content} บทสนทนาย้อนหลัง
-        run_id   — ID ของ Prediction Run (optional)
-        run_name — ชื่อ Prediction Run (optional)
+        message  â€” à¸„à¸³à¸–à¸²à¸¡à¸ˆà¸²à¸à¸œà¸¹à¹‰à¹ƒà¸Šà¹‰ (à¸ à¸²à¸©à¸²à¹„à¸—à¸¢à¸«à¸£à¸·à¸­à¸­à¸±à¸‡à¸à¸¤à¸©)
+        history  â€” list of {role, content} à¸šà¸—à¸ªà¸™à¸—à¸™à¸²à¸¢à¹‰à¸­à¸™à¸«à¸¥à¸±à¸‡
+        run_id   â€” ID à¸‚à¸­à¸‡ Prediction Run (optional)
+        run_name â€” à¸Šà¸·à¹ˆà¸­ Prediction Run (optional)
 
     Returns:
-        reply        — คำตอบภาษาไทย
-        sql_executed — SQL ที่ LLM สร้างและรันจริง
+        reply        â€” à¸„à¸³à¸•à¸­à¸šà¸ à¸²à¸©à¸²à¹„à¸—à¸¢
+        sql_executed â€” SQL à¸—à¸µà¹ˆ LLM à¸ªà¸£à¹‰à¸²à¸‡à¹à¸¥à¸°à¸£à¸±à¸™à¸ˆà¸£à¸´à¸‡
     """
     if not req.message.strip():
         raise HTTPException(400, "message cannot be empty")
@@ -1039,19 +1039,19 @@ async def api_chat(req: ChatRequest):
 
 
 
-# ══════════════════════════════════════════════════════════
-# POST /api/import-csv  — upload users or payments CSV → PostgreSQL
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# POST /api/import-csv  â€” upload users or payments CSV â†’ PostgreSQL
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 @app.post("/api/import-csv")
 async def import_csv(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(400, "กรุณาอัปโหลดไฟล์ .csv เท่านั้น")
+        raise HTTPException(400, "à¸à¸£à¸¸à¸“à¸²à¸­à¸±à¸›à¹‚à¸«à¸¥à¸”à¹„à¸Ÿà¸¥à¹Œ .csv à¹€à¸—à¹ˆà¸²à¸™à¸±à¹‰à¸™")
 
     content = await file.read()
     try:
         df = pd.read_csv(io.BytesIO(content))
     except Exception as e:
-        raise HTTPException(400, f"ไม่สามารถอ่านไฟล์ CSV ได้: {e}")
+        raise HTTPException(400, f"à¹„à¸¡à¹ˆà¸ªà¸²à¸¡à¸²à¸£à¸–à¸­à¹ˆà¸²à¸™à¹„à¸Ÿà¸¥à¹Œ CSV à¹„à¸”à¹‰: {e}")
 
     cols = set(df.columns.str.lower())
     if "acc_id" in cols and "payment_date" in cols:
@@ -1061,10 +1061,10 @@ async def import_csv(file: UploadFile = File(...)):
     else:
         raise HTTPException(
             400,
-            "ไม่รู้จักรูปแบบไฟล์ — ต้องมีคอลัมน์ acc_id และ (payment_date สำหรับ payments / join_date สำหรับ users)"
+            "à¹„à¸¡à¹ˆà¸£à¸¹à¹‰à¸ˆà¸±à¸à¸£à¸¹à¸›à¹à¸šà¸šà¹„à¸Ÿà¸¥à¹Œ â€” à¸•à¹‰à¸­à¸‡à¸¡à¸µà¸„à¸­à¸¥à¸±à¸¡à¸™à¹Œ acc_id à¹à¸¥à¸° (payment_date à¸ªà¸³à¸«à¸£à¸±à¸š payments / join_date à¸ªà¸³à¸«à¸£à¸±à¸š users)"
         )
 
-    # ── Upsert into PostgreSQL ────────────────────────────
+    # â”€â”€ Upsert into PostgreSQL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     conn = await asyncpg.connect(_DB_DSN)
     try:
         if kind == "users":
@@ -1117,7 +1117,7 @@ async def import_csv(file: UploadFile = File(...)):
             if not cust_count:
                 raise HTTPException(
                     400,
-                    "กรุณา import Users CSV ก่อน — ยังไม่มีข้อมูล customers ใน database"
+                    "à¸à¸£à¸¸à¸“à¸² import Users CSV à¸à¹ˆà¸­à¸™ â€” à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸‚à¹‰à¸­à¸¡à¸¹à¸¥ customers à¹ƒà¸™ database"
                 )
 
             df["payment_date"] = pd.to_datetime(df["payment_date"], errors="coerce")
@@ -1148,7 +1148,7 @@ async def import_csv(file: UploadFile = File(...)):
     finally:
         await conn.close()
 
-    # ── Update active run upload flags in DB ──────────────
+    # â”€â”€ Update active run upload flags in DB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if _active_run_id is not None:
         col_flag = "users_uploaded" if kind == "users" else "payments_uploaded"
         async with AsyncSessionLocal() as db:
@@ -1158,7 +1158,7 @@ async def import_csv(file: UploadFile = File(...)):
             )
             await db.commit()
 
-    # ── Check if both tables have data → rebuild predictions ──
+    # â”€â”€ Check if both tables have data â†’ rebuild predictions â”€â”€
     rebuilt = 0
     async with AsyncSessionLocal() as db:
         c_count = (await db.execute(text("SELECT COUNT(*) FROM customers"))).scalar()
@@ -1176,11 +1176,11 @@ async def import_csv(file: UploadFile = File(...)):
                         {"rid": _active_run_id},
                     )
                     await db.commit()
-            raise HTTPException(500, f"การคำนวณ predictions ล้มเหลว: {e}")
+            raise HTTPException(500, f"à¸à¸²à¸£à¸„à¸³à¸™à¸§à¸“ predictions à¸¥à¹‰à¸¡à¹€à¸«à¸¥à¸§: {e}")
 
         # If both files uploaded but rebuilt=0, mark as error (e.g. model not loaded)
         if rebuilt == 0 and _active_run_id is not None:
-            reason = "โมเดลยังไม่ได้ train — กรุณารัน churn_model.py ก่อน" if _model_obj is None else "ไม่สามารถคำนวณ predictions ได้"
+            reason = "à¹‚à¸¡à¹€à¸”à¸¥à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¹„à¸”à¹‰ train â€” à¸à¸£à¸¸à¸“à¸²à¸£à¸±à¸™ churn_model.py à¸à¹ˆà¸­à¸™" if _model_obj is None else "à¹„à¸¡à¹ˆà¸ªà¸²à¸¡à¸²à¸£à¸–à¸„à¸³à¸™à¸§à¸“ predictions à¹„à¸”à¹‰"
             print(f"[WARN] rebuild returned 0: {reason}")
             async with AsyncSessionLocal() as db:
                 await db.execute(
@@ -1190,7 +1190,7 @@ async def import_csv(file: UploadFile = File(...)):
                 await db.commit()
             raise HTTPException(500, reason)
 
-    # ── Mark run as done ─────────────────────────────────
+    # â”€â”€ Mark run as done â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if rebuilt > 0 and _active_run_id is not None:
         async with AsyncSessionLocal() as db:
             await db.execute(
@@ -1206,9 +1206,9 @@ async def import_csv(file: UploadFile = File(...)):
     inserted = len(rows)
     skipped  = len(df) - inserted if kind == "payments" else 0
     return {
-        "message": f"Import {kind} สำเร็จ {inserted:,} แถว ({file.filename})"
-                   + (f" (ข้าม {skipped:,} แถวที่ไม่มี customer)" if skipped else "")
-                   + (f" — คำนวณ predictions {rebuilt:,} รายการแล้ว" if rebuilt else " — รอ import อีกไฟล์"),
+        "message": f"Import {kind} à¸ªà¸³à¹€à¸£à¹‡à¸ˆ {inserted:,} à¹à¸–à¸§ ({file.filename})"
+                   + (f" (à¸‚à¹‰à¸²à¸¡ {skipped:,} à¹à¸–à¸§à¸—à¸µà¹ˆà¹„à¸¡à¹ˆà¸¡à¸µ customer)" if skipped else "")
+                   + (f" â€” à¸„à¸³à¸™à¸§à¸“ predictions {rebuilt:,} à¸£à¸²à¸¢à¸à¸²à¸£à¹à¸¥à¹‰à¸§" if rebuilt else " â€” à¸£à¸­ import à¸­à¸µà¸à¹„à¸Ÿà¸¥à¹Œ"),
         "rows":              inserted,
         "rows_skipped":      skipped,
         "type":              kind,
@@ -1217,9 +1217,9 @@ async def import_csv(file: UploadFile = File(...)):
     }
 
 
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Prediction Run management  (DB-backed)
-# ══════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 class RunCreateBody(BaseModel):
     name: str
@@ -1238,7 +1238,7 @@ async def create_run(body: RunCreateBody):
     global _active_run_id
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "กรุณาระบุชื่อ Prediction Run")
+        raise HTTPException(400, "à¸à¸£à¸¸à¸“à¸²à¸£à¸°à¸šà¸¸à¸Šà¸·à¹ˆà¸­ Prediction Run")
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             text("""
@@ -1312,4 +1312,5 @@ async def delete_run(run_id: int):
             row = result.mappings().first()
         _active_run_id = row["id"] if row else None
     return {"ok": True}
+
 
