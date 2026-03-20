@@ -1,39 +1,16 @@
 """
-Async PostgreSQL connection — SQLAlchemy 2.0 + asyncpg
-
-DATABASE_URL env var (default points to Docker Compose service):
-  postgresql+asyncpg://crm_user:crm_secret@localhost:5432/churn_crm
+Async database connection — SQLAlchemy + asyncpg
 """
-
 import os
-from dotenv import load_dotenv
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
-
-from sqlalchemy.ext.asyncio import (
-    create_async_engine,
-    AsyncSession,
-    async_sessionmaker,
-)
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL: str = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://crm_user:crm_secret@localhost:5432/churn_crm",
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://moby:moby1234@db:5432/moby")
+# SQLAlchemy needs postgresql+asyncpg://
+ASYNC_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
-engine = create_async_engine(
-    DATABASE_URL,
-    echo=False,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-)
-
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+engine = create_async_engine(ASYNC_URL, echo=False, pool_pre_ping=True)
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
@@ -41,6 +18,5 @@ class Base(DeclarativeBase):
 
 
 async def get_db():
-    """FastAPI dependency — yields an AsyncSession per request."""
     async with AsyncSessionLocal() as session:
         yield session

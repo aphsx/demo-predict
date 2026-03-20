@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --moby-blue: #0057a8;
+  --moby-blue-dark: #003d7a;
+  --moby-blue-light: #e8f1fb;
+}
+
+body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; }

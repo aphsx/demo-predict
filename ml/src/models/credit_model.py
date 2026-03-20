@@ -140,16 +140,36 @@ def train(payments: pd.DataFrame, usage: pd.DataFrame,
 
 
 def predict(payments: pd.DataFrame, usage: pd.DataFrame,
-            cutoff: pd.Timestamp = CUTOFF, models_dir: Path = MODELS_DIR) -> pd.DataFrame:
+            cutoff: pd.Timestamp = CUTOFF, models_dir: Path = MODELS_DIR,
+            min_purchases: int = 2) -> pd.DataFrame:
     """
-    คืน DataFrame: acc_id, p10, p25, p50, p75, p90, urgency, alert_date
-    เฉพาะลูกค้าที่มีประวัติซื้อเครดิตอย่างน้อย 1 ครั้ง
+    คืน DataFrame: acc_id, p10, p25, p50, p75, p90, urgency, alert_date,
+                   n_purchases, forecast_confidence
+
+    FIX: กรองเฉพาะลูกค้าที่มี >= min_purchases ก่อนส่งเข้า model
+         ลูกค้าที่ซื้อครั้งแรกครั้งเดียวไม่มี interval history
+         -> model เดาไม่ได้ -> P10 ต่ำมาก -> urgency Critical ทั้งหมด
+
+    ลูกค้าที่ซื้อแค่ 1 ครั้ง: urgency = "New Customer" แยกออกมาชัดเจน
     """
     artifacts = _load_all(models_dir)
     mult_80   = artifacts[0.10]["mult_80"]
     mult_50   = artifacts[0.25]["mult_50"]
 
-    X_pred = build_latest_transaction_features(payments, usage, cutoff)
+    p_pre = payments[payments["payment_date"] < cutoff]
+
+    # FIX: นับจำนวน purchases ต่อลูกค้า
+    purchase_counts = p_pre.groupby("acc_id").size().rename("n_purchases")
+    repeat_buyers   = purchase_counts[purchase_counts >= min_purchases].index
+    single_buyers   = purchase_counts[purchase_counts <  min_purchases].index
+
+    print(f"  Credit predict: {len(repeat_buyers):,} repeat buyers (>={min_purchases}x) | "
+          f"{len(single_buyers):,} single buyers -> urgency='New Customer'")
+
+    # Predict สำหรับ repeat buyers เท่านั้น
+    p_repeat = payments[payments["acc_id"].isin(repeat_buyers)]
+    X_pred   = build_latest_transaction_features(p_repeat, usage, cutoff)
+
     if len(X_pred) == 0:
         return pd.DataFrame()
 
@@ -169,12 +189,36 @@ def predict(payments: pd.DataFrame, usage: pd.DataFrame,
 
     X_pred["p50"] = X_pred["p50_raw"]
 
-    X_pred["urgency"]    = X_pred["p10"].apply(_urgency_label)
-    X_pred["alert_date"] = (cutoff + pd.to_timedelta(
+    # Urgency + confidence
+    X_pred["urgency"]             = X_pred["p10"].apply(_urgency_label)
+    X_pred["forecast_confidence"] = X_pred["acc_id"].map(
+        purchase_counts.clip(upper=10).div(10)
+    ).fillna(0).round(2)
+    X_pred["alert_date"]  = (cutoff + pd.to_timedelta(
         X_pred["p25"].astype(int), unit="D")).dt.date
+    X_pred["n_purchases"] = X_pred["acc_id"].map(purchase_counts).fillna(0).astype(int)
 
-    cols = ["acc_id", "p10", "p25", "p50", "p75", "p90", "urgency", "alert_date"]
-    return X_pred[cols].copy()
+    repeat_out = X_pred[["acc_id", "p10", "p25", "p50", "p75", "p90",
+                          "urgency", "alert_date",
+                          "n_purchases", "forecast_confidence"]].copy()
+
+    # New/single buyers — urgency ที่บอกชัดว่าไม่มี history
+    if len(single_buyers) > 0:
+        single_out = pd.DataFrame({
+            "acc_id":               single_buyers,
+            "p10":                  np.nan,
+            "p25":                  np.nan,
+            "p50":                  np.nan,
+            "p75":                  np.nan,
+            "p90":                  np.nan,
+            "urgency":              "New Customer",
+            "alert_date":           None,
+            "n_purchases":          purchase_counts.reindex(single_buyers).values,
+            "forecast_confidence":  0.0,
+        })
+        return pd.concat([repeat_out, single_out], ignore_index=True)
+
+    return repeat_out
 
 
 # ─────────────────────────────────────────────────────────────────

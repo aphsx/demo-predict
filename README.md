@@ -1,63 +1,47 @@
-# Churn CRM Dashboard - การใช้งาน (Usage Guide)
+# 1Moby Analytics — Full Stack
 
-โปรเจกต์นี้แบ่งออกเป็น 3 ส่วนหลัก ได้แก่ API (Backend), Dashboard (Frontend), และส่วน Training Model (สำหรับเทรนโมเดล)
+## Stack
+- **ML/API**: Python + FastAPI + SQLAlchemy async
+- **Frontend**: Next.js 14 + Tailwind CSS + Recharts
+- **Database**: PostgreSQL 15
+- **Orchestration**: Docker Compose
 
-คุณสามารถเปิดใช้งานตามขั้นตอนด้านล่างนี้:
+## Quick Start
 
----
+```bash
+# 1. Copy env
+cp .env.example .env
 
-## 1. การรัน API (Backend)
-API ถูกสร้างด้วย FastAPI เพื่อใช้บริการข้อมูลและโมเดลทำนายการ Churn
+# 2. Train models ก่อน (ต้องมี Excel data)
+cd ml && python train.py data/1Moby_Data.xlsx
 
-**ขั้นตอนการรัน:**
-1. เปิด Terminal และเข้าไปที่โฟลเดอร์ `api`
-   ```bash
-   cd api
-   ```
-2. ติดตั้ง Python dependencies ที่จำเป็น
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. รัน Server ด้วยคำสั่ง `uvicorn`
-   ```bash
-   uvicorn main:app --reload
-   ```
-*API จะทำงานอยู่ที่: `http://localhost:8000`*
+# 3. Run all services
+docker-compose up --build
+```
 
-*(สามารถดู API Docs ได้ที่ `http://localhost:8000/docs`)*
+**URLs:**
+- Frontend: http://localhost:3000
+- API docs:  http://localhost:8000/docs
+- Database:  localhost:5432
 
----
+## การใช้งาน
 
-## 2. การรัน Dashboard (Frontend)
-ส่วนหน้าบ้านถูกพัฒนาด้วย Next.js (React)
+1. เปิด http://localhost:3000
+2. ไปหน้า "จัดการรัน" → สร้าง Run ใหม่
+3. อัปโหลดไฟล์ Excel → ระบบ predict อัตโนมัติ
+4. ดูผลที่หน้า Dashboard และ รายชื่อลูกค้า
 
-**ขั้นตอนการรัน:**
-1. เปิด Terminal ใหม่อีก 1 หน้าต่าง และเข้าไปที่โฟลเดอร์ `dashboard`
-   ```bash
-   cd dashboard
-   ```
-2. ติดตั้ง Node modules (ทำแค่ครั้งแรก)
-   ```bash
-   npm install
-   ```
-3. รัน Development Server
-   ```bash
-   npm run dev
-   ```
-*หน้า Dashboard จะทำงานอยู่ที่: `http://localhost:3000`*
+## Pages
+- `/`              → Dashboard + KPI + Charts
+- `/runs`          → จัดการ Prediction Runs + Upload
+- `/customers`     → ตารางลูกค้า + filter + pagination
+- `/customers/[id]`→ Customer 360 detail
 
----
-
-## 3. การเทรนโมเดลใหม่ (Training Model) - Optional
-หากต้องการเทรนโมเดล Machine Learning ใหม่ให้ทำการรัน script ด้านล่าง
-
-**ขั้นตอนการรัน:**
-1. เปิด Terminal เข้าไปที่โฟลเดอร์ `train`
-   ```bash
-   cd train
-   ```
-2. รันสคริปต์ Python เพื่อเทรนโมเดล (ต้องมั่นใจว่ามี library เช่น pandas, scikit-learn เรียบร้อยแล้ว)
-   ```bash
-   python churn_model.py
-   ```
-*หลังจบกระบวนการ ไฟล์อัปเดตโมเดล (`churn_model.pkl` และ `churn_model_keras.h5`) จะถูกบันทึกในโฟลเดอร์ `train/output` โดยอัตโนมัติเพื่อให้ API โหลดนำไปใช้งาน*
+## API Endpoints
+- `GET  /runs`                           → list runs
+- `POST /runs`                           → create run
+- `POST /runs/{id}/upload`               → upload + trigger predict
+- `GET  /runs/{id}/predictions`          → paginated results
+- `GET  /runs/{id}/predictions/{acc_id}` → customer 360
+- `GET  /runs/{id}/summary`              → dashboard KPIs
+- `GET  /health`                         → health check
