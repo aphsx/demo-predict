@@ -111,7 +111,7 @@ def train(feat_df: pd.DataFrame, active_set: set,
     cal_model.fit(X_trainval, y_trainval)
 
     # ── Leakage audit ─────────────────────────────────────────────
-    leakage = _leakage_audit(lgb_tuned, X_te, y_te, FEAT_COLS_CACHE)
+    leakage = _leakage_audit(lgb_tuned, X_trainval, y_trainval, X_te, y_te, FEAT_COLS_CACHE)
 
     # ── Final metrics on test (never seen) ───────────────────────
     p_cal = cal_model.predict_proba(X_te)[:, 1]
@@ -295,11 +295,12 @@ def _print_competition(results: dict) -> None:
         print(f"  {name:<22} {r['auc']:.3f} {r['f1']:.3f} {r['precision']:.3f} {r['recall']:.3f}")
 
 
-def _leakage_audit(model, X_te, y_te, feat_cols: list) -> dict:
+def _leakage_audit(model, X_tr, y_tr, X_te, y_te, feat_cols: list) -> dict:
+    """FIX: ฝึก m_safe บน train set แล้ววัดผลบน test set (ไม่ใช่ train+eval บน test เดียวกัน)"""
     present = [f for f in LEAK_SUSPECT_FEATURES if f in feat_cols]
     safe    = [c for c in feat_cols if c not in present]
     m_safe  = lgb.LGBMClassifier(n_estimators=200, random_state=CHURN_RANDOM_STATE, verbose=-1)
-    m_safe.fit(X_te[safe], y_te)
+    m_safe.fit(X_tr[safe], y_tr)
     auc_full  = roc_auc_score(y_te, model.predict_proba(X_te)[:, 1])
     auc_safe  = roc_auc_score(y_te, m_safe.predict_proba(X_te[safe])[:, 1])
     drop      = round(auc_full - auc_safe, 4)

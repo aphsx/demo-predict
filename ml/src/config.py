@@ -90,6 +90,24 @@ URGENCY_SCORE_MAP = {
     None:       0.00,
 }
 
+# ─── Lifecycle Stages ─────────────────────────────────────────────
+LIFECYCLE_STAGES = {
+    "Ghost":          "สมัครแล้วไม่เคยใช้",
+    "Churned":        "เคยใช้แต่หยุดไปแล้ว",
+    "Active Free":    "ใช้งานอยู่แต่ไม่เคยจ่าย",
+    "Active Paid":    "จ่ายเงินและใช้งานอยู่",
+}
+GHOST_NEW_DAYS = 30          # สมัครใหม่ ≤ 30 วัน
+GHOST_WARM_DAYS = 180        # 30–180 วัน = ยังพอ activate ได้
+
+# ─── Win-back Model ───────────────────────────────────────────────
+WINBACK_OPTUNA_TRIALS = 20
+WINBACK_RANDOM_STATE  = 42
+
+# ─── Conversion Model ────────────────────────────────────────────
+CONVERSION_OPTUNA_TRIALS = 20
+CONVERSION_RANDOM_STATE  = 42
+
 # ─── Monitoring Thresholds ────────────────────────────────────────
 PSI_ALERT_THRESHOLD          = 0.25
 KS_PVALUE_THRESHOLD          = 0.05
@@ -113,4 +131,6 @@ MODEL_FILES = {
     "rfm_segments":  "rfm_segments.csv",
     "customer_360":  "customer_360.csv",
     "churn_eval":    "churn_eval.png",
+    "winback_model": "winback_model.pkl",
+    "conversion_model": "conversion_model.pkl",
 }
