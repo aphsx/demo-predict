@@ -1,14 +1,16 @@
 """
-Background Prediction Worker
+Background Prediction Worker  (ARQ task queue)
 ดึงข้อมูลจาก DB → run ML pipeline → save results กลับ DB
+Worker รันเป็น process แยกจาก API server ผ่าน ARQ + Redis
 """
-import asyncio, os, sys
+import os, sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import text
 
@@ -16,10 +18,15 @@ from sqlalchemy import text
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://moby:moby1234@db:5432/moby")
 ASYNC_URL    = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
+REDIS_SETTINGS = RedisSettings(
+    host=os.getenv("REDIS_HOST", "redis"),
+    port=int(os.getenv("REDIS_PORT", 6379)),
+)
 
-def run_prediction_pipeline(run_id: str, model_dir: str):
-    """Entry point called by FastAPI BackgroundTasks (sync wrapper)"""
-    asyncio.run(_pipeline(run_id, model_dir))
+
+async def run_prediction_pipeline(ctx, run_id: str, model_dir: str):
+    """ARQ task — รันใน worker process แยก ไม่กระทบ API server"""
+    await _pipeline(run_id, model_dir)
 
 
 async def _pipeline(run_id: str, model_dir: str):
@@ -230,3 +237,13 @@ def _dv(row, col):
         return ts.date()
     except:
         return None
+
+
+# ── ARQ Worker Settings ────────────────────────────────────────────
+class WorkerSettings:
+    """ARQ worker configuration — start with: python -m arq worker.predict_worker.WorkerSettings"""
+    functions     = [run_prediction_pipeline]
+    redis_settings = REDIS_SETTINGS
+    max_jobs      = 2       # predict สองงานพร้อมกันสูงสุด
+    job_timeout   = 3600    # 1 ชั่วโมง timeout ต่องาน
+    keep_result   = 3600    # เก็บ result ใน Redis 1 ชั่วโมง

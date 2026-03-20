@@ -1,6 +1,6 @@
 """
 1Moby Analytics — FastAPI
-DB-backed: upload → validate → background predict → save results
+DB-backed: upload → validate → enqueue ARQ job → worker process predicts
 """
 import os, io, json
 from contextlib import asynccontextmanager
@@ -9,7 +9,8 @@ from uuid import UUID
 from datetime import date
 
 import pandas as pd
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, BackgroundTasks
+from arq import create_pool
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -20,7 +21,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.database import get_db, engine
-from worker.predict_worker import run_prediction_pipeline
+from worker.predict_worker import REDIS_SETTINGS
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", "models"))
 
@@ -29,8 +30,10 @@ MODEL_DIR = Path(os.getenv("MODEL_DIR", "models"))
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[API] Starting up...")
+    app.state.arq = await create_pool(REDIS_SETTINGS)
     yield
     print("[API] Shutting down...")
+    await app.state.arq.aclose()
     await engine.dispose()
 
 
@@ -98,12 +101,12 @@ async def delete_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
 @app.post("/runs/{run_id}/upload")
 async def upload_file(
     run_id: UUID,
-    background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    อัปโหลด Excel/CSV → validate → insert raw data → trigger background predict
+    อัปโหลด Excel/CSV → validate → insert raw data → enqueue ARQ job ใน worker process
     """
     # Check run exists
     row = await db.execute(text("SELECT id, status FROM prediction_runs WHERE id = :id"),
@@ -145,13 +148,13 @@ async def upload_file(
         await _set_status(db, run_id, "failed", str(e))
         raise HTTPException(500, f"DB insert error: {e}")
 
-    # Fire background predict
-    background_tasks.add_task(
-        run_prediction_pipeline,
-        str(run_id), str(MODEL_DIR)
+    # Enqueue prediction job → worker process แยก ไม่กระทบ API server
+    await request.app.state.arq.enqueue_job(
+        "run_prediction_pipeline",
+        str(run_id), str(MODEL_DIR),
     )
 
-    return {"run_id": str(run_id), "status": "processing", "message": "Prediction started"}
+    return {"run_id": str(run_id), "status": "processing", "message": "Prediction queued"}
 
 
 # ── Predictions ───────────────────────────────────────────────────

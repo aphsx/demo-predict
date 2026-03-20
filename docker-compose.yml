@@ -19,6 +19,15 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   ml:
     build: ./ml
     restart: unless-stopped
@@ -30,8 +39,28 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-moby}:${POSTGRES_PASSWORD:-moby1234}@db:5432/${POSTGRES_DB:-moby}
       MODEL_DIR:    /app/models
+      REDIS_HOST:   redis
     depends_on:
       db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./ml
+    restart: unless-stopped
+    command: python -m arq worker.predict_worker.WorkerSettings
+    volumes:
+      - ./ml/models:/app/models
+      - ./ml/data:/app/data
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-moby}:${POSTGRES_PASSWORD:-moby1234}@db:5432/${POSTGRES_DB:-moby}
+      MODEL_DIR:    /app/models
+      REDIS_HOST:   redis
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   web:
