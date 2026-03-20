@@ -5,7 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 import Sidebar from "@/components/Sidebar";
 import Badge from "@/components/Badge";
 import { api, Run, Summary } from "@/lib/api";
-import { RefreshCw, TrendingDown, Users, AlertTriangle, DollarSign, Bell } from "lucide-react";
+import { RefreshCw, TrendingDown, Users, AlertTriangle, DollarSign, Bell, BarChart3 } from "lucide-react";
 
 const PIE_COLORS = ["#0057a8","#ef4444","#f59e0b","#9ca3af"];
 const BAR_COLORS: Record<string,string> = {
@@ -170,7 +170,7 @@ export default function DashboardPage() {
 
           {!activeRun && (
             <div className="text-center py-20 text-gray-400">
-              <BarChart2 size={48} className="mx-auto mb-3 opacity-30" />
+              <BarChart3 size={48} className="mx-auto mb-3 opacity-30" />
               <p className="text-lg">เลือก Run หรือ<a href="/runs" className="text-blue-600 underline ml-1">สร้าง Run ใหม่</a></p>
             </div>
           )}

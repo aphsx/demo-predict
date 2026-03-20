@@ -46,6 +46,7 @@ export interface Prediction {
   churn_probability: number; churn_tier: string;
   predicted_clv_6m: number; clv_ci95_lo: number; clv_ci95_hi: number;
   clv_ci80_lo: number; clv_ci80_hi: number; p_alive: number; rfm_segment: string;
+  r_score?: number; f_score?: number; m_score?: number;
   credit_p10: number; credit_p25: number; credit_p50: number;
   credit_p75: number; credit_p90: number;
   urgency: string; alert_date: string;
