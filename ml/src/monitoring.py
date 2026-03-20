@@ -91,7 +91,7 @@ def save_baseline(feat_df: pd.DataFrame, out_path: Path) -> None:
     }
     with open(out_path, "w") as f:
         json.dump(baseline, f, indent=2)
-    print(f"  Monitoring baseline saved → {out_path}")
+    print(f"  Monitoring baseline saved -> {out_path}")
 
 
 def load_baseline(path: Path) -> dict:

@@ -306,7 +306,7 @@ def _leakage_audit(model, X_tr, y_tr, X_te, y_te, feat_cols: list) -> dict:
     drop      = round(auc_full - auc_safe, 4)
     print(f"\n  Leakage audit: AUC_full={auc_full:.4f} AUC_safe={auc_safe:.4f} drop={drop}")
     if drop > 0.05:
-        print("  [WARNING] AUC drop > 0.05 → investigate leak-suspect features")
+        print("  [WARNING] AUC drop > 0.05 -> investigate leak-suspect features")
     else:
         print("  [OK] No significant leakage detected")
     return {"auc_without_leak_suspects": round(auc_safe, 4),
