@@ -1,205 +1,167 @@
 "use client";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import Sidebar from "@/components/Sidebar";
+import { fetchRuns, fetchPredictions, exportUrl } from "@/lib/api";
 import Badge from "@/components/Badge";
-import { api, Prediction, Run } from "@/lib/api";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 
-const CHURN_TIERS  = ["High","Medium","Low","Already Churned"];
-const RFM_SEGS     = ["Champions","Loyal","Promising","Cannot Lose","At Risk","Need Attention"];
-const URGENCIES    = ["Critical","Warning","Monitor","Stable","New Customer"];
+const STAGES = ["", "Active Paid", "Active Free", "Churned", "Ghost"];
+const CHURN_TIERS = ["", "Low", "Medium", "High"];
+const WB_TIERS = ["", "High", "Medium", "Low"];
+const CV_TIERS = ["", "High", "Medium", "Low"];
 
-function CustomersContent() {
-  const params  = useSearchParams();
-  const router  = useRouter();
-  const initRun = params.get("run") ?? "";
+export default function Customers() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const [runs, setRuns] = useState<any[]>([]);
+  const [runId, setRunId] = useState(sp.get("run") || "");
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<any>(null);
+  const [filters, setFilters] = useState({
+    lifecycle_stage: "", churn_tier: "", winback_tier: "", conversion_tier: "", search: ""
+  });
 
-  const [runs, setRuns]           = useState<Run[]>([]);
-  const [runId, setRunId]         = useState(initRun);
-  const [data, setData]           = useState<Prediction[]>([]);
-  const [total, setTotal]         = useState(0);
-  const [page, setPage]           = useState(1);
-  const [loading, setLoading]     = useState(false);
-  const [churnTier, setChurnTier] = useState("");
-  const [rfmSeg, setRfmSeg]       = useState("");
-  const [urgency, setUrgency]     = useState("");
-  const [search, setSearch]       = useState("");
-
-  useEffect(() => { api.listRuns().then(setRuns); }, []);
+  useEffect(() => { fetchRuns().then(r => { setRuns(r); if (!runId && r.length) setRunId(r[0].id); }); }, []);
 
   useEffect(() => {
     if (!runId) return;
-    setLoading(true);
-    const p: Record<string,string|number> = { page, page_size: 50 };
-    if (churnTier) p.churn_tier = churnTier;
-    if (rfmSeg)    p.rfm_segment = rfmSeg;
-    if (urgency)   p.urgency = urgency;
-    api.getPredictions(runId, p)
-       .then(r => { setData(r.data); setTotal(r.total); })
-       .finally(() => setLoading(false));
-  }, [runId, page, churnTier, rfmSeg, urgency]);
+    const params: any = { page: String(page), page_size: "50" };
+    Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
+    fetchPredictions(runId, params).then(setData);
+  }, [runId, page, filters]);
 
-  const filtered = search
-    ? data.filter(d => String(d.acc_id).includes(search))
-    : data;
+  const updateFilter = (key: string, val: string) => {
+    setFilters(f => ({ ...f, [key]: val }));
+    setPage(1);
+  };
 
+  const rows = data?.data || [];
+  const total = data?.total || 0;
   const totalPages = Math.ceil(total / 50);
 
-  const pct = (n?: number) => n == null ? "—" : `${(n * 100).toFixed(0)}%`;
-  const baht = (n?: number) => n == null ? "—" : `฿${Math.round(n).toLocaleString()}`;
-  const days = (n?: number) => n == null ? "—" : `${Math.round(n)} วัน`;
-
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-white border-b px-6 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h1 className="text-xl font-bold">รายชื่อลูกค้า</h1>
-              <p className="text-sm text-gray-500">
-                {total > 0 ? `${total.toLocaleString()} รายการ` : "เลือก Run เพื่อดูข้อมูล"}
-              </p>
-            </div>
-            <select className="text-sm border rounded-lg px-3 py-2"
-                    value={runId} onChange={e => { setRunId(e.target.value); setPage(1); }}>
-              <option value="">-- เลือก Run --</option>
-              {runs.filter(r => r.status === "done").map(r => (
-                <option key={r.id} value={r.id}>{r.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                     placeholder="ค้นหา acc_id..."
-                     className="pl-8 pr-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-36" />
-            </div>
-            <select value={churnTier} onChange={e => { setChurnTier(e.target.value); setPage(1); }}
-                    className="text-sm border rounded-lg px-3 py-1.5">
-              <option value="">Churn Tier ทั้งหมด</option>
-              {CHURN_TIERS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <select value={rfmSeg} onChange={e => { setRfmSeg(e.target.value); setPage(1); }}
-                    className="text-sm border rounded-lg px-3 py-1.5">
-              <option value="">RFM ทั้งหมด</option>
-              {RFM_SEGS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select value={urgency} onChange={e => { setUrgency(e.target.value); setPage(1); }}
-                    className="text-sm border rounded-lg px-3 py-1.5">
-              <option value="">Urgency ทั้งหมด</option>
-              {URGENCIES.map(u => <option key={u} value={u}>{u}</option>)}
-            </select>
-            {(churnTier || rfmSeg || urgency) && (
-              <button onClick={() => { setChurnTier(""); setRfmSeg(""); setUrgency(""); }}
-                      className="text-sm text-blue-600 hover:underline px-2">
-                ล้างตัวกรอง
-              </button>
-            )}
-          </div>
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold">Customers</h1>
+        <div className="flex items-center gap-2">
+          <select value={runId} onChange={e => { setRunId(e.target.value); setPage(1); }}
+            className="border rounded px-2 py-1 text-sm bg-white">
+            {runs.filter(r => r.status === "done").map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+          {runId && (
+            <a href={exportUrl(runId, Object.fromEntries(Object.entries(filters).filter(([,v]) => v)))}
+              className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">
+              Export CSV
+            </a>
+          )}
         </div>
+      </div>
 
-        {/* Table */}
-        <div className="p-6">
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    {["acc_id","Churn %","Tier","CLV 6m","P(alive)","RFM Segment",
-                      "P50 (วัน)","Urgency","Alert Date","Priority","Revenue Risk"].map(h => (
-                      <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {loading && (
-                    <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">
-                      กำลังโหลด...
-                    </td></tr>
-                  )}
-                  {!loading && filtered.map(d => (
-                    <tr key={d.acc_id}
-                        className="hover:bg-blue-50 cursor-pointer transition-colors"
-                        onClick={() => router.push(`/customers/${d.acc_id}?run=${runId}`)}>
-                      <td className="px-3 py-2.5 font-mono font-medium text-blue-700">
-                        {d.acc_id}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                            <div className="h-1.5 rounded-full"
-                                 style={{
-                                   width: `${(d.churn_probability ?? 0) * 100}%`,
-                                   background: (d.churn_probability ?? 0) > 0.6 ? "#ef4444"
-                                             : (d.churn_probability ?? 0) > 0.3 ? "#f59e0b"
-                                             : "#22c55e"
-                                 }} />
-                          </div>
-                          <span className="text-xs text-gray-600">{pct(d.churn_probability)}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5"><Badge label={d.churn_tier ?? "—"} /></td>
-                      <td className="px-3 py-2.5 text-right font-medium">{baht(d.predicted_clv_6m)}</td>
-                      <td className="px-3 py-2.5 text-center">{pct(d.p_alive)}</td>
-                      <td className="px-3 py-2.5"><Badge label={d.rfm_segment ?? "—"} /></td>
-                      <td className="px-3 py-2.5 text-center">{days(d.credit_p50)}</td>
-                      <td className="px-3 py-2.5"><Badge label={d.urgency ?? "—"} /></td>
-                      <td className="px-3 py-2.5 text-xs text-gray-500">{d.alert_date ?? "—"}</td>
-                      <td className="px-3 py-2.5 text-center">
-                        <span className={`font-semibold text-sm ${
-                          (d.priority_score ?? 0) > 7 ? "text-red-600"
-                        : (d.priority_score ?? 0) > 4 ? "text-orange-500"
-                        : "text-gray-600"
-                        }`}>
-                          {d.priority_score?.toFixed(1) ?? "—"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right">{baht(d.revenue_at_risk)}</td>
-                    </tr>
-                  ))}
-                  {!loading && filtered.length === 0 && (
-                    <tr><td colSpan={11} className="px-4 py-12 text-center text-gray-400">
-                      {runId ? "ไม่พบข้อมูล" : "เลือก Run ก่อน"}
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <select value={filters.lifecycle_stage} onChange={e => updateFilter("lifecycle_stage", e.target.value)}
+          className="border rounded px-2 py-1 text-sm bg-white">
+          <option value="">All Stages</option>
+          {STAGES.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {(!filters.lifecycle_stage || filters.lifecycle_stage === "Active Paid") && (
+          <select value={filters.churn_tier} onChange={e => updateFilter("churn_tier", e.target.value)}
+            className="border rounded px-2 py-1 text-sm bg-white">
+            <option value="">All Churn</option>
+            {CHURN_TIERS.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+        {filters.lifecycle_stage === "Churned" && (
+          <select value={filters.winback_tier} onChange={e => updateFilter("winback_tier", e.target.value)}
+            className="border rounded px-2 py-1 text-sm bg-white">
+            <option value="">All Win-back</option>
+            {WB_TIERS.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+        {filters.lifecycle_stage === "Active Free" && (
+          <select value={filters.conversion_tier} onChange={e => updateFilter("conversion_tier", e.target.value)}
+            className="border rounded px-2 py-1 text-sm bg-white">
+            <option value="">All Conversion</option>
+            {CV_TIERS.filter(Boolean).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+        <input placeholder="Search acc_id..." value={filters.search}
+          onChange={e => updateFilter("search", e.target.value)}
+          className="border rounded px-2 py-1 text-sm w-40" />
+        <span className="text-sm text-gray-500 self-center">{total.toLocaleString()} results</span>
+      </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="border-t px-4 py-3 flex items-center justify-between">
-                <span className="text-xs text-gray-500">
-                  หน้า {page} จาก {totalPages} ({total.toLocaleString()} รายการ)
-                </span>
-                <div className="flex gap-1">
-                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                          className="p-1.5 rounded border hover:bg-gray-50 disabled:opacity-40">
-                    <ChevronLeft size={14} />
-                  </button>
-                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-                          className="p-1.5 rounded border hover:bg-gray-50 disabled:opacity-40">
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+      {/* Table */}
+      <div className="bg-white border rounded-lg overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b text-left text-xs text-gray-500 uppercase">
+              <th className="px-3 py-2">ID</th>
+              <th className="px-3 py-2">Stage</th>
+              <th className="px-3 py-2">Sub</th>
+              <th className="px-3 py-2">Score</th>
+              <th className="px-3 py-2">Key Metric</th>
+              <th className="px-3 py-2">Priority</th>
+              <th className="px-3 py-2">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r: any) => (
+              <tr key={r.acc_id} className="border-b hover:bg-gray-50 cursor-pointer"
+                onClick={() => router.push(`/customers/${r.acc_id}?run=${runId}`)}>
+                <td className="px-3 py-2 font-mono text-blue-600">{r.acc_id}</td>
+                <td className="px-3 py-2"><Badge stage={r.lifecycle_stage} /></td>
+                <td className="px-3 py-2 text-xs text-gray-600">{r.sub_stage}</td>
+                <td className="px-3 py-2 font-mono text-xs">
+                  {r.lifecycle_stage === "Active Paid" && r.churn_probability != null &&
+                    <span className={r.churn_probability > 0.6 ? "text-red-600 font-bold" : ""}>
+                      Churn {(r.churn_probability * 100).toFixed(0)}%
+                    </span>}
+                  {r.lifecycle_stage === "Churned" && r.comeback_probability != null &&
+                    <span className="text-orange-600">
+                      Comeback {(r.comeback_probability * 100).toFixed(0)}%
+                    </span>}
+                  {r.lifecycle_stage === "Active Free" && r.conversion_probability != null &&
+                    <span className="text-purple-600">
+                      Convert {(r.conversion_probability * 100).toFixed(0)}%
+                    </span>}
+                </td>
+                <td className="px-3 py-2 text-xs text-gray-600">
+                  {r.lifecycle_stage === "Active Paid" && r.predicted_clv_6m != null &&
+                    `CLV ${Number(r.predicted_clv_6m).toLocaleString()} ฿`}
+                  {r.lifecycle_stage === "Active Paid" && r.revenue_at_risk > 0 &&
+                    <span className="text-red-500 ml-2">RAR {Number(r.revenue_at_risk).toLocaleString()}</span>}
+                </td>
+                <td className="px-3 py-2">
+                  {r.priority_score != null && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded-full"
+                          style={{ width: `${Math.min(100, (r.priority_score / 10) * 100)}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-500">{Number(r.priority_score).toFixed(1)}</span>
+                    </div>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-xs text-gray-600 max-w-xs truncate">{r.recommended_action}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+            className="px-3 py-1 border rounded text-sm disabled:opacity-30">Prev</button>
+          <span className="text-sm text-gray-500">Page {page} / {totalPages}</span>
+          <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
+            className="px-3 py-1 border rounded text-sm disabled:opacity-30">Next</button>
         </div>
-      </main>
+      )}
     </div>
   );
-}
-
-export default function CustomersPage() {
-  return <Suspense><CustomersContent /></Suspense>;
 }

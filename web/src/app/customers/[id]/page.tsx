@@ -1,301 +1,221 @@
 "use client";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
+import { fetchRuns, fetchCustomer } from "@/lib/api";
 import Badge from "@/components/Badge";
-import { api, Prediction } from "@/lib/api";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  ReferenceLine, Cell
-} from "recharts";
-import { ArrowLeft, User, TrendingDown, DollarSign, Calendar, AlertTriangle } from "lucide-react";
-import Link from "next/link";
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children, className }: any) {
   return (
-    <div className="bg-white rounded-xl border shadow-sm p-5">
-      <h2 className="font-semibold text-gray-800 mb-4 text-base">{title}</h2>
+    <div className={`bg-white border rounded-lg p-4 ${className || ""}`}>
+      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">{title}</h3>
       {children}
     </div>
   );
 }
 
-function Row({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
+function Stat({ label, value, color, sub }: any) {
   return (
-    <div className="flex items-center justify-between py-2 border-b last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
-      <span className={`text-sm font-medium ${highlight ? "text-blue-700" : "text-gray-900"}`}>
-        {value}
-      </span>
+    <div className="mb-3">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className={`text-lg font-bold ${color || "text-gray-900"}`}>{value}</p>
+      {sub && <p className="text-xs text-gray-400">{sub}</p>}
     </div>
   );
 }
 
-function ChurnGauge({ prob }: { prob: number }) {
-  const pct   = Math.round(prob * 100);
-  const color = prob > 0.6 ? "#ef4444" : prob > 0.3 ? "#f59e0b" : "#22c55e";
-  const r = 54, cx = 70, cy = 70;
-  const circ = 2 * Math.PI * r;
-  const dash  = (pct / 100) * circ;
+function Gauge({ value, label, max = 1 }: { value: number; label: string; max?: number }) {
+  const pct = Math.min(100, (value / max) * 100);
+  const color = pct > 60 ? "text-red-600" : pct > 30 ? "text-yellow-600" : "text-green-600";
+  const bg = pct > 60 ? "bg-red-500" : pct > 30 ? "bg-yellow-500" : "bg-green-500";
   return (
-    <div className="flex flex-col items-center">
-      <svg width="140" height="100" viewBox="0 0 140 100">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth="10"
-                strokeDasharray={`${circ * 0.75} ${circ * 0.25}`}
-                strokeDashoffset={circ * 0.125} strokeLinecap="round" transform="rotate(135 70 70)" />
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="10"
-                strokeDasharray={`${dash * 0.75} ${circ}`}
-                strokeDashoffset={circ * 0.125} strokeLinecap="round" transform="rotate(135 70 70)" />
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize="22" fontWeight="700" fill={color}>{pct}%</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" fill="#9ca3af">Churn Risk</text>
-      </svg>
+    <div className="text-center">
+      <p className={`text-3xl font-bold ${color}`}>{(value * 100).toFixed(1)}%</p>
+      <div className="w-full h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
+        <div className={`h-full rounded-full ${bg}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-xs text-gray-500 mt-1">{label}</p>
     </div>
   );
 }
 
-function CreditForecast({ p }: { p: Prediction }) {
-  if (!p.credit_p50) return <p className="text-gray-400 text-sm">ไม่มีข้อมูล (ซื้อครั้งแรก)</p>;
-  const data = [
-    { name: "P10", days: Math.round(p.credit_p10 ?? 0), fill: "#93c5fd" },
-    { name: "P25", days: Math.round(p.credit_p25 ?? 0), fill: "#60a5fa" },
-    { name: "P50", days: Math.round(p.credit_p50 ?? 0), fill: "#2563eb" },
-    { name: "P75", days: Math.round(p.credit_p75 ?? 0), fill: "#1d4ed8" },
-    { name: "P90", days: Math.round(p.credit_p90 ?? 0), fill: "#1e3a8a" },
-  ];
-  return (
-    <div>
-      <ResponsiveContainer width="100%" height={140}>
-        <BarChart data={data} margin={{ top: 5, bottom: 5 }}>
-          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} unit=" วัน" />
-          <Tooltip formatter={(v: any) => [`${v} วัน`]} />
-          <Bar dataKey="days" radius={[4,4,0,0]}>
-            {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
-          </Bar>
-          <ReferenceLine y={p.credit_p50} stroke="#f59e0b" strokeDasharray="4 3" label={{ value: "P50", fontSize: 10 }} />
-        </BarChart>
-      </ResponsiveContainer>
-      <div className="grid grid-cols-3 gap-2 mt-2 text-center text-xs">
-        <div className="bg-blue-50 rounded-lg py-2">
-          <div className="font-bold text-blue-800">{Math.round(p.credit_p25 ?? 0)} วัน</div>
-          <div className="text-blue-500">P25 (alert)</div>
-        </div>
-        <div className="bg-blue-100 rounded-lg py-2">
-          <div className="font-bold text-blue-900">{Math.round(p.credit_p50 ?? 0)} วัน</div>
-          <div className="text-blue-600">P50 (best guess)</div>
-        </div>
-        <div className="bg-blue-50 rounded-lg py-2">
-          <div className="font-bold text-blue-800">{Math.round(p.credit_p75 ?? 0)} วัน</div>
-          <div className="text-blue-500">P75 (late)</div>
-        </div>
-      </div>
-    </div>
-  );
-}
+export default function Customer360() {
+  const params = useParams();
+  const sp = useSearchParams();
+  const accId = params.id as string;
+  const [runs, setRuns] = useState<any[]>([]);
+  const [runId, setRunId] = useState(sp.get("run") || "");
+  const [c, setC] = useState<any>(null);
+  const [error, setError] = useState("");
 
-function CLVBar({ p }: { p: Prediction }) {
-  if (!p.predicted_clv_6m) return <p className="text-gray-400 text-sm">ไม่มีข้อมูล</p>;
-  const max = (p.clv_ci95_hi ?? p.predicted_clv_6m) * 1.1;
-  const toW = (v: number) => `${Math.round((v / max) * 100)}%`;
-  return (
-    <div className="space-y-2">
-      <div className="relative h-8 bg-gray-100 rounded-full overflow-hidden">
-        <div className="absolute h-full bg-blue-100 rounded-full"
-             style={{ left: toW(p.clv_ci95_lo ?? 0), width: toW((p.clv_ci95_hi ?? 0) - (p.clv_ci95_lo ?? 0)) }} />
-        <div className="absolute h-full bg-blue-300 rounded-full"
-             style={{ left: toW(p.clv_ci80_lo ?? 0), width: toW((p.clv_ci80_hi ?? 0) - (p.clv_ci80_lo ?? 0)) }} />
-        <div className="absolute top-1 bottom-1 w-1.5 bg-blue-700 rounded-full"
-             style={{ left: `calc(${toW(p.predicted_clv_6m)} - 3px)` }} />
-      </div>
-      <div className="flex justify-between text-xs text-gray-500">
-        <span>฿{Math.round(p.clv_ci95_lo ?? 0).toLocaleString()} (95% lo)</span>
-        <span className="font-semibold text-blue-700">฿{Math.round(p.predicted_clv_6m).toLocaleString()} (predict)</span>
-        <span>฿{Math.round(p.clv_ci95_hi ?? 0).toLocaleString()} (95% hi)</span>
-      </div>
-      <div className="flex gap-3 text-xs">
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded bg-blue-100 inline-block" />95% CI</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded bg-blue-300 inline-block" />80% CI</span>
-        <span className="flex items-center gap-1"><span className="w-1 h-3 rounded bg-blue-700 inline-block" />Prediction</span>
-      </div>
-    </div>
-  );
-}
-
-function CustomerContent() {
-  const { id }    = useParams<{ id: string }>();
-  const params    = useSearchParams();
-  const runId     = params.get("run") ?? "";
-  const [p, setP] = useState<Prediction | null>(null);
-  const [loading, setLoading] = useState(true);
-
+  useEffect(() => { fetchRuns().then(r => { setRuns(r); if (!runId && r.length) setRunId(r[0].id); }); }, []);
   useEffect(() => {
-    if (!runId || !id) return;
-    api.getCustomer(runId, Number(id))
-       .then(setP)
-       .finally(() => setLoading(false));
-  }, [id, runId]);
+    if (!runId || !accId) return;
+    fetchCustomer(runId, accId).then(setC).catch(() => setError("Customer not found"));
+  }, [runId, accId]);
 
-  const pct  = (n?: number | null) => n == null ? "—" : `${(n * 100).toFixed(1)}%`;
-  const baht = (n?: number | null) => n == null ? "—" : `฿${Math.round(n).toLocaleString()}`;
+  if (error) return <div className="p-6 text-red-600">{error}</div>;
+  if (!c) return <div className="p-6 text-gray-500">Loading...</div>;
 
-  if (loading) return (
-    <div className="flex h-screen"><Sidebar />
-      <div className="flex-1 flex items-center justify-center text-gray-400">กำลังโหลด...</div>
-    </div>
-  );
-  if (!p) return (
-    <div className="flex h-screen"><Sidebar />
-      <div className="flex-1 flex items-center justify-center text-gray-400">ไม่พบข้อมูลลูกค้า</div>
-    </div>
-  );
-
-  const actionText = () => {
-    if (p.churn_tier === "High" && p.urgency === "Critical") return "รีบโทรทันที — เสี่ยง Churn + ใกล้หมดเครดิต";
-    if (p.churn_tier === "High")    return "โทรสอบถาม + เสนอ Special Offer";
-    if (p.urgency === "Critical")   return "ส่ง Reminder ซื้อเครดิต — ใกล้ถึงรอบซื้อ";
-    if (p.rfm_segment === "Champions" || p.rfm_segment === "Loyal") return "Cross-sell / Upsell — ลูกค้า VIP";
-    return "Monitor — ไม่มี Action เร่งด่วน";
-  };
-
-  const riskFactors = [p.risk_factor_1, p.risk_factor_2, p.risk_factor_3].filter(Boolean);
+  const stage = c.lifecycle_stage;
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-white border-b px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Link href={`/customers?run=${runId}`}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <ArrowLeft size={16} />
-            </Link>
+    <div className="p-6 max-w-6xl mx-auto">
+      {/* Header */}
+      <div className="bg-white border rounded-lg p-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-lg font-bold text-gray-600">
+              {String(c.acc_id).slice(-2)}
+            </div>
             <div>
-              <h1 className="text-xl font-bold flex items-center gap-2">
-                <User size={18} className="text-blue-600" />
-                ลูกค้า #{p.acc_id}
-              </h1>
-              <div className="flex items-center gap-2 mt-0.5">
-                <Badge label={p.churn_tier ?? "—"} />
-                <Badge label={p.rfm_segment ?? "—"} />
-                {p.urgency && <Badge label={p.urgency} />}
-                <span className="text-xs text-gray-400">
-                  Priority: <strong>{p.priority_score?.toFixed(1) ?? "—"}</strong>/10
-                </span>
+              <h1 className="text-xl font-bold">Customer {c.acc_id}</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge stage={stage} />
+                <span className="text-sm text-gray-500">{c.sub_stage}</span>
+                {c.priority_score != null && (
+                  <span className="text-sm text-blue-600 font-mono">Priority: {Number(c.priority_score).toFixed(1)}/10</span>
+                )}
               </div>
             </div>
-            {/* Action box */}
-            <div className="ml-auto bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 max-w-sm">
-              <p className="text-xs text-blue-500 font-medium">คำแนะนำ Sales</p>
-              <p className="text-sm font-semibold text-blue-900 mt-0.5">{actionText()}</p>
-            </div>
           </div>
+          <select value={runId} onChange={e => setRunId(e.target.value)}
+            className="border rounded px-2 py-1 text-sm bg-white">
+            {runs.filter(r => r.status === "done").map(r => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
         </div>
+        {/* Action recommendation */}
+        {c.recommended_action && (
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+            <span className="font-semibold">Recommended Action: </span>{c.recommended_action}
+          </div>
+        )}
+      </div>
 
-        <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Left column */}
-          <div className="space-y-5">
-            {/* Churn gauge */}
-            <Section title="Churn Prediction">
-              <ChurnGauge prob={p.churn_probability ?? 0} />
-              {riskFactors.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs font-medium text-gray-500 uppercase">ปัจจัยเสี่ยงหลัก</p>
-                  {riskFactors.map((f, i) => (
-                    <div key={i} className="flex items-start gap-2 bg-red-50 rounded-lg px-3 py-2">
-                      <AlertTriangle size={13} className="text-red-400 mt-0.5 shrink-0" />
-                      <span className="text-xs text-red-700">{f}</span>
+      {/* === ACTIVE PAID === */}
+      {stage === "Active Paid" && (
+        <div className="grid grid-cols-3 gap-4">
+          <Card title="Churn analysis">
+            {c.churn_probability != null && <Gauge value={c.churn_probability} label="Churn probability" />}
+            <div className="mt-4 space-y-1">
+              {[c.risk_factor_1, c.risk_factor_2, c.risk_factor_3].filter(Boolean).map((f: string, i: number) => (
+                <p key={i} className="text-xs text-red-700 bg-red-50 px-2 py-1 rounded">{f}</p>
+              ))}
+            </div>
+            <div className="mt-3 pt-3 border-t">
+              <Stat label="Revenue at Risk" value={`${Number(c.revenue_at_risk || 0).toLocaleString()} ฿`} color="text-red-600" />
+            </div>
+          </Card>
+
+          <Card title="CLV & RFM">
+            <Stat label="Predicted CLV (6m)" value={`${Number(c.predicted_clv_6m || 0).toLocaleString()} ฿`} color="text-blue-600" />
+            {c.clv_ci95_lo != null && (
+              <div className="text-xs text-gray-500 mb-3">
+                95% CI: {Number(c.clv_ci95_lo).toLocaleString()} – {Number(c.clv_ci95_hi).toLocaleString()} ฿
+              </div>
+            )}
+            <Stat label="P(alive)" value={c.p_alive != null ? `${(c.p_alive * 100).toFixed(1)}%` : "N/A"} />
+            {c.rfm_segment && (
+              <div className="mt-2">
+                <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-medium">
+                  {c.rfm_segment}
+                </span>
+              </div>
+            )}
+            <Stat label="Purchases" value={c.n_purchases || 0} sub="total transactions before cutoff" />
+            <Stat label="Total Revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
+          </Card>
+
+          <Card title="Credit forecast">
+            {c.credit_p50 != null ? (
+              <>
+                <Stat label="Urgency" value={c.urgency || "N/A"}
+                  color={c.urgency === "Critical" ? "text-red-600" : c.urgency === "Warning" ? "text-orange-600" : "text-gray-700"} />
+                {c.alert_date && <Stat label="Alert Date" value={c.alert_date} sub="start campaign by this date" />}
+                <div className="mt-3 space-y-1 text-xs">
+                  {[["P10 (Optimistic)", c.credit_p10], ["P25 (Early)", c.credit_p25],
+                    ["P50 (Likely)", c.credit_p50], ["P75 (Late)", c.credit_p75],
+                    ["P90 (Pessimistic)", c.credit_p90]].map(([label, val]: any) => (
+                    <div key={label} className="flex justify-between">
+                      <span className="text-gray-500">{label}</span>
+                      <span className="font-mono">{val != null ? `${Number(val).toFixed(0)} days` : "-"}</span>
                     </div>
                   ))}
                 </div>
-              )}
-            </Section>
-
-            {/* Key stats */}
-            <Section title="ข้อมูลสำคัญ">
-              <Row label="Status" value={<Badge label={p.is_active ? "Active" : "Churned"} />} />
-              <Row label="Revenue at Risk" value={baht(p.revenue_at_risk)} highlight />
-              <Row label="Priority Score"  value={`${p.priority_score?.toFixed(2) ?? "—"} / 10`} highlight />
-              <Row label="จำนวนซื้อ"       value={`${p.n_purchases ?? 0} ครั้ง`} />
-              <Row label="Forecast confidence" value={pct(p.forecast_confidence)} />
-            </Section>
-          </div>
-
-          {/* Middle column */}
-          <div className="space-y-5">
-            {/* CLV */}
-            <Section title="Customer Lifetime Value (6 เดือน)">
-              <Row label="Predicted CLV" value={baht(p.predicted_clv_6m)} highlight />
-              <Row label="P(alive)"       value={pct(p.p_alive)} />
-              <Row label="RFM Segment"    value={<Badge label={p.rfm_segment ?? "—"} />} />
-              <div className="mt-3">
-                <p className="text-xs text-gray-500 mb-2">Confidence Interval</p>
-                <CLVBar p={p} />
-              </div>
-            </Section>
-
-            {/* RFM scores */}
-            <Section title="RFM Scores">
-              {[
-                { label: "R (Recency)", val: p.r_score, max: 5, color: "bg-blue-500" },
-                { label: "F (Frequency)", val: p.f_score, max: 5, color: "bg-indigo-500" },
-                { label: "M (Monetary)", val: p.m_score, max: 5, color: "bg-purple-500" },
-              ].map(({ label, val, max, color }) => (
-                <div key={label} className="mb-3">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-500">{label}</span>
-                    <span className="font-medium">{val ?? "—"} / {max}</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full">
-                    <div className={`h-2 rounded-full ${color}`}
-                         style={{ width: val ? `${(val / max) * 100}%` : "0%" }} />
-                  </div>
-                </div>
-              ))}
-            </Section>
-          </div>
-
-          {/* Right column */}
-          <div className="space-y-5">
-            {/* Credit forecast */}
-            <Section title="Credit Purchase Forecast">
-              <div className="flex items-center justify-between mb-3">
-                <Badge label={p.urgency ?? "—"} />
-                {p.alert_date && (
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
-                    <Calendar size={12} />
-                    Alert: {p.alert_date}
-                  </div>
-                )}
-              </div>
-              <CreditForecast p={p} />
-            </Section>
-
-            {/* CI table */}
-            <Section title="Quantile Details">
-              {[
-                { label: "P10 (เร็วสุด)", v: p.credit_p10, note: "warm up" },
-                { label: "P25 (alert)",   v: p.credit_p25, note: "เริ่มโทร", bold: true },
-                { label: "P50 (best)",    v: p.credit_p50, note: "target date", bold: true },
-                { label: "P75 (late)",    v: p.credit_p75, note: "อาจช้ากว่า" },
-                { label: "P90 (ช้าสุด)", v: p.credit_p90, note: "pessimistic" },
-              ].map(({ label, v, note, bold }) => (
-                <div key={label} className={`flex justify-between py-1.5 text-sm border-b last:border-0 ${bold ? "font-semibold" : ""}`}>
-                  <span className="text-gray-600">{label}</span>
-                  <span className="text-right">
-                    {v ? `${Math.round(v)} วัน` : "—"}
-                    <span className="text-xs text-gray-400 ml-1">({note})</span>
-                  </span>
-                </div>
-              ))}
-            </Section>
-          </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-400">
+                {c.n_purchases <= 1 ? "New customer — not enough purchase history" : "No credit forecast available"}
+              </p>
+            )}
+          </Card>
         </div>
-      </main>
+      )}
+
+      {/* === CHURNED === */}
+      {stage === "Churned" && (
+        <div className="grid grid-cols-2 gap-4">
+          <Card title="Win-back analysis">
+            {c.comeback_probability != null && (
+              <Gauge value={c.comeback_probability} label="Comeback probability" />
+            )}
+            <div className="mt-4">
+              <Stat label="Win-back Tier" value={c.winback_tier || "N/A"}
+                color={c.winback_tier === "High" ? "text-green-600" : "text-gray-700"} />
+              <Stat label="Days Since Last Activity" value={c.days_since_last_activity || "N/A"} sub="days" />
+              <Stat label="Ever Paid" value={c.ever_paid ? "Yes" : "No — free user only"} />
+              <Stat label="Total Revenue (historical)" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
+            </div>
+          </Card>
+          <Card title="Win-back action">
+            <div className="bg-orange-50 border border-orange-200 rounded p-4 text-sm text-orange-800">
+              <p className="font-semibold mb-2">Recommended:</p>
+              <p>{c.winback_action || c.recommended_action || "Monitor"}</p>
+            </div>
+            <div className="mt-4 text-xs text-gray-500 space-y-1">
+              <p>Past purchases: {c.n_purchases || 0}</p>
+              {c.rfm_segment && <p>Last RFM segment: {c.rfm_segment}</p>}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* === ACTIVE FREE === */}
+      {stage === "Active Free" && (
+        <div className="grid grid-cols-2 gap-4">
+          <Card title="Conversion analysis">
+            {c.conversion_probability != null && (
+              <Gauge value={c.conversion_probability} label="Conversion probability" />
+            )}
+            <div className="mt-4">
+              <Stat label="Conversion Tier" value={c.conversion_tier || "N/A"}
+                color={c.conversion_tier === "High" ? "text-green-600" : "text-gray-700"} />
+              <Stat label="Days Since Join" value={c.days_since_last_activity || "N/A"} sub="days active" />
+            </div>
+          </Card>
+          <Card title="Conversion action">
+            <div className="bg-purple-50 border border-purple-200 rounded p-4 text-sm text-purple-800">
+              <p className="font-semibold mb-2">Recommended:</p>
+              <p>{c.conversion_action || c.recommended_action || "Engagement campaign"}</p>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* === GHOST === */}
+      {stage === "Ghost" && (
+        <Card title="Ghost account">
+          <p className="text-gray-600">This customer signed up but never used the service.</p>
+          <div className="mt-4">
+            <Stat label="Sub-stage" value={c.sub_stage || "Unknown"} />
+            <div className="bg-gray-50 border rounded p-3 mt-3 text-sm text-gray-600">
+              <p className="font-semibold mb-1">Recommended:</p>
+              <p>{c.recommended_action}</p>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
-}
-
-export default function CustomerPage() {
-  return <Suspense><CustomerContent /></Suspense>;
 }

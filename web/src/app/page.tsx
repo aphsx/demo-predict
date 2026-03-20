@@ -1,181 +1,174 @@
 "use client";
 import { useEffect, useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-         PieChart, Pie, Cell, Legend } from "recharts";
-import Sidebar from "@/components/Sidebar";
-import Badge from "@/components/Badge";
-import { api, Run, Summary } from "@/lib/api";
-import { RefreshCw, TrendingDown, Users, AlertTriangle, DollarSign, Bell, BarChart3 } from "lucide-react";
+import { fetchRuns, fetchSummary } from "@/lib/api";
 
-const PIE_COLORS = ["#0057a8","#ef4444","#f59e0b","#9ca3af"];
-const BAR_COLORS: Record<string,string> = {
-  Champions:"#7c3aed", Loyal:"#2563eb", Promising:"#0891b2",
-  "Cannot Lose":"#dc2626", "At Risk":"#f97316", "Need Attention":"#6b7280"
-};
-
-function KPICard({ label, value, sub, color="blue", icon: Icon }:
-  { label:string; value:string; sub?:string; color?:string; icon:any }) {
-  const colors: Record<string,string> = {
-    blue:"border-blue-500 bg-blue-50", red:"border-red-500 bg-red-50",
-    green:"border-green-500 bg-green-50", orange:"border-orange-500 bg-orange-50",
-    purple:"border-purple-500 bg-purple-50",
-  };
+function KPI({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
-    <div className={`rounded-xl border-l-4 p-4 shadow-sm ${colors[color]}`}>
-      <div className="flex items-start justify-between">
+    <div className="bg-white rounded-lg border p-4">
+      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className={`text-2xl font-bold mt-1 ${color || "text-gray-900"}`}>{value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+function StageCard({ title, count, sub, children, color }: any) {
+  return (
+    <div className={`rounded-lg border-l-4 bg-white border p-4 ${color}`}>
+      <div className="flex justify-between items-start">
         <div>
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-          {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+          <p className="text-sm font-semibold text-gray-800">{title}</p>
+          <p className="text-2xl font-bold text-gray-900">{(count || 0).toLocaleString()}</p>
         </div>
-        <Icon size={20} className="text-gray-400 mt-1" />
+      </div>
+      {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+      {children}
+    </div>
+  );
+}
+
+function DistBar({ data, colors }: { data: Record<string, number>; colors: Record<string, string> }) {
+  const total = Object.values(data).reduce((a, b) => a + b, 0);
+  if (!total) return null;
+  return (
+    <div className="mt-3">
+      <div className="flex rounded-full overflow-hidden h-3">
+        {Object.entries(data).map(([k, v]) => (
+          <div key={k} style={{ width: `${(v / total) * 100}%` }}
+            className={`${colors[k] || "bg-gray-300"}`} title={`${k}: ${v}`} />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-3 mt-2">
+        {Object.entries(data).map(([k, v]) => (
+          <span key={k} className="text-xs text-gray-600">
+            <span className={`inline-block w-2 h-2 rounded-full mr-1 ${colors[k] || "bg-gray-300"}`}></span>
+            {k}: {v.toLocaleString()}
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
-export default function DashboardPage() {
-  const [runs, setRuns]       = useState<Run[]>([]);
-  const [activeRun, setActive] = useState<Run | null>(null);
-  const [summary, setSummary]  = useState<Summary | null>(null);
-  const [loading, setLoading]  = useState(false);
+export default function Dashboard() {
+  const [runs, setRuns] = useState<any[]>([]);
+  const [runId, setRunId] = useState("");
+  const [summary, setSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { api.listRuns().then(r => { setRuns(r); if (r.length > 0) setActive(r[0]); }); }, []);
+  useEffect(() => { fetchRuns().then(r => { setRuns(r); if (r.length) setRunId(r[0].id); }); }, []);
   useEffect(() => {
-    if (!activeRun || activeRun.status !== "done") return;
+    if (!runId) return;
     setLoading(true);
-    api.getSummary(activeRun.id).then(s => { setSummary(s); setLoading(false); });
-  }, [activeRun]);
+    fetchSummary(runId).then(s => { setSummary(s); setLoading(false); });
+    const run = runs.find(r => r.id === runId);
+    if (run?.status === "processing") {
+      const t = setInterval(() => fetchSummary(runId).then(setSummary), 5000);
+      return () => clearInterval(t);
+    }
+  }, [runId]);
 
-  const fmt = (n?: number) => n == null ? "—" : n.toLocaleString("th-TH");
-  const fmtB = (n?: number) => n == null ? "—" : `฿${n.toLocaleString("th-TH")}`;
-
-  const churnData = summary ? Object.entries(summary.churn_tiers).map(([k,v])=>({name:k,value:v})) : [];
-  const rfmData   = summary?.rfm_segments ?? [];
+  const s = summary;
+  const ap = s?.active_paid || {};
+  const wb = s?.winback || {};
+  const cv = s?.conversion || {};
+  const lc = s?.lifecycle || {};
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-white border-b px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">ภาพรวมระบบ</h1>
-            <p className="text-sm text-gray-500">Customer Predictive Analytics</p>
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
+        <select value={runId} onChange={e => setRunId(e.target.value)}
+          className="border rounded px-3 py-1.5 text-sm bg-white">
+          {runs.filter(r => r.status === "done").map(r => (
+            <option key={r.id} value={r.id}>{r.name} ({r.cutoff_date})</option>
+          ))}
+        </select>
+      </div>
+
+      {loading && <p className="text-gray-500">Loading...</p>}
+      {!loading && s && (
+        <>
+          {/* Lifecycle Overview */}
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Customer Lifecycle</h2>
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <StageCard title="Active Paid" count={lc["Active Paid"]?.total} color="border-l-blue-500"
+              sub={`Healthy ${ap.healthy || 0} • At Risk ${ap.at_risk || 0}`}>
+              <p className="text-xs text-red-600 mt-2 font-medium">
+                Revenue at Risk: {Number(ap.revenue_at_risk || 0).toLocaleString()} ฿
+              </p>
+            </StageCard>
+            <StageCard title="Active Free" count={lc["Active Free"]?.total} color="border-l-purple-500"
+              sub={`High convert: ${cv.high || 0}`}>
+              <p className="text-xs text-purple-600 mt-2 font-medium">
+                Avg convert: {((cv.avg_convert || 0) * 100).toFixed(1)}%
+              </p>
+            </StageCard>
+            <StageCard title="Churned" count={lc["Churned"]?.total} color="border-l-orange-500"
+              sub={`Win-back High: ${wb.high || 0} • Med: ${wb.medium || 0}`}>
+              <p className="text-xs text-orange-600 mt-2 font-medium">
+                Avg comeback: {((wb.avg_comeback || 0) * 100).toFixed(1)}%
+              </p>
+            </StageCard>
+            <StageCard title="Ghost" count={lc["Ghost"]?.total} color="border-l-gray-400"
+              sub={Object.entries(lc["Ghost"]?.sub_stages || {}).map(([k,v]) => `${k}: ${v}`).join(" • ")} />
           </div>
-          <div className="flex items-center gap-3">
-            <select className="text-sm border rounded-lg px-3 py-2 bg-white"
-                    value={activeRun?.id ?? ""}
-                    onChange={e => setActive(runs.find(r => r.id === e.target.value) ?? null)}>
-              <option value="">-- เลือก Run --</option>
-              {runs.map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.status})
-                </option>
-              ))}
-            </select>
-            <button onClick={() => activeRun && api.getSummary(activeRun.id).then(setSummary)}
-                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            </button>
+
+          {/* Active Paid KPIs */}
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Active Paid — Key Metrics</h2>
+          <div className="grid grid-cols-5 gap-3 mb-6">
+            <KPI label="Total Active Paid" value={(ap.total || 0).toLocaleString()} />
+            <KPI label="At Risk" value={(ap.at_risk || 0).toLocaleString()} color="text-red-600" />
+            <KPI label="Revenue at Risk" value={`${Number(ap.revenue_at_risk || 0).toLocaleString()} ฿`} color="text-red-600" />
+            <KPI label="Avg CLV (6m)" value={`${Number(ap.avg_clv || 0).toLocaleString()} ฿`} />
+            <KPI label="Critical Top-up" value={(ap.critical_topup || 0).toLocaleString()} color="text-amber-600" />
           </div>
-        </div>
 
-        <div className="p-6 space-y-6">
-          {/* Status banner */}
-          {activeRun && activeRun.status !== "done" && (
-            <div className={`rounded-xl p-4 flex items-center gap-3 ${
-              activeRun.status === "processing" ? "bg-blue-50 text-blue-800" :
-              activeRun.status === "failed"     ? "bg-red-50 text-red-800" :
-              "bg-yellow-50 text-yellow-800"
-            }`}>
-              <RefreshCw size={16} className={activeRun.status === "processing" ? "animate-spin" : ""} />
-              <span className="text-sm font-medium">
-                {activeRun.status === "processing" && "กำลัง predict... กรุณารอสักครู่"}
-                {activeRun.status === "failed" && `เกิดข้อผิดพลาด: ${activeRun.error_message}`}
-                {activeRun.status === "pending" && "รอ upload ข้อมูล"}
-              </span>
-              <Badge label={activeRun.status} />
+          {/* Distributions */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-white rounded-lg border p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Churn Distribution</h3>
+              <DistBar data={s.churn_distribution || {}} colors={{
+                "Low": "bg-green-400", "Medium": "bg-yellow-400", "High": "bg-red-400"
+              }} />
             </div>
-          )}
-
-          {/* KPI Cards */}
-          {summary && (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-              <KPICard label="ลูกค้า Active"     value={fmt(summary.active)}        icon={Users}         color="blue" />
-              <KPICard label="เสี่ยง Churn สูง"  value={fmt(summary.high_churn)}    icon={TrendingDown}  color="red"  />
-              <KPICard label="Revenue at Risk"  value={fmtB(summary.revenue_at_risk)} icon={DollarSign}  color="orange"
-                       sub="churn_prob × CLV" />
-              <KPICard label="Avg CLV 6 เดือน"  value={fmtB(summary.avg_clv)}       icon={DollarSign}   color="green" />
-              <KPICard label="Critical Top-up"  value={fmt(summary.critical_topup)} icon={Bell}          color="red" />
-              <KPICard label="ลูกค้าทั้งหมด"    value={fmt(summary.total)}          icon={Users}         color="purple" />
+            <div className="bg-white rounded-lg border p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">RFM Segments</h3>
+              <DistBar data={s.rfm_distribution || {}} colors={{
+                "Champions": "bg-blue-500", "Loyal": "bg-blue-300",
+                "Need Attention": "bg-yellow-400", "Promising": "bg-green-400",
+                "At Risk": "bg-red-400", "Cannot Lose": "bg-orange-400"
+              }} />
             </div>
-          )}
+            <div className="bg-white rounded-lg border p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-2">Credit Urgency</h3>
+              <DistBar data={s.urgency_distribution || {}} colors={{
+                "Critical": "bg-red-500", "Warning": "bg-orange-400",
+                "Monitor": "bg-yellow-300", "Stable": "bg-green-400", "New Customer": "bg-gray-300"
+              }} />
+            </div>
+          </div>
 
-          {/* Charts */}
-          {summary && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Churn Tier Donut */}
-              <div className="bg-white rounded-xl border p-5 shadow-sm">
-                <h2 className="font-semibold text-gray-800 mb-4">การแจกแจง Churn Tier</h2>
-                <ResponsiveContainer width="100%" height={240}>
-                  <PieChart>
-                    <Pie data={churnData} cx="50%" cy="50%" innerRadius={60} outerRadius={90}
-                         dataKey="value" nameKey="name" label={({name,percent})=>`${name} ${(percent*100).toFixed(0)}%`}
-                         labelLine={false}>
-                      {churnData.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v:any) => v.toLocaleString()} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+          {/* Action summary */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="text-sm font-semibold text-blue-800 mb-2">Actionable Today</h3>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <p className="text-blue-600 font-bold text-lg">{ap.at_risk || 0}</p>
+                <p className="text-blue-700">Active Paid at risk — call or send offer</p>
               </div>
-
-              {/* RFM Bar */}
-              <div className="bg-white rounded-xl border p-5 shadow-sm">
-                <h2 className="font-semibold text-gray-800 mb-4">RFM Segments</h2>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={rfmData} layout="vertical" margin={{left:10}}>
-                    <XAxis type="number" tick={{fontSize:11}} />
-                    <YAxis type="category" dataKey="rfm_segment" width={110} tick={{fontSize:11}} />
-                    <Tooltip formatter={(v:any) => v.toLocaleString()} />
-                    <Bar dataKey="count" radius={[0,4,4,0]}>
-                      {rfmData.map((entry,i) => (
-                        <Cell key={i} fill={BAR_COLORS[entry.rfm_segment] ?? "#6b7280"} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <div>
+                <p className="text-orange-600 font-bold text-lg">{wb.high || 0}</p>
+                <p className="text-orange-700">Churned High tier — win-back call</p>
+              </div>
+              <div>
+                <p className="text-purple-600 font-bold text-lg">{cv.high || 0}</p>
+                <p className="text-purple-700">Free users High tier — conversion offer</p>
               </div>
             </div>
-          )}
-
-          {/* Urgency Summary */}
-          {summary?.urgency_dist && (
-            <div className="bg-white rounded-xl border p-5 shadow-sm">
-              <h2 className="font-semibold text-gray-800 mb-4">Credit Top-up Urgency</h2>
-              <div className="flex gap-4 flex-wrap">
-                {Object.entries(summary.urgency_dist).map(([u, c]) => (
-                  <div key={u} className="flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-3">
-                    <Badge label={u} />
-                    <span className="text-2xl font-bold text-gray-900">{c.toLocaleString()}</span>
-                    <span className="text-sm text-gray-500">คน</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!activeRun && (
-            <div className="text-center py-20 text-gray-400">
-              <BarChart3 size={48} className="mx-auto mb-3 opacity-30" />
-              <p className="text-lg">เลือก Run หรือ<a href="/runs" className="text-blue-600 underline ml-1">สร้าง Run ใหม่</a></p>
-            </div>
-          )}
-        </div>
-      </main>
+          </div>
+        </>
+      )}
     </div>
   );
 }

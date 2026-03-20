@@ -1,35 +1,29 @@
-import clsx from "clsx";
-
 const COLORS: Record<string, string> = {
-  High:           "bg-red-100 text-red-800",
-  Medium:         "bg-yellow-100 text-yellow-800",
-  Low:            "bg-green-100 text-green-800",
-  "Already Churned": "bg-gray-200 text-gray-600",
-  Critical:       "bg-red-100 text-red-800",
-  Warning:        "bg-orange-100 text-orange-800",
-  Monitor:        "bg-yellow-100 text-yellow-800",
-  Stable:         "bg-green-100 text-green-800",
-  "New Customer": "bg-blue-100 text-blue-800",
-  Champions:      "bg-purple-100 text-purple-800",
-  Loyal:          "bg-indigo-100 text-indigo-800",
-  Promising:      "bg-teal-100 text-teal-800",
-  "Cannot Lose":  "bg-red-100 text-red-800",
-  "At Risk":      "bg-orange-100 text-orange-800",
-  "Need Attention":"bg-gray-100 text-gray-700",
-  done:           "bg-green-100 text-green-800",
-  processing:     "bg-blue-100 text-blue-800",
-  pending:        "bg-gray-100 text-gray-600",
-  failed:         "bg-red-100 text-red-800",
-  validating:     "bg-yellow-100 text-yellow-800",
+  "Active Paid": "bg-blue-100 text-blue-800",
+  "Active Free": "bg-purple-100 text-purple-800",
+  "Churned": "bg-orange-100 text-orange-800",
+  "Ghost": "bg-gray-100 text-gray-600",
+  "High": "bg-red-100 text-red-800",
+  "Medium": "bg-yellow-100 text-yellow-800",
+  "Low": "bg-green-100 text-green-800",
+  "At Risk": "bg-red-100 text-red-700",
+  "Healthy": "bg-green-100 text-green-700",
+  "Critical": "bg-red-100 text-red-800",
+  "Warning": "bg-orange-100 text-orange-800",
+  "Monitor": "bg-yellow-100 text-yellow-800",
+  "Stable": "bg-green-100 text-green-800",
+  "Champions": "bg-blue-100 text-blue-800",
+  "Loyal": "bg-blue-50 text-blue-700",
+  "Need Attention": "bg-yellow-100 text-yellow-800",
+  "Free User": "bg-purple-100 text-purple-700",
+  "Already Churned": "bg-gray-200 text-gray-700",
 };
 
-export default function Badge({ label }: { label: string }) {
+export default function Badge({ stage, className }: { stage: string; className?: string }) {
+  const color = COLORS[stage] || "bg-gray-100 text-gray-600";
   return (
-    <span className={clsx(
-      "inline-flex px-2 py-0.5 rounded-full text-xs font-medium",
-      COLORS[label] ?? "bg-gray-100 text-gray-700"
-    )}>
-      {label}
+    <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded ${color} ${className || ""}`}>
+      {stage}
     </span>
   );
 }
