@@ -95,6 +95,11 @@ async def _pipeline(run_id: str, model_dir: str):
 async def _load_from_db(db: AsyncSession, run_id: str):
     """โหลดข้อมูลดิบจาก DB → pandas DataFrames"""
 
+    def _to_naive_datetime(series: pd.Series) -> pd.Series:
+        # Force UTC parse then drop tz to keep comparisons consistent with naive cutoff timestamps.
+        dt = pd.to_datetime(series, errors="coerce", utc=True)
+        return dt.dt.tz_convert(None)
+
     # Users
     u = await db.execute(text("""
         SELECT acc_id,status_sms,credit_sms,credit_email,
@@ -104,7 +109,10 @@ async def _load_from_db(db: AsyncSession, run_id: str):
     users = pd.DataFrame([dict(row._mapping) for row in u])
     for col in ["expire_sms","expire_email","join_date","last_access","last_send"]:
         if col in users.columns:
-            users[col] = pd.to_datetime(users[col], errors="coerce")
+            users[col] = _to_naive_datetime(users[col])
+    for col in ["credit_sms", "credit_email"]:
+        if col in users.columns:
+            users[col] = pd.to_numeric(users[col], errors="coerce")
 
     # Payments
     p = await db.execute(text("""
@@ -112,7 +120,10 @@ async def _load_from_db(db: AsyncSession, run_id: str):
         FROM raw_payments WHERE run_id = :r
     """), {"r": run_id})
     payments = pd.DataFrame([dict(row._mapping) for row in p])
-    payments["payment_date"] = pd.to_datetime(payments["payment_date"], errors="coerce")
+    payments["payment_date"] = _to_naive_datetime(payments["payment_date"])
+    for col in ["amount", "credit_add"]:
+        if col in payments.columns:
+            payments[col] = pd.to_numeric(payments[col], errors="coerce")
 
     # Usage
     u2 = await db.execute(text("""
@@ -120,6 +131,9 @@ async def _load_from_db(db: AsyncSession, run_id: str):
     """), {"r": run_id})
     usage = pd.DataFrame([dict(row._mapping) for row in u2])
     if len(usage) > 0:
+        for col in ["usage", "year", "month"]:
+            if col in usage.columns:
+                usage[col] = pd.to_numeric(usage[col], errors="coerce")
         usage["period"] = pd.to_datetime(
             usage["year"].astype(str) + "-" + usage["month"].astype(str).str.zfill(2) + "-01"
         )
@@ -178,7 +192,7 @@ async def _save_predictions(db: AsyncSession, run_id: str,
             "p10": _fv(row, "p10"), "p25": _fv(row, "p25"),
             "p50": _fv(row, "p50"), "p75": _fv(row, "p75"), "p90": _fv(row, "p90"),
             "urgency":    _sv(row, "urgency"),
-            "alert_date": _sv(row, "alert_date"),
+            "alert_date": _dv(row, "alert_date"),
             "n_purch":    int(row["n_purchases"]) if "n_purchases" in row.index and pd.notna(row["n_purchases"]) else None,
             "conf":       _fv(row, "forecast_confidence"),
             "priority":   _fv(row, "priority_score"),
@@ -204,3 +218,15 @@ def _fv(row, col):
 def _sv(row, col):
     v = row.get(col) if hasattr(row, "get") else row[col] if col in row.index else None
     return str(v) if v is not None and str(v) not in ("None","nan","NaT") else None
+
+def _dv(row, col):
+    v = row.get(col) if hasattr(row, "get") else row[col] if col in row.index else None
+    if v is None:
+        return None
+    try:
+        ts = pd.Timestamp(v)
+        if pd.isna(ts):
+            return None
+        return ts.date()
+    except:
+        return None

@@ -345,22 +345,41 @@ async def _insert_raw(db: AsyncSession, run_id, df_map: dict):
 
 
 def _safe(row, col):
-    import math
     v = row.get(col)
-    if v is None: return None
+    if v is None:
+        return None
     try:
-        if isinstance(v, float) and math.isnan(v): return None
-    except: pass
+        if pd.isna(v):
+            return None
+    except:
+        pass
+    try:
+        if hasattr(v, "item"):
+            return v.item()
+    except:
+        pass
     return v
 
 def _safe_date(row, col):
     v = _safe(row, col)
-    if v is None: return None
-    try: return pd.Timestamp(v).date()
-    except: return None
+    if v is None:
+        return None
+    try:
+        ts = pd.Timestamp(v)
+        if pd.isna(ts):
+            return None
+        return ts.date()
+    except:
+        return None
 
 def _safe_ts(row, col):
     v = _safe(row, col)
-    if v is None: return None
-    try: return pd.Timestamp(v).isoformat()
-    except: return None
+    if v is None:
+        return None
+    try:
+        ts = pd.Timestamp(v)
+        if pd.isna(ts):
+            return None
+        return ts.to_pydatetime()
+    except:
+        return None
