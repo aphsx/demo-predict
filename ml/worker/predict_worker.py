@@ -164,31 +164,34 @@ async def _save_predictions(db: AsyncSession, run_id: str,
 
     await db.execute(text("DELETE FROM predictions WHERE run_id = :r"), {"r": run_id})
 
+    INSERT_SQL = text("""
+        INSERT INTO predictions (
+          run_id, acc_id,
+          churn_probability, churn_tier,
+          predicted_clv_6m, clv_ci95_lo, clv_ci95_hi,
+          clv_ci80_lo, clv_ci80_hi, p_alive, rfm_segment,
+          credit_p10, credit_p25, credit_p50, credit_p75, credit_p90,
+          urgency, alert_date, n_purchases, forecast_confidence,
+          priority_score, revenue_at_risk, is_active,
+          risk_factor_1, risk_factor_2, risk_factor_3
+        ) VALUES (
+          :run_id, :acc_id,
+          :churn_prob, :churn_tier,
+          :clv, :ci95_lo, :ci95_hi,
+          :ci80_lo, :ci80_hi, :p_alive, :rfm,
+          :p10, :p25, :p50, :p75, :p90,
+          :urgency, :alert_date, :n_purch, :conf,
+          :priority, :rev_risk, :is_active,
+          :rf1, :rf2, :rf3
+        )
+    """)
+
+    BATCH_SIZE = 1000
+    rows_buf = []
     for _, row in batch.iterrows():
         acc  = int(row.get("acc_id", 0))
         shap = shap_cache.get(acc, [])
-
-        await db.execute(text("""
-            INSERT INTO predictions (
-              run_id, acc_id,
-              churn_probability, churn_tier,
-              predicted_clv_6m, clv_ci95_lo, clv_ci95_hi,
-              clv_ci80_lo, clv_ci80_hi, p_alive, rfm_segment,
-              credit_p10, credit_p25, credit_p50, credit_p75, credit_p90,
-              urgency, alert_date, n_purchases, forecast_confidence,
-              priority_score, revenue_at_risk, is_active,
-              risk_factor_1, risk_factor_2, risk_factor_3
-            ) VALUES (
-              :run_id, :acc_id,
-              :churn_prob, :churn_tier,
-              :clv, :ci95_lo, :ci95_hi,
-              :ci80_lo, :ci80_hi, :p_alive, :rfm,
-              :p10, :p25, :p50, :p75, :p90,
-              :urgency, :alert_date, :n_purch, :conf,
-              :priority, :rev_risk, :is_active,
-              :rf1, :rf2, :rf3
-            )
-        """), {
+        rows_buf.append({
             "run_id": run_id, "acc_id": acc,
             "churn_prob": _fv(row, "churn_probability"),
             "churn_tier": _sv(row, "churn_tier"),
@@ -209,6 +212,12 @@ async def _save_predictions(db: AsyncSession, run_id: str,
             "rf2": shap[1] if len(shap) > 1 else None,
             "rf3": shap[2] if len(shap) > 2 else None,
         })
+        if len(rows_buf) >= BATCH_SIZE:
+            await db.execute(INSERT_SQL, rows_buf)
+            rows_buf = []
+
+    if rows_buf:
+        await db.execute(INSERT_SQL, rows_buf)
 
     await db.commit()
 
