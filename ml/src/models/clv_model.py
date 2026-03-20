@@ -44,12 +44,12 @@ def train(payments: pd.DataFrame, cutoff: pd.Timestamp = CUTOFF,
     # ── BG/NBD ────────────────────────────────────────────────────
     bgf = BetaGeoFitter(penalizer_coef=CLV_PENALIZER)
     bgf.fit(rfm_fit["frequency"], rfm_fit["recency"], rfm_fit["T"])
-    print(f"  BG/NBD: r={bgf.params_['r']:.4f} α={bgf.params_['alpha']:.4f} "
+    print(f"  BG/NBD: r={bgf.params_['r']:.4f} alpha={bgf.params_['alpha']:.4f} "
           f"a={bgf.params_['a']:.4f} b={bgf.params_['b']:.4f}")
 
     # ── Gamma-Gamma ───────────────────────────────────────────────
     corr = rfm_fit[["frequency", "monetary_value"]].corr().iloc[0, 1]
-    print(f"  Freq-Monetary corr: {corr:.3f} {'✅' if abs(corr) < 0.3 else '❌'} (need < 0.3)")
+    print(f"  Freq-Monetary corr: {corr:.3f} {'[OK]' if abs(corr) < 0.3 else '[WARN]'} (need < 0.3)")
 
     ggf = GammaGammaFitter(penalizer_coef=CLV_PENALIZER)
     ggf.fit(rfm_fit["frequency"], rfm_fit["monetary_value"])
