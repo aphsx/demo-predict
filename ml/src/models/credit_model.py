@@ -266,9 +266,28 @@ def _load_all(models_dir: Path) -> dict:
     arts = {}
     for q in CREDIT_QUANTILES:
         fname = f"credit_q{int(q * 100):02d}.pkl"
-        with open(models_dir / fname, "rb") as f:
+        with open(_resolve_model_file(models_dir, fname), "rb") as f:
             arts[q] = dill.load(f)
     return arts
+
+
+def _resolve_model_file(models_dir: Path, filename: str) -> Path:
+    requested = Path(models_dir) / filename
+    local_default = Path(__file__).resolve().parents[2] / "models" / filename
+    candidates = [requested]
+    if local_default != requested:
+        candidates.append(local_default)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    searched = "\n".join(f"- {p}" for p in candidates)
+    raise FileNotFoundError(
+        f"Model artifact not found: {filename}\n"
+        f"Searched:\n{searched}\n"
+        "Train models first with: python train.py data/1Moby_Data.xlsx"
+    )
 
 
 def _save_plots(q_preds, actual_te, mult_80, mult_50, q_models, out_dir: Path):

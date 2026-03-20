@@ -230,9 +230,28 @@ def what_if(acc_id: int, feature: str, new_value: float,
 # ─────────────────────────────────────────────────────────────────
 
 def _load_artifact(models_dir: Path) -> dict:
-    path = models_dir / MODEL_FILES["churn_model"]
+    path = _resolve_model_file(models_dir, MODEL_FILES["churn_model"])
     with open(path, "rb") as f:
         return dill.load(f)
+
+
+def _resolve_model_file(models_dir: Path, filename: str) -> Path:
+    requested = Path(models_dir) / filename
+    local_default = Path(__file__).resolve().parents[2] / "models" / filename
+    candidates = [requested]
+    if local_default != requested:
+        candidates.append(local_default)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    searched = "\n".join(f"- {p}" for p in candidates)
+    raise FileNotFoundError(
+        f"Model artifact not found: {filename}\n"
+        f"Searched:\n{searched}\n"
+        "Train models first with: python train.py data/1Moby_Data.xlsx"
+    )
 
 
 def _run_competition(X_tr, X_tr_s, y_tr, X_val, X_val_s, y_val) -> dict:

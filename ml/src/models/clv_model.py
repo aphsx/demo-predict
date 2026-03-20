@@ -225,13 +225,32 @@ def _nlargest_revenue(rfm_eval: pd.DataFrame, frac: float) -> float:
 
 
 def _load_bgf(models_dir: Path) -> dict:
-    with open(models_dir / MODEL_FILES["ltv_bgnbd"], "rb") as f:
+    with open(_resolve_model_file(models_dir, MODEL_FILES["ltv_bgnbd"]), "rb") as f:
         return dill.load(f)
 
 
 def _load_ggf(models_dir: Path) -> GammaGammaFitter:
-    with open(models_dir / MODEL_FILES["ltv_gg"], "rb") as f:
+    with open(_resolve_model_file(models_dir, MODEL_FILES["ltv_gg"]), "rb") as f:
         return dill.load(f)
+
+
+def _resolve_model_file(models_dir: Path, filename: str) -> Path:
+    requested = Path(models_dir) / filename
+    local_default = Path(__file__).resolve().parents[2] / "models" / filename
+    candidates = [requested]
+    if local_default != requested:
+        candidates.append(local_default)
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    searched = "\n".join(f"- {p}" for p in candidates)
+    raise FileNotFoundError(
+        f"Model artifact not found: {filename}\n"
+        f"Searched:\n{searched}\n"
+        "Train models first with: python train.py data/1Moby_Data.xlsx"
+    )
 
 
 def _save_plots(rfm_fit, rfm_eval, rfm_full, out_dir: Path) -> None:
