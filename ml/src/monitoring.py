@@ -14,9 +14,9 @@ def compute_psi(expected: np.ndarray, actual: np.ndarray,
                 bins: int = 10) -> float:
     """
     Population Stability Index — วัดว่า feature distribution เปลี่ยนไปแค่ไหน
-    PSI < 0.10  → ปกติ
-    PSI 0.10–0.25 → เฝ้าระวัง
-    PSI > 0.25  → retrain
+    PSI < 0.10  -> normal
+    PSI 0.10-0.25 -> warning
+    PSI > 0.25  -> retrain
     """
     eps = 1e-8
     breakpoints = np.linspace(0, 100, bins + 1)
@@ -91,7 +91,7 @@ def save_baseline(feat_df: pd.DataFrame, out_path: Path) -> None:
     }
     with open(out_path, "w") as f:
         json.dump(baseline, f, indent=2)
-    print(f"  Monitoring baseline saved → {out_path}")
+    print(f"  Monitoring baseline saved -> {out_path}")
 
 
 def load_baseline(path: Path) -> dict:

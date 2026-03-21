@@ -103,8 +103,8 @@ def train(payments: pd.DataFrame, usage: pd.DataFrame,
     r2_50 = 1 - np.sum((actual_te - p50) ** 2) / np.sum((actual_te - actual_te.mean()) ** 2)
 
     print(f"  LightGBM Q50: MAE={mae50:.1f}d MedAE={med50:.1f}d R²={r2_50:.3f}")
-    print(f"  Coverage P10-P90: {cov_before_80:.1%} → {cov_after_80:.1%} (×{mult_80:.2f})")
-    print(f"  Coverage P25-P75: {cov_before_50:.1%} → {cov_after_50:.1%} (×{mult_50:.2f})")
+    print(f"  Coverage P10-P90: {cov_before_80:.1%} -> {cov_after_80:.1%} (x{mult_80:.2f})")
+    print(f"  Coverage P25-P75: {cov_before_50:.1%} -> {cov_after_50:.1%} (x{mult_50:.2f})")
 
     print("\n  Per-quantile:")
     for q in CREDIT_QUANTILES:
