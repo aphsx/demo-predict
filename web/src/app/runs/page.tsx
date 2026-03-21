@@ -109,7 +109,7 @@ export default function RunsPage() {
                       <div className="flex items-center gap-2">
                         {run.status === "processing" && <RefreshCw size={12} className="animate-spin text-blue-500" />}
                         {run.status === "done" && <CheckCircle size={12} className="text-green-500" />}
-                        <Badge label={run.status} />
+                        <Badge stage={run.status} />
                       </div>
                       {run.error_message && (
                         <p className="text-xs text-red-500 mt-0.5 truncate max-w-xs">{run.error_message}</p>
