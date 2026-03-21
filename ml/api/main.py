@@ -318,9 +318,18 @@ async def export_predictions(
 async def get_model_metrics():
     metrics_path = MODEL_DIR / "metrics.json"
     if not metrics_path.exists():
-        raise HTTPException(404, "No metrics found — train models first")
+        raise HTTPException(404, "No metrics found - train models first")
     with open(metrics_path) as f:
         return json.load(f)
+
+
+@app.get("/training-log")
+async def get_training_log():
+    log_path = MODEL_DIR / "training_log.txt"
+    if not log_path.exists():
+        raise HTTPException(404, "No training log found - train models first")
+    with open(log_path) as f:
+        return {"log": f.read()}
 
 
 # ── Health ────────────────────────────────────────────────────────

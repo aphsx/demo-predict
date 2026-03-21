@@ -3,10 +3,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/", label: "Dashboard", icon: "📊" },
-  { href: "/runs", label: "Runs", icon: "🔄" },
-  { href: "/customers", label: "Customers", icon: "👥" },
-  { href: "/model-performance", label: "Model Metrics", icon: "🎯" },
+  { href: "/", label: "Dashboard" },
+  { href: "/runs", label: "Runs" },
+  { href: "/customers", label: "Customers" },
+  { href: "/model-performance", label: "Model Metrics" },
 ];
 
 export default function Sidebar() {
@@ -22,16 +22,15 @@ export default function Sidebar() {
           const active = pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href));
           return (
             <Link key={l.href} href={l.href}
-              className={`flex items-center gap-2 px-3 py-2 rounded text-sm transition
+              className={`block px-3 py-2 rounded text-sm transition
                 ${active ? "bg-blue-600 text-white" : "text-gray-300 hover:bg-gray-800"}`}>
-              <span className="text-base">{l.icon}</span>
               {l.label}
             </Link>
           );
         })}
       </nav>
       <div className="p-4 text-xs text-gray-500 border-t border-gray-700">
-        5 Models • Lifecycle Engine
+        5 Models | Lifecycle Engine
       </div>
     </aside>
   );

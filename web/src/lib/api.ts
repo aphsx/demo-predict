@@ -52,6 +52,11 @@ export async function fetchModelMetrics() {
   return res.json();
 }
 
+export async function fetchTrainingLog() {
+  const res = await fetch(api("/api/training-log"));
+  return res.json();
+}
+
 export function exportUrl(runId: string, params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
   return api(`/api/runs/${runId}/export?${qs}`);

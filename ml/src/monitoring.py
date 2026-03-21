@@ -65,7 +65,7 @@ def check_prediction_drift(baseline_probs: np.ndarray,
     stat, p = ks_2samp(baseline_probs, new_probs)
     alert   = p < p_threshold
     if alert:
-        print(f"  ⚠️  Prediction drift detected: KS={stat:.4f} p={p:.4f}")
+        print(f"  [WARN]  Prediction drift detected: KS={stat:.4f} p={p:.4f}")
     else:
         print(f"  Prediction drift: OK (KS={stat:.4f} p={p:.4f})")
     return {"ks_stat": round(float(stat), 4), "p_value": round(float(p), 4), "alert": alert}
@@ -91,7 +91,7 @@ def save_baseline(feat_df: pd.DataFrame, out_path: Path) -> None:
     }
     with open(out_path, "w") as f:
         json.dump(baseline, f, indent=2)
-    print(f"  Monitoring baseline saved -> {out_path}")
+    print(f"  Monitoring baseline saved → {out_path}")
 
 
 def load_baseline(path: Path) -> dict:

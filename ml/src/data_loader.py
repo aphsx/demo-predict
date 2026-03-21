@@ -52,7 +52,7 @@ def load_data(path: str | Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
     usage_sheets = {
         "SMS_usage (BC)":    ("sms",   "bc"),
         "SMS_usage (API)":   ("sms",   "api"),
-        "SMS_usage (OTP)":   ("sms",   "otp"),   # ⚠️ ซ้ำกับ API — ตรวจ vendor ก่อน
+        "SMS_usage (OTP)":   ("sms",   "otp"),   # [WARN] ซ้ำกับ API — ตรวจ vendor ก่อน
         "Email_usage (BC)":  ("email", "bc"),
         "Email_usage (API)": ("email", "api"),
         "Email_usage (OTP)": ("email", "otp"),
