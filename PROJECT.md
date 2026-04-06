@@ -103,12 +103,12 @@ demo-predict/
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        USER (Browser)                           │
-│         Next.js Frontend  →  port 3000                          │
+│         Next.js Frontend  →  port 3001                          │
 └────────────────────────────┬────────────────────────────────────┘
                              │  /api/* (Next.js proxy)
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    FastAPI  →  port 8000                        │
+│                    FastAPI  →  port 8001                        │
 │  POST /runs/{id}/upload                                         │
 │    1. Validate Excel sheets                                     │
 │    2. INSERT raw data → PostgreSQL                              │
@@ -511,11 +511,11 @@ Layout 3 คอลัมน์:
 
 | Service | Image / Build | Port | Role |
 |---------|--------------|------|------|
-| **db** | postgres:15-alpine | 5432 | Database |
+| **db** | postgres:15-alpine | 5433 | Database |
 | **redis** | redis:7-alpine | — | Queue + Cache |
-| **ml** | ./ml/Dockerfile | 8000 | FastAPI API server |
+| **ml** | ./ml/Dockerfile | 8001 | FastAPI API server |
 | **worker** | ./ml/Dockerfile | — | ARQ background worker |
-| **web** | ./web/Dockerfile | 3000 | Next.js frontend |
+| **web** | ./web/Dockerfile | 3001 | Next.js frontend |
 
 ### Dependency Chain
 
@@ -540,9 +540,9 @@ redis (healthy)─┤
 
 ```
 Browser request  →  /api/runs
-Next.js rewrite  →  http://ml:8000/runs   (Docker internal)
+Next.js rewrite  →  http://ml:8000/runs   (Docker internal, ไม่เปลี่ยน)
 
-Dev mode         →  http://localhost:8000/runs
+Dev mode         →  http://localhost:8001/runs
 ```
 
 ---
@@ -558,7 +558,7 @@ Dev mode         →  http://localhost:8000/runs
 | `MODEL_DIR` | /app/models | path ไฟล์โมเดล |
 | `REDIS_HOST` | redis | Redis hostname |
 | `REDIS_PORT` | 6379 | Redis port |
-| `NEXT_PUBLIC_API_URL` | http://localhost:8000 | API URL สำหรับ browser |
+| `NEXT_PUBLIC_API_URL` | http://localhost:8001 | API URL สำหรับ browser |
 | `API_URL` | http://ml:8000 | API URL สำหรับ Next.js server-side |
 
 ---
@@ -587,9 +587,9 @@ docker compose up db redis ml worker -d
 # Step 2 — รัน Next.js dev server บนเครื่อง
 cd web
 npm install               # ครั้งแรกเท่านั้น
-API_URL=http://localhost:8000 npm run dev
+API_URL=http://localhost:8001 npm run dev
 
-# เปิด http://localhost:3000
+# เปิด http://localhost:3001
 # แก้ไฟล์ → browser reload เอง (hot reload)
 ```
 

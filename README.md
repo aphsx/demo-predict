@@ -20,13 +20,13 @@ docker-compose up --build
 ```
 
 **URLs:**
-- Frontend: http://localhost:3000
-- API docs:  http://localhost:8000/docs
-- Database:  localhost:5432
+- Frontend: http://localhost:3001
+- API docs:  http://localhost:8001/docs
+- Database:  localhost:5433
 
 ## การใช้งาน
 
-1. เปิด http://localhost:3000
+1. เปิด http://localhost:3001
 2. ไปหน้า "จัดการรัน" → สร้าง Run ใหม่
 3. อัปโหลดไฟล์ Excel → ระบบ predict อัตโนมัติ
 4. ดูผลที่หน้า Dashboard และ รายชื่อลูกค้า
