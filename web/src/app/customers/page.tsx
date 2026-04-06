@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchRuns, fetchPredictions, exportUrl } from "@/lib/api";
@@ -13,7 +13,7 @@ const CHURN_TIERS = ["", "Low", "Medium", "High"];
 const WB_TIERS = ["", "High", "Medium", "Low"];
 const CV_TIERS = ["", "High", "Medium", "Low"];
 
-export default function Customers() {
+function CustomersContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const [runs, setRuns] = useState<any[]>([]);
@@ -166,5 +166,13 @@ export default function Customers() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function Customers() {
+  return (
+    <Suspense fallback={<div className="p-6 text-gray-500">Loading...</div>}>
+      <CustomersContent />
+    </Suspense>
   );
 }
