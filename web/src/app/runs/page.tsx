@@ -1,20 +1,41 @@
 "use client";
+export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
-import Sidebar from "@/components/Sidebar";
-import Badge from "@/components/Badge";
+import {
+  Plus, Upload, Trash2, RefreshCw, CheckCircle2,
+  Clock3, AlertCircle, FileSpreadsheet, ChevronRight,
+} from "lucide-react";
+import {
+  PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
+} from "@/components/ui";
 import { api, Run } from "@/lib/api";
-import { Plus, Upload, Trash2, RefreshCw, CheckCircle } from "lucide-react";
+
+const statusToTone: Record<string, "ok" | "warn" | "danger" | "info" | "neutral"> = {
+  done:       "ok",
+  processing: "info",
+  validating: "info",
+  pending:    "neutral",
+  failed:     "danger",
+};
+const statusIcon: Record<string, any> = {
+  done:       CheckCircle2,
+  processing: RefreshCw,
+  validating: RefreshCw,
+  pending:    Clock3,
+  failed:     AlertCircle,
+};
 
 export default function RunsPage() {
   const [runs, setRuns]       = useState<Run[]>([]);
+  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [name, setName]       = useState("");
   const [cutoff, setCutoff]   = useState("2025-07-01");
   const [uploading, setUploading] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = () => api.listRuns().then(setRuns);
+  const load = () => api.listRuns().then((d) => { setRuns(d); setLoading(false); });
   useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
 
   const createRun = async () => {
@@ -22,160 +43,188 @@ export default function RunsPage() {
     await api.createRun({ name, cutoff_date: cutoff });
     setCreating(false); setName(""); load();
   };
-
   const deleteRun = async (id: string) => {
     if (!confirm("ลบ Run นี้?")) return;
     await api.deleteRun(id); load();
   };
-
   const uploadFile = async (runId: string, file: File) => {
     setUploading(runId);
-    try {
-      await api.uploadFile(runId, file);
-      load();
-    } finally {
-      setUploading(null);
-    }
+    try { await api.uploadFile(runId, file); load(); } finally { setUploading(null); }
   };
 
-  const statusColor: Record<string,string> = {
-    done:"text-green-600", processing:"text-blue-600 animate-pulse",
-    failed:"text-red-600", pending:"text-gray-500", validating:"text-yellow-600",
+  const stats = {
+    total: runs.length,
+    active: runs.filter(r => ["processing", "validating"].includes(r.status)).length,
+    done: runs.filter(r => r.status === "done").length,
+    failed: runs.filter(r => r.status === "failed").length,
   };
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-white border-b px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold">จัดการ Prediction Runs</h1>
-            <p className="text-sm text-gray-500">อัปโหลดข้อมูล → trigger ML pipeline</p>
-          </div>
-          <button onClick={() => setCreating(true)}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">
-            <Plus size={16} /> สร้าง Run ใหม่
+    <div className="pb-12">
+      <PageHeader
+        eyebrow="Pipelines"
+        title="Run management"
+        actions={
+          <button
+            onClick={() => setCreating(true)}
+            className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] inline-flex items-center gap-1.5"
+          >
+            <Plus size={14} /> Create run
           </button>
+        }
+      />
+
+      <div className="px-8 mt-4 space-y-5">
+        {/* Status strip */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MiniStat label="Total runs" value={stats.total} tone="slate" />
+          <MiniStat label="In progress" value={stats.active} tone="blue" />
+          <MiniStat label="Completed" value={stats.done} tone="emerald" />
+          <MiniStat label="Failed" value={stats.failed} tone="rose" />
         </div>
 
-        <div className="p-6 space-y-4">
-          {/* Create form */}
-          {creating && (
-            <div className="bg-white rounded-xl border p-5 shadow-sm space-y-3">
-              <h2 className="font-semibold text-gray-800">Run ใหม่</h2>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">ชื่อ Run</label>
-                  <input value={name} onChange={e => setName(e.target.value)}
-                         className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                         placeholder="เช่น Q1-2025" />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Cutoff Date</label>
-                  <input type="date" value={cutoff} onChange={e => setCutoff(e.target.value)}
-                         className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
+        {/* Create panel */}
+        {creating && (
+          <SectionCard title="New run" right={<button onClick={() => setCreating(false)} className="text-[12px] text-[color:var(--ink-4)] hover:underline">cancel</button>}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-medium text-[color:var(--ink-4)] block mb-1">Run name</label>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Q3-2025"
+                  className="w-full h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px]"
+                />
               </div>
-              <div className="flex gap-2">
-                <button onClick={createRun}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
-                  สร้าง
-                </button>
-                <button onClick={() => setCreating(false)}
-                        className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50">
-                  ยกเลิก
-                </button>
+              <div>
+                <label className="text-[11px] font-medium text-[color:var(--ink-4)] block mb-1">Cutoff date</label>
+                <input
+                  type="date"
+                  value={cutoff}
+                  onChange={e => setCutoff(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px]"
+                />
               </div>
             </div>
-          )}
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={createRun}
+                className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)]"
+              >
+                Create
+              </button>
+            </div>
+          </SectionCard>
+        )}
 
-          {/* Runs table */}
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
+        {/* Runs table */}
+        <div className="surface overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="table-base">
+              <thead>
                 <tr>
-                  {["ชื่อ Run","Status","Cutoff","ลูกค้า","Active","สร้างเมื่อ","Actions"].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                      {h}
-                    </th>
-                  ))}
+                  <th>Run</th>
+                  <th>Status</th>
+                  <th>Cutoff</th>
+                  <th className="text-right">Customers</th>
+                  <th className="text-right">Active</th>
+                  <th>Created</th>
+                  <th></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {runs.map(run => (
-                  <tr key={run.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">{run.name}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {run.status === "processing" && <RefreshCw size={12} className="animate-spin text-blue-500" />}
-                        {run.status === "done" && <CheckCircle size={12} className="text-green-500" />}
-                        <Badge stage={run.status} />
-                      </div>
-                      {run.error_message && (
-                        <p className="text-xs text-red-500 mt-0.5 truncate max-w-xs">{run.error_message}</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{run.cutoff_date}</td>
-                    <td className="px-4 py-3 text-gray-600">{run.total_customers?.toLocaleString() ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-600">{run.active_customers?.toLocaleString() ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">
-                      {new Date(run.created_at).toLocaleString("th-TH")}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {/* Upload button */}
-                        {["pending","failed"].includes(run.status) && (
-                          <>
-                            <button
-                              onClick={() => { setSelectedRun(run.id); fileRef.current?.click(); }}
-                              disabled={uploading === run.id}
-                              className="flex items-center gap-1 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 transition-colors disabled:opacity-50">
-                              {uploading === run.id
-                                ? <RefreshCw size={12} className="animate-spin" />
-                                : <Upload size={12} />}
-                              อัปโหลด
-                            </button>
-                            <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden"
-                                   onChange={e => { const f = e.target.files?.[0]; if (f && selectedRun) uploadFile(selectedRun, f); }} />
-                          </>
-                        )}
-                        {/* View results */}
-                        {run.status === "done" && (
-                          <a href={`/customers?run=${run.id}`}
-                             className="flex items-center gap-1 bg-green-50 text-green-700 px-3 py-1.5 rounded-lg text-xs hover:bg-green-100">
-                            ดูผลลัพธ์
-                          </a>
-                        )}
-                        {/* Delete */}
-                        <button onClick={() => deleteRun(run.id)}
-                                className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+              <tbody>
+                {loading && [...Array(4)].map((_, i) => (
+                  <tr key={i}><td colSpan={7}><Skeleton className="h-6 my-1" /></td></tr>
                 ))}
-                {runs.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">
-                    ยังไม่มี Run — กดปุ่ม "สร้าง Run ใหม่" เพื่อเริ่มต้น
+                {!loading && runs.length === 0 && (
+                  <tr><td colSpan={7}>
+                    <EmptyState
+                      icon={FileSpreadsheet}
+                      title="ยังไม่มี run"
+                      hint="Create run และ upload Excel เพื่อเริ่มประมวลผล"
+                    />
                   </td></tr>
                 )}
+                {!loading && runs.map(run => {
+                  const Icon = statusIcon[run.status];
+                  return (
+                    <tr key={run.id}>
+                      <td className="font-medium text-[color:var(--ink-1)]">{run.name}</td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <StatusPill tone={statusToTone[run.status] || "neutral"} icon={Icon}>
+                            {run.status}
+                          </StatusPill>
+                          {run.error_message && (
+                            <span className="text-[11px] text-[color:var(--danger)] truncate max-w-[240px]" title={run.error_message}>
+                              {run.error_message}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="num">{run.cutoff_date}</td>
+                      <td className="text-right num">{run.total_customers?.toLocaleString() ?? "—"}</td>
+                      <td className="text-right num">{run.active_customers?.toLocaleString() ?? "—"}</td>
+                      <td className="text-[11.5px] text-[color:var(--ink-4)]">
+                        {new Date(run.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
+                      </td>
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {["pending", "failed"].includes(run.status) && (
+                            <>
+                              <button
+                                onClick={() => { setSelectedRun(run.id); fileRef.current?.click(); }}
+                                disabled={uploading === run.id}
+                                className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1 disabled:opacity-40"
+                              >
+                                {uploading === run.id
+                                  ? <RefreshCw size={11} className="animate-spin" />
+                                  : <Upload size={11} />}
+                                Upload
+                              </button>
+                              <input
+                                ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden"
+                                onChange={e => {
+                                  const f = e.target.files?.[0];
+                                  if (f && selectedRun) uploadFile(selectedRun, f);
+                                }}
+                              />
+                            </>
+                          )}
+                          {run.status === "done" && (
+                            <a
+                              href={`/?run=${run.id}`}
+                              className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--moby-700)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1"
+                            >
+                              Open <ChevronRight size={11} />
+                            </a>
+                          )}
+                          <button
+                            onClick={() => deleteRun(run.id)}
+                            className="h-7 w-7 grid place-items-center rounded-md text-[color:var(--ink-4)] hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)]"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-
-          {/* How it works */}
-          <div className="bg-blue-50 rounded-xl p-5 text-sm text-blue-800">
-            <p className="font-semibold mb-2">ขั้นตอนการใช้งาน</p>
-            <ol className="space-y-1 list-decimal list-inside text-blue-700">
-              <li>กดสร้าง Run ใหม่ → กำหนดชื่อและ Cutoff Date</li>
-              <li>กดอัปโหลดไฟล์ Excel ที่มีข้อมูล 1Moby</li>
-              <li>ระบบ validate → insert ลงฐานข้อมูล → predict อัตโนมัติ</li>
-              <li>รอ status เป็น "done" → กดดูผลลัพธ์</li>
-            </ol>
-          </div>
         </div>
-      </main>
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, tone }: { label: string; value: number; tone: "slate" | "blue" | "emerald" | "rose" }) {
+  const col = ({ slate: "var(--ink-4)", blue: "var(--moby-600)", emerald: "var(--ok)", rose: "var(--danger)" } as const)[tone];
+  return (
+    <div className="surface p-4">
+      <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">{label}</div>
+      <div className="num text-[22px] font-semibold mt-1" style={{ color: col }}>{value.toLocaleString()}</div>
     </div>
   );
 }

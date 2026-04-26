@@ -1,221 +1,388 @@
 "use client";
+export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { fetchRuns, fetchCustomer } from "@/lib/api";
-import Badge from "@/components/Badge";
-
-function Card({ title, children, className }: any) {
-  return (
-    <div className={`bg-white border rounded-lg p-4 ${className || ""}`}>
-      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function Stat({ label, value, color, sub }: any) {
-  return (
-    <div className="mb-3">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`text-lg font-bold ${color || "text-gray-900"}`}>{value}</p>
-      {sub && <p className="text-xs text-gray-400">{sub}</p>}
-    </div>
-  );
-}
-
-function Gauge({ value, label, max = 1 }: { value: number; label: string; max?: number }) {
-  const pct = Math.min(100, (value / max) * 100);
-  const color = pct > 60 ? "text-red-600" : pct > 30 ? "text-yellow-600" : "text-green-600";
-  const bg = pct > 60 ? "bg-red-500" : pct > 30 ? "bg-yellow-500" : "bg-green-500";
-  return (
-    <div className="text-center">
-      <p className={`text-3xl font-bold ${color}`}>{(value * 100).toFixed(1)}%</p>
-      <div className="w-full h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
-        <div className={`h-full rounded-full ${bg}`} style={{ width: `${pct}%` }} />
-      </div>
-      <p className="text-xs text-gray-500 mt-1">{label}</p>
-    </div>
-  );
-}
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import {
+  ArrowLeft, Phone, Mail, Send, Tag, AlertTriangle, ChevronRight,
+  CalendarClock, Banknote, Target, ShieldCheck, Activity,
+} from "lucide-react";
+import {
+  PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton, EmptyState,
+  lifecycleTone, churnTone, urgencyTone,
+} from "@/components/ui";
+import { fetchCustomer } from "@/lib/api";
+import { useRunStore } from "@/lib/runStore";
 
 export default function Customer360() {
   const params = useParams();
-  const sp = useSearchParams();
-  const accId = params.id as string;
-  const [runs, setRuns] = useState<any[]>([]);
-  const [runId, setRunId] = useState(sp.get("run") || "");
+  const accId  = params.id as string;
+  const { runId } = useRunStore();
   const [c, setC] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => { fetchRuns().then(r => { setRuns(r); if (!runId && r.length) setRunId(r[0].id); }); }, []);
   useEffect(() => {
     if (!runId || !accId) return;
-    fetchCustomer(runId, accId).then(setC).catch(() => setError("Customer not found"));
+    setLoading(true); setError("");
+    fetchCustomer(runId, accId)
+      .then(d => { setC(d); setLoading(false); })
+      .catch(() => { setError("ไม่พบลูกค้า"); setLoading(false); });
   }, [runId, accId]);
 
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
-  if (!c) return <div className="p-6 text-gray-500">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="p-8 space-y-4">
+        <Skeleton className="h-24" />
+        <div className="grid grid-cols-3 gap-4">
+          <Skeleton className="h-72" /><Skeleton className="h-72" /><Skeleton className="h-72" />
+        </div>
+      </div>
+    );
+  }
+  if (error) return <div className="p-8"><EmptyState title={error} icon={AlertTriangle} /></div>;
+  if (!c) return null;
 
   const stage = c.lifecycle_stage;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="bg-white border rounded-lg p-4 mb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-lg font-bold text-gray-600">
+    <div className="pb-12">
+      <PageHeader
+        eyebrow={
+          <Link href="/customers" className="inline-flex items-center gap-1 text-[color:var(--moby-700)] hover:underline">
+            <ArrowLeft size={11} /> Customers
+          </Link>
+        }
+        title={`Account ${c.acc_id}`}
+        actions={
+          <div className="flex items-center gap-2">
+            <ActionBtn icon={Phone}>Log call</ActionBtn>
+            <ActionBtn icon={Mail}>Send email</ActionBtn>
+            <ActionBtn icon={Send} primary>Trigger campaign</ActionBtn>
+          </div>
+        }
+      />
+
+      <div className="px-8 mt-4 space-y-5">
+        {/* Account brief */}
+        <div className="surface p-5">
+          <div className="flex items-center gap-5 flex-wrap">
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] text-white grid place-items-center font-semibold text-[18px]">
               {String(c.acc_id).slice(-2)}
             </div>
-            <div>
-              <h1 className="text-xl font-bold">Customer {c.acc_id}</h1>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge stage={stage} />
-                <span className="text-sm text-gray-500">{c.sub_stage}</span>
-                {c.priority_score != null && (
-                  <span className="text-sm text-blue-600 font-mono">Priority: {Number(c.priority_score).toFixed(1)}/10</span>
+            <div className="flex-1 min-w-[260px]">
+              <div className="flex items-center flex-wrap gap-2">
+                <StatusPill tone={lifecycleTone(stage)}>{stage}</StatusPill>
+                {c.sub_stage && <StatusPill tone="neutral" dot={false}>{c.sub_stage}</StatusPill>}
+                {c.rfm_segment && <StatusPill tone="brand" dot={false}><Tag size={11} /> {c.rfm_segment}</StatusPill>}
+                {c.urgency && <StatusPill tone={urgencyTone(c.urgency)}>{c.urgency}</StatusPill>}
+                {c.churn_tier && <StatusPill tone={churnTone(c.churn_tier)}>Churn {c.churn_tier}</StatusPill>}
+              </div>
+              <div className="mt-2 flex items-center gap-4 text-[12px] text-[color:var(--ink-4)] flex-wrap">
+                <span><span className="text-[color:var(--ink-5)]">Purchases</span> <b className="num text-[color:var(--ink-2)]">{c.n_purchases || 0}</b></span>
+                <span><span className="text-[color:var(--ink-5)]">Total revenue</span> <b className="num text-[color:var(--ink-2)]">{Number(c.total_revenue || 0).toLocaleString()} ฿</b></span>
+                {c.days_since_last_activity != null && (
+                  <span><span className="text-[color:var(--ink-5)]">Inactive</span> <b className="num text-[color:var(--ink-2)]">{c.days_since_last_activity} days</b></span>
+                )}
+                {c.alert_date && (
+                  <span><span className="text-[color:var(--ink-5)]">Alert by</span> <b className="num text-[color:var(--ink-2)]">{c.alert_date}</b></span>
                 )}
               </div>
             </div>
+            <PriorityRing score={Number(c.priority_score || 0)} />
           </div>
-          <select value={runId} onChange={e => setRunId(e.target.value)}
-            className="border rounded px-2 py-1 text-sm bg-white">
-            {runs.filter(r => r.status === "done").map(r => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
         </div>
-        {/* Action recommendation */}
+
+        {/* NBA bar */}
         {c.recommended_action && (
-          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-            <span className="font-semibold">Recommended Action: </span>{c.recommended_action}
+          <div className="surface bg-[color:var(--info-bg)] border-[color:var(--info)]/20 px-5 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-white grid place-items-center text-[color:var(--info)]">
+                <Target size={16} />
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--info)] font-semibold">Next best action</div>
+                <div className="text-[14px] text-[color:var(--ink-1)] mt-0.5">{c.recommended_action}</div>
+              </div>
+            </div>
           </div>
         )}
-      </div>
 
-      {/* === ACTIVE PAID === */}
-      {stage === "Active Paid" && (
-        <div className="grid grid-cols-3 gap-4">
-          <Card title="Churn analysis">
-            {c.churn_probability != null && <Gauge value={c.churn_probability} label="Churn probability" />}
-            <div className="mt-4 space-y-1">
-              {[c.risk_factor_1, c.risk_factor_2, c.risk_factor_3].filter(Boolean).map((f: string, i: number) => (
-                <p key={i} className="text-xs text-red-700 bg-red-50 px-2 py-1 rounded">{f}</p>
-              ))}
-            </div>
-            <div className="mt-3 pt-3 border-t">
-              <Stat label="Revenue at Risk" value={`${Number(c.revenue_at_risk || 0).toLocaleString()} ฿`} color="text-red-600" />
-            </div>
-          </Card>
-
-          <Card title="CLV & RFM">
-            <Stat label="Predicted CLV (6m)" value={`${Number(c.predicted_clv_6m || 0).toLocaleString()} ฿`} color="text-blue-600" />
-            {c.clv_ci95_lo != null && (
-              <div className="text-xs text-gray-500 mb-3">
-                95% CI: {Number(c.clv_ci95_lo).toLocaleString()} – {Number(c.clv_ci95_hi).toLocaleString()} ฿
+        {/* Active Paid layout */}
+        {stage === "Active Paid" && (
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            {/* Churn */}
+            <SectionCard title="Churn analysis" hint="ความน่าจะเป็นที่จะเลิกใช้ใน 6 เดือน">
+              <ChurnGauge value={c.churn_probability || 0} />
+              <div className="mt-5 space-y-3">
+                <KV label="Revenue at risk" value={`${Number(c.revenue_at_risk || 0).toLocaleString()} ฿`} accent="rose" />
+                <KV label="P(alive)" value={c.p_alive != null ? `${(c.p_alive * 100).toFixed(1)}%` : "—"} />
               </div>
-            )}
-            <Stat label="P(alive)" value={c.p_alive != null ? `${(c.p_alive * 100).toFixed(1)}%` : "N/A"} />
-            {c.rfm_segment && (
-              <div className="mt-2">
-                <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-medium">
-                  {c.rfm_segment}
-                </span>
-              </div>
-            )}
-            <Stat label="Purchases" value={c.n_purchases || 0} sub="total transactions before cutoff" />
-            <Stat label="Total Revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
-          </Card>
-
-          <Card title="Credit forecast">
-            {c.credit_p50 != null ? (
-              <>
-                <Stat label="Urgency" value={c.urgency || "N/A"}
-                  color={c.urgency === "Critical" ? "text-red-600" : c.urgency === "Warning" ? "text-orange-600" : "text-gray-700"} />
-                {c.alert_date && <Stat label="Alert Date" value={c.alert_date} sub="start campaign by this date" />}
-                <div className="mt-3 space-y-1 text-xs">
-                  {[["P10 (Optimistic)", c.credit_p10], ["P25 (Early)", c.credit_p25],
-                    ["P50 (Likely)", c.credit_p50], ["P75 (Late)", c.credit_p75],
-                    ["P90 (Pessimistic)", c.credit_p90]].map(([label, val]: any) => (
-                    <div key={label} className="flex justify-between">
-                      <span className="text-gray-500">{label}</span>
-                      <span className="font-mono">{val != null ? `${Number(val).toFixed(0)} days` : "-"}</span>
+              <div className="mt-5">
+                <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-2">Top risk factors</div>
+                <div className="space-y-1.5">
+                  {[c.risk_factor_1, c.risk_factor_2, c.risk_factor_3].filter(Boolean).map((f: string, i: number) => (
+                    <div key={i} className="text-[12px] flex items-start gap-2 px-2.5 py-1.5 rounded-md bg-[color:var(--danger-bg)] text-[color:var(--danger)]">
+                      <AlertTriangle size={12} className="mt-0.5" /> <span className="text-[color:var(--ink-2)]">{f}</span>
                     </div>
                   ))}
+                  {!c.risk_factor_1 && (
+                    <div className="text-[11.5px] text-[color:var(--ink-5)]">ไม่มี factor เด่น</div>
+                  )}
                 </div>
-              </>
-            ) : (
-              <p className="text-sm text-gray-400">
-                {c.n_purchases <= 1 ? "New customer — not enough purchase history" : "No credit forecast available"}
-              </p>
-            )}
-          </Card>
-        </div>
-      )}
+              </div>
+            </SectionCard>
 
-      {/* === CHURNED === */}
-      {stage === "Churned" && (
-        <div className="grid grid-cols-2 gap-4">
-          <Card title="Win-back analysis">
-            {c.comeback_probability != null && (
-              <Gauge value={c.comeback_probability} label="Comeback probability" />
-            )}
-            <div className="mt-4">
-              <Stat label="Win-back Tier" value={c.winback_tier || "N/A"}
-                color={c.winback_tier === "High" ? "text-green-600" : "text-gray-700"} />
-              <Stat label="Days Since Last Activity" value={c.days_since_last_activity || "N/A"} sub="days" />
-              <Stat label="Ever Paid" value={c.ever_paid ? "Yes" : "No — free user only"} />
-              <Stat label="Total Revenue (historical)" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
-            </div>
-          </Card>
-          <Card title="Win-back action">
-            <div className="bg-orange-50 border border-orange-200 rounded p-4 text-sm text-orange-800">
-              <p className="font-semibold mb-2">Recommended:</p>
-              <p>{c.winback_action || c.recommended_action || "Monitor"}</p>
-            </div>
-            <div className="mt-4 text-xs text-gray-500 space-y-1">
-              <p>Past purchases: {c.n_purchases || 0}</p>
-              {c.rfm_segment && <p>Last RFM segment: {c.rfm_segment}</p>}
-            </div>
-          </Card>
-        </div>
-      )}
+            {/* CLV / RFM */}
+            <SectionCard title="Lifetime value" hint="คาดการณ์ 6 เดือนข้างหน้า">
+              <div>
+                <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Predicted CLV</div>
+                <div className="num text-[28px] font-semibold text-[color:var(--ink-1)] mt-0.5">
+                  {Number(c.predicted_clv_6m || 0).toLocaleString()} <span className="text-[14px] text-[color:var(--ink-4)]">฿</span>
+                </div>
+                {c.clv_ci95_lo != null && (
+                  <div className="text-[11.5px] text-[color:var(--ink-5)] mt-1 num">
+                    95% CI: {Number(c.clv_ci95_lo).toLocaleString()} – {Number(c.clv_ci95_hi).toLocaleString()} ฿
+                  </div>
+                )}
+              </div>
+              {c.clv_ci95_lo != null && (
+                <CIBar
+                  lo80={c.clv_ci80_lo} hi80={c.clv_ci80_hi}
+                  lo95={c.clv_ci95_lo} hi95={c.clv_ci95_hi}
+                  point={c.predicted_clv_6m}
+                />
+              )}
+              <hr className="hairline my-4" />
+              <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-3">RFM scoring</div>
+              <div className="grid grid-cols-3 gap-3">
+                <RFMBar label="R" value={c.rfm_r} />
+                <RFMBar label="F" value={c.rfm_f} />
+                <RFMBar label="M" value={c.rfm_m} />
+              </div>
+            </SectionCard>
 
-      {/* === ACTIVE FREE === */}
-      {stage === "Active Free" && (
-        <div className="grid grid-cols-2 gap-4">
-          <Card title="Conversion analysis">
-            {c.conversion_probability != null && (
-              <Gauge value={c.conversion_probability} label="Conversion probability" />
-            )}
-            <div className="mt-4">
-              <Stat label="Conversion Tier" value={c.conversion_tier || "N/A"}
-                color={c.conversion_tier === "High" ? "text-green-600" : "text-gray-700"} />
-              <Stat label="Days Since Join" value={c.days_since_last_activity || "N/A"} sub="days active" />
-            </div>
-          </Card>
-          <Card title="Conversion action">
-            <div className="bg-purple-50 border border-purple-200 rounded p-4 text-sm text-purple-800">
-              <p className="font-semibold mb-2">Recommended:</p>
-              <p>{c.conversion_action || c.recommended_action || "Engagement campaign"}</p>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* === GHOST === */}
-      {stage === "Ghost" && (
-        <Card title="Ghost account">
-          <p className="text-gray-600">This customer signed up but never used the service.</p>
-          <div className="mt-4">
-            <Stat label="Sub-stage" value={c.sub_stage || "Unknown"} />
-            <div className="bg-gray-50 border rounded p-3 mt-3 text-sm text-gray-600">
-              <p className="font-semibold mb-1">Recommended:</p>
-              <p>{c.recommended_action}</p>
-            </div>
+            {/* Credit */}
+            <SectionCard title="Credit forecast" hint="ทำนายว่าจะซื้อเครดิตอีกในกี่วัน">
+              {c.credit_p50 != null ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <StatusPill tone={urgencyTone(c.urgency)}>{c.urgency}</StatusPill>
+                    {c.alert_date && (
+                      <span className="text-[12px] text-[color:var(--ink-4)] inline-flex items-center gap-1">
+                        <CalendarClock size={12} /> Alert by <b className="num text-[color:var(--ink-2)]">{c.alert_date}</b>
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-5 space-y-3">
+                    <QuantileBar label="Optimistic (P10)" value={c.credit_p10} max={c.credit_p90} tone="ok" />
+                    <QuantileBar label="Early (P25)" value={c.credit_p25} max={c.credit_p90} tone="info" />
+                    <QuantileBar label="Likely (P50)" value={c.credit_p50} max={c.credit_p90} tone="brand" highlight />
+                    <QuantileBar label="Late (P75)" value={c.credit_p75} max={c.credit_p90} tone="warn" />
+                    <QuantileBar label="Pessimistic (P90)" value={c.credit_p90} max={c.credit_p90} tone="danger" />
+                  </div>
+                  <div className="mt-4 text-[11.5px] text-[color:var(--ink-5)]">
+                    forecast confidence{" "}
+                    <b className="num text-[color:var(--ink-3)]">{c.forecast_confidence != null ? (c.forecast_confidence * 100).toFixed(0) + "%" : "—"}</b>
+                  </div>
+                </>
+              ) : (
+                <EmptyState
+                  icon={Banknote}
+                  title="ยังไม่มีพยากรณ์เครดิต"
+                  hint={c.n_purchases <= 1 ? "ลูกค้ายังซื้อแค่ครั้งเดียว — ต้องมี ≥ 2 transaction" : "ไม่มีข้อมูลเพียงพอ"}
+                />
+              )}
+            </SectionCard>
           </div>
-        </Card>
-      )}
+        )}
+
+        {/* Churned layout */}
+        {stage === "Churned" && (
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            <SectionCard title="Win-back potential" className="xl:col-span-2">
+              <ChurnGauge value={c.comeback_probability || 0} label="Comeback probability" tone="warn" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
+                <KV label="Win-back tier" value={c.winback_tier || "—"} />
+                <KV label="Inactive (days)" value={c.days_since_last_activity ?? "—"} />
+                <KV label="Past purchases" value={c.n_purchases || 0} />
+                <KV label="Past revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
+              </div>
+            </SectionCard>
+            <SectionCard title="Win-back action">
+              <div className="text-[13px] text-[color:var(--ink-2)] leading-relaxed">
+                {c.winback_action || c.recommended_action || "Monitor"}
+              </div>
+              {c.rfm_segment && (
+                <div className="mt-3 text-[11.5px] text-[color:var(--ink-5)]">Last segment · {c.rfm_segment}</div>
+              )}
+            </SectionCard>
+          </div>
+        )}
+
+        {/* Active Free */}
+        {stage === "Active Free" && (
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            <SectionCard title="Conversion likelihood" className="xl:col-span-2">
+              <ChurnGauge value={c.conversion_probability || 0} label="Convert in 6m" tone="violet" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
+                <KV label="Conversion tier" value={c.conversion_tier || "—"} />
+                <KV label="Days active" value={c.days_since_last_activity ?? "—"} />
+                <KV label="Engaged" value={c.is_engaged ? "Yes" : "No"} />
+                <KV label="Eligibility" value={c.is_qualified ? "Qualified" : "—"} />
+              </div>
+            </SectionCard>
+            <SectionCard title="Conversion play">
+              <div className="text-[13px] text-[color:var(--ink-2)] leading-relaxed">
+                {c.conversion_action || c.recommended_action || "Engagement campaign"}
+              </div>
+            </SectionCard>
+          </div>
+        )}
+
+        {/* Ghost */}
+        {stage === "Ghost" && (
+          <SectionCard title="Ghost account">
+            <EmptyState
+              icon={Activity}
+              title="สมัครแล้วแต่ยังไม่ใช้งาน"
+              hint={c.recommended_action || "Trigger onboarding sequence"}
+            />
+          </SectionCard>
+        )}
+
+        {/* Footer · model lineage */}
+        <div className="text-[11px] text-[color:var(--ink-5)] flex items-center gap-3 px-1">
+          <ShieldCheck size={11} /> Output from churn / clv / credit / win-back / conversion models
+          <span className="opacity-50">·</span>
+          point-in-time safe (cutoff respected)
+          <span className="opacity-50">·</span>
+          SHAP-based factor explanations
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── inner ──────────────────────────────────────── */
+
+function ActionBtn({ icon: Icon, children, primary }: any) {
+  return (
+    <button className={`h-9 px-3 rounded-lg text-[13px] inline-flex items-center gap-1.5 ${
+      primary
+        ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-700)]"
+        : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]"
+    }`}>
+      <Icon size={14} /> {children}
+    </button>
+  );
+}
+
+function PriorityRing({ score }: { score: number }) {
+  const pct = Math.max(0, Math.min(1, score / 10));
+  const r = 26, c = 2 * Math.PI * r;
+  const off = c * (1 - pct);
+  const tone = pct >= 0.7 ? "var(--danger)" : pct >= 0.4 ? "var(--warn)" : "var(--moby-600)";
+  return (
+    <div className="flex items-center gap-3">
+      <svg width="64" height="64" viewBox="0 0 64 64" className="-rotate-90">
+        <circle cx="32" cy="32" r={r} stroke="var(--line-2)" strokeWidth="6" fill="none" />
+        <circle cx="32" cy="32" r={r} stroke={tone} strokeWidth="6" fill="none"
+          strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round" />
+      </svg>
+      <div>
+        <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Priority</div>
+        <div className="num text-[20px] font-semibold text-[color:var(--ink-1)] leading-none">
+          {score.toFixed(1)}<span className="text-[12px] text-[color:var(--ink-4)]"> /10</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChurnGauge({ value, label = "Churn probability", tone = "auto" }: { value: number; label?: string; tone?: "auto" | "warn" | "violet" }) {
+  const pct = Math.max(0, Math.min(1, value));
+  const color = tone === "warn" ? "var(--warn)"
+    : tone === "violet" ? "#7c3aed"
+    : pct > 0.6 ? "var(--danger)"
+    : pct > 0.3 ? "var(--warn)"
+    : "var(--ok)";
+  const r = 70;
+  const cx = 90, cy = 90;
+  const start = polar(cx, cy, r, 180);
+  const end   = polar(cx, cy, r, 360);
+  const cur   = polar(cx, cy, r, 180 + pct * 180);
+  return (
+    <div className="text-center">
+      <svg width="180" height="100" viewBox="0 0 180 100">
+        <path d={`M${start.x},${start.y} A${r},${r} 0 0 1 ${end.x},${end.y}`} fill="none" stroke="var(--line-2)" strokeWidth="10" strokeLinecap="round" />
+        <path d={`M${start.x},${start.y} A${r},${r} 0 ${pct > 0.5 ? 1 : 0} 1 ${cur.x},${cur.y}`} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />
+      </svg>
+      <div className="num text-[32px] font-semibold leading-none mt-1" style={{ color }}>
+        {(pct * 100).toFixed(1)}%
+      </div>
+      <div className="text-[11.5px] text-[color:var(--ink-5)] mt-1">{label}</div>
+    </div>
+  );
+}
+function polar(cx: number, cy: number, r: number, deg: number) {
+  const rad = (deg * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function KV({ label, value, accent }: { label: string; value: any; accent?: "rose" | "ok" | "blue" }) {
+  const color = accent === "rose" ? "var(--danger)" : accent === "ok" ? "var(--ok)" : accent === "blue" ? "var(--moby-700)" : "var(--ink-1)";
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">{label}</div>
+      <div className="num text-[16px] font-semibold mt-0.5" style={{ color }}>{value}</div>
+    </div>
+  );
+}
+
+function CIBar({ lo80, hi80, lo95, hi95, point }: any) {
+  const min = lo95, max = hi95, range = max - min || 1;
+  const pos = (v: number) => ((v - min) / range) * 100;
+  return (
+    <div className="mt-4">
+      <div className="relative h-3 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
+        <div className="absolute top-0 bottom-0 bg-[color:var(--moby-100)]" style={{ left: 0, right: 0 }} />
+        <div className="absolute top-0 bottom-0 bg-[color:var(--moby-200)]" style={{ left: `${pos(lo80)}%`, right: `${100 - pos(hi80)}%` }} />
+        <div className="absolute top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[color:var(--moby-700)]" style={{ left: `calc(${pos(point)}% - 1px)` }} />
+      </div>
+      <div className="flex justify-between text-[10.5px] text-[color:var(--ink-5)] num mt-1.5">
+        <span>{Number(lo95).toLocaleString()}</span>
+        <span>{Number(hi95).toLocaleString()}</span>
+      </div>
+    </div>
+  );
+}
+
+function RFMBar({ label, value }: { label: string; value: number | null }) {
+  const v = value ?? 0;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1">
+        <span className="text-[11px] text-[color:var(--ink-4)]">{label}</span>
+        <span className="num text-[12px] text-[color:var(--ink-2)]">{v}/5</span>
+      </div>
+      <ProgressMeter value={v} max={5} tone="blue" showValue={false} />
+    </div>
+  );
+}
+
+function QuantileBar({ label, value, max, tone, highlight }: any) {
+  const pct = Math.max(0, Math.min(100, (value / max) * 100));
+  const color = ({ ok: "var(--ok)", info: "var(--info)", brand: "var(--moby-600)", warn: "var(--warn)", danger: "var(--danger)" } as any)[tone];
+  return (
+    <div>
+      <div className="flex justify-between items-baseline mb-1">
+        <span className={`text-[11.5px] ${highlight ? "font-medium text-[color:var(--ink-1)]" : "text-[color:var(--ink-4)]"}`}>{label}</span>
+        <span className="num text-[12px] text-[color:var(--ink-2)]">{Number(value).toFixed(0)} days</span>
+      </div>
+      <div className="w-full h-1.5 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
+        <div className="h-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
     </div>
   );
 }
