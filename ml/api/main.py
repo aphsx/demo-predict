@@ -79,44 +79,74 @@ async def get_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
 @app.get("/runs/{run_id}/stream")
 async def stream_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
     """
-    SSE endpoint — streams run status updates until status is 'done', 'failed', or timeout.
-    Client subscribes once, server pushes updates.
+    SSE endpoint — reads from Redis Stream for real-time progress updates.
+    Falls back to DB polling only if Redis unavailable.
     """
     async def event_generator():
-        import asyncio
-        import time
+        try:
+            import redis.asyncio as aioredis
+            redis = await aioredis.from_url(f"redis://{os.getenv('REDIS_HOST', 'redis')}:6379")
+            stream_key = f"progress:{run_id}"
 
-        while True:
-            row = await db.execute(
-                text("SELECT id, status, total_customers, active_customers, error_message, updated_at FROM prediction_runs WHERE id = :id"),
-                {"id": str(run_id)}
-            )
-            r = row.mappings().first()
-            if not r:
-                yield {"event": "error", "data": "Run not found"}
-                break
+            # Read from Stream (persistent, can replay)
+            last_id = "0"
+            while True:
+                # XREAD from last position
+                messages = await redis.xread({stream_key: last_id}, count=10, block=1000)
+                for stream, items in messages:
+                    for msg_id, fields in items:
+                        last_id = msg_id
+                        progress = int(fields.get(b"progress", 0))
+                        step = fields.get(b"step", b"").decode()
+                        is_done = progress >= 100 or step.startswith("failed")
+                        yield {
+                            "event": "progress",
+                            "data": json.dumps({
+                                "progress": progress,
+                                "step": step,
+                                "status": "done" if is_done else "processing"
+                            })
+                        }
+                        if is_done:
+                            await redis.close()
+                            return
 
-            status = r["status"]
-            if status != last_status or last_status is None:
+                # Also check DB for final status (fallback check)
+                row = await db.execute(text("SELECT status FROM prediction_runs WHERE id = :id"), {"id": str(run_id)})
+                r = row.mappings().first()
+                if r and r["status"] in ("done", "failed"):
+                    yield {"event": "done", "data": json.dumps({"status": r["status"]})}
+                    break
+
+            await redis.close()
+
+        except Exception:
+            import asyncio
+            while True:
+                row = await db.execute(
+                    text("SELECT id, status, total_customers, active_customers, error_message, updated_at FROM prediction_runs WHERE id = :id"),
+                    {"id": str(run_id)}
+                )
+                r = row.mappings().first()
+                if not r:
+                    yield {"event": "error", "data": "Run not found"}
+                    break
                 yield {
                     "event": "status",
                     "data": json.dumps({
-                        "status": status,
+                        "status": r["status"],
+                        "progress": 50 if r["status"] == "processing" else (100 if r["status"] == "done" else 0),
+                        "step": "",
                         "total_customers": r["total_customers"],
                         "active_customers": r["active_customers"],
                         "error_message": r["error_message"],
                         "updated_at": str(r["updated_at"]) if r["updated_at"] else None,
                     })
                 }
-                last_status = status
-
-            if status in ("done", "failed"):
-                yield {"event": "done", "data": json.dumps({"status": status})}
-                break
-
-            await asyncio.sleep(5)
-
-        yield {"event": "close", "data": ""}
+                if r["status"] in ("done", "failed"):
+                    yield {"event": "done", "data": json.dumps({"status": r["status"]})}
+                    break
+                await asyncio.sleep(5)
 
     return StreamingResponse(
         event_generator(),

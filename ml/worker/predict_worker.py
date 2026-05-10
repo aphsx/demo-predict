@@ -1,11 +1,11 @@
 """
 Background Prediction Worker V2 (ARQ task queue)
 DB → ML pipeline (all 5 models + lifecycle) → save results back to DB
+Progress via Redis Streams (persistent + real-time)
 """
 import os, sys
 from pathlib import Path
 import pandas as pd
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -17,46 +17,63 @@ from sqlalchemy import text
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://moby:moby1234@db:5432/moby")
 ASYNC_URL    = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
-REDIS_SETTINGS = RedisSettings(
-    host=os.getenv("REDIS_HOST", "redis"),
-    port=int(os.getenv("REDIS_PORT", 6379)),
-)
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+
+REDIS_SETTINGS = RedisSettings(host=REDIS_HOST, port=REDIS_PORT)
 
 
 async def run_prediction_pipeline(ctx, run_id: str, model_dir: str):
     await _pipeline(run_id, model_dir)
 
 
+async def _stream_progress(redis, run_id: str, progress: int, step: str):
+    """Write progress to Redis Stream (persistent)"""
+    stream_key = f"progress:{run_id}"
+    await redis.xadd(stream_key, {"progress": str(progress), "step": step}, max_len=100)
+
+
 async def _pipeline(run_id: str, model_dir: str):
+    import redis.asyncio as aioredis
+
     engine = create_async_engine(ASYNC_URL, echo=False)
     Session = async_sessionmaker(engine, expire_on_commit=False)
+    redis = await aioredis.from_url(f"redis://{REDIS_HOST}:{REDIS_PORT}")
 
-    async with Session() as db:
-        try:
-            print(f"[Worker] Run {run_id}: loading data from DB...")
-            users, payments, usage = await _load_from_db(db, run_id)
+    try:
+        # Stream: 10% - loading data
+        await _stream_progress(redis, run_id, 10, "loading_data")
+        print(f"[Worker] Run {run_id}: loading data from DB...")
+        users, payments, usage = await _load_from_db(Session, run_id)
 
-            run_row = await db.execute(
-                text("SELECT cutoff_date FROM prediction_runs WHERE id = :id"),
-                {"id": run_id}
-            )
-            r = run_row.mappings().first()
-            from src.config import CUTOFF
-            cutoff = pd.Timestamp(r["cutoff_date"]) if r else CUTOFF
+        run_row = await Session().__aenter__().execute(
+            text("SELECT cutoff_date FROM prediction_runs WHERE id = :id"),
+            {"id": run_id}
+        )
+        r = run_row.mappings().first()
+        from src.config import CUTOFF
+        cutoff = pd.Timestamp(r["cutoff_date"]) if r else CUTOFF
 
-            print(f"[Worker] Run {run_id}: building features...")
-            from src.features import build_features
-            feat_df = build_features(users, payments, usage, cutoff)
+        # Stream: 25% - building features
+        await _stream_progress(redis, run_id, 25, "building_features")
+        print(f"[Worker] Run {run_id}: building features...")
+        from src.features import build_features
+        feat_df = build_features(users, payments, usage, cutoff)
 
-            print(f"[Worker] Run {run_id}: running V2 pipeline (5 models + lifecycle)...")
-            from src.predictor import MobyPredictor
-            predictor = MobyPredictor(Path(model_dir), cutoff)
-            predictor.load_data(users, feat_df, payments, usage)
-            predictor.run_all_predictions()
+        # Stream: 40% - predicting all models
+        await _stream_progress(redis, run_id, 40, "predicting_all")
+        print(f"[Worker] Run {run_id}: running V2 pipeline (5 models + lifecycle)...")
+        from src.predictor import MobyPredictor
+        predictor = MobyPredictor(Path(model_dir), cutoff)
+        predictor.load_data(users, feat_df, payments, usage)
+        predictor.run_all_predictions()
 
-            batch = predictor.predict_batch()
+        batch = predictor.predict_batch()
 
-            print(f"[Worker] Run {run_id}: saving {len(batch):,} predictions to DB...")
+        # Stream: 85% - saving results
+        await _stream_progress(redis, run_id, 85, "saving_results")
+        print(f"[Worker] Run {run_id}: saving {len(batch):,} predictions to DB...")
+        async with Session() as db:
             await _save_predictions(db, run_id, batch)
 
             active_count = int((batch["lifecycle_stage"].isin(["Active Paid", "Active Free"])).sum())
@@ -69,62 +86,70 @@ async def _pipeline(run_id: str, model_dir: str):
                 WHERE id = :id
             """), {"id": run_id, "total": len(batch), "active": active_count})
             await db.commit()
-            print(f"[Worker] Run {run_id}: DONE")
 
-        except Exception as e:
-            import traceback
-            print(f"[Worker] Run {run_id} FAILED: {e}")
-            traceback.print_exc()
+        # Stream: 100% - done
+        await _stream_progress(redis, run_id, 100, "done")
+        print(f"[Worker] Run {run_id}: DONE")
+
+    except Exception as e:
+        import traceback
+        print(f"[Worker] Run {run_id} FAILED: {e}")
+        traceback.print_exc()
+        await _stream_progress(redis, run_id, -1, f"failed: {str(e)[:100]}")
+        async with Session() as db:
             await db.execute(text("""
                 UPDATE prediction_runs
                 SET status = 'failed', error_message = :err, updated_at = NOW()
                 WHERE id = :id
             """), {"id": run_id, "err": str(e)[:500]})
             await db.commit()
-        finally:
-            await engine.dispose()
+    finally:
+        await engine.dispose()
+        await redis.close()
 
 
-async def _load_from_db(db: AsyncSession, run_id: str):
-    def _to_naive(series):
-        dt = pd.to_datetime(series, errors="coerce", utc=True)
-        return dt.dt.tz_convert(None)
+async def _load_from_db(Session, run_id: str):
+    engine = create_async_engine(ASYNC_URL, echo=False)
+    async with Session() as db:
+        def _to_naive(series):
+            dt = pd.to_datetime(series, errors="coerce", utc=True)
+            return dt.dt.tz_convert(None)
 
-    u = await db.execute(text("""
-        SELECT acc_id,status_sms,credit_sms,credit_email,
-               expire_sms,expire_email,status_email,join_date,last_access,last_send
-        FROM raw_customers WHERE run_id = :r
-    """), {"r": run_id})
-    users = pd.DataFrame([dict(row._mapping) for row in u])
-    for col in ["expire_sms","expire_email","join_date","last_access","last_send"]:
-        if col in users.columns:
-            users[col] = _to_naive(users[col])
-    for col in ["credit_sms", "credit_email"]:
-        if col in users.columns:
-            users[col] = pd.to_numeric(users[col], errors="coerce")
+        u = await db.execute(text("""
+            SELECT acc_id,status_sms,credit_sms,credit_email,
+                   expire_sms,expire_email,status_email,join_date,last_access,last_send
+            FROM raw_customers WHERE run_id = :r
+        """), {"r": run_id})
+        users = pd.DataFrame([dict(row._mapping) for row in u])
+        for col in ["expire_sms","expire_email","join_date","last_access","last_send"]:
+            if col in users.columns:
+                users[col] = _to_naive(users[col])
+        for col in ["credit_sms", "credit_email"]:
+            if col in users.columns:
+                users[col] = pd.to_numeric(users[col], errors="coerce")
 
-    p = await db.execute(text("""
-        SELECT acc_id,payment_date,amount,credit_add,credit_type
-        FROM raw_payments WHERE run_id = :r
-    """), {"r": run_id})
-    payments = pd.DataFrame([dict(row._mapping) for row in p])
-    if len(payments) > 0:
-        payments["payment_date"] = _to_naive(payments["payment_date"])
-        for col in ["amount", "credit_add"]:
-            payments[col] = pd.to_numeric(payments[col], errors="coerce")
+        p = await db.execute(text("""
+            SELECT acc_id,payment_date,amount,credit_add,credit_type
+            FROM raw_payments WHERE run_id = :r
+        """), {"r": run_id})
+        payments = pd.DataFrame([dict(row._mapping) for row in p])
+        if len(payments) > 0:
+            payments["payment_date"] = _to_naive(payments["payment_date"])
+            for col in ["amount", "credit_add"]:
+                payments[col] = pd.to_numeric(payments[col], errors="coerce")
 
-    u2 = await db.execute(text("""
-        SELECT acc_id,year,month,usage,channel,source FROM raw_usage WHERE run_id = :r
-    """), {"r": run_id})
-    usage = pd.DataFrame([dict(row._mapping) for row in u2])
-    if len(usage) > 0:
-        for col in ["usage", "year", "month"]:
-            usage[col] = pd.to_numeric(usage[col], errors="coerce")
-        usage["period"] = pd.to_datetime(
-            usage["year"].astype(str) + "-" + usage["month"].astype(str).str.zfill(2) + "-01"
-        )
-
-    return users, payments, usage
+        u2 = await db.execute(text("""
+            SELECT acc_id,year,month,usage,channel,source FROM raw_usage WHERE run_id = :r
+        """), {"r": run_id})
+        usage = pd.DataFrame([dict(row._mapping) for row in u2])
+        if len(usage) > 0:
+            for col in ["usage", "year", "month"]:
+                usage[col] = pd.to_numeric(usage[col], errors="coerce")
+            usage["period"] = pd.to_datetime(
+                usage["year"].astype(str) + "-" + usage["month"].astype(str).str.zfill(2) + "-01"
+            )
+        await engine.dispose()
+        return users, payments, usage
 
 
 async def _save_predictions(db, run_id, batch):
@@ -204,6 +229,7 @@ def _fv(row, col):
 def _sv(row, col):
     v = row.get(col) if hasattr(row, "get") else (row[col] if col in row.index else None)
     return str(v) if v is not None and str(v) not in ("None","nan","NaT") else None
+
 
 class WorkerSettings:
     functions      = [run_prediction_pipeline]
