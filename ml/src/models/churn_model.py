@@ -153,7 +153,7 @@ def train(feat_df: pd.DataFrame, active_set: set,
 
 def predict(feat_df: pd.DataFrame, models_dir: Path = MODELS_DIR) -> pd.DataFrame:
     """
-    คืน DataFrame: acc_id, churn_probability, churn_tier
+    คืน DataFrame: acc_id, churn_probability
     """
     artifact   = _load_artifact(models_dir)
     model      = artifact["model"]
@@ -164,9 +164,6 @@ def predict(feat_df: pd.DataFrame, models_dir: Path = MODELS_DIR) -> pd.DataFram
 
     out   = feat_df[["acc_id"]].copy()
     out["churn_probability"] = probs
-    out["churn_tier"]        = pd.cut(probs, bins=[0, 0.30, 0.60, 1.01],
-                                       labels=["Low", "Medium", "High"],
-                                       right=False)
     return out
 
 

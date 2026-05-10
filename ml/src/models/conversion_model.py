@@ -233,7 +233,7 @@ def predict(
     models_dir: Path = MODELS_DIR,
 ) -> pd.DataFrame:
     """
-    คืน DataFrame: acc_id, conversion_probability, conversion_tier, conversion_action
+    คืน DataFrame: acc_id, conversion_probability
     """
     with open(_resolve(models_dir, MODEL_FILES["conversion_model"]), "rb") as f:
         art = dill.load(f)
@@ -247,15 +247,6 @@ def predict(
 
     out = feat[["acc_id"]].copy()
     out["conversion_probability"] = probs
-    out["conversion_tier"] = pd.cut(
-        probs, bins=[0, 0.05, 0.15, 1.01],
-        labels=["Low", "Medium", "High"], right=False,
-    )
-    out["conversion_action"] = out["conversion_tier"].map({
-        "High": "เสนอ trial package ทันที — โอกาสสูง",
-        "Medium": "ส่ง promo + feature showcase",
-        "Low": "Engagement campaign — เพิ่ม usage ก่อน",
-    })
     return out
 
 

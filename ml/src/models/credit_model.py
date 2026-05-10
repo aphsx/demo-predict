@@ -19,8 +19,7 @@ import xgboost as xgb
 from src.config import (
     CUTOFF, CREDIT_QUANTILES, CREDIT_OPTUNA_TRIALS,
     CREDIT_OUTLIER_PCTILE, CREDIT_RANDOM_STATE,
-    CONFORMAL_MULT_80, CONFORMAL_MULT_50,
-    CREDIT_URGENCY_DAYS, MODEL_FILES, MODELS_DIR,
+    MODEL_FILES, MODELS_DIR,
 )
 from src.features import build_transaction_pairs, build_latest_transaction_features
 
@@ -143,14 +142,7 @@ def predict(payments: pd.DataFrame, usage: pd.DataFrame,
             cutoff: pd.Timestamp = CUTOFF, models_dir: Path = MODELS_DIR,
             min_purchases: int = 2) -> pd.DataFrame:
     """
-    คืน DataFrame: acc_id, p10, p25, p50, p75, p90, urgency, alert_date,
-                   n_purchases, forecast_confidence
-
-    FIX: กรองเฉพาะลูกค้าที่มี >= min_purchases ก่อนส่งเข้า model
-         ลูกค้าที่ซื้อครั้งแรกครั้งเดียวไม่มี interval history
-         -> model เดาไม่ได้ -> P10 ต่ำมาก -> urgency Critical ทั้งหมด
-
-    ลูกค้าที่ซื้อแค่ 1 ครั้ง: urgency = "New Customer" แยกออกมาชัดเจน
+    คืน DataFrame: acc_id, p10, p25, p50, p75, p90, n_purchases, forecast_confidence
     """
     artifacts = _load_all(models_dir)
     mult_80   = artifacts[0.10]["mult_80"]
@@ -189,20 +181,16 @@ def predict(payments: pd.DataFrame, usage: pd.DataFrame,
 
     X_pred["p50"] = X_pred["p50_raw"]
 
-    # Urgency + confidence
-    X_pred["urgency"]             = X_pred["p10"].apply(_urgency_label)
+    # Confidence
     X_pred["forecast_confidence"] = X_pred["acc_id"].map(
         purchase_counts.clip(upper=10).div(10)
     ).fillna(0).round(2)
-    X_pred["alert_date"]  = (cutoff + pd.to_timedelta(
-        X_pred["p25"].astype(int), unit="D")).dt.date
     X_pred["n_purchases"] = X_pred["acc_id"].map(purchase_counts).fillna(0).astype(int)
 
     repeat_out = X_pred[["acc_id", "p10", "p25", "p50", "p75", "p90",
-                          "urgency", "alert_date",
                           "n_purchases", "forecast_confidence"]].copy()
 
-    # New/single buyers — urgency ที่บอกชัดว่าไม่มี history
+    # New/single buyers — no history
     if len(single_buyers) > 0:
         single_out = pd.DataFrame({
             "acc_id":               single_buyers,
@@ -211,8 +199,6 @@ def predict(payments: pd.DataFrame, usage: pd.DataFrame,
             "p50":                  np.nan,
             "p75":                  np.nan,
             "p90":                  np.nan,
-            "urgency":              "New Customer",
-            "alert_date":           None,
             "n_purchases":          purchase_counts.reindex(single_buyers).values,
             "forecast_confidence":  0.0,
         })
@@ -250,16 +236,6 @@ def _find_multipliers(q_preds: dict, actual: np.ndarray) -> tuple[float, float]:
         if _coverage_raw(mid - half, mid + half, actual) >= 0.50:
             mult_50 = m; break
     return round(mult_80, 3), round(mult_50, 3)
-
-
-def _urgency_label(p10: float) -> str:
-    if p10 < CREDIT_URGENCY_DAYS["Critical"]:
-        return "Critical"
-    elif p10 < CREDIT_URGENCY_DAYS["Warning"]:
-        return "Warning"
-    elif p10 < CREDIT_URGENCY_DAYS["Monitor"]:
-        return "Monitor"
-    return "Stable"
 
 
 def _load_all(models_dir: Path) -> dict:

@@ -109,7 +109,6 @@ def train(payments: pd.DataFrame, cutoff: pd.Timestamp = CUTOFF,
             rfm_full["monetary_value"].fillna(0))
     )
     rfm_full = rfm_quintile_score(rfm_full)
-    print(f"\n  RFM Segments: {rfm_full['rfm_segment'].value_counts().to_dict()}")
 
     # ── Plots ─────────────────────────────────────────────────────
     _save_plots(rfm_fit, rfm_eval, rfm_full, out_dir)
@@ -128,7 +127,7 @@ def predict(payments: pd.DataFrame, cutoff: pd.Timestamp = CUTOFF,
             models_dir: Path = MODELS_DIR) -> pd.DataFrame:
     """
     คืน DataFrame: acc_id, predicted_clv_6m, ci_95_lo, ci_95_hi,
-                   ci_80_lo, ci_80_hi, p_alive, rfm_segment
+                   ci_80_lo, ci_80_hi, p_alive
     """
     bgf_art = _load_bgf(models_dir)
     bgf     = bgf_art["model"]
@@ -168,7 +167,7 @@ def predict(payments: pd.DataFrame, cutoff: pd.Timestamp = CUTOFF,
 
     rfm = rfm_quintile_score(rfm)
     return rfm[["acc_id", "predicted_clv_6m", "ci_95_lo", "ci_95_hi",
-                "ci_80_lo", "ci_80_hi", "p_alive", "rfm_segment"]].copy()
+                "ci_80_lo", "ci_80_hi", "p_alive"]].copy()
 
 
 # ─────────────────────────────────────────────────────────────────

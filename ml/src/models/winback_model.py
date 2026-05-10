@@ -241,7 +241,7 @@ def predict(
     models_dir: Path = MODELS_DIR,
 ) -> pd.DataFrame:
     """
-    คืน DataFrame: acc_id, comeback_probability, winback_tier, winback_action
+    คืน DataFrame: acc_id, comeback_probability
     """
     with open(_resolve(models_dir, MODEL_FILES["winback_model"]), "rb") as f:
         art = dill.load(f)
@@ -255,30 +255,7 @@ def predict(
 
     out = feat[["acc_id"]].copy()
     out["comeback_probability"] = probs
-    out["winback_tier"] = pd.cut(
-        probs, bins=[0, 0.10, 0.25, 1.01],
-        labels=["Low", "Medium", "High"], right=False,
-    )
-    out["winback_action"] = out.apply(
-        lambda r: _action(r["winback_tier"], feat[feat["acc_id"] == r["acc_id"]].iloc[0]),
-        axis=1,
-    )
     return out
-
-
-def _action(tier: str, row: pd.Series) -> str:
-    ever_paid = row.get("ever_paid", 0)
-    days = row.get("days_since_last_activity", 9999)
-    if tier == "High" and ever_paid:
-        return "โทรหาทันที — เสนอ special offer"
-    elif tier == "High":
-        return "ส่ง promo package + โทรติดตาม"
-    elif tier == "Medium" and days < 365:
-        return "ส่ง email win-back campaign"
-    elif tier == "Medium":
-        return "ส่ง SMS reminder + discount code"
-    else:
-        return "Email campaign เท่านั้น (low priority)"
 
 
 def _resolve(models_dir: Path, filename: str) -> Path:
