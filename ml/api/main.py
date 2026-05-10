@@ -161,7 +161,13 @@ async def stream_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
 
 @app.delete("/runs/{run_id}")
 async def delete_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
-    await db.execute(text("DELETE FROM prediction_runs WHERE id = :id"), {"id": str(run_id)})
+    # Delete in order: predictions → raw_usage → raw_payments → raw_customers → run
+    run_id_str = str(run_id)
+    await db.execute(text("DELETE FROM predictions WHERE run_id = :id"), {"id": run_id_str})
+    await db.execute(text("DELETE FROM raw_usage WHERE run_id = :id"), {"id": run_id_str})
+    await db.execute(text("DELETE FROM raw_payments WHERE run_id = :id"), {"id": run_id_str})
+    await db.execute(text("DELETE FROM raw_customers WHERE run_id = :id"), {"id": run_id_str})
+    await db.execute(text("DELETE FROM prediction_runs WHERE id = :id"), {"id": run_id_str})
     await db.commit()
     return {"deleted": True}
 
