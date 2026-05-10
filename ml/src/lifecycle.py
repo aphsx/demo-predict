@@ -14,7 +14,7 @@ Stages:
 
 import pandas as pd
 import numpy as np
-from src.config import GHOST_NEW_DAYS, GHOST_WARM_DAYS
+from src.config import GHOST_NEW_DAYS, GHOST_WARM_DAYS, FREE_USAGE_QUANTILE
 
 
 def assign_lifecycle_stage(
@@ -111,7 +111,7 @@ def assign_lifecycle_stage(
             days_since = (cutoff - la).days if pd.notna(la) else 0
             # Sub-stage by usage level
             acc_use = u_pre[u_pre["acc_id"] == acc]["usage"].sum()
-            if acc_use > u_pre.groupby("acc_id")["usage"].sum().quantile(0.75):
+            if acc_use > u_pre.groupby("acc_id")["usage"].sum().quantile(FREE_USAGE_QUANTILE):
                 sub = "High Usage Free"
             else:
                 sub = "Low Usage Free"

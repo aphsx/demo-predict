@@ -133,6 +133,10 @@ export default function Customer360() {
                   point={c.predicted_clv_6m}
                 />
               )}
+              <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-[color:var(--line)]">
+                <KV label="Revenue at risk" value={c.revenue_at_risk != null ? `${Number(c.revenue_at_risk || 0).toLocaleString()} ฿` : "—"} accent="rose" />
+                <KV label="Avg txn value" value={c.avg_transaction_value != null ? `${Number(c.avg_transaction_value || 0).toLocaleString()} ฿` : "—"} />
+              </div>
             </SectionCard>
 
             {/* Credit */}

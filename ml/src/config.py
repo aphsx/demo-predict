@@ -97,8 +97,13 @@ LIFECYCLE_STAGES = {
     "Active Free":    "ใช้งานอยู่แต่ไม่เคยจ่าย",
     "Active Paid":    "จ่ายเงินและใช้งานอยู่",
 }
+
+# Ghost account sub-stages thresholds
 GHOST_NEW_DAYS = 30          # สมัครใหม่ ≤ 30 วัน
 GHOST_WARM_DAYS = 180        # 30–180 วัน = ยังพอ activate ได้
+
+# Active Free usage quantile threshold for sub-stage categorization
+FREE_USAGE_QUANTILE = 0.75   # ใช้งานสูงกว่า quantile นี้ = High Usage Free
 
 # ─── Win-back Model ───────────────────────────────────────────────
 WINBACK_OPTUNA_TRIALS = 20

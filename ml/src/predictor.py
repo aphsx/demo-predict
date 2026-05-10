@@ -10,7 +10,6 @@
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from datetime import date
 
 from src.config import CUTOFF, MODELS_DIR
 from src.lifecycle import assign_lifecycle_stage
@@ -194,12 +193,15 @@ class MobyPredictor:
         else:
             merged["conversion_probability"] = np.nan
 
-        # Sub-stage for Active Paid
-        paid_mask = merged["lifecycle_stage"] == "Active Paid"
-        high_churn = paid_mask & (merged["churn_probability"].fillna(0) >= 0.30)
-        merged.loc[paid_mask & ~high_churn, "sub_stage"] = "Healthy"
-        merged.loc[paid_mask & high_churn, "sub_stage"] = "At Risk"
+        # Derived metrics (business layer)
+        merged["revenue_at_risk"] = (
+            merged["predicted_clv_6m"].fillna(0) * merged["churn_probability"].fillna(0)
+        ).round(2)
+        has_revenue = merged["n_purchases"].fillna(0) > 0
+        merged["avg_transaction_value"] = np.where(
+            has_revenue,
+            (merged["total_revenue"].fillna(0) / merged["n_purchases"].fillna(1)).round(2),
+            np.nan
+        )
 
         return merged
-
-

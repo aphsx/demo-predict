@@ -133,7 +133,7 @@ async def _save_predictions(db, run_id, batch):
     INSERT = text("""
         INSERT INTO predictions (
           run_id, acc_id,
-          lifecycle_stage, sub_stage,
+          lifecycle_stage,
           churn_probability,
           predicted_clv_6m, clv_ci95_lo, clv_ci95_hi,
           clv_ci80_lo, clv_ci80_hi, p_alive,
@@ -141,10 +141,11 @@ async def _save_predictions(db, run_id, batch):
           n_purchases, forecast_confidence,
           comeback_probability,
           conversion_probability,
-          is_active, total_revenue, days_since_last_activity, ever_paid
+          is_active, total_revenue, days_since_last_activity, ever_paid,
+          revenue_at_risk, avg_transaction_value
         ) VALUES (
           :run_id, :acc_id,
-          :lifecycle, :sub_stage,
+          :lifecycle,
           :churn_prob,
           :clv, :ci95_lo, :ci95_hi,
           :ci80_lo, :ci80_hi, :p_alive,
@@ -152,7 +153,8 @@ async def _save_predictions(db, run_id, batch):
           :n_purch, :conf,
           :comeback_prob,
           :conv_prob,
-          :is_active, :total_rev, :days_since, :ever_paid
+          :is_active, :total_rev, :days_since, :ever_paid,
+          :revenue_at_risk, :avg_txn_value
         )
     """)
 
@@ -164,7 +166,6 @@ async def _save_predictions(db, run_id, batch):
         buf.append({
             "run_id": run_id, "acc_id": acc,
             "lifecycle": _sv(row, "lifecycle_stage"),
-            "sub_stage": _sv(row, "sub_stage"),
             "churn_prob": _fv(row, "churn_probability"),
             "clv": _fv(row, "predicted_clv_6m"),
             "ci95_lo": _fv(row, "ci_95_lo"), "ci95_hi": _fv(row, "ci_95_hi"),
@@ -180,6 +181,8 @@ async def _save_predictions(db, run_id, batch):
             "total_rev": _fv(row, "total_revenue"),
             "days_since": int(row["days_since_last_activity"]) if pd.notna(row.get("days_since_last_activity")) else None,
             "ever_paid": bool(row.get("ever_paid", False)),
+            "revenue_at_risk": _fv(row, "revenue_at_risk"),
+            "avg_txn_value": _fv(row, "avg_transaction_value"),
         })
         if len(buf) >= BATCH_SIZE:
             await db.execute(INSERT, buf)
