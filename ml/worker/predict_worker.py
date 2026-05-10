@@ -30,7 +30,7 @@ async def run_prediction_pipeline(ctx, run_id: str, model_dir: str):
 async def _stream_progress(redis, run_id: str, progress: int, step: str):
     """Write progress to Redis Stream (persistent)"""
     stream_key = f"progress:{run_id}"
-    await redis.xadd(stream_key, {"progress": str(progress), "step": step}, max_len=100)
+    await redis.xadd(stream_key, {"progress": str(progress), "step": step}, maxlen=100)
 
 
 async def _pipeline(run_id: str, model_dir: str):
@@ -46,7 +46,7 @@ async def _pipeline(run_id: str, model_dir: str):
         print(f"[Worker] Run {run_id}: loading data from DB...")
         users, payments, usage = await _load_from_db(Session, run_id)
 
-        run_row = await Session().__aenter__().execute(
+        run_row = await Session().execute(
             text("SELECT cutoff_date FROM prediction_runs WHERE id = :id"),
             {"id": run_id}
         )
@@ -158,7 +158,7 @@ async def _save_predictions(db, run_id, batch):
     INSERT = text("""
         INSERT INTO predictions (
           run_id, acc_id,
-          lifecycle_stage,
+          lifecycle_stage, sub_stage,
           churn_probability,
           predicted_clv_6m, clv_ci95_lo, clv_ci95_hi,
           clv_ci80_lo, clv_ci80_hi, p_alive,
@@ -170,7 +170,7 @@ async def _save_predictions(db, run_id, batch):
           revenue_at_risk, avg_transaction_value
         ) VALUES (
           :run_id, :acc_id,
-          :lifecycle,
+          :lifecycle, :sub_stage,
           :churn_prob,
           :clv, :ci95_lo, :ci95_hi,
           :ci80_lo, :ci80_hi, :p_alive,
@@ -191,6 +191,7 @@ async def _save_predictions(db, run_id, batch):
         buf.append({
             "run_id": run_id, "acc_id": acc,
             "lifecycle": _sv(row, "lifecycle_stage"),
+            "sub_stage": _sv(row, "sub_stage"),
             "churn_prob": _fv(row, "churn_probability"),
             "clv": _fv(row, "predicted_clv_6m"),
             "ci95_lo": _fv(row, "ci_95_lo"), "ci95_hi": _fv(row, "ci_95_hi"),

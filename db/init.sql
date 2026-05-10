@@ -107,6 +107,10 @@ CREATE TABLE predictions (
   days_since_last_activity INTEGER,
   ever_paid            BOOLEAN DEFAULT FALSE,
 
+  -- Derived metrics (computed in predictor)
+  revenue_at_risk      NUMERIC(14,2),
+  avg_transaction_value NUMERIC(14,2),
+
   created_at           TIMESTAMPTZ DEFAULT NOW()
 );
 
