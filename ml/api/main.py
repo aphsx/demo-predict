@@ -297,7 +297,7 @@ async def explain_customer(run_id: UUID, acc_id: int, db: AsyncSession = Depends
     run_row = await db.execute(text("SELECT cutoff_date FROM prediction_runs WHERE id = :id"), {"id": str(run_id)})
     r_row = run_row.mappings().first()
     from src.config import CUTOFF
-    cutoff = pd.Timestamp(r_row["cutoff_date"]) if r_row else CUTOFF
+    cutoff = pd.Timestamp(r_row["cutoff_date"], tz="UTC") if r_row else pd.Timestamp(CUTOFF, tz="UTC")
 
     from src.features import build_features
     feat_df = build_features(users, payments, usage, cutoff)
