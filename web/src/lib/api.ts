@@ -9,8 +9,8 @@ export interface Run {
   error_message?: string;
 }
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "";
-const apiUrl = (path: string) => `${BASE}${path}`;
+const BASE = process.env.NEXT_PUBLIC_API_URL;
+const apiUrl = (path: string) => BASE ? `${BASE}${path}` : path;
 
 export async function fetchRuns(): Promise<Run[]> {
   const res = await fetch(apiUrl("/api/runs"));
