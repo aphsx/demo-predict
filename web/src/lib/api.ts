@@ -76,6 +76,23 @@ export async function fetchTrainingLog() {
   return res.json();
 }
 
+export async function fetchModelVersions() {
+  const res = await fetch(apiUrl("/api/model-versions"));
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+export async function fetchActiveModelVersions() {
+  const res = await fetch(apiUrl("/api/model-versions/active"));
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+export async function trainModels() {
+  const res = await fetch(apiUrl("/api/model-versions/train"), { method: "POST" });
+  return res.json();
+}
+
 export function subscribeRunStatus(runId: string, onUpdate: (data: RunStatusUpdate) => void): () => void {
   const es = new EventSource(apiUrl(`/api/runs/${runId}/stream`));
   es.onmessage = (e) => {

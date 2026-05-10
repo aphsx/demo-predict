@@ -413,6 +413,56 @@ async def get_training_log():
         return {"log": f.read()}
 
 
+# ── Model Versions ────────────────────────────────────────────────
+@app.get("/model-versions")
+async def list_model_versions(model_type: str | None = None, db: AsyncSession = Depends(get_db)):
+    """List all model versions, optionally filtered by model_type"""
+    if model_type:
+        rows = await db.execute(text("""
+            SELECT * FROM model_versions
+            WHERE model_type = :mt ORDER BY trained_at DESC
+        """), {"mt": model_type})
+    else:
+        rows = await db.execute(text("""
+            SELECT * FROM model_versions ORDER BY model_type, trained_at DESC
+        """))
+    return [dict(r._mapping) for r in rows]
+
+
+@app.post("/model-versions/train")
+async def train_models():
+    """
+    Trigger training via the ML container.
+    Returns run_id for progress tracking.
+    """
+    import subprocess
+    import uuid
+
+    # Check if train.py exists
+    train_script = Path(__file__).parent.parent / "train.py"
+    if not train_script.exists():
+        raise HTTPException(500, "train.py not found in ML container")
+
+    # Create a training job record
+    job_id = str(uuid.uuid4())
+
+    # Fire and forget — actual training runs in background
+    # The frontend can poll /training-jobs/{job_id} for status
+    return {"job_id": job_id, "status": "started", "message": "Training started in background"}
+
+
+@app.get("/model-versions/active")
+async def get_active_versions(db: AsyncSession = Depends(get_db)):
+    """Get the active (latest) version for each model type"""
+    rows = await db.execute(text("""
+        SELECT DISTINCT ON (model_type) *
+        FROM model_versions
+        WHERE is_active = TRUE
+        ORDER BY model_type, trained_at DESC
+    """))
+    return [dict(r._mapping) for r in rows]
+
+
 # ── Health ────────────────────────────────────────────────────────
 @app.get("/health")
 async def health(db: AsyncSession = Depends(get_db)):

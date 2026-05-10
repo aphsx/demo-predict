@@ -28,6 +28,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
     title: "Configure",
     items: [
       { href: "/runs", label: "Pipelines & Data", icon: Database },
+      { href: "/training", label: "Model Training", icon: Activity },
     ],
   },
 ];
