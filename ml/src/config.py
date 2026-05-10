@@ -3,13 +3,13 @@
 ค่าคงที่ทั้งระบบอยู่ที่นี่ที่เดียว ทุก module import จากที่นี่
 """
 
+import os
 from pathlib import Path
 import pandas as pd
 
 # ─── Paths ───────────────────────────────────────────────────────
-ROOT_DIR   = Path(__file__).parent.parent
-MODELS_DIR = ROOT_DIR / "models"
-DATA_DIR   = ROOT_DIR / "data"
+ROOT_DIR   = Path(__file__).parent.parent.parent
+MODELS_DIR = Path(os.getenv("MODEL_DIR", str(ROOT_DIR / "models")))
 MODELS_DIR.mkdir(exist_ok=True)
 
 # ─── Point-in-Time Cutoff ────────────────────────────────────────

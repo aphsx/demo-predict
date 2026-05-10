@@ -1,0 +1,102 @@
+  Loaded: users=25,093  payments=13,882  usage_rows=76,255
+  Features: 30 features × 25,093 customers
+
+--- Data Summary ---
+  Total users: 25,093
+  Total payments: 13,882
+  Total usage rows: 76,255
+  Active (before cutoff): 4,362
+  Active (after cutoff): 4,576
+  Features: 30
+
+[Churn] Training...
+  Population: 3,099 | Churn rate: 29.8%
+  Split: train=1,859 val=620 test=620
+
+  Model competition (val set):
+  Model                     AUC     F1   Prec    Rec
+  Logistic Regression    0.887 0.661 0.713 0.616
+  Random Forest          0.918 0.744 0.742 0.746
+  XGBoost                0.918 0.743 0.735 0.751
+  LightGBM               0.927 0.723 0.712 0.735
+  Optuna best AUC (val): 0.9339
+
+  Leakage audit: AUC_full=0.9424 AUC_safe=0.9419 drop=0.0006
+  [OK]  No significant leakage detected
+
+  Final (test set): AUC=0.9451 F1=0.7841 Prec=0.8214 Rec=0.75
+  CM: TN=406 FP=30 FN=46 TP=138
+
+  SHAP Top 10:
+                feature     shap
+  days_until_sms_expire 1.050235
+ days_since_last_access 0.959919
+           usage_months 0.592635
+        usage_recent_3m 0.391980
+         credit_sms_log 0.263880
+      usage_decay_ratio 0.177290
+days_until_email_expire 0.130464
+   days_since_last_send 0.117275
+              usage_avg 0.106720
+          usage_prev_3m 0.103038
+
+[CLV] Training BG/NBD + Gamma-Gamma...
+  Repeat buyers for fitting: 1,501
+  BG/NBD: r=0.8607 alpha=39.9416 a=0.2800 b=0.7257
+  Freq-Monetary corr: 0.088 [OK] (need < 0.3)
+
+  CLV Metrics:
+    spearman: 0.7712
+    top_decile_lift: 0.6447
+    mae: 140510.28
+    medae: 21919.33
+    avg_p_alive: 0.5421
+    avg_clv_6m: 112880.41
+    median_clv_6m: 10339.23
+    coverage_95: 0.9303
+    coverage_80: 0.7909
+
+[Credit] Training Quantile Regression × 5...
+  Transaction pairs: 5,761 (outlier cutoff >393 days)
+  XGBoost baseline: MAE=35.0d R²=0.358
+  LightGBM Q50: MAE=33.3d MedAE=9.2d R²=0.395
+  Coverage P10-P90: 74.1% -> 80.4% (x1.07)
+  Coverage P25-P75: 47.3% -> 50.2% (x1.05)
+
+  Per-quantile:
+    P10: MAE=47.0d MedAE=13.5d mean=13.1d
+    P25: MAE=40.0d MedAE=10.2d mean=23.1d
+    P50: MAE=33.3d MedAE=9.2d mean=46.6d
+    P75: MAE=38.8d MedAE=15.9d mean=71.1d
+    P90: MAE=52.5d MedAE=31.3d mean=95.7d
+
+[Win-back] Training...
+  Churned: 4,948 | Comeback: 160 (3.2%)
+  Comeback rate: 9.4%
+  Optuna best AUC: 0.9300
+  Final: AUC=0.9279 F1=0.4789 Prec=0.5484 Rec=0.425
+
+  Feature importance:
+    days_as_customer: 150
+    credit_remaining_log: 134
+    days_since_last_activity: 112
+    usage_avg: 69
+    total_revenue_log: 39
+    usage_total_log: 38
+    ever_paid: 13
+    usage_months: 12
+
+[Conversion] Training...
+  Active Free: 1,912 | Converted: 80 (4.2%)
+  Optuna best AUC: 0.9745
+  Final: AUC=0.9645 F1=0.6512 Prec=0.6087 Rec=0.7
+
+  Feature importance:
+    credit_sms_log: 179
+    days_since_join: 169
+    credit_email_log: 136
+    usage_total_log: 97
+    usage_slope: 95
+    usage_std: 89
+    usage_avg: 88
+    usage_prev_3m: 78

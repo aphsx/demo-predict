@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from api.database import get_db, engine
 from worker.predict_worker import REDIS_SETTINGS
 
-MODEL_DIR = Path(os.getenv("MODEL_DIR", "models"))
+MODEL_DIR = Path(os.getenv("MODEL_DIR", str(Path(__file__).parent.parent.parent / "models")))
 
 
 @asynccontextmanager
