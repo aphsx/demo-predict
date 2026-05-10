@@ -4,17 +4,19 @@ services:
   db:
     image: postgres:15-alpine
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB:       ${POSTGRES_DB:-moby}
-      POSTGRES_USER:     ${POSTGRES_USER:-moby}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-moby1234}
+      POSTGRES_DB:       ${POSTGRES_DB}
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-moby}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -31,16 +33,13 @@ services:
   ml:
     build: ./ml
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "8001:8000"
     volumes:
       - ./models:/app/models
       - ./data:/data
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-moby}:${POSTGRES_PASSWORD:-moby1234}@db:5432/${POSTGRES_DB:-moby}
-      MODEL_DIR:    /app/models
-      DATA_DIR:     /data
-      REDIS_HOST:   redis
     depends_on:
       db:
         condition: service_healthy
@@ -50,15 +49,12 @@ services:
   worker:
     build: ./ml
     restart: unless-stopped
+    env_file:
+      - .env
     command: python -m arq worker.predict_worker.WorkerSettings
     volumes:
       - ./models:/app/models
       - ./data:/data
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-moby}:${POSTGRES_PASSWORD:-moby1234}@db:5432/${POSTGRES_DB:-moby}
-      MODEL_DIR:    /app/models
-      DATA_DIR:     /data
-      REDIS_HOST:   redis
     depends_on:
       db:
         condition: service_healthy
@@ -68,12 +64,10 @@ services:
   web:
     build: ./web
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "3001:3001"
-    environment:
-      PORT:                "3001"
-      NEXT_PUBLIC_API_URL: http://localhost:8001
-      API_URL:             http://ml:8000
     depends_on:
       - ml
 
