@@ -24,6 +24,11 @@ def build_features(users: pd.DataFrame, payments: pd.DataFrame,
     feat = feat.merge(usage_f,   on="acc_id", how="left")
     feat = feat.fillna(0)
 
+    # Ensure numeric columns are float/int, not object (handles edge case of empty merge)
+    for col in feat.columns:
+        if col != "acc_id":
+            feat[col] = pd.to_numeric(feat[col], errors="coerce").fillna(0)
+
     n_features = feat.shape[1] - 1
     print(f"  Features: {n_features} features × {len(feat):,} customers")
     return feat
@@ -58,14 +63,25 @@ def _user_features(users: pd.DataFrame, payments: pd.DataFrame,
     u = u.merge(last_send_pit.reset_index(), on="acc_id", how="left")
     u = u.merge(last_pay_pit.reset_index(),  on="acc_id", how="left")
 
-    # last_access = max(last_send_pit, last_pay_pit)
-    u["last_access_pit"] = u[["last_send_pit", "last_pay_pit"]].max(axis=1)
+    # last_access = max(last_send_pit, last_pay_pit) — handle mixed NaT/float safely
+    s = u["last_send_pit"].copy()
+    p = u["last_pay_pit"].copy()
+    s_ts = pd.to_datetime(s, errors="coerce")
+    p_ts = pd.to_datetime(p, errors="coerce")
+    u["last_access_pit"] = p_ts.combine_first(s_ts)
 
-    u["days_since_join"]         = (cutoff - u["join_date"]).dt.days
-    u["days_since_last_send"]    = (cutoff - u["last_send_pit"]).dt.days
-    u["days_since_last_access"]  = (cutoff - u["last_access_pit"]).dt.days
-    u["days_until_sms_expire"]   = (u["expire_sms"]   - cutoff).dt.days
-    u["days_until_email_expire"] = (u["expire_email"] - cutoff).dt.days
+    def _to_days_delta(col, ref):
+        ts = pd.to_datetime(col, errors="coerce")
+        valid = ts.notna()
+        result = pd.Series([np.nan] * len(col), index=col.index)
+        result[valid] = (ref - ts[valid]).dt.days
+        return result
+
+    u["days_since_join"]         = _to_days_delta(u["join_date"], cutoff)
+    u["days_since_last_send"]    = _to_days_delta(u["last_send_pit"], cutoff)
+    u["days_since_last_access"]  = _to_days_delta(u["last_access_pit"], cutoff)
+    u["days_until_sms_expire"]   = _to_days_delta(u["expire_sms"], cutoff)
+    u["days_until_email_expire"] = _to_days_delta(u["expire_email"], cutoff)
     u["credit_sms_log"]          = np.log1p(u["credit_sms"].clip(lower=0))
     u["credit_email_log"]        = np.log1p(u["credit_email"].clip(lower=0))
     u["is_paid_sms"]             = (u["status_sms"]   == "PAID").astype(int)
@@ -85,7 +101,12 @@ def _user_features(users: pd.DataFrame, payments: pd.DataFrame,
 def _payment_features(payments: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     p = payments[payments["payment_date"] < cutoff].copy()
     if len(p) == 0:
-        return pd.DataFrame(columns=["acc_id"])
+        return pd.DataFrame(columns=[
+            "acc_id",
+            "pay_recency_days", "pay_frequency", "pay_monetary_log", "pay_avg_amount",
+            "pay_total_credits", "pay_avg_interval", "pay_overdue_ratio",
+            "pay_n_sms", "pay_n_email", "pay_tenure_days",
+        ])
 
     def _agg(grp):
         dates     = grp["payment_date"].sort_values()
@@ -116,7 +137,12 @@ def _payment_features(payments: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFr
 def _usage_features(usage: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     u_pre = usage[usage["period"] < cutoff].copy()
     if len(u_pre) == 0:
-        return pd.DataFrame(columns=["acc_id"])
+        return pd.DataFrame(columns=[
+            "acc_id",
+            "usage_total_log", "usage_months", "usage_avg", "usage_max", "usage_std",
+            "usage_recent_3m", "usage_prev_3m", "usage_decay_ratio", "usage_slope",
+            "usage_sms_total", "usage_email_total",
+        ])
 
     recent_cutoff = cutoff - pd.DateOffset(months=3)
     prev_cutoff   = cutoff - pd.DateOffset(months=6)

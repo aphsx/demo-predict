@@ -52,7 +52,7 @@ async def _pipeline(run_id: str, model_dir: str):
         )
         r = run_row.mappings().first()
         from src.config import CUTOFF
-        cutoff = pd.Timestamp(r["cutoff_date"], tz="UTC") if r else pd.Timestamp(CUTOFF, tz="UTC")
+        cutoff = pd.Timestamp(r["cutoff_date"]).tz_localize(None) if r else pd.Timestamp(CUTOFF).tz_localize(None)
 
         # Stream: 25% - building features
         await _stream_progress(redis, run_id, 25, "building_features")

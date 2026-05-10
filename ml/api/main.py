@@ -279,12 +279,12 @@ async def explain_customer(run_id: UUID, acc_id: int, db: AsyncSession = Depends
 
     for col in ["expire_sms","expire_email","join_date","last_access","last_send"]:
         if col in users.columns:
-            users[col] = pd.to_datetime(users[col], errors="coerce")
+            users[col] = pd.to_datetime(users[col], errors="coerce", utc=True).dt.tz_convert(None)
     for col in ["credit_sms", "credit_email"]:
         if col in users.columns:
             users[col] = pd.to_numeric(users[col], errors="coerce")
     if len(payments) > 0:
-        payments["payment_date"] = pd.to_datetime(payments["payment_date"], errors="coerce")
+        payments["payment_date"] = pd.to_datetime(payments["payment_date"], errors="coerce", utc=True).dt.tz_convert(None)
         for col in ["amount", "credit_add"]:
             payments[col] = pd.to_numeric(payments[col], errors="coerce")
     if len(usage) > 0:
@@ -293,11 +293,13 @@ async def explain_customer(run_id: UUID, acc_id: int, db: AsyncSession = Depends
         usage["period"] = pd.to_datetime(
             usage["year"].astype(str) + "-" + usage["month"].astype(str).str.zfill(2) + "-01"
         )
+    else:
+        usage = pd.DataFrame(columns=["acc_id", "year", "month", "usage", "channel", "source", "period"])
 
     run_row = await db.execute(text("SELECT cutoff_date FROM prediction_runs WHERE id = :id"), {"id": str(run_id)})
     r_row = run_row.mappings().first()
     from src.config import CUTOFF
-    cutoff = pd.Timestamp(r_row["cutoff_date"], tz="UTC") if r_row else pd.Timestamp(CUTOFF, tz="UTC")
+    cutoff = pd.Timestamp(r_row["cutoff_date"]).tz_localize(None) if r_row else pd.Timestamp(CUTOFF).tz_localize(None)
 
     from src.features import build_features
     feat_df = build_features(users, payments, usage, cutoff)
@@ -353,11 +355,20 @@ async def get_summary(run_id: UUID, db: AsyncSession = Depends(get_db)):
     """), {"r": str(run_id)})
     conversion_kpi = dict(cv.mappings().first() or {})
 
+    run_row = await db.execute(text("""
+        SELECT total_customers, active_customers, model_version_id
+        FROM prediction_runs WHERE id = :id
+    """), {"id": str(run_id)})
+    run_info = dict(run_row.mappings().first() or {})
+
     return {
         "lifecycle": lifecycle,
         "active_paid": active_paid_kpi,
         "winback": winback_kpi,
         "conversion": conversion_kpi,
+        "total_customers": run_info.get("total_customers"),
+        "active_customers": run_info.get("active_customers"),
+        "model_version_id": str(run_info["model_version_id"]) if run_info.get("model_version_id") else None,
     }
 
 
