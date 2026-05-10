@@ -86,13 +86,7 @@ async def stream_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
         import asyncio
         import time
 
-        last_status = None
-        checks = 0
-        max_checks = 120  # ~10 min at 5s interval
-
-        while checks < max_checks:
-            checks += 1
-
+        while True:
             row = await db.execute(
                 text("SELECT id, status, total_customers, active_customers, error_message, updated_at FROM prediction_runs WHERE id = :id"),
                 {"id": str(run_id)}
@@ -103,10 +97,7 @@ async def stream_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
                 break
 
             status = r["status"]
-            is_terminal = status in ("done", "failed")
-
-            # Only emit if status changed or first check (to show initial state)
-            if status != last_status or checks == 1:
+            if status != last_status or last_status is None:
                 yield {
                     "event": "status",
                     "data": json.dumps({
@@ -119,7 +110,7 @@ async def stream_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
                 }
                 last_status = status
 
-            if is_terminal:
+            if status in ("done", "failed"):
                 yield {"event": "done", "data": json.dumps({"status": status})}
                 break
 
