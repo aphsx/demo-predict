@@ -76,6 +76,26 @@ export async function fetchTrainingLog() {
   return res.json();
 }
 
+export function subscribeRunStatus(runId: string, onUpdate: (data: RunStatusUpdate) => void): () => void {
+  const es = new EventSource(apiUrl(`/api/runs/${runId}/stream`));
+  es.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      onUpdate(data);
+    } catch {}
+  };
+  es.onerror = () => es.close();
+  return () => es.close();
+}
+
+export interface RunStatusUpdate {
+  status: string;
+  total_customers?: number;
+  active_customers?: number;
+  error_message?: string;
+  updated_at?: string;
+}
+
 export function exportUrl(runId: string, params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
   return apiUrl(`/api/runs/${runId}/export?${qs}`);

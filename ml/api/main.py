@@ -76,6 +76,68 @@ async def get_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
     return dict(r)
 
 
+@app.get("/runs/{run_id}/stream")
+async def stream_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
+    """
+    SSE endpoint — streams run status updates until status is 'done', 'failed', or timeout.
+    Client subscribes once, server pushes updates.
+    """
+    async def event_generator():
+        import asyncio
+        import time
+
+        last_status = None
+        checks = 0
+        max_checks = 120  # ~10 min at 5s interval
+
+        while checks < max_checks:
+            checks += 1
+
+            row = await db.execute(
+                text("SELECT id, status, total_customers, active_customers, error_message, updated_at FROM prediction_runs WHERE id = :id"),
+                {"id": str(run_id)}
+            )
+            r = row.mappings().first()
+            if not r:
+                yield {"event": "error", "data": "Run not found"}
+                break
+
+            status = r["status"]
+            is_terminal = status in ("done", "failed")
+
+            # Only emit if status changed or first check (to show initial state)
+            if status != last_status or checks == 1:
+                yield {
+                    "event": "status",
+                    "data": json.dumps({
+                        "status": status,
+                        "total_customers": r["total_customers"],
+                        "active_customers": r["active_customers"],
+                        "error_message": r["error_message"],
+                        "updated_at": str(r["updated_at"]) if r["updated_at"] else None,
+                    })
+                }
+                last_status = status
+
+            if is_terminal:
+                yield {"event": "done", "data": json.dumps({"status": status})}
+                break
+
+            await asyncio.sleep(5)
+
+        yield {"event": "close", "data": ""}
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
 @app.delete("/runs/{run_id}")
 async def delete_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
     await db.execute(text("DELETE FROM prediction_runs WHERE id = :id"), {"id": str(run_id)})

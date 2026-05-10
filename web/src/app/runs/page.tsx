@@ -34,9 +34,25 @@ export default function RunsPage() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [streamingRun, setStreamingRun] = useState<string | null>(null);
 
   const load = () => api.listRuns().then((d) => { setRuns(d); setLoading(false); });
-  useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
+  useEffect(() => { load(); }, []);
+
+  // SSE subscription for active runs
+  useEffect(() => {
+    const activeRun = runs.find(r => ["pending", "validating", "processing"].includes(r.status));
+    if (!activeRun || streamingRun === activeRun.id) return;
+
+    setStreamingRun(activeRun.id);
+    const unsub = api.subscribeRunStatus(activeRun.id, (update) => {
+      if (update.status === "done" || update.status === "failed" || update.status === "done") {
+        setStreamingRun(null);
+        load();
+      }
+    });
+    return unsub;
+  }, [runs, streamingRun]);
 
   const createRun = async () => {
     if (!name) return;
