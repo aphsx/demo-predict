@@ -11,7 +11,8 @@ import {
   PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton, EmptyState,
   lifecycleTone,
 } from "@/components/ui";
-import { fetchCustomer } from "@/lib/api";
+import { fetchCustomer, fetchCustomerExplain } from "@/lib/api";
+import { formatFeatureLabel } from "@/lib/featureLabels";
 import { useRunStore } from "@/lib/runStore";
 
 export default function Customer360() {
@@ -19,14 +20,17 @@ export default function Customer360() {
   const accId  = params.id as string;
   const { runId } = useRunStore();
   const [c, setC] = useState<any>(null);
+  const [explain, setExplain] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!runId || !accId) return;
     setLoading(true); setError("");
-    fetchCustomer(runId, accId)
-      .then(d => { setC(d); setLoading(false); })
+    Promise.all([
+      fetchCustomer(runId, accId),
+      fetchCustomerExplain(runId, accId),
+    ]).then(([d, exp]) => { setC(d); setExplain(exp); setLoading(false); })
       .catch(() => { setError("ไม่พบลูกค้า"); setLoading(false); });
   }, [runId, accId]);
 
@@ -95,6 +99,17 @@ export default function Customer360() {
               <ChurnGauge value={c.churn_probability || 0} />
               <div className="mt-5 space-y-3">
                 <KV label="P(alive)" value={c.p_alive != null ? `${(c.p_alive * 100).toFixed(1)}%` : "—"} />
+                {explain?.top_risk_factors?.length > 0 && (
+                  <div className="pt-2 border-t border-[color:var(--line)]">
+                    <div className="text-[10.5px] uppercase tracking-[.10em] text-[color:var(--ink-5)] mb-2">Risk factors</div>
+                    {explain.top_risk_factors.map((f: any, i: number) => (
+                      <div key={i} className="text-[12px] text-[color:var(--ink-3)] mb-1 flex items-start gap-1.5">
+                        <span className="text-[color:var(--warn)] mt-0.5">·</span>
+                        <span>{formatFeatureLabel(f.feature, f.feature_value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </SectionCard>
 

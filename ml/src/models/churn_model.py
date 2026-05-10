@@ -5,7 +5,6 @@ LightGBM + Isotonic Calibration
 """
 
 import dill
-import json
 import shap
 import numpy as np
 import pandas as pd
@@ -31,7 +30,7 @@ import lightgbm as lgb
 import xgboost as xgb
 
 from src.config import (
-    CHURN_THRESHOLDS, CHURN_OPTUNA_TRIALS, CHURN_RANDOM_STATE,
+    CHURN_OPTUNA_TRIALS, CHURN_RANDOM_STATE,
     LEAK_SUSPECT_FEATURES, MODEL_FILES, MODELS_DIR,
 )
 
@@ -171,7 +170,7 @@ def explain(acc_id: int, feat_df: pd.DataFrame,
             models_dir: Path = MODELS_DIR, top_n: int = 3) -> dict:
     """
     SHAP explanation สำหรับลูกค้า 1 คน
-    Returns: {"acc_id", "churn_probability", "top_risk_factors": [str]}
+    Returns: {"acc_id", "churn_probability", "top_risk_factors": [{"feature", "shap_value", "feature_value"}]}
     """
     artifact  = _load_artifact(models_dir)
     feat_cols = artifact["features"]
@@ -188,11 +187,17 @@ def explain(acc_id: int, feat_df: pd.DataFrame,
         sv = sv[1]
 
     sv_series = pd.Series(sv[0], index=feat_cols).sort_values(key=abs, ascending=False)
-    reasons   = [_shap_to_text(feat, sv_series[feat], float(row[feat].iloc[0]))
-                 for feat in sv_series.head(top_n).index]
+    factors   = [
+        {
+            "feature": feat,
+            "shap_value": round(float(sv_series[feat]), 4),
+            "feature_value": round(float(row[feat].iloc[0]), 4),
+        }
+        for feat in sv_series.head(top_n).index
+    ]
 
     return {"acc_id": acc_id, "churn_probability": round(float(prob), 4),
-            "top_risk_factors": reasons}
+            "top_risk_factors": factors}
 
 
 def what_if(acc_id: int, feature: str, new_value: float,
@@ -310,20 +315,6 @@ def _leakage_audit(model, X_tr, y_tr, X_te, y_te, feat_cols: list) -> dict:
             "auc_drop_leakage_test": drop}
 
 
-def _shap_to_text(feature: str, shap_val: float, feat_value: float) -> str:
-    direction = "สูง" if shap_val > 0 else "ต่ำ"
-    labels = {
-        "days_since_last_send":    f"ไม่ส่งข้อความมา {int(feat_value)} วัน",
-        "days_since_last_access":  f"ไม่ login มา {int(feat_value)} วัน",
-        "days_until_sms_expire":   f"เครดิตหมดอายุใน {int(feat_value)} วัน",
-        "usage_recent_3m":         f"ใช้งาน {int(feat_value):,} ข้อความใน 3 เดือนล่าสุด",
-        "usage_months":            f"เคย active {int(feat_value)} เดือน",
-        "usage_decay_ratio":       f"Usage ลดลง (ratio={feat_value:.2f})",
-        "pay_recency_days":        f"ไม่ซื้อเครดิตมา {int(feat_value)} วัน",
-        "pay_overdue_ratio":       f"เกินรอบซื้อปกติ {feat_value:.1f} เท่า",
-        "credit_sms_log":          f"เครดิต SMS เหลือน้อย",
-    }
-    return labels.get(feature, f"{feature} = {feat_value:.2f} ({direction}ผิดปกติ)")
 
 
 def _save_plots(y_te, p_cal, cm, out_dir: Path) -> None:

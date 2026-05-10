@@ -8,6 +8,7 @@ import {
   PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton, EmptyState,
 } from "@/components/ui";
 import { fetchModelMetrics, fetchTrainingLog } from "@/lib/api";
+import { formatFeatureLabel } from "@/lib/featureLabels";
 
 type Tab = "overview" | "churn" | "clv" | "credit" | "winback" | "conversion" | "log";
 
@@ -131,10 +132,10 @@ function ChurnTab({ m }: any) {
             {m.churn_shap_top10.map((d: any, i: number) => (
               <div key={i}>
                 <div className="flex justify-between mb-1">
-                  <span className="text-[11.5px] text-[color:var(--ink-3)] font-mono">{d.feature}</span>
+                  <span className="text-[11.5px] text-[color:var(--ink-3)]">{formatFeatureLabel(d.feature, d.shap)}</span>
                   <span className="text-[11.5px] num text-[color:var(--ink-2)]">{Number(d.shap).toFixed(4)}</span>
                 </div>
-                <ProgressMeter value={d.shap} max={m.churn_shap_top10[0].shap} tone="blue" showValue={false} />
+                <ProgressMeter value={Math.abs(d.shap)} max={Math.abs(m.churn_shap_top10[0].shap)} tone="blue" showValue={false} />
               </div>
             ))}
           </div>

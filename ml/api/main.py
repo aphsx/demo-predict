@@ -164,6 +164,62 @@ async def get_customer_prediction(run_id: UUID, acc_id: int, db: AsyncSession = 
     return dict(r)
 
 
+@app.get("/runs/{run_id}/predictions/{acc_id}/explain")
+async def explain_customer(run_id: UUID, acc_id: int, db: AsyncSession = Depends(get_db)):
+    """SHAP explanation for a single customer — returns numeric factors only"""
+    # Load raw data for feature building
+    u = await db.execute(text("""
+        SELECT acc_id,status_sms,credit_sms,credit_email,
+               expire_sms,expire_email,status_email,join_date,last_access,last_send
+        FROM raw_customers WHERE run_id = :r AND acc_id = :acc_id
+    """), {"r": str(run_id), "acc_id": acc_id})
+    users = pd.DataFrame([dict(row._mapping) for row in u])
+    if len(users) == 0:
+        raise HTTPException(404, "Customer not found")
+
+    p = await db.execute(text("""
+        SELECT acc_id,payment_date,amount,credit_add,credit_type
+        FROM raw_payments WHERE run_id = :r AND acc_id = :acc_id
+    """), {"r": str(run_id), "acc_id": acc_id})
+    payments = pd.DataFrame([dict(row._mapping) for row in p])
+
+    u2 = await db.execute(text("""
+        SELECT acc_id,year,month,usage,channel,source FROM raw_usage WHERE run_id = :r AND acc_id = :acc_id
+    """), {"r": str(run_id), "acc_id": acc_id})
+    usage = pd.DataFrame([dict(row._mapping) for row in u2])
+
+    for col in ["expire_sms","expire_email","join_date","last_access","last_send"]:
+        if col in users.columns:
+            users[col] = pd.to_datetime(users[col], errors="coerce")
+    for col in ["credit_sms", "credit_email"]:
+        if col in users.columns:
+            users[col] = pd.to_numeric(users[col], errors="coerce")
+    if len(payments) > 0:
+        payments["payment_date"] = pd.to_datetime(payments["payment_date"], errors="coerce")
+        for col in ["amount", "credit_add"]:
+            payments[col] = pd.to_numeric(payments[col], errors="coerce")
+    if len(usage) > 0:
+        for col in ["usage", "year", "month"]:
+            usage[col] = pd.to_numeric(usage[col], errors="coerce")
+        usage["period"] = pd.to_datetime(
+            usage["year"].astype(str) + "-" + usage["month"].astype(str).str.zfill(2) + "-01"
+        )
+
+    run_row = await db.execute(text("SELECT cutoff_date FROM prediction_runs WHERE id = :id"), {"id": str(run_id)})
+    r_row = run_row.mappings().first()
+    from src.config import CUTOFF
+    cutoff = pd.Timestamp(r_row["cutoff_date"]) if r_row else CUTOFF
+
+    from src.features import build_features
+    feat_df = build_features(users, payments, usage, cutoff)
+
+    from src.predictor import MobyPredictor
+    predictor = MobyPredictor(Path(MODEL_DIR), cutoff)
+    predictor.load_data(users, feat_df, payments, usage)
+    result = predictor.explain(acc_id)
+    return result
+
+
 # ── Dashboard Summary V2 ──────────────────────────────────────────
 @app.get("/runs/{run_id}/summary")
 async def get_summary(run_id: UUID, db: AsyncSession = Depends(get_db)):

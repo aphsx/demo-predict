@@ -58,6 +58,11 @@ export async function fetchCustomer(runId: string, accId: string) {
   return res.json();
 }
 
+export async function fetchCustomerExplain(runId: string, accId: string) {
+  const res = await fetch(apiUrl(`/api/runs/${runId}/predictions/${accId}/explain`));
+  return res.json();
+}
+
 export async function fetchModelMetrics() {
   const res = await fetch(apiUrl("/api/model-metrics"));
   return res.json();
