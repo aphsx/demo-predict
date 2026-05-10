@@ -12,9 +12,12 @@ export interface Run {
 const BASE = process.env.NEXT_PUBLIC_API_URL || "";
 const apiUrl = (path: string) => `${BASE}${path}`;
 
-export async function fetchRuns() {
+export async function fetchRuns(): Promise<Run[]> {
   const res = await fetch(apiUrl("/api/runs"));
-  return res.json();
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+  if (!Array.isArray(data)) throw new Error(`Expected array, got ${typeof data}`);
+  return data;
 }
 
 export async function createRun(name: string, cutoff_date: string) {

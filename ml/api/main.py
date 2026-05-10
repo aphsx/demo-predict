@@ -334,11 +334,15 @@ async def get_training_log():
 @app.get("/health")
 async def health(db: AsyncSession = Depends(get_db)):
     await db.execute(text("SELECT 1"))
-    models_ok = (MODEL_DIR / "churn_model.pkl").exists()
+    churn_ok = (MODEL_DIR / "churn_model.pkl").exists()
     winback_ok = (MODEL_DIR / "winback_model.pkl").exists()
     conversion_ok = (MODEL_DIR / "conversion_model.pkl").exists()
-    return {"status": "ok", "db": "connected",
-            "models": {"churn": models_ok, "winback": winback_ok, "conversion": conversion_ok}}
+    all_ok = churn_ok and winback_ok and conversion_ok
+    status = "ok" if all_ok else "degraded"
+    msg = None if all_ok else "Models not trained — run: python train.py <data_file>"
+    return {"status": status, "db": "connected",
+            "models": {"churn": churn_ok, "winback": winback_ok, "conversion": conversion_ok},
+            "message": msg}
 
 
 # ── Helpers ───────────────────────────────────────────────────────

@@ -4,7 +4,7 @@
 Trains all 5 models, saves metrics + detailed training log
 Usage: python train.py data/1Moby_Data.xlsx
 """
-import sys, io
+import sys, io, os
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     import json
     from datetime import datetime
 
-    path = sys.argv[1] if len(sys.argv) > 1 else "data/1Moby_Data.xlsx"
+    path = sys.argv[1] if len(sys.argv) > 1 else os.getenv("DATA_DIR", "data") + "/1Moby_Data.xlsx"
     print(f"Training from: {path}")
     print(f"Cutoff: {CUTOFF}")
     print("=" * 60)
