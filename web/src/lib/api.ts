@@ -112,4 +112,5 @@ export const api = {
   fetchCustomer,
   fetchModelMetrics,
   fetchTrainingLog,
+  subscribeRunStatus,
 };
