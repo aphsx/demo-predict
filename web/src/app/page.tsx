@@ -7,8 +7,8 @@ import {
   Sparkles, RefreshCw, ChevronRight, Activity,
 } from "lucide-react";
 import {
-  KpiCard, SectionCard, StackBar, StatusPill, AlertItem,
-  PageHeader, ActionChip, Skeleton, lifecycleTone, urgencyTone, churnTone,
+  KpiCard, SectionCard, StatusPill, AlertItem,
+  PageHeader, ActionChip, Skeleton, lifecycleTone,
 } from "@/components/ui";
 import { fetchSummary, fetchPredictions } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
@@ -18,19 +18,6 @@ const LIFECYCLE_COLOR: Record<string, string> = {
   "Active Free": "var(--c-free)",
   "Churned":     "var(--c-churn)",
   "Ghost":       "var(--c-ghost)",
-};
-const URGENCY_COLOR: Record<string, string> = {
-  "Critical": "#dc2626", "Warning": "#d97706",
-  "Monitor": "#0369a1",  "Stable": "#059669",
-  "New Customer": "#94a3b8",
-};
-const RFM_COLOR: Record<string, string> = {
-  "Champions": "#1d4ed8", "Loyal": "#3b82f6",
-  "Promising": "#10b981", "Cannot Lose": "#f59e0b",
-  "At Risk": "#ef4444",   "Need Attention": "#94a3b8",
-};
-const CHURN_COLOR: Record<string, string> = {
-  "Low": "#10b981", "Medium": "#f59e0b", "High": "#ef4444",
 };
 
 export default function Dashboard() {
@@ -57,7 +44,6 @@ export default function Dashboard() {
   const lc = summary?.lifecycle || {};
 
   const totalCustomers = summary?.total_customers || 0;
-  const portfolioRisk = ap.total ? (ap.at_risk || 0) / ap.total : 0;
 
   const anomalies = useMemo(() => buildAnomalies(summary), [summary]);
 
@@ -93,10 +79,10 @@ export default function Dashboard() {
                 accent="slate"
               />
               <KpiCard
-                label="Revenue at risk"
-                value={Number(ap.revenue_at_risk || 0)}
-                format="currency"
-                hint={`${(ap.at_risk || 0).toLocaleString()} active paid · churn-prob ≥ 0.6`}
+                label="Avg Churn Probability"
+                value={Number(ap.avg_churn || 0)}
+                format="percent"
+                hint="Active Paid cohort"
                 accent="rose"
               />
               <KpiCard
@@ -105,12 +91,6 @@ export default function Dashboard() {
                 format="currency"
                 hint="Active Paid cohort"
                 accent="blue"
-              />
-              <KpiCard
-                label="Critical top-up"
-                value={ap.critical_topup || 0}
-                hint="ต้องเตือนซื้อเครดิตภายใน 14 วัน"
-                accent="amber"
               />
             </>
           )}
@@ -134,21 +114,21 @@ export default function Dashboard() {
                 color={LIFECYCLE_COLOR["Active Paid"]}
                 label="Active Paid"
                 count={lc["Active Paid"]?.total || 0}
-                detail={`Healthy ${ap.healthy || 0} · At risk ${ap.at_risk || 0}`}
+                detail={`Avg churn ${((ap.avg_churn || 0) * 100).toFixed(1)}% · Avg CLV ${Number(ap.avg_clv || 0).toLocaleString()} ฿`}
                 href="/customers?lifecycle_stage=Active%20Paid"
               />
               <LifecycleTile
                 color={LIFECYCLE_COLOR["Active Free"]}
                 label="Active Free"
                 count={lc["Active Free"]?.total || 0}
-                detail={`High convert ${cv.high || 0} · Avg ${(((cv.avg_convert || 0) * 100)).toFixed(1)}%`}
+                detail={`Avg convert ${((cv.avg_convert || 0) * 100).toFixed(1)}%`}
                 href="/customers?lifecycle_stage=Active%20Free"
               />
               <LifecycleTile
                 color={LIFECYCLE_COLOR["Churned"]}
                 label="Churned"
                 count={lc["Churned"]?.total || 0}
-                detail={`Win-back High ${wb.high || 0} · Med ${wb.medium || 0}`}
+                detail={`Avg comeback ${((wb.avg_comeback || 0) * 100).toFixed(1)}%`}
                 href="/customers?lifecycle_stage=Churned"
               />
               <LifecycleTile
@@ -160,22 +140,7 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Distribution row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-6">
-              <div>
-                <DistTitle title="Churn tier" right={`${(portfolioRisk * 100).toFixed(1)}% at risk`} />
-                <StackBar data={summary?.churn_distribution || {}} palette={CHURN_COLOR} />
-              </div>
-              <div>
-                <DistTitle title="RFM segments" />
-                <StackBar data={summary?.rfm_distribution || {}} palette={RFM_COLOR} />
-              </div>
-              <div>
-                <DistTitle title="Credit urgency" />
-                <StackBar data={summary?.urgency_distribution || {}} palette={URGENCY_COLOR} />
-              </div>
-            </div>
-          </SectionCard>
+                      </SectionCard>
 
           {/* Anomaly feed */}
           <SectionCard
@@ -228,11 +193,10 @@ export default function Dashboard() {
                   <tr>
                     <th>Account</th>
                     <th>Stage</th>
-                    <th>Churn</th>
-                    <th>Urgency</th>
+                    <th>Churn Prob</th>
                     <th>CLV (6m)</th>
-                    <th>Revenue at risk</th>
-                    <th>Priority</th>
+                    <th>Comeback Prob</th>
+                    <th>Convert Prob</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -241,24 +205,21 @@ export default function Dashboard() {
                     <tr key={r.acc_id}>
                       <td className="num text-[color:var(--moby-700)]">{r.acc_id}</td>
                       <td><StatusPill tone={lifecycleTone(r.lifecycle_stage)}>{r.lifecycle_stage}</StatusPill></td>
-                      <td>
-                        {r.churn_probability != null && (
-                          <StatusPill tone={churnTone(r.churn_tier)}>
-                            {(r.churn_probability * 100).toFixed(0)}% · {r.churn_tier}
-                          </StatusPill>
-                        )}
+                      <td className="num">
+                        {r.churn_probability != null
+                          ? `${(r.churn_probability * 100).toFixed(1)}%`
+                          : "—"}
                       </td>
-                      <td>{r.urgency ? <StatusPill tone={urgencyTone(r.urgency)}>{r.urgency}</StatusPill> : <span className="text-[color:var(--ink-5)] text-[11.5px]">—</span>}</td>
                       <td className="num">{Number(r.predicted_clv_6m || 0).toLocaleString()} ฿</td>
-                      <td className="num text-[color:var(--danger)]">{Number(r.revenue_at_risk || 0).toLocaleString()} ฿</td>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <div className="num text-[12px] text-[color:var(--ink-2)]">{Number(r.priority_score || 0).toFixed(1)}</div>
-                          <div className="w-12 h-1.5 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
-                            <div className="h-full bg-[color:var(--moby-600)]"
-                              style={{ width: `${Math.min(100, (r.priority_score / 10) * 100)}%` }} />
-                          </div>
-                        </div>
+                      <td className="num">
+                        {r.comeback_probability != null
+                          ? `${(r.comeback_probability * 100).toFixed(1)}%`
+                          : "—"}
+                      </td>
+                      <td className="num">
+                        {r.conversion_probability != null
+                          ? `${(r.conversion_probability * 100).toFixed(1)}%`
+                          : "—"}
                       </td>
                       <td className="text-right">
                         <Link href={`/customers/${r.acc_id}`} className="inline-flex items-center gap-0.5 text-[12px] text-[color:var(--moby-700)] hover:underline">
@@ -282,35 +243,35 @@ export default function Dashboard() {
             <div className="space-y-4">
               <SignalRow
                 icon={<Sparkles size={14} />}
-                label="High intent free users"
-                value={cv.high || 0}
+                label="Active Free users"
+                value={lc["Active Free"]?.total || 0}
                 sub={`Avg convert ${(((cv.avg_convert || 0) * 100)).toFixed(1)}%`}
                 tone="violet"
-                href="/customers?lifecycle_stage=Active%20Free&conversion_tier=High"
+                href="/customers?lifecycle_stage=Active%20Free"
               />
               <SignalRow
                 icon={<Flame size={14} />}
-                label="High win-back targets"
-                value={wb.high || 0}
+                label="Churned customers"
+                value={lc["Churned"]?.total || 0}
                 sub={`Avg comeback ${(((wb.avg_comeback || 0) * 100)).toFixed(1)}%`}
                 tone="amber"
-                href="/customers?lifecycle_stage=Churned&winback_tier=High"
+                href="/customers?lifecycle_stage=Churned"
               />
               <SignalRow
                 icon={<Wallet size={14} />}
-                label="Critical top-up"
-                value={ap.critical_topup || 0}
-                sub="แจ้งซื้อเครดิตภายใน 14 วัน"
-                tone="rose"
-                href="/customers?urgency=Critical"
+                label="Active Paid customers"
+                value={lc["Active Paid"]?.total || 0}
+                sub={`Avg churn ${(((ap.avg_churn || 0) * 100)).toFixed(1)}% · Avg CLV ${Number(ap.avg_clv || 0).toLocaleString()} ฿`}
+                tone="blue"
+                href="/customers?lifecycle_stage=Active%20Paid"
               />
               <SignalRow
                 icon={<ShieldOff size={14} />}
-                label="Active Paid at risk"
-                value={ap.at_risk || 0}
-                sub={`Revenue at risk ${Number(ap.revenue_at_risk || 0).toLocaleString()} ฿`}
+                label="Ghost accounts"
+                value={lc["Ghost"]?.total || 0}
+                sub="ไม่เคยใช้งาน"
                 tone="rose"
-                href="/customers?lifecycle_stage=Active%20Paid&churn_tier=High"
+                href="/customers?lifecycle_stage=Ghost"
               />
             </div>
           </SectionCard>
@@ -321,15 +282,6 @@ export default function Dashboard() {
 }
 
 /* ── helpers ──────────────────────────────────────────── */
-
-function DistTitle({ title, right }: { title: string; right?: string }) {
-  return (
-    <div className="flex items-baseline justify-between mb-2">
-      <h4 className="text-[12px] font-medium text-[color:var(--ink-2)]">{title}</h4>
-      {right && <span className="text-[11px] text-[color:var(--ink-5)] num">{right}</span>}
-    </div>
-  );
-}
 
 function LifecycleTile({
   color, label, count, detail, href,
@@ -372,40 +324,13 @@ function buildAnomalies(summary: any): { severity: string; title: string; time: 
   if (!summary) return [];
   const out: any[] = [];
   const ap = summary.active_paid || {};
-  const ch = summary.churn_distribution || {};
-  const ug = summary.urgency_distribution || {};
 
-  const total = ap.total || 1;
-  const highChurnPct = (ch.High || 0) / total;
-  if (highChurnPct > 0.18) {
+  const avgChurn = ap.avg_churn || 0;
+  if (avgChurn > 0.4) {
     out.push({
       severity: "danger",
-      title: `High churn share เกินเป้าที่ ${(highChurnPct * 100).toFixed(1)}%`,
-      body: `Active Paid ที่ churn-prob ≥ 0.6 มี ${(ch.High || 0).toLocaleString()} คน — เกิน threshold 18%`,
-      time: "now",
-    });
-  }
-  if ((ug.Critical || 0) > 500) {
-    out.push({
-      severity: "warn",
-      title: `Critical top-up พุ่งเกิน 500 บัญชี (${(ug.Critical || 0).toLocaleString()})`,
-      body: "ต้องเปิด campaign reminder ภายใน 7 วัน เพื่อกัน churn",
-      time: "now",
-    });
-  }
-  if ((ap.revenue_at_risk || 0) > 5_000_000) {
-    out.push({
-      severity: "danger",
-      title: `Revenue at risk ${Number(ap.revenue_at_risk).toLocaleString()} ฿`,
-      body: "เกินกรอบความเสี่ยงรายไตรมาส — ส่งต่อทีม Account Mgmt",
-      time: "now",
-    });
-  }
-  if ((summary.rfm_distribution?.["At Risk"] || 0) > 1000) {
-    out.push({
-      severity: "warn",
-      title: `RFM "At Risk" segment เกิน 1,000 ราย`,
-      body: "Recency ต่ำติดต่อกัน — แนะนำ trigger win-back",
+      title: `High avg churn probability at ${(avgChurn * 100).toFixed(1)}%`,
+      body: `Active Paid cohort มีค่าเฉลี่ย churn สูง — ตรวจสอบ retention strategy`,
       time: "now",
     });
   }
@@ -413,7 +338,7 @@ function buildAnomalies(summary: any): { severity: string; title: string; time: 
   out.push({
     severity: "info",
     title: "Model freshness ปกติ",
-    body: "PSI 0.08 · KS p-value 0.42 · ไม่มี drift",
+    body: "ไม่มี drift ตรวจพบ",
     time: "5m",
   });
   return out;

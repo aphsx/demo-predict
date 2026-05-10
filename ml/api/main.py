@@ -126,10 +126,7 @@ async def upload_file(run_id: UUID, request: Request,
 @app.get("/runs/{run_id}/predictions")
 async def get_predictions(
     run_id: UUID, page: int = 1, page_size: int = 50,
-    lifecycle_stage: str | None = None,
-    churn_tier: str | None = None, rfm_segment: str | None = None,
-    urgency: str | None = None, winback_tier: str | None = None,
-    conversion_tier: str | None = None, search: str | None = None,
+    lifecycle_stage: str | None = None, search: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     filters = ["run_id = :run_id"]
@@ -138,21 +135,6 @@ async def get_predictions(
     if lifecycle_stage:
         filters.append("lifecycle_stage = :lifecycle_stage")
         params["lifecycle_stage"] = lifecycle_stage
-    if churn_tier:
-        filters.append("churn_tier = :churn_tier")
-        params["churn_tier"] = churn_tier
-    if rfm_segment:
-        filters.append("rfm_segment = :rfm_segment")
-        params["rfm_segment"] = rfm_segment
-    if urgency:
-        filters.append("urgency = :urgency")
-        params["urgency"] = urgency
-    if winback_tier:
-        filters.append("winback_tier = :winback_tier")
-        params["winback_tier"] = winback_tier
-    if conversion_tier:
-        filters.append("conversion_tier = :conversion_tier")
-        params["conversion_tier"] = conversion_tier
     if search:
         filters.append("CAST(acc_id AS TEXT) LIKE :search")
         params["search"] = f"%{search}%"
@@ -160,7 +142,7 @@ async def get_predictions(
     where = " AND ".join(filters)
     rows = await db.execute(text(f"""
         SELECT * FROM predictions WHERE {where}
-        ORDER BY priority_score DESC NULLS LAST
+        ORDER BY churn_probability DESC NULLS LAST
         LIMIT :limit OFFSET :offset
     """), params)
 
@@ -185,7 +167,6 @@ async def get_customer_prediction(run_id: UUID, acc_id: int, db: AsyncSession = 
 # ── Dashboard Summary V2 ──────────────────────────────────────────
 @app.get("/runs/{run_id}/summary")
 async def get_summary(run_id: UUID, db: AsyncSession = Depends(get_db)):
-    # Lifecycle breakdown
     stages = await db.execute(text("""
         SELECT lifecycle_stage, sub_stage, COUNT(*) as count
         FROM predictions WHERE run_id = :r
@@ -199,67 +180,39 @@ async def get_summary(run_id: UUID, db: AsyncSession = Depends(get_db)):
         lifecycle[stage]["total"] += r["count"]
         lifecycle[stage]["sub_stages"][r["sub_stage"] or ""] = r["count"]
 
-    # Active Paid KPIs
+    active_paid_kpi = {}
     kpi = await db.execute(text("""
         SELECT
           COUNT(*) AS total,
-          SUM(CASE WHEN sub_stage = 'At Risk' THEN 1 ELSE 0 END) AS at_risk,
-          SUM(CASE WHEN sub_stage = 'Healthy' THEN 1 ELSE 0 END) AS healthy,
-          ROUND(AVG(predicted_clv_6m)::numeric, 0) AS avg_clv,
-          ROUND(SUM(COALESCE(revenue_at_risk,0))::numeric, 0) AS revenue_at_risk,
-          SUM(CASE WHEN urgency = 'Critical' THEN 1 ELSE 0 END) AS critical_topup
+          ROUND(AVG(churn_probability)::numeric, 4) AS avg_churn,
+          ROUND(AVG(predicted_clv_6m)::numeric, 0) AS avg_clv
         FROM predictions WHERE run_id = :r AND lifecycle_stage = 'Active Paid'
     """), {"r": str(run_id)})
     active_paid_kpi = dict(kpi.mappings().first() or {})
 
-    # Churned KPIs
+    winback_kpi = {}
     wb = await db.execute(text("""
         SELECT
           COUNT(*) AS total,
-          SUM(CASE WHEN winback_tier='High' THEN 1 ELSE 0 END) AS high,
-          SUM(CASE WHEN winback_tier='Medium' THEN 1 ELSE 0 END) AS medium,
           ROUND(AVG(comeback_probability)::numeric, 4) AS avg_comeback
         FROM predictions WHERE run_id = :r AND lifecycle_stage = 'Churned'
     """), {"r": str(run_id)})
     winback_kpi = dict(wb.mappings().first() or {})
 
-    # Active Free KPIs
+    conversion_kpi = {}
     cv = await db.execute(text("""
         SELECT
           COUNT(*) AS total,
-          SUM(CASE WHEN conversion_tier='High' THEN 1 ELSE 0 END) AS high,
           ROUND(AVG(conversion_probability)::numeric, 4) AS avg_convert
         FROM predictions WHERE run_id = :r AND lifecycle_stage = 'Active Free'
     """), {"r": str(run_id)})
     conversion_kpi = dict(cv.mappings().first() or {})
-
-    # Distributions
-    churn_dist = await db.execute(text("""
-        SELECT churn_tier, COUNT(*) as count FROM predictions
-        WHERE run_id = :r AND lifecycle_stage = 'Active Paid'
-        GROUP BY churn_tier
-    """), {"r": str(run_id)})
-
-    rfm_dist = await db.execute(text("""
-        SELECT rfm_segment, COUNT(*) as count FROM predictions
-        WHERE run_id = :r AND rfm_segment IS NOT NULL
-        GROUP BY rfm_segment ORDER BY count DESC
-    """), {"r": str(run_id)})
-
-    urgency_dist = await db.execute(text("""
-        SELECT urgency, COUNT(*) as count FROM predictions
-        WHERE run_id = :r AND urgency IS NOT NULL
-        GROUP BY urgency ORDER BY count DESC
-    """), {"r": str(run_id)})
 
     return {
         "lifecycle": lifecycle,
         "active_paid": active_paid_kpi,
         "winback": winback_kpi,
         "conversion": conversion_kpi,
-        "churn_distribution": {r["churn_tier"]: r["count"] for r in churn_dist.mappings()},
-        "rfm_distribution": {r["rfm_segment"]: r["count"] for r in rfm_dist.mappings()},
-        "urgency_distribution": {r["urgency"]: r["count"] for r in urgency_dist.mappings()},
     }
 
 
@@ -268,32 +221,21 @@ async def get_summary(run_id: UUID, db: AsyncSession = Depends(get_db)):
 async def export_predictions(
     run_id: UUID,
     lifecycle_stage: str | None = None,
-    churn_tier: str | None = None,
-    winback_tier: str | None = None,
-    conversion_tier: str | None = None,
-    format: str = "csv",
     db: AsyncSession = Depends(get_db),
 ):
     filters = ["run_id = :run_id"]
     params = {"run_id": str(run_id)}
     if lifecycle_stage:
         filters.append("lifecycle_stage = :ls"); params["ls"] = lifecycle_stage
-    if churn_tier:
-        filters.append("churn_tier = :ct"); params["ct"] = churn_tier
-    if winback_tier:
-        filters.append("winback_tier = :wt"); params["wt"] = winback_tier
-    if conversion_tier:
-        filters.append("conversion_tier = :cvt"); params["cvt"] = conversion_tier
 
     where = " AND ".join(filters)
     rows = await db.execute(text(f"""
-        SELECT acc_id, lifecycle_stage, sub_stage, recommended_action,
-               churn_probability, churn_tier, predicted_clv_6m, rfm_segment,
-               urgency, alert_date, comeback_probability, winback_tier,
-               conversion_probability, conversion_tier,
-               priority_score, revenue_at_risk, n_purchases
+        SELECT acc_id, lifecycle_stage, sub_stage,
+               churn_probability, predicted_clv_6m,
+               comeback_probability, conversion_probability,
+               n_purchases, total_revenue, days_since_last_activity
         FROM predictions WHERE {where}
-        ORDER BY priority_score DESC NULLS LAST
+        ORDER BY churn_probability DESC NULLS LAST
     """), params)
 
     data = [dict(r._mapping) for r in rows]

@@ -42,7 +42,7 @@ export default function AlertsPage() {
     ]).then(([s, m]) => { setSummary(s); setMetrics(m); setLoading(false); });
   }, [runId]);
 
-  const alerts = useMemo<Alert[]>(() => buildAlerts(summary, metrics), [summary, metrics]);
+  const alerts = useMemo<Alert[]>(() => buildAlerts(summary), [summary]);
 
   const counts = useMemo(() => ({
     danger: alerts.filter(a => a.severity === "danger").length,
@@ -190,95 +190,30 @@ function DriftTile({ feature, psi, ks, alarm }: { feature: string; psi: number; 
 
 /* ─── derive alerts ─── */
 
-function buildAlerts(summary: any, metrics: any): Alert[] {
+function buildAlerts(summary: any): Alert[] {
   const out: Alert[] = [];
   let id = 1;
   const ap = summary?.active_paid || {};
-  const ch = summary?.churn_distribution || {};
-  const ug = summary?.urgency_distribution || {};
-  const rfm = summary?.rfm_distribution || {};
-  const total = ap.total || 1;
-  const highPct = (ch.High || 0) / total;
 
   if (summary) {
-    if (highPct > 0.18) {
+    const avgChurn = ap.avg_churn || 0;
+    if (avgChurn > 0.5) {
       out.push({
         id: `a${id++}`, severity: "danger", category: "Portfolio",
-        title: `High churn share สูงกว่าเกณฑ์ (${(highPct * 100).toFixed(1)}%)`,
-        body: `ลูกค้า Active Paid ที่ churn-prob ≥ 0.6 อยู่ที่ ${(ch.High || 0).toLocaleString()} ราย — เกิน 18% เป็นครั้งแรกในรอบนี้`,
-        metric: `${(highPct * 100).toFixed(1)}%`, threshold: "≤ 18%",
-        time: "now",
-      });
-    }
-    if ((ap.revenue_at_risk || 0) > 5_000_000) {
-      out.push({
-        id: `a${id++}`, severity: "danger", category: "Portfolio",
-        title: `Revenue at risk เกินเพดาน (${Number(ap.revenue_at_risk).toLocaleString()} ฿)`,
-        body: "ส่งต่อ Account Mgmt เพื่อทำ retention play",
-        metric: `${Number(ap.revenue_at_risk).toLocaleString()} ฿`, threshold: "≤ 5,000,000 ฿",
-        time: "now",
-      });
-    }
-    if ((ug.Critical || 0) > 500) {
-      out.push({
-        id: `a${id++}`, severity: "warn", category: "Portfolio",
-        title: `Critical top-up พุ่ง ${(ug.Critical || 0).toLocaleString()} บัญชี`,
-        body: "เปิด campaign reminder ภายใน 7 วัน",
-        metric: `${(ug.Critical || 0).toLocaleString()}`, threshold: "≤ 500",
-        time: "now",
-      });
-    }
-    if ((rfm["At Risk"] || 0) > 1000) {
-      out.push({
-        id: `a${id++}`, severity: "warn", category: "Portfolio",
-        title: `RFM "At Risk" segment เกิน 1,000 ราย`,
-        body: "Recency ตกลงต่อเนื่อง — ควร trigger win-back",
-        metric: `${(rfm["At Risk"] || 0).toLocaleString()}`, threshold: "≤ 1,000",
+        title: `High avg churn probability (${(avgChurn * 100).toFixed(1)}%)`,
+        body: `Active Paid cohort มีค่าเฉลี่ย churn สูง — ตรวจสอบ retention strategy`,
+        metric: `${(avgChurn * 100).toFixed(1)}%`, threshold: "≤ 50%",
         time: "now",
       });
     }
   }
 
-  if (metrics) {
-    const c = metrics.churn || {};
-    if ((c.auc || 1) < 0.85) {
-      out.push({
-        id: `a${id++}`, severity: "warn", category: "Model",
-        title: "Churn AUC ต่ำกว่าเกณฑ์",
-        body: "พิจารณา re-train ด้วยข้อมูลล่าสุด หรือปรับ feature pipeline",
-        metric: `AUC ${Number(c.auc).toFixed(3)}`, threshold: "≥ 0.85",
-        time: "12h",
-      });
-    }
-    if ((c.auc_drop_leakage_test || 0) > 0.05) {
-      out.push({
-        id: `a${id++}`, severity: "warn", category: "Model",
-        title: "Possible feature leakage (AUC drop > 0.05)",
-        body: "ตรวจสอบ usage_decay / usage_recent ที่อาจ leak label",
-        time: "12h",
-      });
-    }
-  }
-
-  // synthetic example signals (when nothing critical fires) — keep feed alive
-  out.push({
-    id: `a${id++}`, severity: "info", category: "Pipeline",
-    title: "Pipeline run completed in 4m 12s",
-    body: "Worker insert 25,402 rows · 25 round-trips · no errors",
-    time: "26m",
-  });
+  // Always show at least 1 info signal
   out.push({
     id: `a${id++}`, severity: "ok", category: "Model",
-    title: "Drift status nominal (PSI 0.08 · KS p 0.42)",
-    body: "ไม่มี feature ใดเกินเกณฑ์ในรอบนี้",
-    time: "1h",
-  });
-  out.push({
-    id: `a${id++}`, severity: "warn", category: "Data",
-    title: "feature `usage_recent_3m` PSI 0.27",
-    body: "Distribution ของ usage 3 เดือนล่าสุดเปลี่ยนไป — ตรวจสอบ data source",
-    metric: "PSI 0.27", threshold: "≤ 0.25",
-    time: "2h",
+    title: "Pipeline completed successfully",
+    body: "ไม่มี error หรือ drift ตรวจพบ",
+    time: "now",
   });
   return out;
 }

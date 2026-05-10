@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Phone, Mail, Send, Tag, AlertTriangle, ChevronRight,
-  CalendarClock, Banknote, Target, ShieldCheck, Activity,
+  ArrowLeft, Phone, Mail, Send, AlertTriangle, ChevronRight,
+  CalendarClock, Banknote, ShieldCheck, Activity,
 } from "lucide-react";
 import {
   PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton, EmptyState,
-  lifecycleTone, churnTone, urgencyTone,
+  lifecycleTone,
 } from "@/components/ui";
 import { fetchCustomer } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
@@ -74,9 +74,6 @@ export default function Customer360() {
               <div className="flex items-center flex-wrap gap-2">
                 <StatusPill tone={lifecycleTone(stage)}>{stage}</StatusPill>
                 {c.sub_stage && <StatusPill tone="neutral" dot={false}>{c.sub_stage}</StatusPill>}
-                {c.rfm_segment && <StatusPill tone="brand" dot={false}><Tag size={11} /> {c.rfm_segment}</StatusPill>}
-                {c.urgency && <StatusPill tone={urgencyTone(c.urgency)}>{c.urgency}</StatusPill>}
-                {c.churn_tier && <StatusPill tone={churnTone(c.churn_tier)}>Churn {c.churn_tier}</StatusPill>}
               </div>
               <div className="mt-2 flex items-center gap-4 text-[12px] text-[color:var(--ink-4)] flex-wrap">
                 <span><span className="text-[color:var(--ink-5)]">Purchases</span> <b className="num text-[color:var(--ink-2)]">{c.n_purchases || 0}</b></span>
@@ -84,30 +81,12 @@ export default function Customer360() {
                 {c.days_since_last_activity != null && (
                   <span><span className="text-[color:var(--ink-5)]">Inactive</span> <b className="num text-[color:var(--ink-2)]">{c.days_since_last_activity} days</b></span>
                 )}
-                {c.alert_date && (
-                  <span><span className="text-[color:var(--ink-5)]">Alert by</span> <b className="num text-[color:var(--ink-2)]">{c.alert_date}</b></span>
-                )}
               </div>
             </div>
-            <PriorityRing score={Number(c.priority_score || 0)} />
-          </div>
+                      </div>
         </div>
 
-        {/* NBA bar */}
-        {c.recommended_action && (
-          <div className="surface bg-[color:var(--info-bg)] border-[color:var(--info)]/20 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-white grid place-items-center text-[color:var(--info)]">
-                <Target size={16} />
-              </div>
-              <div>
-                <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--info)] font-semibold">Next best action</div>
-                <div className="text-[14px] text-[color:var(--ink-1)] mt-0.5">{c.recommended_action}</div>
-              </div>
-            </div>
-          </div>
-        )}
-
+        
         {/* Active Paid layout */}
         {stage === "Active Paid" && (
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
@@ -115,25 +94,11 @@ export default function Customer360() {
             <SectionCard title="Churn analysis" hint="ความน่าจะเป็นที่จะเลิกใช้ใน 6 เดือน">
               <ChurnGauge value={c.churn_probability || 0} />
               <div className="mt-5 space-y-3">
-                <KV label="Revenue at risk" value={`${Number(c.revenue_at_risk || 0).toLocaleString()} ฿`} accent="rose" />
                 <KV label="P(alive)" value={c.p_alive != null ? `${(c.p_alive * 100).toFixed(1)}%` : "—"} />
-              </div>
-              <div className="mt-5">
-                <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-2">Top risk factors</div>
-                <div className="space-y-1.5">
-                  {[c.risk_factor_1, c.risk_factor_2, c.risk_factor_3].filter(Boolean).map((f: string, i: number) => (
-                    <div key={i} className="text-[12px] flex items-start gap-2 px-2.5 py-1.5 rounded-md bg-[color:var(--danger-bg)] text-[color:var(--danger)]">
-                      <AlertTriangle size={12} className="mt-0.5" /> <span className="text-[color:var(--ink-2)]">{f}</span>
-                    </div>
-                  ))}
-                  {!c.risk_factor_1 && (
-                    <div className="text-[11.5px] text-[color:var(--ink-5)]">ไม่มี factor เด่น</div>
-                  )}
-                </div>
               </div>
             </SectionCard>
 
-            {/* CLV / RFM */}
+            {/* CLV */}
             <SectionCard title="Lifetime value" hint="คาดการณ์ 6 เดือนข้างหน้า">
               <div>
                 <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Predicted CLV</div>
@@ -153,27 +118,12 @@ export default function Customer360() {
                   point={c.predicted_clv_6m}
                 />
               )}
-              <hr className="hairline my-4" />
-              <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-3">RFM scoring</div>
-              <div className="grid grid-cols-3 gap-3">
-                <RFMBar label="R" value={c.rfm_r} />
-                <RFMBar label="F" value={c.rfm_f} />
-                <RFMBar label="M" value={c.rfm_m} />
-              </div>
             </SectionCard>
 
             {/* Credit */}
             <SectionCard title="Credit forecast" hint="ทำนายว่าจะซื้อเครดิตอีกในกี่วัน">
               {c.credit_p50 != null ? (
                 <>
-                  <div className="flex items-center gap-3">
-                    <StatusPill tone={urgencyTone(c.urgency)}>{c.urgency}</StatusPill>
-                    {c.alert_date && (
-                      <span className="text-[12px] text-[color:var(--ink-4)] inline-flex items-center gap-1">
-                        <CalendarClock size={12} /> Alert by <b className="num text-[color:var(--ink-2)]">{c.alert_date}</b>
-                      </span>
-                    )}
-                  </div>
                   <div className="mt-5 space-y-3">
                     <QuantileBar label="Optimistic (P10)" value={c.credit_p10} max={c.credit_p90} tone="ok" />
                     <QuantileBar label="Early (P25)" value={c.credit_p25} max={c.credit_p90} tone="info" />
@@ -199,42 +149,40 @@ export default function Customer360() {
 
         {/* Churned layout */}
         {stage === "Churned" && (
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-            <SectionCard title="Win-back potential" className="xl:col-span-2">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <SectionCard title="Win-back potential">
               <ChurnGauge value={c.comeback_probability || 0} label="Comeback probability" tone="warn" />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
-                <KV label="Win-back tier" value={c.winback_tier || "—"} />
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-5">
                 <KV label="Inactive (days)" value={c.days_since_last_activity ?? "—"} />
                 <KV label="Past purchases" value={c.n_purchases || 0} />
                 <KV label="Past revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
               </div>
             </SectionCard>
-            <SectionCard title="Win-back action">
-              <div className="text-[13px] text-[color:var(--ink-2)] leading-relaxed">
-                {c.winback_action || c.recommended_action || "Monitor"}
+            <SectionCard title="Past engagement">
+              <div className="space-y-3">
+                <KV label="Ever paid" value={c.ever_paid ? "Yes" : "No"} />
+                <KV label="Total revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
+                <KV label="Days since last activity" value={c.days_since_last_activity ?? "—"} />
               </div>
-              {c.rfm_segment && (
-                <div className="mt-3 text-[11.5px] text-[color:var(--ink-5)]">Last segment · {c.rfm_segment}</div>
-              )}
             </SectionCard>
           </div>
         )}
 
         {/* Active Free */}
         {stage === "Active Free" && (
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-            <SectionCard title="Conversion likelihood" className="xl:col-span-2">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <SectionCard title="Conversion likelihood">
               <ChurnGauge value={c.conversion_probability || 0} label="Convert in 6m" tone="violet" />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
-                <KV label="Conversion tier" value={c.conversion_tier || "—"} />
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-5">
                 <KV label="Days active" value={c.days_since_last_activity ?? "—"} />
-                <KV label="Engaged" value={c.is_engaged ? "Yes" : "No"} />
-                <KV label="Eligibility" value={c.is_qualified ? "Qualified" : "—"} />
+                <KV label="Ever paid" value={c.ever_paid ? "Yes" : "No"} />
+                <KV label="Total revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
               </div>
             </SectionCard>
-            <SectionCard title="Conversion play">
-              <div className="text-[13px] text-[color:var(--ink-2)] leading-relaxed">
-                {c.conversion_action || c.recommended_action || "Engagement campaign"}
+            <SectionCard title="Engagement summary">
+              <div className="space-y-3">
+                <KV label="Is active" value={c.is_active ? "Yes" : "No"} />
+                <KV label="Days since last activity" value={c.days_since_last_activity ?? "—"} />
               </div>
             </SectionCard>
           </div>
@@ -246,7 +194,7 @@ export default function Customer360() {
             <EmptyState
               icon={Activity}
               title="สมัครแล้วแต่ยังไม่ใช้งาน"
-              hint={c.recommended_action || "Trigger onboarding sequence"}
+              hint="รอให้ลูกค้าเริ่มใช้งาน"
             />
           </SectionCard>
         )}
@@ -275,28 +223,6 @@ function ActionBtn({ icon: Icon, children, primary }: any) {
     }`}>
       <Icon size={14} /> {children}
     </button>
-  );
-}
-
-function PriorityRing({ score }: { score: number }) {
-  const pct = Math.max(0, Math.min(1, score / 10));
-  const r = 26, c = 2 * Math.PI * r;
-  const off = c * (1 - pct);
-  const tone = pct >= 0.7 ? "var(--danger)" : pct >= 0.4 ? "var(--warn)" : "var(--moby-600)";
-  return (
-    <div className="flex items-center gap-3">
-      <svg width="64" height="64" viewBox="0 0 64 64" className="-rotate-90">
-        <circle cx="32" cy="32" r={r} stroke="var(--line-2)" strokeWidth="6" fill="none" />
-        <circle cx="32" cy="32" r={r} stroke={tone} strokeWidth="6" fill="none"
-          strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round" />
-      </svg>
-      <div>
-        <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Priority</div>
-        <div className="num text-[20px] font-semibold text-[color:var(--ink-1)] leading-none">
-          {score.toFixed(1)}<span className="text-[12px] text-[color:var(--ink-4)]"> /10</span>
-        </div>
-      </div>
-    </div>
   );
 }
 

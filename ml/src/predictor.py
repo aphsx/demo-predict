@@ -12,7 +12,7 @@ import pandas as pd
 from pathlib import Path
 from datetime import date
 
-from src.config import CUTOFF, MODELS_DIR, PRIORITY_WEIGHTS, URGENCY_SCORE_MAP
+from src.config import CUTOFF, MODELS_DIR
 from src.lifecycle import assign_lifecycle_stage
 from src.models import churn_model, clv_model, credit_model, winback_model, conversion_model
 
@@ -153,163 +153,53 @@ class MobyPredictor:
         # Merge churn
         if self._churn_out is not None and len(self._churn_out) > 0:
             merged = merged.merge(
-                self._churn_out[["acc_id", "churn_probability", "churn_tier"]],
+                self._churn_out[["acc_id", "churn_probability"]],
                 on="acc_id", how="left")
         else:
             merged["churn_probability"] = np.nan
-            merged["churn_tier"] = None
 
         # Merge CLV
         if self._clv_out is not None and len(self._clv_out) > 0:
             merged = merged.merge(
                 self._clv_out[["acc_id", "predicted_clv_6m", "p_alive",
-                                "ci_95_lo", "ci_95_hi", "ci_80_lo", "ci_80_hi",
-                                "rfm_segment"]],
+                                "ci_95_lo", "ci_95_hi", "ci_80_lo", "ci_80_hi"]],
                 on="acc_id", how="left")
         else:
             for c in ["predicted_clv_6m", "p_alive", "ci_95_lo", "ci_95_hi",
                        "ci_80_lo", "ci_80_hi"]:
                 merged[c] = np.nan
-            merged["rfm_segment"] = None
 
         # Merge Credit
         if self._credit_out is not None and len(self._credit_out) > 0:
             merged = merged.merge(
-                self._credit_out[["acc_id", "p10", "p25", "p50", "p75", "p90",
-                                   "urgency", "alert_date"]],
+                self._credit_out[["acc_id", "p10", "p25", "p50", "p75", "p90"]],
                 on="acc_id", how="left")
         else:
             for c in ["p10", "p25", "p50", "p75", "p90"]:
                 merged[c] = np.nan
-            merged["urgency"] = None
-            merged["alert_date"] = None
 
         # Merge Win-back
         if self._winback_out is not None and len(self._winback_out) > 0:
             merged = merged.merge(
-                self._winback_out[["acc_id", "comeback_probability",
-                                    "winback_tier", "winback_action"]],
+                self._winback_out[["acc_id", "comeback_probability"]],
                 on="acc_id", how="left")
         else:
             merged["comeback_probability"] = np.nan
-            merged["winback_tier"] = None
-            merged["winback_action"] = None
 
         # Merge Conversion
         if self._conversion_out is not None and len(self._conversion_out) > 0:
             merged = merged.merge(
-                self._conversion_out[["acc_id", "conversion_probability",
-                                       "conversion_tier", "conversion_action"]],
+                self._conversion_out[["acc_id", "conversion_probability"]],
                 on="acc_id", how="left")
         else:
             merged["conversion_probability"] = np.nan
-            merged["conversion_tier"] = None
-            merged["conversion_action"] = None
-
-        # Set labels for non Active Paid
-        # Convert categorical to string to allow custom labels
-        if "churn_tier" in merged.columns:
-            merged["churn_tier"] = merged["churn_tier"].astype(str)
-        ghost_mask = merged["lifecycle_stage"] == "Ghost"
-        churned_mask = merged["lifecycle_stage"] == "Churned"
-        free_mask = merged["lifecycle_stage"] == "Active Free"
-        paid_mask = merged["lifecycle_stage"] == "Active Paid"
-
-        merged.loc[ghost_mask, "churn_tier"] = "Ghost"
-        merged.loc[churned_mask, "churn_tier"] = "Already Churned"
-        merged.loc[free_mask, "churn_tier"] = "Free User"
 
         # Sub-stage for Active Paid
+        paid_mask = merged["lifecycle_stage"] == "Active Paid"
         high_churn = paid_mask & (merged["churn_probability"].fillna(0) >= 0.30)
         merged.loc[paid_mask & ~high_churn, "sub_stage"] = "Healthy"
         merged.loc[paid_mask & high_churn, "sub_stage"] = "At Risk"
 
-        # Priority score
-        merged["priority_score"] = _compute_priority(merged)
-
-        # Revenue at risk (Active Paid only)
-        merged["revenue_at_risk"] = np.where(
-            paid_mask,
-            merged["churn_probability"].fillna(0) * merged["predicted_clv_6m"].fillna(0),
-            0,
-        )
-
-        # Recommended action
-        merged["recommended_action"] = merged.apply(_recommend_action, axis=1)
-
         return merged
 
 
-def _normalize(series):
-    mn, mx = series.min(), series.max()
-    return (series - mn) / (mx - mn + 1e-9)
-
-
-def _compute_priority(df):
-    score = pd.Series(np.nan, index=df.index)
-    paid = df["lifecycle_stage"] == "Active Paid"
-    urgency_score = df["urgency"].map(URGENCY_SCORE_MAP).fillna(0.0)
-
-    if paid.sum() > 0:
-        paid_df = df[paid]
-        s = (
-            PRIORITY_WEIGHTS["churn_probability"] * _normalize(paid_df["churn_probability"].fillna(0)) +
-            PRIORITY_WEIGHTS["predicted_clv_6m"]  * _normalize(paid_df["predicted_clv_6m"].fillna(0)) +
-            PRIORITY_WEIGHTS["urgency_score"]     * urgency_score[paid] +
-            PRIORITY_WEIGHTS["recency_score"]     * 0.5
-        ) * 10
-        score[paid] = s
-
-    churned = df["lifecycle_stage"] == "Churned"
-    if churned.sum() > 0:
-        score[churned] = (df.loc[churned, "comeback_probability"].fillna(0) * 10).round(2)
-
-    free = df["lifecycle_stage"] == "Active Free"
-    if free.sum() > 0:
-        score[free] = (df.loc[free, "conversion_probability"].fillna(0) * 10).round(2)
-
-    return score.round(4)
-
-
-def _recommend_action(row):
-    stage = row.get("lifecycle_stage", "")
-    sub   = row.get("sub_stage", "")
-
-    if stage == "Ghost":
-        if sub == "New Signup":
-            return "ส่ง onboarding email + welcome offer"
-        elif sub == "Warm Ghost":
-            return "ส่ง reminder + free trial"
-        return "Archive — ไม่ต้องทำอะไร"
-
-    elif stage == "Churned":
-        action = row.get("winback_action")
-        if pd.notna(action):
-            return str(action)
-        if sub == "Churned Paid":
-            return "Win-back: โทรหา + special offer"
-        return "Win-back: ส่ง promo campaign"
-
-    elif stage == "Active Free":
-        action = row.get("conversion_action")
-        if pd.notna(action):
-            return str(action)
-        return "Engagement campaign — เพิ่ม usage"
-
-    elif stage == "Active Paid":
-        churn_p = row.get("churn_probability", 0) or 0
-        urgency = row.get("urgency", "")
-        rfm = row.get("rfm_segment", "")
-        if churn_p >= 0.6 and urgency == "Critical":
-            return "รีบโทรทันที — High churn + หมดเครดิตเร็ว"
-        elif churn_p >= 0.6:
-            return "โทรสอบถาม + เสนอ special offer"
-        elif urgency == "Critical":
-            return "ส่ง reminder ซื้อเครดิตด่วน"
-        elif rfm in ("Champions", "Loyal"):
-            return "Cross-sell / Upsell — ดูแลรักษา"
-        elif churn_p >= 0.3:
-            return "Monitor closely — ส่ง engagement email"
-        return "ดูแลปกติ — ลูกค้า healthy"
-
-    return "Monitor"

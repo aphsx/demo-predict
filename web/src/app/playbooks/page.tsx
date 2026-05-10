@@ -8,37 +8,37 @@ import {
 } from "lucide-react";
 import {
   PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
-  lifecycleTone, urgencyTone, churnTone,
+  lifecycleTone,
 } from "@/components/ui";
 import { fetchPredictions } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
 
-type LaneId = "retain" | "topup" | "winback" | "convert";
+type LaneId = "active_paid" | "active_free" | "churned" | "ghost";
 
 const LANES: { id: LaneId; title: string; hint: string; icon: any; tone: string; filters: Record<string, string> }[] = [
   {
-    id: "retain", title: "Retain · High churn",
-    hint: "Active Paid ที่กำลังจะหลุด — โทรเช็ค + offer",
+    id: "active_paid", title: "Active Paid",
+    hint: "ลูกค้าที่กำลังใช้งานอยู่",
     icon: ShieldOff, tone: "rose",
-    filters: { lifecycle_stage: "Active Paid", churn_tier: "High" },
+    filters: { lifecycle_stage: "Active Paid" },
   },
   {
-    id: "topup", title: "Top-up · Critical",
-    hint: "ใกล้เครดิตหมด — เตือนซื้อ",
+    id: "active_free", title: "Active Free",
+    hint: "ลูกค้าที่ยังไม่เคยจ่าย",
     icon: Wallet, tone: "amber",
-    filters: { lifecycle_stage: "Active Paid", urgency: "Critical" },
+    filters: { lifecycle_stage: "Active Free" },
   },
   {
-    id: "winback", title: "Win-back · High",
-    hint: "Churned ที่มีโอกาสกลับมา",
+    id: "churned", title: "Churned",
+    hint: "ลูกค้าที่เลิกใช้ไปแล้ว",
     icon: Flame, tone: "violet",
-    filters: { lifecycle_stage: "Churned", winback_tier: "High" },
+    filters: { lifecycle_stage: "Churned" },
   },
   {
-    id: "convert", title: "Convert · High intent",
-    hint: "Free user ที่พร้อมจ่ายเงิน",
+    id: "ghost", title: "Ghost",
+    hint: "สมัครแล้วแต่ไม่เคยใช้",
     icon: Sparkles, tone: "blue",
-    filters: { lifecycle_stage: "Active Free", conversion_tier: "High" },
+    filters: { lifecycle_stage: "Ghost" },
   },
 ];
 
@@ -167,17 +167,13 @@ function Lane({
                       {r.acc_id}
                     </Link>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] text-[color:var(--ink-5)] num">P{Number(r.priority_score || 0).toFixed(1)}</span>
+                      <StatusPill tone={lifecycleTone(r.lifecycle_stage)}>{r.lifecycle_stage}</StatusPill>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    <StatusPill tone={lifecycleTone(r.lifecycle_stage)}>{r.lifecycle_stage}</StatusPill>
-                    {r.churn_tier && <StatusPill tone={churnTone(r.churn_tier)}>Churn {r.churn_tier}</StatusPill>}
-                    {r.urgency && <StatusPill tone={urgencyTone(r.urgency)}>{r.urgency}</StatusPill>}
-                    {r.rfm_segment && <StatusPill tone="brand" dot={false}>{r.rfm_segment}</StatusPill>}
-                  </div>
-                  <div className="text-[11.5px] text-[color:var(--ink-4)] mt-1.5 truncate">
-                    {r.recommended_action || r.winback_action || r.conversion_action || "Monitor"}
+                  <div className="text-[11.5px] text-[color:var(--ink-4)] mt-1.5">
+                    Churn {r.churn_probability != null ? `${(r.churn_probability * 100).toFixed(1)}%` : "—"}
+                    {r.comeback_probability != null ? ` · Comeback ${(r.comeback_probability * 100).toFixed(1)}%` : ""}
+                    {r.conversion_probability != null ? ` · Convert ${(r.conversion_probability * 100).toFixed(1)}%` : ""}
                   </div>
                   {/* Inline actions */}
                   <div className="flex items-center gap-2 mt-2">
@@ -186,17 +182,9 @@ function Lane({
                     <ChipBtn icon={Send}>Campaign</ChipBtn>
                   </div>
                 </div>
-                {/* RAR */}
+                {/* CLV */}
                 <div className="text-right shrink-0">
-                  {r.revenue_at_risk > 0 && (
-                    <>
-                      <div className="text-[10px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">at risk</div>
-                      <div className="num text-[13px] font-semibold text-[color:var(--danger)]">
-                        {Number(r.revenue_at_risk).toLocaleString()} ฿
-                      </div>
-                    </>
-                  )}
-                  {!r.revenue_at_risk && r.predicted_clv_6m > 0 && (
+                  {r.predicted_clv_6m > 0 && (
                     <>
                       <div className="text-[10px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">CLV</div>
                       <div className="num text-[13px] font-semibold text-[color:var(--ink-1)]">

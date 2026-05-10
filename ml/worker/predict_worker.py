@@ -56,12 +56,8 @@ async def _pipeline(run_id: str, model_dir: str):
 
             batch = predictor.predict_batch()
 
-            # SHAP for Active Paid customers (top 500)
-            print(f"[Worker] Run {run_id}: computing SHAP...")
-            active_paid = batch[batch["lifecycle_stage"] == "Active Paid"]["acc_id"].tolist()
-
             print(f"[Worker] Run {run_id}: saving {len(batch):,} predictions to DB...")
-            await _save_predictions(db, run_id, batch, predictor, active_paid[:500])
+            await _save_predictions(db, run_id, batch)
 
             active_count = int((batch["lifecycle_stage"].isin(["Active Paid", "Active Free"])).sum())
             await db.execute(text("""
@@ -131,44 +127,32 @@ async def _load_from_db(db: AsyncSession, run_id: str):
     return users, payments, usage
 
 
-async def _save_predictions(db, run_id, batch, predictor, shap_ids):
-    shap_cache = {}
-    for acc_id in shap_ids:
-        try:
-            exp = predictor.explain(int(acc_id))
-            shap_cache[int(acc_id)] = exp.get("top_risk_factors", [])
-        except Exception:
-            pass
-
+async def _save_predictions(db, run_id, batch):
     await db.execute(text("DELETE FROM predictions WHERE run_id = :r"), {"r": run_id})
 
     INSERT = text("""
         INSERT INTO predictions (
           run_id, acc_id,
-          lifecycle_stage, sub_stage, recommended_action,
-          churn_probability, churn_tier,
+          lifecycle_stage, sub_stage,
+          churn_probability,
           predicted_clv_6m, clv_ci95_lo, clv_ci95_hi,
-          clv_ci80_lo, clv_ci80_hi, p_alive, rfm_segment,
+          clv_ci80_lo, clv_ci80_hi, p_alive,
           credit_p10, credit_p25, credit_p50, credit_p75, credit_p90,
-          urgency, alert_date, n_purchases, forecast_confidence,
-          comeback_probability, winback_tier, winback_action,
-          conversion_probability, conversion_tier, conversion_action,
-          priority_score, revenue_at_risk, is_active,
-          total_revenue, days_since_last_activity, ever_paid,
-          risk_factor_1, risk_factor_2, risk_factor_3
+          n_purchases, forecast_confidence,
+          comeback_probability,
+          conversion_probability,
+          is_active, total_revenue, days_since_last_activity, ever_paid
         ) VALUES (
           :run_id, :acc_id,
-          :lifecycle, :sub_stage, :action,
-          :churn_prob, :churn_tier,
+          :lifecycle, :sub_stage,
+          :churn_prob,
           :clv, :ci95_lo, :ci95_hi,
-          :ci80_lo, :ci80_hi, :p_alive, :rfm,
+          :ci80_lo, :ci80_hi, :p_alive,
           :p10, :p25, :p50, :p75, :p90,
-          :urgency, :alert_date, :n_purch, :conf,
-          :comeback_prob, :wb_tier, :wb_action,
-          :conv_prob, :conv_tier, :conv_action,
-          :priority, :rev_risk, :is_active,
-          :total_rev, :days_since, :ever_paid,
-          :rf1, :rf2, :rf3
+          :n_purch, :conf,
+          :comeback_prob,
+          :conv_prob,
+          :is_active, :total_rev, :days_since, :ever_paid
         )
     """)
 
@@ -176,40 +160,26 @@ async def _save_predictions(db, run_id, batch, predictor, shap_ids):
     buf = []
     for _, row in batch.iterrows():
         acc = int(row.get("acc_id", 0))
-        shap = shap_cache.get(acc, [])
         is_active = 1 if row.get("lifecycle_stage") in ("Active Paid", "Active Free") else 0
         buf.append({
             "run_id": run_id, "acc_id": acc,
             "lifecycle": _sv(row, "lifecycle_stage"),
             "sub_stage": _sv(row, "sub_stage"),
-            "action": _sv(row, "recommended_action"),
             "churn_prob": _fv(row, "churn_probability"),
-            "churn_tier": _sv(row, "churn_tier"),
             "clv": _fv(row, "predicted_clv_6m"),
             "ci95_lo": _fv(row, "ci_95_lo"), "ci95_hi": _fv(row, "ci_95_hi"),
             "ci80_lo": _fv(row, "ci_80_lo"), "ci80_hi": _fv(row, "ci_80_hi"),
-            "p_alive": _fv(row, "p_alive"), "rfm": _sv(row, "rfm_segment"),
+            "p_alive": _fv(row, "p_alive"),
             "p10": _fv(row, "p10"), "p25": _fv(row, "p25"),
             "p50": _fv(row, "p50"), "p75": _fv(row, "p75"), "p90": _fv(row, "p90"),
-            "urgency": _sv(row, "urgency"),
-            "alert_date": _dv(row, "alert_date"),
             "n_purch": int(row["n_purchases"]) if "n_purchases" in row.index and pd.notna(row.get("n_purchases")) else None,
             "conf": _fv(row, "forecast_confidence"),
             "comeback_prob": _fv(row, "comeback_probability"),
-            "wb_tier": _sv(row, "winback_tier"),
-            "wb_action": _sv(row, "winback_action"),
             "conv_prob": _fv(row, "conversion_probability"),
-            "conv_tier": _sv(row, "conversion_tier"),
-            "conv_action": _sv(row, "conversion_action"),
-            "priority": _fv(row, "priority_score"),
-            "rev_risk": _fv(row, "revenue_at_risk"),
             "is_active": is_active,
             "total_rev": _fv(row, "total_revenue"),
             "days_since": int(row["days_since_last_activity"]) if pd.notna(row.get("days_since_last_activity")) else None,
             "ever_paid": bool(row.get("ever_paid", False)),
-            "rf1": shap[0] if len(shap) > 0 else None,
-            "rf2": shap[1] if len(shap) > 1 else None,
-            "rf3": shap[2] if len(shap) > 2 else None,
         })
         if len(buf) >= BATCH_SIZE:
             await db.execute(INSERT, buf)
@@ -231,15 +201,6 @@ def _fv(row, col):
 def _sv(row, col):
     v = row.get(col) if hasattr(row, "get") else (row[col] if col in row.index else None)
     return str(v) if v is not None and str(v) not in ("None","nan","NaT") else None
-
-def _dv(row, col):
-    v = row.get(col) if hasattr(row, "get") else (row[col] if col in row.index else None)
-    if v is None: return None
-    try:
-        ts = pd.Timestamp(v)
-        return ts.date() if not pd.isna(ts) else None
-    except: return None
-
 
 class WorkerSettings:
     functions      = [run_prediction_pipeline]
