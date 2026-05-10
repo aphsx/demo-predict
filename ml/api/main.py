@@ -283,10 +283,14 @@ async def explain_customer(run_id: UUID, acc_id: int, db: AsyncSession = Depends
     for col in ["credit_sms", "credit_email"]:
         if col in users.columns:
             users[col] = pd.to_numeric(users[col], errors="coerce")
+    # payment_date column must exist for _user_features (even if empty)
     if len(payments) > 0:
         payments["payment_date"] = pd.to_datetime(payments["payment_date"], errors="coerce", utc=True).dt.tz_convert(None)
         for col in ["amount", "credit_add"]:
             payments[col] = pd.to_numeric(payments[col], errors="coerce")
+    else:
+        payments = pd.DataFrame(columns=["acc_id", "payment_date", "amount", "credit_add", "credit_type"])
+
     if len(usage) > 0:
         for col in ["usage", "year", "month"]:
             usage[col] = pd.to_numeric(usage[col], errors="coerce")
