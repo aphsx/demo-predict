@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 1Moby -- Training CLI V2
-Trains all 5 models, saves metrics + detailed training log
+Trains all 5 models, saves metrics + detailed training log + model version to DB
 Usage: python train.py data/1Moby_Data.xlsx
 """
 import sys, io, os
@@ -16,6 +16,8 @@ if __name__ == "__main__":
     from src.models import churn_model, clv_model, credit_model, winback_model, conversion_model
     from src.monitoring import save_baseline
     import json
+    import asyncio
+    import asyncpg
     from datetime import datetime
 
     path = sys.argv[1] if len(sys.argv) > 1 else os.getenv("DATA_DIR", "data") + "/1Moby_Data.xlsx"
@@ -89,6 +91,37 @@ if __name__ == "__main__":
         f.write(tee.get_log())
 
     save_baseline(feat, MODELS_DIR / "monitoring_baseline.json")
+
+    # ── Register model versions in DB ─────────────────────────────
+    import asyncpg
+
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://moby:moby1234@localhost:5433/moby")
+
+    async def _register():
+        conn = await asyncpg.connect(DATABASE_URL)
+        model_entries = [
+            ("churn",      "churn_model.pkl",      cr.get("metrics", {})),
+            ("clv",        "ltv_bgnbd.pkl",         lv.get("metrics", {})),
+            ("credit",     "credit_q50.pkl",        ct.get("metrics", {})),
+            ("winback",    "winback_model.pkl",     wb.get("metrics", {})),
+            ("conversion", "conversion_model.pkl", cv.get("metrics", {})),
+        ]
+        for model_type, file_path, model_metrics in model_entries:
+            version = datetime.now().strftime("%Y%m%d_%H%M%S")
+            metrics_json = json.dumps(model_metrics, default=str)
+            model_path = str(MODELS_DIR / file_path)
+            await conn.execute("""
+                UPDATE model_versions SET is_active = FALSE
+                WHERE model_type = $1 AND is_active = TRUE
+            """, model_type)
+            await conn.execute("""
+                INSERT INTO model_versions (model_type, version, metrics_json, model_file_path, is_active)
+                VALUES ($1, $2, $3::jsonb, $4, TRUE)
+            """, model_type, version, metrics_json, model_path)
+        await conn.close()
+
+    asyncio.run(_register())
+    print("Model versions registered in DB.")
 
     print("\n" + "=" * 60)
     print("Training complete. Models trained:")

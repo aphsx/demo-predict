@@ -2,17 +2,30 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- ── Model Versions ────────────────────────────────────────────────
+CREATE TABLE model_versions (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  model_type      TEXT NOT NULL,
+  version         TEXT NOT NULL,
+  trained_at      TIMESTAMPTZ DEFAULT NOW(),
+  metrics_json    JSONB,
+  model_file_path TEXT,
+  is_active       BOOLEAN DEFAULT FALSE,
+  UNIQUE(model_type, version)
+);
+
 -- ── Prediction Runs ──────────────────────────────────────────────
 CREATE TABLE prediction_runs (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name         TEXT NOT NULL,
-  status       TEXT NOT NULL DEFAULT 'pending',
-  cutoff_date  DATE NOT NULL,
-  total_customers  INTEGER,
-  active_customers INTEGER,
-  error_message    TEXT,
-  created_at   TIMESTAMPTZ DEFAULT NOW(),
-  updated_at   TIMESTAMPTZ DEFAULT NOW()
+  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name              TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'pending',
+  cutoff_date       DATE NOT NULL,
+  total_customers   INTEGER,
+  active_customers  INTEGER,
+  error_message     TEXT,
+  model_version_id  UUID REFERENCES model_versions(id),
+  created_at        TIMESTAMPTZ DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ── Raw Data (uploaded per run) ───────────────────────────────────
