@@ -47,11 +47,12 @@ services:
         condition: service_healthy
 
   worker:
-    build: ./ml
+    build:
+      context: ./ml
+      dockerfile: Dockerfile.worker
     restart: unless-stopped
     env_file:
       - .env
-    command: python -m arq worker.predict_worker.WorkerSettings
     volumes:
       - ./models:/app/models
       - ./data:/data
