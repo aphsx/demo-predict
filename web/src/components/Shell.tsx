@@ -13,6 +13,8 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   if (bare) return <>{children}</>;
 
+  const hideWidget = pathname.startsWith("/ai-chat");
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />

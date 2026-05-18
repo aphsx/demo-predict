@@ -1,6 +1,33 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
+
+function UploadButton({ runId, uploading, onUpload }: {
+  runId: string;
+  uploading: boolean;
+  onUpload: (runId: string, file: File) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <button
+        onClick={() => ref.current?.click()}
+        disabled={uploading}
+        className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1 disabled:opacity-40"
+      >
+        {uploading ? <RefreshCw size={11} className="animate-spin" /> : <Upload size={11} />}
+        Upload
+      </button>
+      <input
+        ref={ref} type="file" accept=".xlsx,.csv" className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) { onUpload(runId, f); e.target.value = ""; }
+        }}
+      />
+    </>
+  );
+}
 import {
   Plus, Upload, Trash2, RefreshCw, CheckCircle2,
   Clock3, AlertCircle, FileSpreadsheet, ChevronRight,
@@ -32,8 +59,6 @@ export default function RunsPage() {
   const [name, setName]       = useState("");
   const [cutoff, setCutoff]   = useState("2025-07-01");
   const [uploading, setUploading] = useState<string | null>(null);
-  const [selectedRun, setSelectedRun] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const [streamingRun, setStreamingRun] = useState<string | null>(null);
 
   const load = () => api.listRuns().then((d) => { setRuns(d); setLoading(false); });
@@ -46,7 +71,7 @@ export default function RunsPage() {
 
     setStreamingRun(activeRun.id);
     const unsub = api.subscribeRunStatus(activeRun.id, (update) => {
-      if (update.status === "done" || update.status === "failed" || update.status === "done") {
+      if (update.status === "done" || update.status === "failed") {
         setStreamingRun(null);
         load();
       }
@@ -187,25 +212,11 @@ export default function RunsPage() {
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {["pending", "failed"].includes(run.status) && (
-                            <>
-                              <button
-                                onClick={() => { setSelectedRun(run.id); fileRef.current?.click(); }}
-                                disabled={uploading === run.id}
-                                className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1 disabled:opacity-40"
-                              >
-                                {uploading === run.id
-                                  ? <RefreshCw size={11} className="animate-spin" />
-                                  : <Upload size={11} />}
-                                Upload
-                              </button>
-                              <input
-                                ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden"
-                                onChange={e => {
-                                  const f = e.target.files?.[0];
-                                  if (f && selectedRun) uploadFile(selectedRun, f);
-                                }}
-                              />
-                            </>
+                            <UploadButton
+                              runId={run.id}
+                              uploading={uploading === run.id}
+                              onUpload={uploadFile}
+                            />
                           )}
                           {run.status === "done" && (
                             <a

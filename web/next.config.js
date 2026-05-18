@@ -8,5 +8,12 @@ const nextConfig = {
       },
     ];
   },
+  images: {
+    remotePatterns: [
+      { hostname: "lh3.googleusercontent.com" },
+      { hostname: "avatars.githubusercontent.com" },
+      { hostname: "cdn.discordapp.com" },
+    ],
+  },
 };
 module.exports = nextConfig;
