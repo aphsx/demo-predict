@@ -1,0 +1,60 @@
+%%{init: {'theme':'default'}}%%
+flowchart LR
+    %% Actors
+    User((Business User))
+    Admin((Data/ML Engineer))
+    Worker((ARQ Worker<br/>System Actor))
+    DB((PostgreSQL<br/>System Actor))
+
+    %% System boundary
+    subgraph SYS [1Moby Analytics System]
+        direction TB
+
+        UC1([UC1: Create Prediction Run])
+        UC2([UC2: Upload Excel Dataset])
+        UC3([UC3: Monitor Run Status])
+        UC4([UC4: View Dashboard / KPIs])
+        UC5([UC5: Browse Customer List])
+        UC6([UC6: View Customer 360])
+        UC7([UC7: Filter & Search Customers])
+        UC8([UC8: Delete Prediction Run])
+        UC9([UC9: Check System Health])
+
+        UC10([UC10: Run ML Prediction Pipeline])
+        UC11([UC11: Build Features])
+        UC12([UC12: Compute Churn / CLV / Credit])
+        UC13([UC13: Generate SHAP Explanations])
+        UC14([UC14: Persist Predictions])
+
+        UC15([UC15: Train ML Models])
+        UC16([UC16: Validate Excel Schema])
+    end
+
+    %% User associations
+    User --- UC1
+    User --- UC2
+    User --- UC3
+    User --- UC4
+    User --- UC5
+    User --- UC6
+    User --- UC7
+    User --- UC8
+
+    %% Admin associations
+    Admin --- UC15
+    Admin --- UC9
+    Admin --- UC8
+
+    %% System actors
+    Worker --- UC10
+    DB --- UC14
+
+    %% Include / Extend relationships
+    UC2 -.->|include| UC16
+    UC2 -.->|include| UC10
+    UC10 -.->|include| UC11
+    UC10 -.->|include| UC12
+    UC10 -.->|include| UC13
+    UC10 -.->|include| UC14
+    UC6 -.->|extend| UC13
+    UC4 -.->|include| UC3
