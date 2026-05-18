@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionCookie } from "better-auth/cookies";
 
 const PUBLIC_PATHS = ["/login"];
+const SESSION_COOKIE = "better-auth.session_token";
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -10,8 +10,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const sessionCookie = getSessionCookie(request);
-  if (!sessionCookie) {
+  const sessionToken = request.cookies.get(SESSION_COOKIE)?.value;
+  if (!sessionToken) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
