@@ -1,9 +1,14 @@
 "use client";
 import { ReactNode, Suspense } from "react";
+import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import AIChatWidget from "./AIChatWidget";
 
 export default function Shell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const hideWidget = pathname.startsWith("/ai-chat");
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
@@ -17,6 +22,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           </Suspense>
         </main>
       </div>
+      {!hideWidget && <AIChatWidget />}
     </div>
   );
 }
