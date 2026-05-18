@@ -1,9 +1,17 @@
 "use client";
 import { ReactNode, Suspense } from "react";
+import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
+const BARE_ROUTES = ["/login"];
+
 export default function Shell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const bare = BARE_ROUTES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  if (bare) return <>{children}</>;
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />

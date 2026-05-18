@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search, Calendar, ChevronDown, BellDot } from "lucide-react";
+import { Search, Calendar, ChevronDown, BellDot, LogOut } from "lucide-react";
 import { fetchRuns, Run } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
+import { useSession, signOut } from "@/lib/auth-client";
 
 const TITLE_MAP: Record<string, { title: string; sub: string }> = {
   "/":                   { title: "Command Center",   sub: "ภาพรวมพอร์ตลูกค้าและสัญญาณเตือน real-time" },
@@ -101,7 +102,69 @@ export default function Topbar() {
         }`} />
         <span className="text-[12px] text-[color:var(--ink-3)] capitalize">{activeRun?.status || "—"}</span>
       </div>
+
+      <UserMenu />
     </header>
+  );
+}
+
+function UserMenu() {
+  const { data, isPending } = useSession();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  if (isPending) {
+    return <div className="w-9 h-9 rounded-full bg-[color:var(--surface-2)] animate-pulse" />;
+  }
+  if (!data?.user) return null;
+
+  const user = data.user;
+  const initial = (user.name || user.email || "?").trim().charAt(0).toUpperCase();
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="h-9 flex items-center gap-2 pl-1 pr-2 rounded-lg border border-[color:var(--line)] bg-white hover:bg-[color:var(--surface-2)]"
+      >
+        {user.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={user.image} alt="" className="w-7 h-7 rounded-full object-cover" />
+        ) : (
+          <span className="w-7 h-7 rounded-full bg-[color:var(--moby-600)] text-white text-[12px] font-semibold grid place-items-center">
+            {initial}
+          </span>
+        )}
+        <span className="hidden md:inline text-[12px] text-[color:var(--ink-2)] max-w-[120px] truncate">
+          {user.name || user.email}
+        </span>
+        <ChevronDown size={12} className="text-[color:var(--ink-4)]" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-[44px] w-[240px] rounded-lg border border-[color:var(--line)] bg-white shadow-lg overflow-hidden z-50">
+          <div className="px-3 py-2.5 border-b border-[color:var(--line-2)]">
+            <div className="text-[12.5px] font-medium text-[color:var(--ink-1)] truncate">{user.name || "—"}</div>
+            <div className="text-[11px] text-[color:var(--ink-5)] truncate">{user.email}</div>
+          </div>
+          <button
+            onClick={() => signOut({ fetchOptions: { onSuccess: () => { window.location.href = "/login"; } } })}
+            className="w-full px-3 py-2 flex items-center gap-2 text-[12.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]"
+          >
+            <LogOut size={13} />
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
