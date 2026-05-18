@@ -3,7 +3,7 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/:path*",
+        source: "/api/:path((?!auth(?:/|$)).*)",
         destination: `${process.env.API_URL || "http://ml:8000"}/:path*`,
       },
     ];

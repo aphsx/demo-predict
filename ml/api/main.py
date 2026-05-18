@@ -23,6 +23,51 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from api.database import get_db, engine
 from worker.predict_worker import REDIS_SETTINGS
 
+SESSION_COOKIE = "better-auth.session_token"
+
+ALLOWED_ORIGINS = [
+    o.strip() for o in
+    os.getenv("ALLOWED_ORIGINS", "http://localhost:3001,http://localhost:3000").split(",")
+    if o.strip()
+]
+
+
+async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> str | None:
+    """Return user_id from the better-auth session cookie, or None if not signed in."""
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    row = await db.execute(
+        text('SELECT "userId" FROM session WHERE token = :t AND "expiresAt" > NOW()'),
+        {"t": token},
+    )
+    r = row.mappings().first()
+    return r["userId"] if r else None
+
+
+async def require_user(user_id: str | None = Depends(get_current_user)) -> str:
+    """Raise 401 if not authenticated."""
+    if not user_id:
+        raise HTTPException(401, "Not authenticated")
+    return user_id
+
+
+async def get_run_or_403(
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_user),
+) -> dict:
+    """Fetch a run and verify ownership. Raises 404 or 403 as appropriate."""
+    row = await db.execute(
+        text("SELECT * FROM prediction_runs WHERE id = :id"), {"id": str(run_id)}
+    )
+    run = row.mappings().first()
+    if not run:
+        raise HTTPException(404, "Run not found")
+    if run["user_id"] and run["user_id"] != user_id:
+        raise HTTPException(403, "Not your run")
+    return dict(run)
+
 MODEL_DIR = Path(os.getenv("MODEL_DIR", str(Path(__file__).parent.parent.parent / "models")))
 
 
@@ -50,7 +95,13 @@ async def strip_api_prefix(request: Request, call_next):
         request.scope["raw_path"] = new_path.encode()
     return await call_next(request)
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class RunCreate(BaseModel):
@@ -60,37 +111,47 @@ class RunCreate(BaseModel):
 
 # ── Runs ──────────────────────────────────────────────────────────
 @app.get("/runs")
-async def list_runs(db: AsyncSession = Depends(get_db)):
+async def list_runs(
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_user),
+):
     rows = await db.execute(text("""
         SELECT id, name, status, cutoff_date,
                total_customers, active_customers,
                error_message, created_at, updated_at
-        FROM prediction_runs ORDER BY created_at DESC LIMIT 50
-    """))
+        FROM prediction_runs
+        WHERE user_id = :uid
+        ORDER BY created_at DESC LIMIT 50
+    """), {"uid": user_id})
     return [dict(r._mapping) for r in rows]
 
 
 @app.post("/runs")
-async def create_run(body: RunCreate, db: AsyncSession = Depends(get_db)):
+async def create_run(
+    body: RunCreate,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_user),
+):
     row = await db.execute(text("""
-        INSERT INTO prediction_runs (name, cutoff_date, status)
-        VALUES (:name, :cutoff, 'pending')
+        INSERT INTO prediction_runs (name, cutoff_date, status, user_id)
+        VALUES (:name, :cutoff, 'pending', :uid)
         RETURNING id, name, status, cutoff_date, created_at
-    """), {"name": body.name, "cutoff": body.cutoff_date})
+    """), {"name": body.name, "cutoff": body.cutoff_date, "uid": user_id})
     await db.commit()
     return dict(row.mappings().first())
 
 
 @app.get("/runs/{run_id}")
-async def get_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
-    row = await db.execute(text("SELECT * FROM prediction_runs WHERE id = :id"), {"id": str(run_id)})
-    r = row.mappings().first()
-    if not r: raise HTTPException(404, "Run not found")
-    return dict(r)
+async def get_run(run: dict = Depends(get_run_or_403)):
+    return run
 
 
 @app.get("/runs/{run_id}/stream")
-async def stream_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
+async def stream_run(
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    run: dict = Depends(get_run_or_403),
+):
     """
     SSE endpoint — reads from Redis Stream for real-time progress updates.
     Falls back to DB polling only if Redis unavailable.
@@ -173,8 +234,11 @@ async def stream_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @app.delete("/runs/{run_id}")
-async def delete_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
-    # Delete in order: predictions → raw_usage → raw_payments → raw_customers → run
+async def delete_run(
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    run: dict = Depends(get_run_or_403),
+):
     run_id_str = str(run_id)
     await db.execute(text("DELETE FROM predictions WHERE run_id = :id"), {"id": run_id_str})
     await db.execute(text("DELETE FROM raw_usage WHERE run_id = :id"), {"id": run_id_str})
@@ -187,11 +251,13 @@ async def delete_run(run_id: UUID, db: AsyncSession = Depends(get_db)):
 
 # ── Upload ────────────────────────────────────────────────────────
 @app.post("/runs/{run_id}/upload")
-async def upload_file(run_id: UUID, request: Request,
-                      file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
-    row = await db.execute(text("SELECT id, status FROM prediction_runs WHERE id = :id"), {"id": str(run_id)})
-    run = row.mappings().first()
-    if not run: raise HTTPException(404, "Run not found")
+async def upload_file(
+    run_id: UUID,
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    run: dict = Depends(get_run_or_403),
+):
     if run["status"] not in ("pending", "failed"):
         raise HTTPException(400, f"Run status is '{run['status']}' — cannot re-upload")
 
@@ -230,6 +296,7 @@ async def get_predictions(
     run_id: UUID, page: int = 1, page_size: int = 50,
     lifecycle_stage: str | None = None, search: str | None = None,
     db: AsyncSession = Depends(get_db),
+    run: dict = Depends(get_run_or_403),
 ):
     filters = ["run_id = :run_id"]
     params = {"run_id": str(run_id), "limit": page_size, "offset": (page - 1) * page_size}
@@ -257,7 +324,11 @@ async def get_predictions(
 
 
 @app.get("/runs/{run_id}/predictions/{acc_id}")
-async def get_customer_prediction(run_id: UUID, acc_id: int, db: AsyncSession = Depends(get_db)):
+async def get_customer_prediction(
+    run_id: UUID, acc_id: int,
+    db: AsyncSession = Depends(get_db),
+    run: dict = Depends(get_run_or_403),
+):
     row = await db.execute(text("""
         SELECT * FROM predictions WHERE run_id = :run_id AND acc_id = :acc_id
     """), {"run_id": str(run_id), "acc_id": acc_id})
@@ -267,7 +338,11 @@ async def get_customer_prediction(run_id: UUID, acc_id: int, db: AsyncSession = 
 
 
 @app.get("/runs/{run_id}/predictions/{acc_id}/explain")
-async def explain_customer(run_id: UUID, acc_id: int, db: AsyncSession = Depends(get_db)):
+async def explain_customer(
+    run_id: UUID, acc_id: int,
+    db: AsyncSession = Depends(get_db),
+    run: dict = Depends(get_run_or_403),
+):
     """SHAP explanation for a single customer — returns numeric factors only"""
     # Load raw data for feature building
     u = await db.execute(text("""
@@ -330,7 +405,11 @@ async def explain_customer(run_id: UUID, acc_id: int, db: AsyncSession = Depends
 
 # ── Dashboard Summary V2 ──────────────────────────────────────────
 @app.get("/runs/{run_id}/summary")
-async def get_summary(run_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_summary(
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    run: dict = Depends(get_run_or_403),
+):
     stages = await db.execute(text("""
         SELECT lifecycle_stage, sub_stage, COUNT(*) as count
         FROM predictions WHERE run_id = :r
@@ -395,6 +474,7 @@ async def export_predictions(
     run_id: UUID,
     lifecycle_stage: str | None = None,
     db: AsyncSession = Depends(get_db),
+    run: dict = Depends(get_run_or_403),
 ):
     filters = ["run_id = :run_id"]
     params = {"run_id": str(run_id)}
@@ -464,25 +544,33 @@ async def list_model_versions(model_type: str | None = None, db: AsyncSession = 
 
 
 @app.post("/model-versions/train")
-async def train_models():
-    """
-    Trigger training via the ML container.
-    Returns run_id for progress tracking.
-    """
-    import subprocess
-    import uuid
+async def train_models(_: str = Depends(require_user)):
+    """Trigger model training in the background. Requires authentication."""
+    import asyncio, uuid
 
-    # Check if train.py exists
     train_script = Path(__file__).parent.parent / "train.py"
     if not train_script.exists():
         raise HTTPException(500, "train.py not found in ML container")
 
-    # Create a training job record
+    data_dir = Path(os.getenv("DATA_DIR", "/data"))
+    xlsx_files = list(data_dir.glob("*.xlsx"))
+    if not xlsx_files:
+        raise HTTPException(400, "No .xlsx data file found in DATA_DIR — upload data first")
+
+    data_file = str(sorted(xlsx_files)[-1])
     job_id = str(uuid.uuid4())
 
-    # Fire and forget — actual training runs in background
-    # The frontend can poll /training-jobs/{job_id} for status
-    return {"job_id": job_id, "status": "started", "message": "Training started in background"}
+    async def _run():
+        proc = await asyncio.create_subprocess_exec(
+            "python", str(train_script), data_file,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        await proc.communicate()
+
+    asyncio.create_task(_run())
+    return {"job_id": job_id, "status": "started", "data_file": data_file,
+            "message": "Training started — check /training-log for progress"}
 
 
 @app.get("/model-versions/active")
