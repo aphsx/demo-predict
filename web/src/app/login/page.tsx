@@ -1,11 +1,19 @@
 "use client";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 
-type Provider = "google" | "github" | "discord";
+type Provider = "google"; // add "github" | "discord" here when re-enabling those providers
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const sp = useSearchParams();
   const callbackURL = sp.get("redirect") || "/";
   const [busy, setBusy] = useState<Provider | null>(null);
@@ -47,7 +55,13 @@ export default function LoginPage() {
               onClick={() => handle("google")}
               icon={<GoogleIcon />}
             />
-            {/* <ProviderButton
+            {/* To re-enable GitHub / Discord:
+              1. Uncomment the providers in web/src/lib/auth.ts
+              2. Add credentials to .env
+              3. Add "github" | "discord" to the Provider type above
+              4. Uncomment the buttons below
+
+            <ProviderButton
               provider="github"
               label="Continue with GitHub"
               busy={busy === "github"}
@@ -85,7 +99,7 @@ export default function LoginPage() {
 }
 
 function ProviderButton({
-  provider, label, icon, busy, disabled, onClick,
+  label, icon, busy, disabled, onClick,
 }: {
   provider: Provider;
   label: string;

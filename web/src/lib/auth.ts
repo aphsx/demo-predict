@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { nextCookies } from "better-auth/next-js";
 import { Pool } from "pg";
 
 const pool = new Pool({
@@ -33,6 +34,7 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
   },
+  plugins: [nextCookies()], // MUST be last — forwards Set-Cookie via Next.js's cookies() API
 });
 
 export type Session = typeof auth.$Infer.Session;

@@ -24,6 +24,7 @@ from api.database import get_db, engine
 from worker.predict_worker import REDIS_SETTINGS
 
 SESSION_COOKIE = "better-auth.session_token"
+BETTER_AUTH_SECRET = os.getenv("BETTER_AUTH_SECRET", "")
 
 ALLOWED_ORIGINS = [
     o.strip() for o in
@@ -32,9 +33,36 @@ ALLOWED_ORIGINS = [
 ]
 
 
+def _verify_signed_cookie(value: str, secret: str) -> str | None:
+    """
+    Parse a better-auth (better-call) signed cookie: `<token>.<base64-signature>`.
+    The cookie value arrives URL-encoded from Starlette, so decode first.
+    The signature is HMAC-SHA256(secret, token) encoded as standard base64 (44 chars ending in '=').
+    Returns the unsigned token if the signature is valid, else None.
+    """
+    import hmac as _hmac, hashlib, base64
+    from urllib.parse import unquote
+    if not value or not secret:
+        return None
+    decoded = unquote(value)
+    dot = decoded.rfind(".")
+    if dot < 1:
+        return None
+    token, signature = decoded[:dot], decoded[dot + 1:]
+    if len(signature) != 44 or not signature.endswith("="):
+        return None
+    expected = base64.b64encode(
+        _hmac.new(secret.encode(), token.encode(), hashlib.sha256).digest()
+    ).decode()
+    return token if _hmac.compare_digest(expected, signature) else None
+
+
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> str | None:
     """Return user_id from the better-auth session cookie, or None if not signed in."""
-    token = request.cookies.get(SESSION_COOKIE)
+    raw = request.cookies.get(SESSION_COOKIE)
+    if not raw:
+        return None
+    token = _verify_signed_cookie(raw, BETTER_AUTH_SECRET)
     if not token:
         return None
     row = await db.execute(

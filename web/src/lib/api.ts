@@ -17,8 +17,17 @@ const apiUrl = (path: string) => {
   return `${normalizedBase}${normalizedPath}`;
 };
 
+async function apiFetch(url: string, opts?: RequestInit): Promise<Response> {
+  const res = await fetch(url, { credentials: "include", ...opts });
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+    throw new Error("Unauthorized");
+  }
+  return res;
+}
+
 export async function fetchRuns(): Promise<Run[]> {
-  const res = await fetch(apiUrl("/api/runs"));
+  const res = await apiFetch(apiUrl("/api/runs"));
   if (!res.ok) throw new Error(`API error ${res.status}`);
   const data = await res.json();
   if (!Array.isArray(data)) throw new Error(`Expected array, got ${typeof data}`);
@@ -26,7 +35,7 @@ export async function fetchRuns(): Promise<Run[]> {
 }
 
 export async function createRun(name: string, cutoff_date: string) {
-  const res = await fetch(apiUrl("/api/runs"), {
+  const res = await apiFetch(apiUrl("/api/runs"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, cutoff_date }),
@@ -35,83 +44,90 @@ export async function createRun(name: string, cutoff_date: string) {
 }
 
 export async function deleteRun(id: string) {
-  await fetch(apiUrl(`/api/runs/${id}`), { method: "DELETE" });
+  await apiFetch(apiUrl(`/api/runs/${id}`), { method: "DELETE" });
 }
 
 export async function uploadFile(runId: string, file: File) {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(apiUrl(`/api/runs/${runId}/upload`), { method: "POST", body: fd });
+  const res = await apiFetch(apiUrl(`/api/runs/${runId}/upload`), { method: "POST", body: fd });
   return res.json();
 }
 
 export async function fetchRun(id: string) {
-  const res = await fetch(apiUrl(`/api/runs/${id}`));
+  const res = await apiFetch(apiUrl(`/api/runs/${id}`));
   return res.json();
 }
 
 export async function fetchSummary(runId: string) {
-  const res = await fetch(apiUrl(`/api/runs/${runId}/summary`));
+  const res = await apiFetch(apiUrl(`/api/runs/${runId}/summary`));
   return res.json();
 }
 
 export async function fetchPredictions(runId: string, params: Record<string, string>) {
   const qs = new URLSearchParams(params).toString();
-  const res = await fetch(apiUrl(`/api/runs/${runId}/predictions?${qs}`));
+  const res = await apiFetch(apiUrl(`/api/runs/${runId}/predictions?${qs}`));
   return res.json();
 }
 
 export async function fetchCustomer(runId: string, accId: string) {
-  const res = await fetch(apiUrl(`/api/runs/${runId}/predictions/${accId}`));
+  const res = await apiFetch(apiUrl(`/api/runs/${runId}/predictions/${accId}`));
   return res.json();
 }
 
 export async function fetchCustomerExplain(runId: string, accId: string) {
-  const res = await fetch(apiUrl(`/api/runs/${runId}/predictions/${accId}/explain`));
+  const res = await apiFetch(apiUrl(`/api/runs/${runId}/predictions/${accId}/explain`));
   return res.json();
 }
 
 export async function fetchModelMetrics() {
-  const res = await fetch(apiUrl("/api/model-metrics"));
+  const res = await apiFetch(apiUrl("/api/model-metrics"));
+  if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
 export async function fetchTrainingLog() {
-  const res = await fetch(apiUrl("/api/training-log"));
+  const res = await apiFetch(apiUrl("/api/training-log"));
+  if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
 export async function fetchModelVersions() {
-  const res = await fetch(apiUrl("/api/model-versions"));
+  const res = await apiFetch(apiUrl("/api/model-versions"));
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
 export async function fetchActiveModelVersions() {
-  const res = await fetch(apiUrl("/api/model-versions/active"));
+  const res = await apiFetch(apiUrl("/api/model-versions/active"));
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
 export async function trainModels() {
-  const res = await fetch(apiUrl("/api/model-versions/train"), { method: "POST" });
+  const res = await apiFetch(apiUrl("/api/model-versions/train"), { method: "POST" });
   return res.json();
 }
 
 export function subscribeRunStatus(runId: string, onUpdate: (data: RunStatusUpdate) => void): () => void {
-  const es = new EventSource(apiUrl(`/api/runs/${runId}/stream`));
-  es.onmessage = (e) => {
-    try {
-      const data = JSON.parse(e.data);
-      onUpdate(data);
-    } catch {}
-  };
+  const url = new URL(apiUrl(`/api/runs/${runId}/stream`), window.location.origin);
+  const es = new EventSource(url.toString(), { withCredentials: true });
+
+  es.addEventListener("progress", (e) => {
+    try { onUpdate(JSON.parse(e.data)); } catch {}
+  });
+  es.addEventListener("done", (e) => {
+    try { onUpdate(JSON.parse(e.data)); } catch {}
+    es.close();
+  });
   es.onerror = () => es.close();
   return () => es.close();
 }
 
 export interface RunStatusUpdate {
   status: string;
+  progress?: number;
+  step?: string;
   total_customers?: number;
   active_customers?: number;
   error_message?: string;
