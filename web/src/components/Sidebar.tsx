@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, ListChecks, Database,
-  Activity, Bell, ShieldCheck, Sparkles
+  Activity, Bell, ShieldCheck, Sparkles, MessageSquareMore,
 } from "lucide-react";
 
 type Item = { href: string; label: string; icon: any };
@@ -29,6 +29,12 @@ const GROUPS: { title: string; items: Item[] }[] = [
     items: [
       { href: "/runs", label: "Pipelines & Data", icon: Database },
       { href: "/training", label: "Model Training", icon: Activity },
+    ],
+  },
+  {
+    title: "Assistant",
+    items: [
+      { href: "/ai-chat", label: "AI Assistant", icon: MessageSquareMore },
     ],
   },
 ];
@@ -78,6 +84,12 @@ export default function Sidebar() {
                       <Icon size={15} strokeWidth={active ? 2.2 : 1.8}
                         className={active ? "text-[color:var(--moby-600)]" : "text-[color:var(--ink-4)]"} />
                       <span>{it.label}</span>
+                      {it.href === "/ai-chat" && !active && (
+                        <span className="ml-auto px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wide
+                          bg-gradient-to-r from-[color:var(--moby-600)] to-[color:var(--moby-800)] text-white">
+                          AI
+                        </span>
+                      )}
                       {active && <span className="ml-auto w-1 h-4 rounded-full bg-[color:var(--moby-600)]" />}
                     </Link>
                   </li>
