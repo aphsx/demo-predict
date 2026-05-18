@@ -37,6 +37,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="1Moby Analytics API", version="4.0", lifespan=lifespan)
+
+@app.middleware("http")
+async def strip_api_prefix(request: Request, call_next):
+    path = request.url.path
+    if path == "/api":
+        request.scope["path"] = "/"
+        request.scope["raw_path"] = b"/"
+    elif path.startswith("/api/"):
+        new_path = path[4:]
+        request.scope["path"] = new_path
+        request.scope["raw_path"] = new_path.encode()
+    return await call_next(request)
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
