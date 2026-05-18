@@ -13,6 +13,7 @@ const TITLE_MAP: Record<string, { title: string; sub: string }> = {
   "/alerts":             { title: "Alerts",           sub: "Anomaly · Drift · Threshold breach" },
   "/model-performance":  { title: "Model Health",     sub: "Quality · Calibration · Feature importance" },
   "/runs":               { title: "Pipelines & Data", sub: "Ingest · Validate · Predict" },
+  "/ai-chat":            { title: "AI Assistant",     sub: "Ask anything about your customers and predictions" },
 };
 
 export default function Topbar() {
@@ -23,12 +24,14 @@ export default function Topbar() {
   const { runId, setRunId } = useRunStore();
 
   useEffect(() => {
-    fetchRuns().then((r: Run[]) => {
-      setRuns(r);
-      const fromUrl = sp.get("run");
-      const initial = fromUrl || (runId || r.find(x => x.status === "done")?.id || r[0]?.id || "");
-      if (initial) setRunId(initial);
-    });
+    fetchRuns()
+      .then((r: Run[]) => {
+        setRuns(r);
+        const fromUrl = sp.get("run");
+        const initial = fromUrl || (runId || r.find(x => x.status === "done")?.id || r[0]?.id || "");
+        if (initial) setRunId(initial);
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -137,7 +140,7 @@ function UserMenu() {
       >
         {user.image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={user.image} alt="" className="w-7 h-7 rounded-full object-cover" />
+          <img src={user.image} alt="" referrerPolicy="no-referrer" className="w-7 h-7 rounded-full object-cover" />
         ) : (
           <span className="w-7 h-7 rounded-full bg-[color:var(--moby-600)] text-white text-[12px] font-semibold grid place-items-center">
             {initial}
