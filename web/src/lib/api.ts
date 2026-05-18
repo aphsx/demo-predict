@@ -10,7 +10,12 @@ export interface Run {
 }
 
 const BASE = process.env.NEXT_PUBLIC_API_URL;
-const apiUrl = (path: string) => BASE ? `${BASE}${path}` : path;
+const apiUrl = (path: string) => {
+  if (!BASE) return path;
+  const normalizedBase = BASE.replace(/\/$/, "");
+  const normalizedPath = path.replace(/^\/api/, "");
+  return `${normalizedBase}${normalizedPath}`;
+};
 
 export async function fetchRuns(): Promise<Run[]> {
   const res = await fetch(apiUrl("/api/runs"));
