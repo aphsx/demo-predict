@@ -3,6 +3,7 @@ import { ReactNode, Suspense } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import AIChatWidget from "./AIChatWidget";
 
 const BARE_ROUTES = ["/login"];
 
@@ -25,6 +26,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           </Suspense>
         </main>
       </div>
+      {!hideWidget && <AIChatWidget />}
     </div>
   );
 }
