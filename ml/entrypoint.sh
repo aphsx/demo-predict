@@ -4,6 +4,10 @@ set -e
 MODEL_DIR="${MODEL_DIR:-/app/models}"
 DATA_DIR="${DATA_DIR:-/data}"
 
+# ── Apply DB migrations ──
+echo "=== Running Alembic migrations ==="
+alembic upgrade head
+
 # ── Build time: train only if no models exist ──
 if [ -n "$DOCKER_BUILD" ]; then
   if [ ! -f "$MODEL_DIR/churn_model.pkl" ]; then
