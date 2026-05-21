@@ -1,3 +1,42 @@
+/**
+ * API client — Eden Treaty for typed CRUD routes, manual fetch for SSE / streaming / file ops.
+ *
+ * Eden Treaty (elysia client) gives end-to-end type safety: if an Elysia route's
+ * input or output shape changes, TypeScript flags it here immediately.
+ *
+ * Manual fetch is kept for:
+ *   - subscribeRunStatus  — EventSource (GET SSE, browser-native)
+ *   - uploadFile          — multipart/form-data
+ *   - exportUrl           — returns a URL string for <a href>, not a fetch call
+ *   - streamChat          — POST SSE via fetch + AbortController
+ *   - generateExplanation / fetchExplanation — simple POST/GET, kept manual for clarity
+ */
+
+import { elysia } from "./eden";
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+
+// Eden Treaty return types are { data: success | error-shape | null, error: E | null }.
+// We throw on error and cast to the explicit return type declared on each function.
+// The double-cast is intentional: Date fields in Drizzle become strings after JSON
+// serialisation, so the TypeScript types diverge from the runtime values.
+function unwrap<T>(result: { data: unknown; error: unknown }): T {
+  if (result.error) throw result.error;
+  return result.data as unknown as T;
+}
+
+/** Manual fetch — used only for file upload, SSE, and streaming routes. */
+async function apiFetch(url: string, opts?: RequestInit): Promise<Response> {
+  const res = await fetch(url, { credentials: "include", ...opts });
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+    throw new Error("Unauthorized");
+  }
+  return res;
+}
+
+// ── Shared types ─────────────────────────────────────────────────────────────
+
 export interface Run {
   id: string;
   name: string;
@@ -9,121 +48,6 @@ export interface Run {
   error_message?: string;
 }
 
-const BASE = process.env.NEXT_PUBLIC_API_URL;
-const apiUrl = (path: string) => {
-  if (!BASE) return path;
-  const normalizedBase = BASE.replace(/\/$/, "");
-  const normalizedPath = path.replace(/^\/api/, "");
-  return `${normalizedBase}${normalizedPath}`;
-};
-
-async function apiFetch(url: string, opts?: RequestInit): Promise<Response> {
-  const res = await fetch(url, { credentials: "include", ...opts });
-  if (res.status === 401 && typeof window !== "undefined") {
-    window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-    throw new Error("Unauthorized");
-  }
-  return res;
-}
-
-export async function fetchRuns(): Promise<Run[]> {
-  const res = await apiFetch(apiUrl("/api/runs"));
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  const data = await res.json();
-  if (!Array.isArray(data)) throw new Error(`Expected array, got ${typeof data}`);
-  return data;
-}
-
-export async function createRun(name: string, cutoff_date: string) {
-  const res = await apiFetch(apiUrl("/api/runs"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, cutoff_date }),
-  });
-  return res.json();
-}
-
-export async function deleteRun(id: string) {
-  await apiFetch(apiUrl(`/api/runs/${id}`), { method: "DELETE" });
-}
-
-export async function uploadFile(runId: string, file: File) {
-  const fd = new FormData();
-  fd.append("file", file);
-  const res = await apiFetch(apiUrl(`/api/runs/${runId}/upload`), { method: "POST", body: fd });
-  return res.json();
-}
-
-export async function fetchRun(id: string) {
-  const res = await apiFetch(apiUrl(`/api/runs/${id}`));
-  return res.json();
-}
-
-export async function fetchSummary(runId: string) {
-  const res = await apiFetch(apiUrl(`/api/runs/${runId}/summary`));
-  return res.json();
-}
-
-export async function fetchPredictions(runId: string, params: Record<string, string>) {
-  const qs = new URLSearchParams(params).toString();
-  const res = await apiFetch(apiUrl(`/api/runs/${runId}/predictions?${qs}`));
-  return res.json();
-}
-
-export async function fetchCustomer(runId: string, accId: string) {
-  const res = await apiFetch(apiUrl(`/api/runs/${runId}/predictions/${accId}`));
-  return res.json();
-}
-
-export async function fetchCustomerExplain(runId: string, accId: string) {
-  const res = await apiFetch(apiUrl(`/api/runs/${runId}/predictions/${accId}/explain`));
-  return res.json();
-}
-
-export async function fetchModelMetrics() {
-  const res = await apiFetch(apiUrl("/api/model-metrics"));
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
-
-export async function fetchTrainingLog() {
-  const res = await apiFetch(apiUrl("/api/training-log"));
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
-
-export async function fetchModelVersions() {
-  const res = await apiFetch(apiUrl("/api/model-versions"));
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
-
-export async function fetchActiveModelVersions() {
-  const res = await apiFetch(apiUrl("/api/model-versions/active"));
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
-
-export async function trainModels() {
-  const res = await apiFetch(apiUrl("/api/model-versions/train"), { method: "POST" });
-  return res.json();
-}
-
-export function subscribeRunStatus(runId: string, onUpdate: (data: RunStatusUpdate) => void): () => void {
-  const url = new URL(apiUrl(`/api/runs/${runId}/stream`), window.location.origin);
-  const es = new EventSource(url.toString(), { withCredentials: true });
-
-  es.addEventListener("progress", (e) => {
-    try { onUpdate(JSON.parse(e.data)); } catch {}
-  });
-  es.addEventListener("done", (e) => {
-    try { onUpdate(JSON.parse(e.data)); } catch {}
-    es.close();
-  });
-  es.onerror = () => es.close();
-  return () => es.close();
-}
-
 export interface RunStatusUpdate {
   status: string;
   progress?: number;
@@ -132,11 +56,6 @@ export interface RunStatusUpdate {
   active_customers?: number;
   error_message?: string;
   updated_at?: string;
-}
-
-export function exportUrl(runId: string, params: Record<string, string>) {
-  const qs = new URLSearchParams(params).toString();
-  return apiUrl(`/api/runs/${runId}/export?${qs}`);
 }
 
 export interface Explanation {
@@ -152,26 +71,140 @@ export interface ChatMessage {
   content: string;
 }
 
-/** Generate and persist a one-shot run explanation. */
+// ── Runs — Eden Treaty ───────────────────────────────────────────────────────
+
+export async function fetchRuns(): Promise<Run[]> {
+  return unwrap<Run[]>(await elysia.runs.get());
+}
+
+export async function createRun(name: string, cutoff_date: string) {
+  return unwrap(await elysia.runs.post({ name, cutoff_date }));
+}
+
+export async function deleteRun(id: string) {
+  return unwrap(await elysia.runs({ id }).delete());
+}
+
+export async function fetchRun(id: string) {
+  return unwrap(await elysia.runs({ id }).get());
+}
+
+export interface PaginatedPredictions {
+  total: number;
+  page: number;
+  page_size: number;
+  data: Record<string, unknown>[];
+}
+
+export interface ModelVersion {
+  id: string;
+  model_type: string;
+  version: string;
+  trained_at: string;
+  metrics_json: Record<string, unknown>;
+  model_file_path: string;
+  is_active: boolean;
+}
+
+export async function fetchSummary(runId: string): Promise<Record<string, unknown>> {
+  return unwrap<Record<string, unknown>>(await elysia.runs({ id: runId }).summary.get());
+}
+
+export async function fetchPredictions(
+  runId: string,
+  params: Record<string, string>
+): Promise<PaginatedPredictions> {
+  return unwrap<PaginatedPredictions>(
+    await elysia.runs({ id: runId }).predictions.get({ query: params as never })
+  );
+}
+
+export async function fetchCustomer(
+  runId: string,
+  accId: string
+): Promise<Record<string, unknown>> {
+  return unwrap<Record<string, unknown>>(
+    await elysia.runs({ id: runId }).predictions({ acc_id: accId }).get()
+  );
+}
+
+export async function fetchCustomerExplain(
+  runId: string,
+  accId: string
+): Promise<Record<string, unknown>> {
+  return unwrap<Record<string, unknown>>(
+    await elysia.runs({ id: runId }).predictions({ acc_id: accId }).explain.get()
+  );
+}
+
+// ── Training — Eden Treaty ────────────────────────────────────────────────────
+
+export async function fetchModelMetrics(): Promise<Record<string, unknown>> {
+  return unwrap<Record<string, unknown>>(await elysia["model-metrics"].get());
+}
+
+export async function fetchTrainingLog(): Promise<{ log: string }> {
+  return unwrap<{ log: string }>(await elysia["training-log"].get());
+}
+
+export async function fetchModelVersions(): Promise<ModelVersion[]> {
+  return unwrap<ModelVersion[]>(await elysia["model-versions"].get());
+}
+
+export async function fetchActiveModelVersions(): Promise<ModelVersion[]> {
+  return unwrap<ModelVersion[]>(await elysia["model-versions"].active.get());
+}
+
+export async function trainModels(cutoff_date?: string): Promise<Record<string, unknown>> {
+  return unwrap<Record<string, unknown>>(
+    await elysia["model-versions"].train.post({ cutoff_date })
+  );
+}
+
+// ── File upload — manual fetch (multipart/form-data) ──────────────────────────
+
+export async function uploadFile(runId: string, file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await apiFetch(`/api/runs/${runId}/upload`, { method: "POST", body: fd });
+  return res.json();
+}
+
+// ── Export URL — returns href string for <a> tags ─────────────────────────────
+
+export function exportUrl(runId: string, params: Record<string, string>) {
+  const qs = new URLSearchParams(params).toString();
+  return `/api/runs/${runId}/export${qs ? `?${qs}` : ""}`;
+}
+
+// ── SSE — EventSource (GET-based streaming) ───────────────────────────────────
+
+export function subscribeRunStatus(
+  runId: string,
+  onUpdate: (data: RunStatusUpdate) => void
+): () => void {
+  const es = new EventSource(`/api/runs/${runId}/stream`, { withCredentials: true });
+  es.addEventListener("progress", (e) => { try { onUpdate(JSON.parse(e.data)); } catch {} });
+  es.addEventListener("done",     (e) => { try { onUpdate(JSON.parse(e.data)); } catch {} es.close(); });
+  es.onerror = () => es.close();
+  return () => es.close();
+}
+
+// ── LLM / Insights — manual fetch ────────────────────────────────────────────
+
 export async function generateExplanation(runId: string): Promise<Explanation> {
-  const res = await apiFetch(apiUrl(`/api/runs/${runId}/explain`), { method: "POST" });
+  const res = await apiFetch(`/api/runs/${runId}/explain`, { method: "POST" });
   if (!res.ok) throw new Error(`Explain error ${res.status}`);
   return res.json();
 }
 
-/** Fetch the latest stored explanation for a run. Returns null if none yet. */
 export async function fetchExplanation(runId: string): Promise<Explanation | null> {
-  const res = await apiFetch(apiUrl(`/api/runs/${runId}/explanation`));
+  const res = await apiFetch(`/api/runs/${runId}/explanation`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Fetch explanation error ${res.status}`);
   return res.json();
 }
 
-/**
- * Stream a chat response from Gemini via the /runs/:id/chat endpoint.
- * Calls `onChunk` with each text delta and `onDone` when the stream ends.
- * Returns a cleanup function that aborts the stream if called.
- */
 export function streamChat(
   runId: string,
   messages: ChatMessage[],
@@ -184,7 +217,7 @@ export function streamChat(
   (async () => {
     let res: Response;
     try {
-      res = await fetch(apiUrl(`/api/runs/${runId}/chat`), {
+      res = await fetch(`/api/runs/${runId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -227,9 +260,11 @@ export function streamChat(
   return () => controller.abort();
 }
 
+// ── Convenience object (preserves existing call sites) ───────────────────────
+
 export const api = {
-  listRuns: fetchRuns,
-  createRun: (arg: { name: string; cutoff_date: string }) => createRun(arg.name, arg.cutoff_date),
+  listRuns:         fetchRuns,
+  createRun:        (arg: { name: string; cutoff_date: string }) => createRun(arg.name, arg.cutoff_date),
   deleteRun,
   uploadFile,
   fetchRun,

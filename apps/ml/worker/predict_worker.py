@@ -41,6 +41,11 @@ async def _pipeline(run_id: str, model_dir: str):
     redis = await aioredis.from_url(f"redis://{REDIS_HOST}:{REDIS_PORT}")
 
     try:
+        # Ensure model artifacts are present (downloads from R2 if configured)
+        from src.storage import sync_models
+        import asyncio as _aio
+        await _aio.get_event_loop().run_in_executor(None, sync_models, Path(model_dir))
+
         # Stream: 10% - loading data
         await _stream_progress(redis, run_id, 10, "loading_data")
         print(f"[Worker] Run {run_id}: loading data from DB...")

@@ -9,7 +9,9 @@ const pool = new Pool({
 
 export const auth = betterAuth({
   database: pool,
-  baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3002",
+  // The public-facing URL for OAuth callbacks (should be the Next.js origin in dev).
+  // Google Console redirect URI: ${BETTER_AUTH_URL}/api/auth/callback/google
+  baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   secret: process.env.BETTER_AUTH_SECRET,
   trustedOrigins: (process.env.ALLOWED_ORIGINS ?? "http://localhost:3001,http://localhost:3000")
     .split(",")

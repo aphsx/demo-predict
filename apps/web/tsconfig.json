@@ -6,7 +6,10 @@
     "moduleResolution": "bundler", "resolveJsonModule": true,
     "isolatedModules": true, "jsx": "preserve", "incremental": true,
     "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@moby/api": ["../api/src/index.ts"]
+    }
   },
   "include": ["next-env.d.ts","**/*.ts","**/*.tsx",".next/types/**/*.ts"],
   "exclude": ["node_modules"]

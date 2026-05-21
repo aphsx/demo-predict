@@ -20,3 +20,4 @@ alembic>=1.13
 psycopg2-binary>=2.9
 arq>=0.25
 redis>=5.0
+boto3>=1.34           # R2/S3 model artifact storage (optional — only used when R2_BUCKET is set)

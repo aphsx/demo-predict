@@ -127,6 +127,10 @@ if __name__ == "__main__":
     asyncio.run(_register())
     print("Model versions registered in DB.")
 
+    # Upload artifacts to R2 if configured (no-op on local filesystem)
+    from src.storage import upload_models
+    upload_models(MODELS_DIR)
+
     print("\n" + "=" * 60)
     print("Training complete. Models trained:")
     print("  1. Churn model      (Active Paid -> P(churn))")
