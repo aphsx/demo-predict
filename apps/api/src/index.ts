@@ -3,6 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { auth } from "./auth";
 import { runsRoutes } from "./routes/runs";
 import { predictionsRoutes } from "./routes/predictions";
+import { trainingRoutes } from "./routes/training";
 
 const PORT = Number(process.env.PORT ?? 3002);
 
@@ -23,6 +24,8 @@ const app = new Elysia()
   // Phase 4a routes (read-only)
   .use(runsRoutes)
   .use(predictionsRoutes)
+  // Phase 4b routes (training/admin — all now require auth)
+  .use(trainingRoutes)
   .get("/health", () => ({ ok: true, service: "api" }))
   .listen(PORT);
 

@@ -67,6 +67,8 @@ services:
       - .env
     ports:
       - "3002:3002"
+    volumes:
+      - ./models:/app/models   # needed for /model-metrics and /training-log
     depends_on:
       db:
         condition: service_healthy

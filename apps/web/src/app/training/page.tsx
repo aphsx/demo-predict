@@ -7,6 +7,7 @@ import {
 import {
   PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
 } from "@/components/ui";
+import { fetchModelVersions, fetchActiveModelVersions, trainModels } from "@/lib/api";
 
 interface ModelVersion {
   id: string;
@@ -38,17 +39,16 @@ export default function TrainingPage() {
 
   const load = async () => {
     try {
-      const [vRes, aRes] = await Promise.all([
-        fetch("/api/model-versions"),
-        fetch("/api/model-versions/active"),
+      const [allVersions, activeArr] = await Promise.all([
+        fetchModelVersions(),
+        fetchActiveModelVersions(),
       ]);
-      if (vRes.ok) setVersions(await vRes.json());
-      if (aRes.ok) {
-        const active = await aRes.json();
-        const map: ActiveVersions = {};
-        active.forEach((v: ModelVersion) => { map[v.model_type] = v; });
-        setActiveVersions(map);
-      }
+      setVersions(allVersions);
+      const map: ActiveVersions = {};
+      activeArr.forEach((v: ModelVersion) => { map[v.model_type] = v; });
+      setActiveVersions(map);
+    } catch {
+      // leave state as-is on error
     } finally {
       setLoading(false);
     }
@@ -59,7 +59,8 @@ export default function TrainingPage() {
   const startTraining = async () => {
     setTraining(true);
     try {
-      await fetch("/api/model-versions/train", { method: "POST" });
+      await trainModels();
+      // Poll FastAPI's /health (public endpoint) until all model files exist
       const interval = setInterval(async () => {
         const res = await fetch("/api/health");
         if (res.ok) {

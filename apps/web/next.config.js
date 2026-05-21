@@ -19,8 +19,27 @@ const nextConfig = {
         source: "/api/runs/:id/predictions",
         destination: `${elysiaUrl}/runs/:id/predictions`,
       },
+      // Phase 4b — training/admin routes now served by Elysia (all now require auth).
+      // /model-versions/active must come before /model-versions to avoid path shadowing.
+      // POST /model-versions/train still goes to FastAPI via catch-all (Python subprocess).
+      {
+        source: "/api/model-versions/active",
+        destination: `${elysiaUrl}/model-versions/active`,
+      },
+      {
+        source: "/api/model-versions",
+        destination: `${elysiaUrl}/model-versions`,
+      },
+      {
+        source: "/api/model-metrics",
+        destination: `${elysiaUrl}/model-metrics`,
+      },
+      {
+        source: "/api/training-log",
+        destination: `${elysiaUrl}/training-log`,
+      },
       // Everything else (including /api/runs, /api/runs/:id with POST/DELETE,
-      // upload, stream, export, explain, training) still goes to FastAPI.
+      // upload, stream, export, explain, POST /model-versions/train) still goes to FastAPI.
       {
         source: "/api/:path((?!auth(?:/|$)).*)",
         destination: `${mlUrl}/:path*`,
