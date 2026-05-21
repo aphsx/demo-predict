@@ -12,8 +12,8 @@ export const LOGIN_BRAND = {
 } as const;
 
 /**
- * Steep tilted S — bottom-left → top-right (more diagonal than centered variant).
+ * Steep tilted S through screen center (720, 450): endpoints symmetric around x=720.
  */
-export const LOGIN_CURVE_PATH = "M 360 900 C 680 970, 1020 -30, 1360 0";
+export const LOGIN_CURVE_PATH = "M 320 900 C 510 980, 930 -40, 1120 0";
 
-export const LOGIN_RIGHT_CLIP = `${LOGIN_CURVE_PATH} L 1440 0 L 1440 900 L 360 900 Z`;
+export const LOGIN_RIGHT_CLIP = `${LOGIN_CURVE_PATH} L 1440 0 L 1440 900 L 320 900 Z`;
