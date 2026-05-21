@@ -431,6 +431,80 @@ async def explain_customer(
     return result
 
 
+# ── Internal Explain — called by Elysia proxy, NOT user-facing ────
+@app.get("/internal/explain")
+async def internal_explain(
+    run_id: str,
+    acc_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """SHAP explanation proxied through Elysia. Auth via X-Internal-Token, not session cookie."""
+    import hmac as _hmac
+    token = request.headers.get("x-internal-token", "")
+    expected = os.getenv("INTERNAL_SERVICE_TOKEN", "")
+    if not expected or not _hmac.compare_digest(token, expected):
+        raise HTTPException(403, "Invalid internal token")
+
+    u = await db.execute(text("""
+        SELECT acc_id,status_sms,credit_sms,credit_email,
+               expire_sms,expire_email,status_email,join_date,last_access,last_send
+        FROM raw_customers WHERE run_id = :r AND acc_id = :acc_id
+    """), {"r": run_id, "acc_id": acc_id})
+    users = pd.DataFrame([dict(row._mapping) for row in u])
+    if len(users) == 0:
+        raise HTTPException(404, "Customer not found")
+
+    p = await db.execute(text("""
+        SELECT acc_id,payment_date,amount,credit_add,credit_type
+        FROM raw_payments WHERE run_id = :r AND acc_id = :acc_id
+    """), {"r": run_id, "acc_id": acc_id})
+    payments = pd.DataFrame([dict(row._mapping) for row in p])
+
+    u2 = await db.execute(text("""
+        SELECT acc_id,year,month,usage,channel,source
+        FROM raw_usage WHERE run_id = :r AND acc_id = :acc_id
+    """), {"r": run_id, "acc_id": acc_id})
+    usage = pd.DataFrame([dict(row._mapping) for row in u2])
+
+    for col in ["expire_sms", "expire_email", "join_date", "last_access", "last_send"]:
+        if col in users.columns:
+            users[col] = pd.to_datetime(users[col], errors="coerce", utc=True).dt.tz_convert(None)
+    for col in ["credit_sms", "credit_email"]:
+        if col in users.columns:
+            users[col] = pd.to_numeric(users[col], errors="coerce")
+    if len(payments) > 0:
+        payments["payment_date"] = pd.to_datetime(payments["payment_date"], errors="coerce", utc=True).dt.tz_convert(None)
+        for col in ["amount", "credit_add"]:
+            payments[col] = pd.to_numeric(payments[col], errors="coerce")
+    else:
+        payments = pd.DataFrame(columns=["acc_id", "payment_date", "amount", "credit_add", "credit_type"])
+
+    if len(usage) > 0:
+        for col in ["usage", "year", "month"]:
+            usage[col] = pd.to_numeric(usage[col], errors="coerce")
+        usage["period"] = pd.to_datetime(
+            usage["year"].astype(str) + "-" + usage["month"].astype(str).str.zfill(2) + "-01"
+        )
+    else:
+        usage = pd.DataFrame(columns=["acc_id", "year", "month", "usage", "channel", "source", "period"])
+
+    run_row = await db.execute(
+        text("SELECT cutoff_date FROM prediction_runs WHERE id = :id"), {"id": run_id}
+    )
+    r_row = run_row.mappings().first()
+    from src.config import CUTOFF
+    cutoff = pd.Timestamp(r_row["cutoff_date"]).tz_localize(None) if r_row else pd.Timestamp(CUTOFF).tz_localize(None)
+
+    from src.features import build_features
+    feat_df = build_features(users, payments, usage, cutoff)
+
+    from src.predictor import MobyPredictor
+    predictor = MobyPredictor(Path(MODEL_DIR), cutoff)
+    predictor.load_data(users, feat_df, payments, usage)
+    return predictor.explain(acc_id)
+
+
 # ── Dashboard Summary V2 ──────────────────────────────────────────
 @app.get("/runs/{run_id}/summary")
 async def get_summary(

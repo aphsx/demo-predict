@@ -4,9 +4,12 @@ const nextConfig = {
     const elysiaUrl = process.env.ELYSIA_URL || "http://localhost:3002";
     const mlUrl = process.env.API_URL || "http://ml:8000";
     return [
-      // Phase 4a — read-only prediction/summary routes now served by Elysia.
-      // These paths are GET-only so redirecting all methods is safe.
-      // More specific patterns must come before the catch-all.
+      // Phase 4a/4e — read-only prediction/summary/explain routes now served by Elysia.
+      // More specific patterns must come before less-specific ones.
+      {
+        source: "/api/runs/:id/predictions/:acc_id/explain",
+        destination: `${elysiaUrl}/runs/:id/predictions/:acc_id/explain`,
+      },
       {
         source: "/api/runs/:id/predictions/:acc_id",
         destination: `${elysiaUrl}/runs/:id/predictions/:acc_id`,

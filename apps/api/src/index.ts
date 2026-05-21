@@ -5,6 +5,7 @@ import { runsRoutes } from "./routes/runs";
 import { predictionsRoutes } from "./routes/predictions";
 import { trainingRoutes } from "./routes/training";
 import { uploadsRoutes } from "./routes/uploads";
+import { explanationsRoutes } from "./routes/explanations";
 
 const PORT = Number(process.env.PORT ?? 3002);
 
@@ -29,6 +30,8 @@ const app = new Elysia()
   .use(trainingRoutes)
   // Phase 4d routes (Excel upload + Arq enqueue)
   .use(uploadsRoutes)
+  // Phase 4e routes (SHAP explain — proxied to FastAPI /internal/explain)
+  .use(explanationsRoutes)
   .get("/health", () => ({ ok: true, service: "api" }))
   .listen(PORT);
 
