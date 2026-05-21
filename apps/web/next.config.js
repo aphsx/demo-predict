@@ -1,10 +1,29 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
+    const elysiaUrl = process.env.ELYSIA_URL || "http://localhost:3002";
+    const mlUrl = process.env.API_URL || "http://ml:8000";
     return [
+      // Phase 4a — read-only prediction/summary routes now served by Elysia.
+      // These paths are GET-only so redirecting all methods is safe.
+      // More specific patterns must come before the catch-all.
+      {
+        source: "/api/runs/:id/predictions/:acc_id",
+        destination: `${elysiaUrl}/runs/:id/predictions/:acc_id`,
+      },
+      {
+        source: "/api/runs/:id/summary",
+        destination: `${elysiaUrl}/runs/:id/summary`,
+      },
+      {
+        source: "/api/runs/:id/predictions",
+        destination: `${elysiaUrl}/runs/:id/predictions`,
+      },
+      // Everything else (including /api/runs, /api/runs/:id with POST/DELETE,
+      // upload, stream, export, explain, training) still goes to FastAPI.
       {
         source: "/api/:path((?!auth(?:/|$)).*)",
-        destination: `${process.env.API_URL || "http://ml:8000"}/:path*`,
+        destination: `${mlUrl}/:path*`,
       },
     ];
   },

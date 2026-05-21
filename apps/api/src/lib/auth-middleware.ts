@@ -18,13 +18,15 @@ export const userPlugin = new Elysia({ name: "user-plugin" }).derive(
 
 /**
  * Elysia plugin that guards a route group: responds 401 if no session.
+ * Uses `as: "scoped"` so the guard does NOT propagate to the parent app
+ * (i.e. /health and other public routes are unaffected).
  *
  * Usage:
- *   app.use(requireUser).get("/protected", ({ userId }) => ({ userId }))
+ *   const myRoutes = new Elysia().use(requireUser).get("/protected", ...)
  */
 export const requireUser = new Elysia({ name: "require-user" })
   .use(userPlugin)
-  .onBeforeHandle({ as: "global" }, ({ userId, set }) => {
+  .onBeforeHandle({ as: "scoped" }, ({ userId, set }) => {
     if (!userId) {
       set.status = 401;
       return { message: "Not authenticated" };
