@@ -1,5 +1,7 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { auth } from "./auth";
 import { runsRoutes } from "./routes/runs";
 import { predictionsRoutes } from "./routes/predictions";
@@ -8,9 +10,10 @@ import { uploadsRoutes } from "./routes/uploads";
 import { explanationsRoutes } from "./routes/explanations";
 import { eventsRoutes } from "./routes/events";
 
-const PORT = Number(process.env.PORT ?? 3002);
+const PORT      = Number(process.env.PORT ?? 3001);
+const MODEL_DIR = process.env.MODEL_DIR ?? "/app/models";
 
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3001,http://localhost:3000")
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
@@ -35,7 +38,18 @@ const app = new Elysia()
   .use(explanationsRoutes)
   // Phase 4g routes (SSE — Redis Streams XREAD with DB fallback)
   .use(eventsRoutes)
-  .get("/health", () => ({ ok: true, service: "api" }))
+  .get("/health", () => {
+    const churn      = existsSync(join(MODEL_DIR, "churn_model.pkl"));
+    const winback    = existsSync(join(MODEL_DIR, "winback_model.pkl"));
+    const conversion = existsSync(join(MODEL_DIR, "conversion_model.pkl"));
+    const allOk      = churn && winback && conversion;
+    return {
+      status:  allOk ? "ok" : "degraded",
+      db:      "connected",
+      models:  { churn, winback, conversion },
+      message: allOk ? null : "Models not trained — run: python train.py <data_file>",
+    };
+  })
   .listen(PORT);
 
 console.log(`[api] Elysia listening on port ${PORT}`);

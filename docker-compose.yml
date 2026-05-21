@@ -66,7 +66,7 @@ services:
     env_file:
       - .env
     ports:
-      - "3002:3002"
+      - "3001:3001"
     volumes:
       - ./models:/app/models   # needed for /model-metrics and /training-log
     depends_on:
@@ -81,9 +81,9 @@ services:
     env_file:
       - .env
     ports:
-      - "3001:3001"
+      - "3000:3000"
     depends_on:
-      - ml
+      - api
 
 volumes:
   postgres_data:

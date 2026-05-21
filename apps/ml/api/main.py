@@ -648,6 +648,22 @@ async def list_model_versions(model_type: str | None = None, db: AsyncSession = 
 @app.post("/model-versions/train")
 async def train_models(_: str = Depends(require_user)):
     """Trigger model training in the background. Requires authentication."""
+    return await _do_train()
+
+
+# ── Internal Train — called by Elysia proxy, NOT user-facing ──────
+@app.post("/internal/train")
+async def internal_train(request: Request):
+    """Model training triggered by Elysia. Auth via X-Internal-Token, not session cookie."""
+    import hmac as _hmac
+    token = request.headers.get("x-internal-token", "")
+    expected = os.getenv("INTERNAL_SERVICE_TOKEN", "")
+    if not expected or not _hmac.compare_digest(token, expected):
+        raise HTTPException(403, "Invalid internal token")
+    return await _do_train()
+
+
+async def _do_train():
     import asyncio, uuid
 
     train_script = Path(__file__).parent.parent / "train.py"

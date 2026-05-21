@@ -6,7 +6,9 @@ import { db } from "../db/client";
 import { modelVersions } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 
-const MODEL_DIR = process.env.MODEL_DIR ?? "/app/models";
+const MODEL_DIR   = process.env.MODEL_DIR ?? "/app/models";
+const ML_URL      = process.env.ML_INTERNAL_URL || "http://ml:8000";
+const INT_TOKEN   = process.env.INTERNAL_SERVICE_TOKEN || "";
 
 // Explicit snake_case select — matches FastAPI response shape
 const MODEL_VERSION_SELECT = {
@@ -76,4 +78,24 @@ export const trainingRoutes = new Elysia()
         .orderBy(asc(modelVersions.modelType), desc(modelVersions.trainedAt));
     },
     { query: t.Object({ model_type: t.Optional(t.String()) }) }
-  );
+  )
+
+  // POST /model-versions/train — proxied to FastAPI /internal/train (Python subprocess)
+  .post("/model-versions/train", async ({ set }) => {
+    let res: Response;
+    try {
+      res = await fetch(`${ML_URL}/internal/train`, {
+        method: "POST",
+        headers: { "x-internal-token": INT_TOKEN },
+      });
+    } catch (err) {
+      set.status = 502;
+      const msg = err instanceof Error ? err.message : String(err);
+      return { message: `ML service unavailable: ${msg}` };
+    }
+    if (!res.ok) {
+      set.status = res.status;
+      return res.json().catch(() => ({ message: "Train request failed" }));
+    }
+    return res.json();
+  });
