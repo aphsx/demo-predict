@@ -30,16 +30,13 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
-# Node / Next.js
-apps/web/node_modules/
-apps/web/.next/
-apps/web/out/
-apps/web/.turbo/
-apps/web/.vercel/
-
-# Elysia API (apps/api — added in Phase 2)
-apps/api/node_modules/
-apps/api/.turbo/
+# Node — catch all node_modules and build artifacts at any depth
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+.vercel/
 
 # Build caches
 .cache/
