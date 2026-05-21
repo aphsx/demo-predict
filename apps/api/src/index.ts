@@ -9,6 +9,7 @@ import { trainingRoutes } from "./routes/training";
 import { uploadsRoutes } from "./routes/uploads";
 import { explanationsRoutes } from "./routes/explanations";
 import { eventsRoutes } from "./routes/events";
+import { insightsRoutes } from "./routes/insights";
 
 const PORT      = Number(process.env.PORT ?? 3001);
 const MODEL_DIR = process.env.MODEL_DIR ?? "/app/models";
@@ -38,6 +39,8 @@ const app = new Elysia()
   .use(explanationsRoutes)
   // Phase 4g routes (SSE — Redis Streams XREAD with DB fallback)
   .use(eventsRoutes)
+  // Phase 2 — LLM insights (Gemini)
+  .use(insightsRoutes)
   .get("/health", () => {
     const churn      = existsSync(join(MODEL_DIR, "churn_model.pkl"));
     const winback    = existsSync(join(MODEL_DIR, "winback_model.pkl"));

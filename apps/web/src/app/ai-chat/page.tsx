@@ -3,11 +3,13 @@ export const dynamic = "force-dynamic";
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  Bot, Send, RotateCcw, Sparkles, User, Paperclip,
-  ChevronRight, Clock, TrendingUp, Users, AlertTriangle,
+  Send, RotateCcw, Sparkles, User,
+  ChevronRight, TrendingUp, Users, AlertTriangle, Zap,
 } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
+import { streamChat } from "@/lib/api";
+import { useRunStore } from "@/lib/runStore";
 
 /* ── types ──────────────────────────────────────────────── */
 interface Message {
@@ -15,28 +17,6 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   ts: Date;
-}
-
-/* ── mock responses ─────────────────────────────────────── */
-const DEMO_RESPONSES: Record<string, string> = {
-  default: "สวัสดีครับ! ผมคือ **Moby AI Assistant** ผู้เชี่ยวชาญด้าน Customer Intelligence ช่วยวิเคราะห์ข้อมูลลูกค้า, churn risk, CLV และ lifecycle stage ให้คุณได้ครับ 🐋\n\nคุณต้องการทราบเรื่องอะไรเป็นพิเศษครับ?",
-  churn: "จากข้อมูลล่าสุด:\n\n**กลุ่มที่ต้องระวัง:**\n- Active Paid ที่มี churn probability > 60% มีราว 12% ของพอร์ต\n- กลุ่มที่ usage ลด > 40% ใน 30 วันที่ผ่านมา มีความเสี่ยงสูง\n\n**แนะนำ action:**\n1. ส่ง win-back offer ภายใน 48 ชั่วโมง\n2. Assign CSM สำหรับ high-value accounts\n3. ดู playbook \"Churn Prevention\" ในระบบ\n\nต้องการดูรายชื่อลูกค้ากลุ่มเสี่ยงไหมครับ?",
-  clv: "**CLV 6 เดือน — สรุปพอร์ต:**\n\n- **Median:** 8,400 บาท\n- **Top 10%:** > 42,000 บาท\n- **Bottom 20%:** < 1,200 บาท\n\nลูกค้า high-CLV มักมี:\n- ใช้งาน > 15 ครั้ง/เดือน\n- มี 2+ product lines\n- Support ticket น้อย (< 2/เดือน)\n\nต้องการดู breakdown ตาม lifecycle stage ไหมครับ?",
-  lifecycle: "**Customer Lifecycle — 4 Stages:**\n\n🔵 **Active Paid** — ลูกค้าที่จ่ายและ active\n🟣 **Active Free** — ใช้งานแต่ยังไม่จ่าย (conversion target)\n🟠 **Churned** — เคยจ่ายแล้วหยุด (win-back target)\n⚪ **Ghost** — ไม่เคยใช้งานจริง\n\n**Transition probability (avg):**\n- Free → Paid: 28%\n- Paid → Churned: 14%\n- Churned → Paid: 34%\n\nต้องการ drill down stage ไหนครับ?",
-  predict: "**Model Architecture:**\n\nระบบใช้ **XGBoost Ensemble** ฝึกบน 90 features:\n- Behavioral (frequency, recency, session depth)\n- Transactional (MRR, invoice count, payment delays)\n- Support signals (ticket count, severity)\n- Engagement (login streak, feature usage)\n\n**Performance metrics:**\n- AUC-ROC: **0.89**\n- Precision@10%: **0.76**\n- Recall@High-risk: **0.82**\n\nโมเดล retrain ทุก 7 วัน หรือเมื่อ drift score > 0.05 ครับ",
-  alert: "**Real-time Signal Status:**\n\n✅ Model Health — ปกติ\n✅ Data Pipeline — ทำงานปกติ\n✅ Feature Drift — ไม่พบ\n\n**24h Summary:**\n- Predictions generated: 3,412\n- High-risk flagged: 187 accounts\n- Playbooks triggered: 23 actions\n\nไม่มี critical alert ที่ต้องการ action ด่วนครับ",
-  hello: "สวัสดีครับ! ยินดีให้บริการ 😊\n\nผมช่วยได้เรื่อง:\n- **วิเคราะห์ churn risk** ของลูกค้า\n- **CLV forecasting** และ revenue projection\n- **Lifecycle movement** และ conversion pathway\n- **Model performance** และ feature importance\n- **Playbook recommendations** สำหรับแต่ละ segment\n\nถามมาได้เลยครับ!",
-};
-
-function getMockResponse(text: string): string {
-  const t = text.toLowerCase();
-  if (t.match(/^(hi|hello|สวัสดี|ดีครับ|ดีค่ะ)/)) return DEMO_RESPONSES.hello;
-  if (t.includes("churn") || t.includes("เลิก") || t.includes("ออก") || t.includes("risk")) return DEMO_RESPONSES.churn;
-  if (t.includes("clv") || t.includes("มูลค่า") || t.includes("revenue") || t.includes("value")) return DEMO_RESPONSES.clv;
-  if (t.includes("lifecycle") || t.includes("stage") || t.includes("status") || t.includes("สรุป")) return DEMO_RESPONSES.lifecycle;
-  if (t.includes("predict") || t.includes("โมเดล") || t.includes("model") || t.includes("ai") || t.includes("health")) return DEMO_RESPONSES.predict;
-  if (t.includes("alert") || t.includes("แจ้งเตือน") || t.includes("signal")) return DEMO_RESPONSES.alert;
-  return DEMO_RESPONSES.default;
 }
 
 /* ── markdown-lite renderer ─────────────────────────────── */
@@ -58,73 +38,96 @@ function fmtTime(d: Date) {
 
 /* ── example prompts ────────────────────────────────────── */
 const QUICK_PROMPTS = [
-  { icon: TrendingUp, label: "วิเคราะห์ churn risk" },
-  { icon: Users, label: "สรุป lifecycle stages" },
-  { icon: AlertTriangle, label: "ดู real-time alerts" },
-  { icon: Clock, label: "Model health status" },
+  { icon: TrendingUp,   label: "วิเคราะห์ churn risk ของพอร์ต" },
+  { icon: Users,        label: "สรุป lifecycle distribution" },
+  { icon: AlertTriangle, label: "บัญชีที่มีความเสี่ยงสูงสุด" },
+  { icon: Zap,          label: "แนะนำ action เร่งด่วน" },
 ];
+
+const WELCOME = "สวัสดีครับ! ผมคือ **Moby AI** — วิเคราะห์ข้อมูลลูกค้าจากรอบการประเมินที่เลือกได้เลยครับ\n\nถามเรื่อง churn risk, CLV, lifecycle, หรือขอ action ที่แนะนำก็ได้ครับ";
 
 /* ════════════════════════════════════════════════════════════
    Page
    ════════════════════════════════════════════════════════════ */
 export default function AIChatPage() {
+  const { runId } = useRunStore();
+
   const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "init",
-      role: "assistant",
-      content: DEMO_RESPONSES.default,
-      ts: new Date(),
-    },
+    { id: "init", role: "assistant", content: WELCOME, ts: new Date() },
   ]);
   const [input, setInput] = useState("");
-  const [thinking, setThinking] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const cancelRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, thinking]);
+  }, [messages, streaming]);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 80);
   }, []);
 
-  const send = useCallback(async (text?: string) => {
+  const send = useCallback((text?: string) => {
     const content = (text ?? input).trim();
-    if (!content || thinking) return;
+    if (!content || streaming) return;
+    if (!runId) {
+      setMessages(prev => [...prev, {
+        id: Date.now() + "_err",
+        role: "assistant",
+        content: "กรุณาเลือก Run ก่อนครับ — ไปที่หน้า Runs แล้วเปิด run ที่ต้องการ",
+        ts: new Date(),
+      }]);
+      return;
+    }
     setInput("");
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content, ts: new Date() };
-    setMessages(prev => [...prev, userMsg]);
-    setThinking(true);
+    const replyId = Date.now().toString() + "_r";
+    const replyMsg: Message = { id: replyId, role: "assistant", content: "", ts: new Date() };
 
-    await new Promise(r => setTimeout(r, 900 + Math.random() * 800));
+    setMessages(prev => [...prev, userMsg, replyMsg]);
+    setStreaming(true);
 
-    const reply: Message = {
-      id: Date.now().toString() + "_r",
-      role: "assistant",
-      content: getMockResponse(content),
-      ts: new Date(),
-    };
-    setMessages(prev => [...prev, reply]);
-    setThinking(false);
-  }, [input, thinking]);
+    const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
+
+    cancelRef.current = streamChat(
+      runId,
+      history,
+      (chunk) => setMessages(prev =>
+        prev.map(m => m.id === replyId ? { ...m, content: m.content + chunk } : m)
+      ),
+      () => { setStreaming(false); cancelRef.current = null; },
+      (err) => {
+        setMessages(prev =>
+          prev.map(m => m.id === replyId ? { ...m, content: `เกิดข้อผิดพลาด: ${err}` } : m)
+        );
+        setStreaming(false);
+        cancelRef.current = null;
+      },
+    );
+  }, [input, streaming, runId, messages]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
   const reset = () => {
-    setMessages([{ id: "init", role: "assistant", content: DEMO_RESPONSES.default, ts: new Date() }]);
+    cancelRef.current?.();
+    setMessages([{ id: "init", role: "assistant", content: WELCOME, ts: new Date() }]);
+    setStreaming(false);
+    setInput("");
     setTimeout(() => inputRef.current?.focus(), 80);
   };
 
-  const showQuick = messages.length <= 1 && !thinking;
+  const showQuick = messages.length <= 1 && !streaming;
+  const thinking = streaming && messages[messages.length - 1]?.content === "";
 
   return (
     <div className="h-full flex flex-col bg-[color:var(--bg)]">
       <PageHeader
-        eyebrow="AI · Demo mode"
+        eyebrow={runId ? `AI · Run ${runId.slice(0, 8)}…` : "AI · ไม่มี run"}
         title="Moby AI Assistant"
         actions={
           <button
@@ -240,22 +243,15 @@ export default function AIChatPage() {
               />
             </div>
             <div className="flex items-center gap-2 px-3 pb-3 border-t border-[color:var(--line)] pt-2">
-              <button
-                className="w-8 h-8 rounded-lg border border-[color:var(--line)] flex items-center justify-center
-                  text-[color:var(--ink-4)] hover:bg-[color:var(--surface-2)] transition-colors"
-                title="แนบไฟล์ (ยังไม่รองรับใน demo)"
-              >
-                <Paperclip size={14} />
-              </button>
               <span className="flex-1 text-[11px] text-[color:var(--ink-5)]">
-                Demo mode · ข้อมูลจำลอง ไม่ใช่ข้อมูลจริง
+                {runId ? "Gemini · ข้อมูลจาก run จริง" : "⚠ กรุณาเลือก run ก่อน"}
               </span>
               <button
                 id="ai-chat-page-send"
                 onClick={() => send()}
-                disabled={!input.trim() || thinking}
+                disabled={!input.trim() || streaming}
                 className={`h-9 px-4 rounded-lg text-[13px] font-medium flex items-center gap-2 transition-all
-                  ${input.trim() && !thinking
+                  ${input.trim() && !streaming
                     ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-700)] shadow-sm"
                     : "bg-[color:var(--line)] text-[color:var(--ink-5)] cursor-not-allowed"
                   }`}
@@ -308,9 +304,9 @@ export default function AIChatPage() {
 
           <div className="border-t border-[color:var(--line)] pt-4 mt-auto">
             <div className="rounded-lg bg-[color:var(--moby-50)] border border-[color:var(--moby-100)] p-3">
-              <p className="text-[11px] font-semibold text-[color:var(--moby-700)] mb-1">Demo Mode</p>
+              <p className="text-[11px] font-semibold text-[color:var(--moby-700)] mb-1">Gemini AI</p>
               <p className="text-[10.5px] text-[color:var(--ink-4)] leading-relaxed">
-                ข้อมูลทั้งหมดเป็นการจำลอง เพื่อ demo ระบบ ยังไม่ต่อ LLM จริง
+                วิเคราะห์จากข้อมูลจริงในรอบที่เลือก ข้อมูลไม่ถูกส่งออกนอกระบบ
               </p>
             </div>
           </div>

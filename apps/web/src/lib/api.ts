@@ -139,6 +139,94 @@ export function exportUrl(runId: string, params: Record<string, string>) {
   return apiUrl(`/api/runs/${runId}/export?${qs}`);
 }
 
+export interface Explanation {
+  id: string;
+  run_id: string;
+  content: string;
+  model: string;
+  created_at: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** Generate and persist a one-shot run explanation. */
+export async function generateExplanation(runId: string): Promise<Explanation> {
+  const res = await apiFetch(apiUrl(`/api/runs/${runId}/explain`), { method: "POST" });
+  if (!res.ok) throw new Error(`Explain error ${res.status}`);
+  return res.json();
+}
+
+/** Fetch the latest stored explanation for a run. Returns null if none yet. */
+export async function fetchExplanation(runId: string): Promise<Explanation | null> {
+  const res = await apiFetch(apiUrl(`/api/runs/${runId}/explanation`));
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Fetch explanation error ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Stream a chat response from Gemini via the /runs/:id/chat endpoint.
+ * Calls `onChunk` with each text delta and `onDone` when the stream ends.
+ * Returns a cleanup function that aborts the stream if called.
+ */
+export function streamChat(
+  runId: string,
+  messages: ChatMessage[],
+  onChunk: (text: string) => void,
+  onDone: () => void,
+  onError: (msg: string) => void,
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    let res: Response;
+    try {
+      res = await fetch(apiUrl(`/api/runs/${runId}/chat`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ messages }),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") onError(String(e));
+      return;
+    }
+
+    if (!res.ok || !res.body) { onError(`HTTP ${res.status}`); return; }
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+
+    while (true) {
+      let done: boolean; let value: Uint8Array | undefined;
+      try { ({ done, value } = await reader.read()); } catch { break; }
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+
+      const lines = buf.split("\n");
+      buf = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const payload = JSON.parse(line.slice(6)) as { text?: string; done?: boolean; error?: string };
+          if (payload.error) { onError(payload.error); return; }
+          if (payload.text)  onChunk(payload.text);
+          if (payload.done)  { onDone(); return; }
+        } catch { /* skip malformed line */ }
+      }
+    }
+    onDone();
+  })();
+
+  return () => controller.abort();
+}
+
 export const api = {
   listRuns: fetchRuns,
   createRun: (arg: { name: string; cutoff_date: string }) => createRun(arg.name, arg.cutoff_date),

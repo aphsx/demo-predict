@@ -219,10 +219,23 @@ export const predictions = pgTable(
   ]
 );
 
+export const explanations = pgTable(
+  "explanations",
+  {
+    id:        uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    runId:     uuid("run_id").notNull().references(() => predictionRuns.id, { onDelete: "cascade" }),
+    content:   text("content").notNull(),
+    model:     text("model").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
+  },
+  (t) => [index("idx_explanations_run_id").on(t.runId)]
+);
+
 // ── Convenience type exports ───────────────────────────────────────────────────
 
-export type User = typeof user.$inferSelect;
-export type Session = typeof session.$inferSelect;
+export type User         = typeof user.$inferSelect;
+export type Session      = typeof session.$inferSelect;
 export type ModelVersion = typeof modelVersions.$inferSelect;
 export type PredictionRun = typeof predictionRuns.$inferSelect;
-export type Prediction = typeof predictions.$inferSelect;
+export type Prediction   = typeof predictions.$inferSelect;
+export type Explanation  = typeof explanations.$inferSelect;
