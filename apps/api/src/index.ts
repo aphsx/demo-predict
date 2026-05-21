@@ -4,6 +4,7 @@ import { auth } from "./auth";
 import { runsRoutes } from "./routes/runs";
 import { predictionsRoutes } from "./routes/predictions";
 import { trainingRoutes } from "./routes/training";
+import { uploadsRoutes } from "./routes/uploads";
 
 const PORT = Number(process.env.PORT ?? 3002);
 
@@ -26,6 +27,8 @@ const app = new Elysia()
   .use(predictionsRoutes)
   // Phase 4b routes (training/admin — all now require auth)
   .use(trainingRoutes)
+  // Phase 4d routes (Excel upload + Arq enqueue)
+  .use(uploadsRoutes)
   .get("/health", () => ({ ok: true, service: "api" }))
   .listen(PORT);
 

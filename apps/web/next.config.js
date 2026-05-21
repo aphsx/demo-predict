@@ -19,6 +19,11 @@ const nextConfig = {
         source: "/api/runs/:id/predictions",
         destination: `${elysiaUrl}/runs/:id/predictions`,
       },
+      // Phase 4d — upload fully migrated (replaces N+1 bug with batch inserts)
+      {
+        source: "/api/runs/:id/upload",
+        destination: `${elysiaUrl}/runs/:id/upload`,
+      },
       // Phase 4c — /runs and /runs/:id fully migrated (GET + POST + DELETE).
       // These must come AFTER the more-specific sub-path rules above so that
       // /api/runs/:id/predictions, /summary, etc. still match first.
