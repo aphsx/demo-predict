@@ -19,6 +19,17 @@ const nextConfig = {
         source: "/api/runs/:id/predictions",
         destination: `${elysiaUrl}/runs/:id/predictions`,
       },
+      // Phase 4c — /runs and /runs/:id fully migrated (GET + POST + DELETE).
+      // These must come AFTER the more-specific sub-path rules above so that
+      // /api/runs/:id/predictions, /summary, etc. still match first.
+      {
+        source: "/api/runs/:id",
+        destination: `${elysiaUrl}/runs/:id`,
+      },
+      {
+        source: "/api/runs",
+        destination: `${elysiaUrl}/runs`,
+      },
       // Phase 4b — training/admin routes now served by Elysia (all now require auth).
       // /model-versions/active must come before /model-versions to avoid path shadowing.
       // POST /model-versions/train still goes to FastAPI via catch-all (Python subprocess).

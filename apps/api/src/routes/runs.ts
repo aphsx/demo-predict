@@ -5,6 +5,15 @@ import { predictionRuns } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { verifyRunOwnership } from "../lib/run-guard";
 
+// Shape returned by POST /runs — matches FastAPI's RETURNING clause
+const RUN_CREATE_RETURNING = {
+  id: predictionRuns.id,
+  name: predictionRuns.name,
+  status: predictionRuns.status,
+  cutoff_date: predictionRuns.cutoffDate,
+  created_at: predictionRuns.createdAt,
+} as const;
+
 // Explicit snake_case select — matches FastAPI response shape exactly
 const RUN_SELECT = {
   id: predictionRuns.id,
@@ -33,6 +42,29 @@ export const runsRoutes = new Elysia({ prefix: "/runs" })
       .limit(50)
   )
 
+  // POST /runs — create a new prediction run (status starts as "pending")
+  .post(
+    "/",
+    async ({ body, userId }) => {
+      const [newRun] = await db
+        .insert(predictionRuns)
+        .values({
+          name: body.name,
+          cutoffDate: body.cutoff_date,
+          status: "pending",
+          userId: userId!,
+        })
+        .returning(RUN_CREATE_RETURNING);
+      return newRun;
+    },
+    {
+      body: t.Object({
+        name: t.String({ minLength: 1 }),
+        cutoff_date: t.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+      }),
+    }
+  )
+
   // GET /runs/:id — single run with ownership check
   .get(
     "/:id",
@@ -48,6 +80,23 @@ export const runsRoutes = new Elysia({ prefix: "/runs" })
         .where(eq(predictionRuns.id, params.id))
         .limit(1);
       return run;
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+
+  // DELETE /runs/:id — ownership check then cascade-delete (FK cascade covers child tables)
+  .delete(
+    "/:id",
+    async ({ params, userId, set }) => {
+      const guard = await verifyRunOwnership(params.id, userId!);
+      if (!guard.ok) {
+        set.status = guard.status;
+        return { message: guard.message };
+      }
+      await db
+        .delete(predictionRuns)
+        .where(eq(predictionRuns.id, params.id));
+      return { deleted: true };
     },
     { params: t.Object({ id: t.String() }) }
   );
