@@ -5,6 +5,19 @@ import { predictions, predictionRuns } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { verifyRunOwnership } from "../lib/run-guard";
 
+// Simple CSV serializer — RFC 4180 compliant (quotes cells containing , " or \n)
+function buildCsv(rows: Record<string, unknown>[]): string {
+  if (rows.length === 0) return "";
+  const headers = Object.keys(rows[0]);
+  const escape = (v: unknown) => {
+    const s = v == null ? "" : String(v);
+    return s.includes(",") || s.includes('"') || s.includes("\n")
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
+  return [headers.join(","), ...rows.map(r => headers.map(h => escape(r[h])).join(","))].join("\n");
+}
+
 // Explicit snake_case select — matches FastAPI SELECT * response shape
 const PRED_SELECT = {
   id: predictions.id,
@@ -223,4 +236,48 @@ export const predictionsRoutes = new Elysia({ prefix: "/runs" })
       };
     },
     { params: t.Object({ id: t.String() }) }
+  )
+
+  // GET /runs/:id/export — CSV download of predictions
+  .get(
+    "/:id/export",
+    async ({ params, query, userId, set }) => {
+      const guard = await verifyRunOwnership(params.id, userId!);
+      if (!guard.ok) { set.status = guard.status; return { message: guard.message }; }
+
+      const conditions = [eq(predictions.runId, params.id)];
+      if (query.lifecycle_stage) {
+        conditions.push(eq(predictions.lifecycleStage, query.lifecycle_stage));
+      }
+
+      const rows = await db
+        .select({
+          acc_id:                   predictions.accId,
+          lifecycle_stage:          predictions.lifecycleStage,
+          sub_stage:                predictions.subStage,
+          churn_probability:        predictions.churnProbability,
+          predicted_clv_6m:         predictions.predictedClv6m,
+          comeback_probability:     predictions.comebackProbability,
+          conversion_probability:   predictions.conversionProbability,
+          n_purchases:              predictions.nPurchases,
+          total_revenue:            predictions.totalRevenue,
+          days_since_last_activity: predictions.daysSinceLastActivity,
+        })
+        .from(predictions)
+        .where(and(...conditions))
+        .orderBy(sql`${predictions.churnProbability} DESC NULLS LAST`);
+
+      const filename = `1moby_export_${query.lifecycle_stage || "all"}.csv`;
+      return new Response(buildCsv(rows), {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+          "Cache-Control": "no-cache",
+        },
+      });
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      query: t.Object({ lifecycle_stage: t.Optional(t.String()) }),
+    }
   );

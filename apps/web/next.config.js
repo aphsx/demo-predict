@@ -27,6 +27,11 @@ const nextConfig = {
         source: "/api/runs/:id/upload",
         destination: `${elysiaUrl}/runs/:id/upload`,
       },
+      // Phase 4f — CSV export
+      {
+        source: "/api/runs/:id/export",
+        destination: `${elysiaUrl}/runs/:id/export`,
+      },
       // Phase 4c — /runs and /runs/:id fully migrated (GET + POST + DELETE).
       // These must come AFTER the more-specific sub-path rules above so that
       // /api/runs/:id/predictions, /summary, etc. still match first.
