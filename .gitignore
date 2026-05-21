@@ -30,17 +30,16 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
-# ML artifacts and local data
-ml/models/*
-!ml/models/.gitkeep
-ml/data/*.xlsx
-
 # Node / Next.js
-web/node_modules/
-web/.next/
-web/out/
-web/.turbo/
-web/.vercel/
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/.turbo/
+apps/web/.vercel/
+
+# Elysia API (apps/api — added in Phase 2)
+apps/api/node_modules/
+apps/api/.turbo/
 
 # Build caches
 .cache/

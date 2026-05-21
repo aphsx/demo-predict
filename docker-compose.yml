@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Schema is owned by Alembic (ml/alembic/versions/*) — applied at ml startup.
+      # Schema is owned by Alembic (apps/ml/alembic/versions/*) — applied at ml startup.
     ports:
       - "5433:5432"
     healthcheck:
@@ -29,7 +29,7 @@ services:
       retries: 10
 
   ml:
-    build: ./ml
+    build: ./apps/ml
     restart: unless-stopped
     env_file:
       - .env
@@ -46,7 +46,7 @@ services:
 
   worker:
     build:
-      context: ./ml
+      context: ./apps/ml
       dockerfile: Dockerfile.worker
     restart: unless-stopped
     env_file:
@@ -61,7 +61,7 @@ services:
         condition: service_healthy
 
   web:
-    build: ./web
+    build: ./apps/web
     restart: unless-stopped
     env_file:
       - .env
