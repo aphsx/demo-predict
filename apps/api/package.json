@@ -1,0 +1,22 @@
+{
+  "name": "@moby/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "db:introspect": "drizzle-kit introspect"
+  },
+  "dependencies": {
+    "elysia": "^1.2.0",
+    "@elysiajs/cors": "^1.2.0",
+    "better-auth": "^1.2.0",
+    "drizzle-orm": "^0.44.0",
+    "postgres": "^3.4.0",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.0",
+    "bun-types": "latest"
+  }
+}

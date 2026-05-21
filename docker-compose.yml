@@ -60,6 +60,19 @@ services:
       redis:
         condition: service_healthy
 
+  api:
+    build: ./apps/api
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3002:3002"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   web:
     build: ./apps/web
     restart: unless-stopped
