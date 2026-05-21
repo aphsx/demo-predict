@@ -21,6 +21,10 @@ if __name__ == "__main__":
     from datetime import datetime
 
     path = sys.argv[1] if len(sys.argv) > 1 else os.getenv("DATA_DIR", "data") + "/1Moby_Data.xlsx"
+
+    # Optional second arg overrides config/env (e.g. python train.py data.xlsx 2026-01-01)
+    if len(sys.argv) > 2:
+        CUTOFF = pd.Timestamp(sys.argv[2])
     print(f"Training from: {path}")
     print(f"Cutoff: {CUTOFF}")
     print("=" * 60)

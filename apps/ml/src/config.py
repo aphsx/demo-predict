@@ -13,7 +13,10 @@ MODELS_DIR = Path(os.getenv("MODEL_DIR", str(ROOT_DIR / "models")))
 MODELS_DIR.mkdir(exist_ok=True)
 
 # ─── Point-in-Time Cutoff ────────────────────────────────────────
-CUTOFF = pd.Timestamp("2025-07-01")
+# Set TRAIN_CUTOFF_DATE env var (YYYY-MM-DD) to match your actual data.
+# This must be a date where labelled outcomes exist (i.e. data continues
+# for at least CHURN_LABEL_MONTHS after the cutoff date).
+CUTOFF = pd.Timestamp(os.getenv("TRAIN_CUTOFF_DATE", "2025-07-01"))
 
 # ─── Active Definition ───────────────────────────────────────────
 ACTIVE_WINDOW_MONTHS  = 6   # ดู activity ย้อนหลังกี่เดือน

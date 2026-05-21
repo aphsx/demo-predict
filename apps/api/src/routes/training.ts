@@ -81,21 +81,32 @@ export const trainingRoutes = new Elysia()
   )
 
   // POST /model-versions/train — proxied to FastAPI /internal/train (Python subprocess)
-  .post("/model-versions/train", async ({ set }) => {
-    let res: Response;
-    try {
-      res = await fetch(`${ML_URL}/internal/train`, {
-        method: "POST",
-        headers: { "x-internal-token": INT_TOKEN },
-      });
-    } catch (err) {
-      set.status = 502;
-      const msg = err instanceof Error ? err.message : String(err);
-      return { message: `ML service unavailable: ${msg}` };
+  // Body: { cutoff_date?: "YYYY-MM-DD" }  — omit to use TRAIN_CUTOFF_DATE env var
+  .post(
+    "/model-versions/train",
+    async ({ body, set }) => {
+      let res: Response;
+      try {
+        res = await fetch(`${ML_URL}/internal/train`, {
+          method: "POST",
+          headers: {
+            "x-internal-token": INT_TOKEN,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ cutoff_date: body.cutoff_date ?? null }),
+        });
+      } catch (err) {
+        set.status = 502;
+        const msg = err instanceof Error ? err.message : String(err);
+        return { message: `ML service unavailable: ${msg}` };
+      }
+      if (!res.ok) {
+        set.status = res.status;
+        return res.json().catch(() => ({ message: "Train request failed" }));
+      }
+      return res.json();
+    },
+    {
+      body: t.Object({ cutoff_date: t.Optional(t.String()) }),
     }
-    if (!res.ok) {
-      set.status = res.status;
-      return res.json().catch(() => ({ message: "Train request failed" }));
-    }
-    return res.json();
-  });
+  );

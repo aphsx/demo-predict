@@ -109,7 +109,6 @@ async def _pipeline(run_id: str, model_dir: str):
 
 
 async def _load_from_db(Session, run_id: str):
-    engine = create_async_engine(ASYNC_URL, echo=False)
     async with Session() as db:
         def _to_naive(series):
             dt = pd.to_datetime(series, errors="coerce", utc=True)
@@ -148,7 +147,6 @@ async def _load_from_db(Session, run_id: str):
             usage["period"] = pd.to_datetime(
                 usage["year"].astype(str) + "-" + usage["month"].astype(str).str.zfill(2) + "-01"
             )
-        await engine.dispose()
         return users, payments, usage
 
 
@@ -225,7 +223,8 @@ def _fv(row, col):
         import math
         if isinstance(v, float) and math.isnan(v): return None
         return float(v)
-    except: return None
+    except Exception:
+        return None
 
 def _sv(row, col):
     v = row.get(col) if hasattr(row, "get") else (row[col] if col in row.index else None)

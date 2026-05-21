@@ -146,10 +146,16 @@ async def internal_explain(
 async def internal_train(request: Request):
     """Model training triggered by Elysia. Authenticated via X-Internal-Token."""
     _require_internal_token(request)
-    return await _do_train()
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    cutoff_date: str | None = body.get("cutoff_date")
+    return await _do_train(cutoff_date=cutoff_date)
 
 
-async def _do_train():
+async def _do_train(cutoff_date: str | None = None):
     import asyncio, uuid
 
     train_script = Path(__file__).parent.parent / "train.py"
@@ -164,9 +170,14 @@ async def _do_train():
     data_file = str(sorted(xlsx_files)[-1])
     job_id    = str(uuid.uuid4())
 
+    # Build the command — pass cutoff as second arg if provided
+    cmd = ["python", str(train_script), data_file]
+    if cutoff_date:
+        cmd.append(cutoff_date)
+
     async def _run():
         proc = await asyncio.create_subprocess_exec(
-            "python", str(train_script), data_file,
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
@@ -174,8 +185,9 @@ async def _do_train():
 
     asyncio.create_task(_run())
     return {
-        "job_id":    job_id,
-        "status":    "started",
-        "data_file": data_file,
-        "message":   "Training started — check /training-log for progress",
+        "job_id":       job_id,
+        "status":       "started",
+        "data_file":    data_file,
+        "cutoff_date":  cutoff_date or os.getenv("TRAIN_CUTOFF_DATE", "2025-07-01"),
+        "message":      "Training started — check /training-log for progress",
     }
