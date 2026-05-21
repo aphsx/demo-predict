@@ -1,11 +1,10 @@
 "use client";
 import { createAuthClient } from "better-auth/react";
 
+// NEXT_PUBLIC_AUTH_URL must point to the Elysia API service (not Next.js).
+// Dev default: http://localhost:3002  Docker: set via env_file
 export const authClient = createAuthClient({
-  baseURL:
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.BETTER_AUTH_URL || "http://localhost:3001",
+  baseURL: process.env.NEXT_PUBLIC_AUTH_URL || "http://localhost:3002",
 });
 
 export const { signIn, signOut, useSession, getSession } = authClient;

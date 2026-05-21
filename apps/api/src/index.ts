@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
+import { auth } from "./auth";
 
 const PORT = Number(process.env.PORT ?? 3002);
 
@@ -15,6 +16,8 @@ const app = new Elysia()
       credentials: true,
     })
   )
+  // Better Auth handles all /api/auth/* routes; returns null for everything else
+  .mount(auth.handler)
   .get("/health", () => ({ ok: true, service: "api" }))
   .listen(PORT);
 

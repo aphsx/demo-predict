@@ -13,10 +13,12 @@
     "better-auth": "^1.2.0",
     "drizzle-orm": "^0.44.0",
     "postgres": "^3.4.0",
-    "ioredis": "^5.4.0"
+    "ioredis": "^5.4.0",
+    "pg": "^8.13.0"
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.0",
-    "bun-types": "latest"
+    "bun-types": "latest",
+    "@types/pg": "^8.11.0"
   }
 }
