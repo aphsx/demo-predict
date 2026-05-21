@@ -6,6 +6,7 @@ import { predictionsRoutes } from "./routes/predictions";
 import { trainingRoutes } from "./routes/training";
 import { uploadsRoutes } from "./routes/uploads";
 import { explanationsRoutes } from "./routes/explanations";
+import { eventsRoutes } from "./routes/events";
 
 const PORT = Number(process.env.PORT ?? 3002);
 
@@ -32,6 +33,8 @@ const app = new Elysia()
   .use(uploadsRoutes)
   // Phase 4e routes (SHAP explain — proxied to FastAPI /internal/explain)
   .use(explanationsRoutes)
+  // Phase 4g routes (SSE — Redis Streams XREAD with DB fallback)
+  .use(eventsRoutes)
   .get("/health", () => ({ ok: true, service: "api" }))
   .listen(PORT);
 

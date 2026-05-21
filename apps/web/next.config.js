@@ -22,6 +22,11 @@ const nextConfig = {
         source: "/api/runs/:id/predictions",
         destination: `${elysiaUrl}/runs/:id/predictions`,
       },
+      // Phase 4g — SSE stream
+      {
+        source: "/api/runs/:id/stream",
+        destination: `${elysiaUrl}/runs/:id/stream`,
+      },
       // Phase 4d — upload fully migrated (replaces N+1 bug with batch inserts)
       {
         source: "/api/runs/:id/upload",
