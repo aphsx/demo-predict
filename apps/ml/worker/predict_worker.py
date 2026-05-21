@@ -82,14 +82,23 @@ async def _pipeline(run_id: str, model_dir: str):
             await _save_predictions(db, run_id, batch)
 
             active_count = int((batch["lifecycle_stage"].isin(["Active Paid", "Active Free"])).sum())
+
+            # Look up the currently active churn model version for traceability
+            mv_row = await db.execute(
+                text("SELECT id FROM model_versions WHERE model_type = 'churn' AND is_active = TRUE ORDER BY trained_at DESC LIMIT 1")
+            )
+            mv = mv_row.mappings().first()
+            model_version_id = str(mv["id"]) if mv else None
+
             await db.execute(text("""
                 UPDATE prediction_runs
                 SET status = 'done',
                     total_customers  = :total,
                     active_customers = :active,
+                    model_version_id = :mvid,
                     updated_at = NOW()
                 WHERE id = :id
-            """), {"id": run_id, "total": len(batch), "active": active_count})
+            """), {"id": run_id, "total": len(batch), "active": active_count, "mvid": model_version_id})
             await db.commit()
 
         # Stream: 100% - done

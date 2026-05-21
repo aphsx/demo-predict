@@ -11,6 +11,7 @@ import {
   uuid,
   text,
   integer,
+  bigint,
   bigserial,
   numeric,
   boolean,
@@ -118,6 +119,9 @@ export const predictionRuns = pgTable(
     errorMessage: text("error_message"),
     modelVersionId: uuid("model_version_id").references(() => modelVersions.id),
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    // Date range of the uploaded data — populated by upload handler from min/max payment_date
+    dataStartDate: date("data_start_date"),
+    dataEndDate: date("data_end_date"),
     createdAt: timestamp("created_at", { withTimezone: true }).default(sql`NOW()`),
     updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`NOW()`),
   },
@@ -153,6 +157,7 @@ export const rawPayments = pgTable(
     id: bigserial("id", { mode: "number" }).primaryKey(),
     runId: uuid("run_id").references(() => predictionRuns.id, { onDelete: "cascade" }),
     accId: integer("acc_id").notNull(),
+    paymentUid: bigint("payment_uid", { mode: "number" }),  // original uid from Excel
     paymentDate: timestamp("payment_date", { withTimezone: true }).notNull(),
     amount: numeric("amount"),
     creditAdd: numeric("credit_add"),

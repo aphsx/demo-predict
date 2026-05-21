@@ -25,6 +25,8 @@ const RUN_SELECT = {
   error_message: predictionRuns.errorMessage,
   model_version_id: predictionRuns.modelVersionId,
   user_id: predictionRuns.userId,
+  data_start_date: predictionRuns.dataStartDate,
+  data_end_date: predictionRuns.dataEndDate,
   created_at: predictionRuns.createdAt,
   updated_at: predictionRuns.updatedAt,
 } as const;

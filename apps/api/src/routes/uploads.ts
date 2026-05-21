@@ -1,6 +1,6 @@
 import Elysia, { t } from "elysia";
 import * as XLSX from "xlsx";
-import { eq } from "drizzle-orm";
+import { eq, max, min, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { predictionRuns, rawCustomers, rawPayments, rawUsage } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
@@ -75,6 +75,8 @@ function renameRow(row: RawRow, map: Record<string, string>): RawRow {
   const out: RawRow = {};
   for (const [k, v] of Object.entries(row)) {
     const key = k.trim();
+    // Drop Excel ghost columns (e.g. __EMPTY, __EMPTY_1, ... artifacts from merged cells)
+    if (key.startsWith("__EMPTY")) continue;
     out[map[key] ?? key] = v;
   }
   return out;
@@ -179,6 +181,7 @@ export const uploadsRoutes = new Elysia()
             batch.map(r => ({
               runId,
               accId:       safeInt(r.acc_id) ?? 0,
+              paymentUid:  safeInt(r.uid),                // preserve original transaction ID
               paymentDate: safeTs(r.payment_date) as Date,
               amount:      safeNumStr(r.amount),
               creditAdd:   safeNumStr(r.credit_add),
@@ -191,7 +194,9 @@ export const uploadsRoutes = new Elysia()
         for (const [sheetName, [channel, source]] of Object.entries(USAGE_SHEETS)) {
           if (!(sheetName in sheetMap)) continue;
           for (const batch of chunk(sheetMap[sheetName], BATCH_SIZE)) {
-            await db.insert(rawUsage).values(
+            // onConflictDoNothing: the unique constraint (run_id,acc_id,year,month,channel,source)
+          // silently deduplicates if the source Excel has duplicate rows.
+          await db.insert(rawUsage).values(
               batch.map(r => ({
                 runId,
                 accId:   safeInt(r.acc_id) ?? 0,
@@ -201,9 +206,26 @@ export const uploadsRoutes = new Elysia()
                 channel,
                 source,
               }))
-            );
+            ).onConflictDoNothing();
           }
         }
+
+        // Record data date range from payment history (min/max payment_date)
+        const [dateRange] = await db
+          .select({
+            start: sql<string>`MIN(${rawPayments.paymentDate})::date`,
+            end:   sql<string>`MAX(${rawPayments.paymentDate})::date`,
+          })
+          .from(rawPayments)
+          .where(eq(rawPayments.runId, runId));
+
+        await db
+          .update(predictionRuns)
+          .set({
+            dataStartDate: dateRange?.start ?? null,
+            dataEndDate:   dateRange?.end   ?? null,
+          })
+          .where(eq(predictionRuns.id, runId));
 
         await setRunStatus(runId, "processing");
       } catch (err) {
