@@ -1,8 +1,11 @@
-FROM node:20-alpine
+FROM oven/bun:1-alpine
+
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
+
 COPY . .
-RUN npm run build 2>&1 || true
+
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+CMD ["bun", "run", "dev"]
