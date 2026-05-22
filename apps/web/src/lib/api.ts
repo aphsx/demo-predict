@@ -238,6 +238,15 @@ export async function trainModels(cutoff_date?: string): Promise<Record<string, 
 
 // ── File upload — manual fetch (multipart/form-data) ──────────────────────────
 
+export async function retryRun(runId: string): Promise<{ run_id: string; status: string; message: string }> {
+  const res = await apiFetch(`/api/runs/${runId}/retry`, { method: "POST" });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Failed to retry run (${res.status})`);
+  }
+  return body as { run_id: string; status: string; message: string };
+}
+
 export async function uploadFile(runId: string, file: File) {
   const fd = new FormData();
   fd.append("file", file);

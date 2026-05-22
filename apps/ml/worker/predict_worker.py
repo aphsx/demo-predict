@@ -9,9 +9,18 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import msgpack
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import text
+
+
+def _msgpack_deserializer(data: bytes) -> dict:
+    return msgpack.unpackb(data, raw=False)
+
+
+def _msgpack_serializer(data: dict) -> bytes:
+    return msgpack.packb(data, use_bin_type=True)
 
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://moby:moby1234@db:5432/moby")
@@ -246,8 +255,11 @@ def _sv(row, col):
 
 
 class WorkerSettings:
-    functions      = [run_prediction_pipeline]
-    redis_settings = REDIS_SETTINGS
-    max_jobs       = 2
-    job_timeout    = 3600
-    keep_result    = 3600
+    functions         = [run_prediction_pipeline]
+    redis_settings    = REDIS_SETTINGS
+    max_jobs          = 2
+    job_timeout       = 3600
+    keep_result       = 3600
+    # Elysia enqueues with @msgpack/msgpack (see apps/api/src/services/job-producer.ts)
+    job_serializer    = _msgpack_serializer
+    job_deserializer  = _msgpack_deserializer

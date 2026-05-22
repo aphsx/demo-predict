@@ -103,7 +103,7 @@ export const uploadsRoutes = new Elysia()
         .where(eq(predictionRuns.id, params.id))
         .limit(1);
 
-      if (!run || !["pending", "failed"].includes(run.status)) {
+      if (!run || !["pending", "failed", "processing", "validating"].includes(run.status)) {
         set.status = 400;
         return { message: `Run status is '${run?.status}' — cannot re-upload` };
       }
@@ -235,7 +235,14 @@ export const uploadsRoutes = new Elysia()
         return { message: `DB insert error: ${msg}` };
       }
 
-      await enqueueArqJob("run_prediction_pipeline", params.id, MODEL_DIR);
+      try {
+        await enqueueArqJob("run_prediction_pipeline", params.id, MODEL_DIR);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await setRunStatus(params.id, "failed", `Queue error: ${msg}`);
+        set.status = 500;
+        return { message: `Failed to enqueue prediction job: ${msg}` };
+      }
 
       return { run_id: params.id, status: "processing", message: "Prediction queued" };
     },

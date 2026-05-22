@@ -35,7 +35,7 @@ import {
 import {
   PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
 } from "@/components/ui";
-import { api, Run } from "@/lib/api";
+import { api, retryRun, Run } from "@/lib/api";
 
 const statusToTone: Record<string, "ok" | "warn" | "danger" | "info" | "neutral"> = {
   done: "ok",
@@ -62,6 +62,7 @@ export default function RunsPage() {
   const [streamingRun, setStreamingRun] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [retrying, setRetrying] = useState<string | null>(null);
 
   const load = async () => {
     setError(null);
@@ -123,6 +124,19 @@ export default function RunsPage() {
       setError(e instanceof Error ? e.message : "ลบ run ไม่สำเร็จ");
     }
   };
+  const retryPipeline = async (runId: string) => {
+    setRetrying(runId);
+    setError(null);
+    try {
+      await retryRun(runId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Retry ไม่สำเร็จ");
+    } finally {
+      setRetrying(null);
+    }
+  };
+
   const uploadFile = async (runId: string, file: File) => {
     setUploading(runId);
     setError(null);
@@ -261,12 +275,24 @@ export default function RunsPage() {
                       </td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {["pending", "failed"].includes(run.status) && (
+                          {["pending", "failed", "processing", "validating"].includes(run.status) && (
                             <UploadButton
                               runId={run.id}
                               uploading={uploading === run.id}
                               onUpload={uploadFile}
                             />
+                          )}
+                          {["processing", "failed"].includes(run.status) && (
+                            <button
+                              onClick={() => retryPipeline(run.id)}
+                              disabled={retrying === run.id}
+                              className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1 disabled:opacity-40"
+                            >
+                              {retrying === run.id
+                                ? <RefreshCw size={11} className="animate-spin" />
+                                : <RefreshCw size={11} />}
+                              Retry
+                            </button>
                           )}
                           {run.status === "done" && (
                             <a
