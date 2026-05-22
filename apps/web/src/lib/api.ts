@@ -227,22 +227,51 @@ export async function fetchCustomerExplain(
   return asRecord(body);
 }
 
-// ── Training — Eden Treaty ────────────────────────────────────────────────────
+// ── Training / model health — manual fetch (Eden mishandles these routes) ─────
 
 export async function fetchModelMetrics(): Promise<Record<string, unknown>> {
-  return asRecord(unwrap(await elysia["model-metrics"].get()));
+  const res = await apiFetch("/api/model-metrics");
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(
+      isApiError(body) ? body.message : `Failed to load model metrics (${res.status})`
+    );
+  }
+  return asRecord(body);
 }
 
 export async function fetchTrainingLog(): Promise<{ log: string }> {
-  return unwrap<{ log: string }>(await elysia["training-log"].get());
+  const res = await apiFetch("/api/training-log");
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(
+      isApiError(body) ? body.message : `Failed to load training log (${res.status})`
+    );
+  }
+  const rec = asRecord(body);
+  return { log: typeof rec.log === "string" ? rec.log : "" };
 }
 
 export async function fetchModelVersions(): Promise<ModelVersion[]> {
-  return asArray<ModelVersion>(unwrap(await elysia["model-versions"].get()));
+  const res = await apiFetch("/api/model-versions");
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(
+      isApiError(body) ? body.message : `Failed to load model versions (${res.status})`
+    );
+  }
+  return asArray<ModelVersion>(body);
 }
 
 export async function fetchActiveModelVersions(): Promise<ModelVersion[]> {
-  return asArray<ModelVersion>(unwrap(await elysia["model-versions"].active.get()));
+  const res = await apiFetch("/api/model-versions/active");
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(
+      isApiError(body) ? body.message : `Failed to load active model versions (${res.status})`
+    );
+  }
+  return asArray<ModelVersion>(body);
 }
 
 export async function trainModels(cutoff_date?: string): Promise<Record<string, unknown>> {

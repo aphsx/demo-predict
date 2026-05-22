@@ -21,9 +21,21 @@ export default function ModelHealth() {
 
   useEffect(() => {
     fetchModelMetrics()
-      .then((m) => { setMetrics(m); setLoading(false); })
-      .catch(() => { setErr("Metrics ยังไม่พร้อม — train โมเดลก่อน"); setLoading(false); });
-    fetchTrainingLog().then((d: any) => setLog(d.log || "")).catch(() => {});
+      .then((m) => {
+        if (!m.generated_at && !m.churn && !m.data_summary) {
+          setErr("โหลด metrics ไม่สำเร็จ — ลองรีเฟรชหรือ train โมเดลใหม่");
+        } else {
+          setMetrics(m);
+        }
+        setLoading(false);
+      })
+      .catch((e) => {
+        setErr(e instanceof Error ? e.message : "Metrics ยังไม่พร้อม — train โมเดลก่อน");
+        setLoading(false);
+      });
+    fetchTrainingLog()
+      .then((d) => setLog(d.log || ""))
+      .catch(() => {});
   }, []);
 
   if (loading) return <div className="p-8 space-y-3"><Skeleton className="h-24" /><Skeleton className="h-72" /></div>;
