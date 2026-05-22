@@ -26,19 +26,23 @@ export default function Topbar() {
   useEffect(() => {
     fetchRuns()
       .then((r: Run[]) => {
-        setRuns(r);
+        const safeRuns = Array.isArray(r) ? r : [];
+        setRuns(safeRuns);
         const fromUrl = sp.get("run");
-        const initial = fromUrl || (runId || r.find(x => x.status === "done")?.id || r[0]?.id || "");
+        const initial = fromUrl || (runId || safeRuns.find(x => x.status === "done")?.id || safeRuns[0]?.id || "");
         if (initial) setRunId(initial);
       })
-      .catch(() => {});
+      .catch(() => {
+        setRuns([]);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dyn = matchDynamicPath(pathname);
   const meta = TITLE_MAP[dyn] || { title: "1Moby", sub: "" };
 
-  const activeRun = runs.find(r => r.id === runId);
+  const safeRuns = Array.isArray(runs) ? runs : [];
+  const activeRun = safeRuns.find(r => r.id === runId);
 
   return (
     <header className="h-[60px] shrink-0 bg-white/95 backdrop-blur border-b border-[color:var(--line)] flex items-center px-6 gap-4">
@@ -71,16 +75,16 @@ export default function Topbar() {
       {/* Run selector */}
       <div className="relative">
         <select
-          value={runId}
+          value={runId || ""}
           onChange={(e) => setRunId(e.target.value)}
           className="appearance-none h-9 pl-9 pr-9 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:border-[color:var(--moby-200)] cursor-pointer min-w-[200px]"
         >
-          {runs.map(r => (
+          {safeRuns.map(r => (
             <option key={r.id} value={r.id}>
               {r.name} · {r.cutoff_date} {r.status !== "done" ? `(${r.status})` : ""}
             </option>
           ))}
-          {runs.length === 0 && <option value="">— ยังไม่มี run —</option>}
+          {safeRuns.length === 0 && <option value="">— ยังไม่มี run —</option>}
         </select>
         <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />

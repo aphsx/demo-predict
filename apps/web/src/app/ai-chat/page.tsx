@@ -32,8 +32,14 @@ function renderMessage(text: string) {
 }
 
 /* ── timestamp ──────────────────────────────────────────── */
+const TIME_FORMAT: Intl.DateTimeFormatOptions = {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Asia/Bangkok",
+};
+
 function fmtTime(d: Date) {
-  return d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("th-TH", TIME_FORMAT);
 }
 
 /* ── example prompts ────────────────────────────────────── */

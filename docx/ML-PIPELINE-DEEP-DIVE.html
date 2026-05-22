@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ML Pipeline — Interactive Deep Dive</title>
+<style>
+:root{
+  --bg:#040810;--bg2:#080f1e;--bg3:#0d1628;
+  --line:#162035;--line2:#1e3050;
+  --t1:#d4e4ff;--t2:#6a8aad;--t3:#2d4060;
+  --wk:#34d399;--pg:#38bdf8;--py:#fbbf24;
+  --red:#fb7185;--ely:#a78bfa;--acc:#60a5fa;
+  --churn:#fb7185;--clv:#60a5fa;--credit:#fbbf24;
+  --wb:#f472b6;--cv:#34d399;
+  --mono:'Courier New',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,'Segoe UI',sans-serif;display:flex;flex-direction:column}
+
+/* ── TOP HEADER ── */
+#topbar{
+  flex-shrink:0;display:flex;align-items:center;gap:0;
+  background:rgba(4,8,16,.97);border-bottom:1px solid var(--line);
+  padding:0 20px;height:48px;z-index:100;
+}
+.tb-logo{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--wk);
+  letter-spacing:.1em;margin-right:24px;white-space:nowrap}
+.step-tabs{display:flex;gap:2px;overflow-x:auto;flex:1;scrollbar-width:none}
+.step-tabs::-webkit-scrollbar{display:none}
+.stab{padding:6px 14px;border-radius:4px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;cursor:pointer;
+  color:var(--t3);border:1px solid transparent;white-space:nowrap;transition:.2s}
+.stab:hover{color:var(--t2);border-color:var(--line2)}
+.stab.on{color:var(--acc);background:rgba(96,165,250,.1);border-color:rgba(96,165,250,.2)}
+.stab.done{color:var(--wk)}
+.tb-controls{display:flex;gap:8px;margin-left:16px;flex-shrink:0}
+.ctrl-btn{padding:5px 14px;border-radius:5px;font-size:11px;font-weight:800;
+  cursor:pointer;border:1px solid;transition:.2s;font-family:inherit;background:transparent}
+.ctrl-play{color:var(--acc);border-color:rgba(96,165,250,.4)}
+.ctrl-play:hover{background:rgba(96,165,250,.1)}
+.ctrl-skip{color:var(--t2);border-color:var(--line2)}
+.ctrl-skip:hover{background:var(--bg3)}
+
+/* ── MAIN LAYOUT ── */
+#main{flex:1;display:grid;grid-template-columns:1fr 320px;overflow:hidden}
+#canvas-wrap{position:relative;overflow:hidden;background:var(--bg)}
+#mainCanvas{display:block}
+#side-panel{
+  border-left:1px solid var(--line);overflow-y:auto;background:var(--bg2);
+  display:flex;flex-direction:column;
+}
+#side-panel::-webkit-scrollbar{width:4px}
+#side-panel::-webkit-scrollbar-thumb{background:var(--line2);border-radius:2px}
+
+/* ── SIDE PANEL CONTENT ── */
+.sp-header{
+  padding:16px 18px;border-bottom:1px solid var(--line);
+  background:var(--bg3);flex-shrink:0;
+}
+.sp-title{font-size:13px;font-weight:800;margin-bottom:3px}
+.sp-sub{font-size:11px;color:var(--t2);line-height:1.5}
+.sp-body{padding:14px 16px;flex:1}
+.sp-section{margin-bottom:18px}
+.sp-section-title{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--t3);margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+.info-row{display:flex;justify-content:space-between;align-items:flex-start;
+  padding:5px 0;border-bottom:1px solid rgba(22,32,53,.5);font-size:11px;gap:10px}
+.info-row:last-child{border-bottom:none}
+.ir-k{color:var(--t2);flex-shrink:0}
+.ir-v{font-family:var(--mono);font-size:10px;text-align:right;word-break:break-all}
+.code-mini{background:var(--bg3);border:1px solid var(--line);border-radius:5px;
+  padding:8px 10px;font-family:var(--mono);font-size:10px;line-height:1.7;color:var(--t2);
+  margin-top:6px}
+.feat-mini{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.fm{padding:2px 7px;border-radius:3px;font-size:9px;font-family:var(--mono);
+  background:rgba(255,255,255,.04);border:1px solid var(--line2);color:var(--t2)}
+
+/* ── PROGRESS BAR ── */
+#prog-bar{
+  flex-shrink:0;height:3px;background:var(--line);
+  position:relative;overflow:hidden;
+}
+#prog-fill{height:100%;background:linear-gradient(90deg,var(--acc),var(--wk));
+  width:0;transition:width .4s ease}
+
+/* ── STEP LABEL ── */
+#step-label{
+  position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+  background:rgba(4,8,16,.85);border:1px solid var(--line2);border-radius:20px;
+  padding:5px 16px;font-size:11px;font-weight:700;font-family:var(--mono);
+  color:var(--acc);white-space:nowrap;pointer-events:none;letter-spacing:.04em;
+  backdrop-filter:blur(8px);
+}
+#particle-count{
+  position:absolute;top:14px;right:14px;
+  background:rgba(4,8,16,.85);border:1px solid var(--line);border-radius:6px;
+  padding:5px 12px;font-family:var(--mono);font-size:11px;color:var(--t2);
+  backdrop-filter:blur(8px);
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="tb-logo">1MOBY // ML PIPELINE</div>
+  <div class="step-tabs">
+    <div class="stab on" onclick="goStep(0)" id="tab0">① Job Claim</div>
+    <div class="stab" onclick="goStep(1)" id="tab1">② Data Load</div>
+    <div class="stab" onclick="goStep(2)" id="tab2">③ Cleaning</div>
+    <div class="stab" onclick="goStep(3)" id="tab3">④ Features</div>
+    <div class="stab" onclick="goStep(4)" id="tab4">⑤ Lifecycle</div>
+    <div class="stab" onclick="goStep(5)" id="tab5">⑥ Models</div>
+    <div class="stab" onclick="goStep(6)" id="tab6">⑦ Save</div>
+  </div>
+  <div class="tb-controls">
+    <button class="ctrl-btn ctrl-play" id="playBtn" onclick="togglePlay()">▶ Play</button>
+    <button class="ctrl-btn ctrl-skip" onclick="nextStep()">Next ›</button>
+  </div>
+</div>
+<div id="prog-bar"><div id="prog-fill"></div></div>
+
+<div id="main">
+  <div id="canvas-wrap">
+    <canvas id="mainCanvas"></canvas>
+    <div id="step-label">Step 1 — Arq Worker claims job from Redis</div>
+    <div id="particle-count">0 rows processed</div>
+  </div>
+  <div id="side-panel">
+    <div class="sp-header">
+      <div class="sp-title" id="sp-title">Redis Job Claim</div>
+      <div class="sp-sub" id="sp-sub">The Arq worker polls Redis and claims the job that Elysia pushed after the Excel upload.</div>
+    </div>
+    <div class="sp-body" id="sp-body"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS & SETUP
+// ═══════════════════════════════════════════════════════════════
+const C={bg:'#040810',bg2:'#080f1e',bg3:'#0d1628',line:'#162035',line2:'#1e3050',
+  t1:'#d4e4ff',t2:'#6a8aad',t3:'#2d4060',
+  wk:'#34d399',pg:'#38bdf8',py:'#fbbf24',red:'#fb7185',
+  ely:'#a78bfa',acc:'#60a5fa',gem:'#f472b6',orange:'#fb923c',
+  churn:'#fb7185',clv:'#60a5fa',credit:'#fbbf24',wb:'#f472b6',cv:'#34d399'};
+
+function h2r(h,a=1){const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return`rgba(${r},${g},${b},${a})`}
+
+const canvas=document.getElementById('mainCanvas');
+const ctx=canvas.getContext('2d');
+let W=0,H=0,dpr=1;
+let currentStep=0,playing=false,playTimer=null;
+let particles=[],nodes=[],t=0,animFrame=null;
+let rowCount=0;
+
+function resize(){
+  const wrap=document.getElementById('canvas-wrap');
+  W=wrap.clientWidth; H=wrap.clientHeight;
+  dpr=window.devicePixelRatio||1;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  canvas.style.width=W+'px'; canvas.style.height=H+'px';
+  ctx.scale(dpr,dpr);
+  buildStep(currentStep);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITY DRAW HELPERS
+// ═══════════════════════════════════════════════════════════════
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath()}
+
+function drawBox(x,y,w,h,color,label,icon='',sub='',glow=false){
+  ctx.save();
+  if(glow){ctx.shadowColor=color;ctx.shadowBlur=20;}
+  const g=ctx.createLinearGradient(x,y,x,y+h);
+  g.addColorStop(0,h2r(color,.18)); g.addColorStop(1,h2r(color,.06));
+  ctx.fillStyle=g; ctx.strokeStyle=h2r(color,.6); ctx.lineWidth=1.5;
+  rr(x,y,w,h,8); ctx.fill(); ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.font='16px serif'; ctx.textAlign='center'; ctx.fillStyle=color;
+  ctx.fillText(icon,x+w/2,y+h/2-6);
+  ctx.font=`700 11px -apple-system,sans-serif`;
+  ctx.fillText(label,x+w/2,y+h/2+10);
+  if(sub){ctx.font=`9px Courier New`;ctx.fillStyle=h2r(color,.5);ctx.fillText(sub,x+w/2,y+h/2+22);}
+  ctx.restore();
+}
+
+function drawArrow(x1,y1,x2,y2,color,label='',dashed=false){
+  ctx.save();
+  ctx.strokeStyle=h2r(color,.4); ctx.lineWidth=1.5;
+  if(dashed) ctx.setLineDash([5,5]);
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.setLineDash([]);
+  // arrowhead
+  const angle=Math.atan2(y2-y1,x2-x1);
+  ctx.fillStyle=h2r(color,.6);
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-10*Math.cos(angle-0.4),y2-10*Math.sin(angle-0.4));
+  ctx.lineTo(x2-10*Math.cos(angle+0.4),y2-10*Math.sin(angle+0.4));
+  ctx.closePath(); ctx.fill();
+  if(label){
+    const mx=(x1+x2)/2,my=(y1+y2)/2;
+    ctx.font='9px Courier New'; ctx.fillStyle=h2r(color,.5); ctx.textAlign='center';
+    ctx.fillText(label,mx,my-5);
+  }
+  ctx.restore();
+}
+
+function drawLabel(x,y,text,color,size=10,align='center'){
+  ctx.font=`600 ${size}px -apple-system,sans-serif`;
+  ctx.fillStyle=color; ctx.textAlign=align;
+  ctx.fillText(text,x,y);
+}
+
+function drawMono(x,y,text,color,size=10,align='center'){
+  ctx.font=`${size}px Courier New`;
+  ctx.fillStyle=color; ctx.textAlign=align;
+  ctx.fillText(text,x,y);
+}
+
+function particle(x,y,tx,ty,color,speed=0.01,size=4,label=''){
+  return {x,y,sx:x,sy:y,tx,ty,t:Math.random()*0.1,speed,color,size,label,done:false};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STEP DEFINITIONS
+// ═══════════════════════════════════════════════════════════════
+const STEPS=[
+  // 0 — Job Claim
+  ()=>drawJobClaim(),
+  // 1 — Data Load
+  ()=>drawDataLoad(),
+  // 2 — Cleaning
+  ()=>drawCleaning(),
+  // 3 — Features
+  ()=>drawFeatures(),
+  // 4 — Lifecycle
+  ()=>drawLifecycle(),
+  // 5 — Models
+  ()=>drawModels(),
+  // 6 — Save
+  ()=>drawSave(),
+];
+
+const SIDE_INFO=[
+  // 0
+  {title:'Redis Job Claim',sub:'Elysia pushed a msgpack-encoded job to Redis. The Arq worker polls and claims it.',
+   body:`<div class="sp-section"><div class="sp-section-title">Job Payload</div>
+<div class="code-mini"><span style="color:var(--ely)">f</span>: <span style="color:var(--py)">"run_prediction_pipeline"</span>
+<span style="color:var(--ely)">a</span>: [run_id, model_dir]
+<span style="color:var(--ely)">et</span>: <span style="color:var(--py)">1748123456789</span> (timestamp ms)
+key: <span style="color:var(--wk)">arq:job:{uuid4_hex}</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Worker Settings</div>
+<div class="info-row"><span class="ir-k">max_jobs</span><span class="ir-v" style="color:var(--py)">2 concurrent</span></div>
+<div class="info-row"><span class="ir-k">job_timeout</span><span class="ir-v" style="color:var(--py)">3600s (1 hour)</span></div>
+<div class="info-row"><span class="ir-k">Redis key</span><span class="ir-v" style="color:var(--wk)">arq:queue (sorted set)</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">First actions</div>
+<div class="code-mini"><span style="color:var(--t3)"># Worker creates:</span>
+engine = create_async_engine(DB_URL)
+Session = async_sessionmaker(engine)
+redis = aioredis.from_url(REDIS_URL)
+<span style="color:var(--t3)"># Then calls _pipeline(run_id, model_dir)</span></div></div>`},
+  // 1
+  {title:'Data Load from PostgreSQL',sub:'3 SQL queries fetch all raw data for this run_id. Each query returns a pandas DataFrame.',
+   body:`<div class="sp-section"><div class="sp-section-title">Query 1 — raw_customers</div>
+<div class="info-row"><span class="ir-k">Rows</span><span class="ir-v" style="color:var(--pg)">25,093</span></div>
+<div class="info-row"><span class="ir-k">Columns</span><span class="ir-v">acc_id, status_sms, credit_sms, credit_email, expire_sms, expire_email, status_email, join_date, last_access, last_send</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Query 2 — raw_payments</div>
+<div class="info-row"><span class="ir-k">Rows</span><span class="ir-v" style="color:var(--py)">13,882</span></div>
+<div class="info-row"><span class="ir-k">Unique accounts</span><span class="ir-v">4,495</span></div>
+<div class="info-row"><span class="ir-k">Columns</span><span class="ir-v">acc_id, payment_date, amount, credit_add, credit_type</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Query 3 — raw_usage</div>
+<div class="info-row"><span class="ir-k">Rows</span><span class="ir-v" style="color:var(--red)">76,255</span></div>
+<div class="info-row"><span class="ir-k">Date range</span><span class="ir-v">2024-01 to 2025-12</span></div>
+<div class="info-row"><span class="ir-k">Channels</span><span class="ir-v">sms · email</span></div>
+<div class="info-row"><span class="ir-k">Sources</span><span class="ir-v">bc · api · otp</span></div>
+</div>`},
+  // 2
+  {title:'Data Cleaning',sub:'Type coercions applied immediately after loading, before any ML code runs.',
+   body:`<div class="sp-section"><div class="sp-section-title">Timezone Strip</div>
+<div class="code-mini"><span style="color:var(--t3)"># timestamptz → naive</span>
+<span style="color:var(--red)">2026-03-31 17:00:00+07</span>
+→ <span style="color:var(--wk)">2026-03-31 17:00:00</span>
+
+cols = expire_sms, expire_email,
+       join_date, last_access,
+       last_send, payment_date</div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Numeric Coerce</div>
+<div class="code-mini"><span style="color:var(--t3)"># object/Decimal → float64</span>
+<span style="color:var(--red)">"23466015"</span> → <span style="color:var(--wk)">23466015.0</span>
+<span style="color:var(--red)">None</span> → <span style="color:var(--wk)">NaN</span>
+
+cols = credit_sms, credit_email,
+       amount, credit_add</div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Period Synthesis</div>
+<div class="code-mini"><span style="color:var(--t3)"># usage has year + month</span>
+<span style="color:var(--red)">year=2024, month=3</span>
+→ <span style="color:var(--wk)">period = 2024-03-01</span>
+(for cutoff comparisons)</div></div>`},
+  // 3
+  {title:'Feature Engineering (30 features)',sub:'build_features() computes 9+10+11 features per customer. All data before cutoff only.',
+   body:`<div class="sp-section"><div class="sp-section-title">9 User Features</div>
+<div class="feat-mini">
+<span class="fm" style="color:var(--pg)">days_since_join</span>
+<span class="fm" style="color:var(--pg)">days_since_last_send</span>
+<span class="fm" style="color:var(--pg)">days_since_last_access</span>
+<span class="fm" style="color:var(--pg)">days_until_sms_expire</span>
+<span class="fm" style="color:var(--pg)">days_until_email_expire</span>
+<span class="fm" style="color:var(--pg)">credit_sms_log</span>
+<span class="fm" style="color:var(--pg)">credit_email_log</span>
+<span class="fm" style="color:var(--pg)">is_paid_sms</span>
+<span class="fm" style="color:var(--pg)">is_paid_email</span>
+</div></div>
+<div class="sp-section"><div class="sp-section-title">10 Payment Features</div>
+<div class="feat-mini">
+<span class="fm" style="color:var(--py)">pay_recency_days</span>
+<span class="fm" style="color:var(--py)">pay_frequency</span>
+<span class="fm" style="color:var(--py)">pay_monetary_log</span>
+<span class="fm" style="color:var(--py)">pay_avg_amount</span>
+<span class="fm" style="color:var(--py)">pay_total_credits</span>
+<span class="fm" style="color:var(--py)">pay_avg_interval</span>
+<span class="fm" style="color:var(--py)">pay_overdue_ratio</span>
+<span class="fm" style="color:var(--py)">pay_n_sms</span>
+<span class="fm" style="color:var(--py)">pay_n_email</span>
+<span class="fm" style="color:var(--py)">pay_tenure_days</span>
+</div></div>
+<div class="sp-section"><div class="sp-section-title">11 Usage Features</div>
+<div class="feat-mini">
+<span class="fm" style="color:var(--red)">usage_total_log</span>
+<span class="fm" style="color:var(--red)">usage_months</span>
+<span class="fm" style="color:var(--red)">usage_avg</span>
+<span class="fm" style="color:var(--red)">usage_max</span>
+<span class="fm" style="color:var(--red)">usage_std</span>
+<span class="fm" style="color:var(--red)">usage_recent_3m</span>
+<span class="fm" style="color:var(--red)">usage_prev_3m</span>
+<span class="fm" style="color:var(--red)">usage_decay_ratio</span>
+<span class="fm" style="color:var(--red)">usage_slope</span>
+<span class="fm" style="color:var(--red)">usage_sms_total</span>
+<span class="fm" style="color:var(--red)">usage_email_total</span>
+</div></div>`},
+  // 4
+  {title:'Lifecycle Decision Tree',sub:'Rule-based classifier runs on ALL 25,093 customers. No ML used — pure logic based on payment and usage history.',
+   body:`<div class="sp-section"><div class="sp-section-title">Key Definitions</div>
+<div class="info-row"><span class="ir-k">ever_active</span><span class="ir-v">has any payment OR usage row</span></div>
+<div class="info-row"><span class="ir-k">active_set</span><span class="ir-v">activity within last 6 months</span></div>
+<div class="info-row"><span class="ir-k">pay_accs</span><span class="ir-v">has at least one payment</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Stage Outcomes</div>
+<div class="info-row"><span class="ir-k" style="color:var(--t2)">👻 Ghost</span><span class="ir-v">NOT ever_active</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--red)">💤 Churned</span><span class="ir-v">ever_active NOT active_set</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--ely)">🆓 Active Free</span><span class="ir-v">active_set NOT pay_accs</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--wk)">💰 Active Paid</span><span class="ir-v">active_set AND pay_accs</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Approximate distribution</div>
+<div class="info-row"><span class="ir-k">Ghost</span><span class="ir-v">~12,000 (48%)</span></div>
+<div class="info-row"><span class="ir-k">Churned</span><span class="ir-v">~8,900 (35%)</span></div>
+<div class="info-row"><span class="ir-k">Active Free</span><span class="ir-v">~2,500 (10%)</span></div>
+<div class="info-row"><span class="ir-k">Active Paid</span><span class="ir-v">~1,700 (7%)</span></div>
+</div>`},
+  // 5
+  {title:'5 ML Models Running',sub:'Models run sequentially. Each only processes the customers assigned to it by the lifecycle stage.',
+   body:`<div class="sp-section"><div class="sp-section-title">Model → Cohort</div>
+<div class="info-row"><span class="ir-k" style="color:var(--red)">Churn</span><span class="ir-v">Active Paid only</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--acc)">CLV</span><span class="ir-v">All with payments</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--py)">Credit</span><span class="ir-v">Active Paid (2+ pays)</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--gem)">Winback</span><span class="ir-v">Churned only</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--wk)">Conversion</span><span class="ir-v">Active Free only</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Algorithms</div>
+<div class="info-row"><span class="ir-k" style="color:var(--red)">Churn</span><span class="ir-v">LightGBM + Optuna + SHAP</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--acc)">CLV</span><span class="ir-v">BG-NBD + Gamma-Gamma</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--py)">Credit</span><span class="ir-v">5× Quantile LightGBM</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--gem)">Winback</span><span class="ir-v">LightGBM + Optuna</span></div>
+<div class="info-row"><span class="ir-k" style="color:var(--wk)">Conversion</span><span class="ir-v">LightGBM + Optuna</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Progress events sent</div>
+<div class="code-mini">10% → loading_data
+25% → building_features
+40% → predicting_all
+85% → saving_results
+100% → done</div></div>`},
+  // 6
+  {title:'Merge & Save to PostgreSQL',sub:'All model outputs left-joined onto lifecycle base. 25k rows batch-inserted into predictions table.',
+   body:`<div class="sp-section"><div class="sp-section-title">Merge order</div>
+<div class="code-mini">base = lifecycle (25,093 rows)
+LEFT JOIN churn → churn_probability
+LEFT JOIN CLV   → clv_6m, p_alive
+LEFT JOIN credit→ p10..p90
+LEFT JOIN winback→ comeback_prob
+LEFT JOIN conv  → conversion_prob</div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Derived columns</div>
+<div class="info-row"><span class="ir-k">revenue_at_risk</span><span class="ir-v">clv_6m × churn_prob</span></div>
+<div class="info-row"><span class="ir-k">avg_txn_value</span><span class="ir-v">total_rev / n_purchases</span></div>
+</div>
+<div class="sp-section"><div class="sp-section-title">Insert strategy</div>
+<div class="info-row"><span class="ir-k">Batch size</span><span class="ir-v" style="color:var(--py)">1,000 rows/batch</span></div>
+<div class="info-row"><span class="ir-k">Total batches</span><span class="ir-v">~26</span></div>
+<div class="info-row"><span class="ir-k">Final UPDATE</span><span class="ir-v">status='done', model_version_id</span></div>
+</div>`},
+];
+
+// ═══════════════════════════════════════════════════════════════
+// STEP RENDERERS
+// ═══════════════════════════════════════════════════════════════
+
+// ── Step 0: Job Claim ──────────────────────────────────────────
+function drawJobClaim(){
+  nodes=[]; particles=[];
+  const cx=W/2,cy=H/2;
+
+  // Nodes
+  const elysia={x:cx-240,y:cy-40,w:140,h:70,color:C.ely,icon:'⚡',label:'Elysia',sub:':3001'};
+  const redis  ={x:cx-30,y:cy-40,w:140,h:70,color:C.red,icon:'⚡',label:'Redis',sub:'arq:queue'};
+  const worker ={x:cx+220,y:cy-40,w:140,h:70,color:C.wk,icon:'⚙',label:'Arq Worker',sub:'Python'};
+  nodes=[elysia,redis,worker];
+
+  // spawn particles periodically
+  if(Math.random()<0.03){
+    particles.push(particle(elysia.x+elysia.w,elysia.y+elysia.h/2,
+      redis.x,redis.y+redis.h/2,C.ely,0.008+Math.random()*.006,5,'job'));
+  }
+  if(Math.random()<0.025){
+    particles.push(particle(redis.x+redis.w,redis.y+redis.h/2,
+      worker.x,worker.y+worker.h/2,C.wk,0.008+Math.random()*.006,5,'claim'));
+  }
+
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+
+  // connection lines
+  drawArrow(elysia.x+elysia.w+4,elysia.y+elysia.h/2,redis.x-4,redis.y+redis.h/2,C.ely,'ZADD arq:queue');
+  drawArrow(redis.x+redis.w+4,redis.y+redis.h/2,worker.x-4,worker.y+worker.h/2,C.wk,'BLPOP / poll');
+
+  // boxes
+  nodes.forEach(n=>drawBox(n.x,n.y,n.w,n.h,n.color,n.label,n.icon,n.sub,true));
+
+  // msgpack payload floating below
+  drawPayloadBox(cx-100,cy+80);
+
+  // progress bar hint
+  drawLabel(cx,cy+200,'① Worker creates asyncpg engine + SQLAlchemy session + Redis connection',C.t3,10);
+  drawLabel(cx,cy+215,'② Then calls _pipeline(run_id, model_dir)',C.t3,10);
+
+  updateParticles();
+  updateUI(0,`Step 1 — Arq Worker claims job from Redis`,`${Math.floor(particles.length*8)} jobs/min capacity`);
+}
+
+function drawPayloadBox(x,y){
+  const w=200,h=90;
+  ctx.fillStyle=h2r(C.py,.06); ctx.strokeStyle=h2r(C.py,.3); ctx.lineWidth=1;
+  rr(x,y,w,h,6); ctx.fill(); ctx.stroke();
+  drawMono(x+w/2,y+14,'msgpack payload',h2r(C.py,.5),9);
+  const lines=[
+    ['{f: ','run_prediction_pipeline','}'],
+    ['{a: ','[run_id, model_dir]','}'],
+    ['{et:','1748123456789 ms','}'],
+  ];
+  lines.forEach((l,i)=>{
+    ctx.font='9px Courier New'; ctx.textAlign='left';
+    ctx.fillStyle=h2r(C.py,.4); ctx.fillText(l[0],x+12,y+30+i*16);
+    ctx.fillStyle=h2r(C.py,.8); ctx.fillText(l[1],x+12+ctx.measureText(l[0]).width,y+30+i*16);
+  });
+}
+
+// ── Step 1: Data Load ──────────────────────────────────────────
+const DB_TABLES=[
+  {label:'raw_customers',rows:25093,color:C.pg,icon:'👥',cols:'acc_id, status_sms, credit_sms, expire_sms, join_date...'},
+  {label:'raw_payments', rows:13882,color:C.py,icon:'💳',cols:'acc_id, payment_date, amount, credit_add, credit_type'},
+  {label:'raw_usage',    rows:76255,color:C.red,icon:'📊',cols:'acc_id, year, month, usage, channel, source'},
+];
+let loadedRows={};
+
+function drawDataLoad(){
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  const tableX=W*.08,dfX=W*.65,bw=W*.22,bh=70,gap=16;
+  const startY=H/2-( DB_TABLES.length*(bh+gap))/2;
+
+  // PostgreSQL master box
+  drawBox(tableX-10,startY-50,bw+20,DB_TABLES.length*(bh+gap)+40,C.pg,'PostgreSQL','🐘',':5432');
+
+  // DataFrame output box
+  const dfY=startY+(DB_TABLES.length*(bh+gap)-bh)/2;
+  drawBox(dfX,startY,W*.22,DB_TABLES.length*(bh+gap)-gap,C.wk,'pandas DataFrames','📦','3 DataFrames');
+
+  DB_TABLES.forEach((tb,i)=>{
+    const y=startY+i*(bh+gap);
+    // Table box
+    ctx.fillStyle=h2r(tb.color,.08); ctx.strokeStyle=h2r(tb.color,.4); ctx.lineWidth=1.2;
+    rr(tableX+8,y+4,bw-16,bh-8,6); ctx.fill(); ctx.stroke();
+    ctx.font='13px serif'; ctx.textAlign='left'; ctx.fillStyle=tb.color;
+    ctx.fillText(tb.icon,tableX+18,y+28);
+    ctx.font='700 10px -apple-system,sans-serif'; ctx.fillStyle=tb.color;
+    ctx.fillText(tb.label,tableX+36,y+24);
+    ctx.font='9px Courier New'; ctx.fillStyle=h2r(tb.color,.5);
+    ctx.fillText(`${(loadedRows[i]||0).toLocaleString()} / ${tb.rows.toLocaleString()} rows`,tableX+36,y+38);
+    ctx.fillText(tb.cols,tableX+16,y+52,bw-30);
+
+    // Flow arrow
+    const fx=tableX+bw-8, fy=y+bh/2-5, tx=dfX, ty=startY+(DB_TABLES.length*(bh+gap)-bh)/2+bh/2+(i-1)*20;
+    drawArrow(fx,fy,tx,ty,tb.color,'SQL SELECT');
+
+    // Increment loaded rows animation
+    if(!loadedRows[i]) loadedRows[i]=0;
+    const target=tb.rows;
+    if(loadedRows[i]<target) loadedRows[i]=Math.min(target,loadedRows[i]+Math.ceil(target/60));
+
+    // spawn row particles
+    if(Math.random()<0.04){
+      particles.push(particle(fx,fy,tx,ty,tb.color,0.012+Math.random()*.01,3));
+    }
+  });
+
+  // Total rows
+  const total=Object.values(loadedRows).reduce((a,b)=>a+b,0);
+  drawBox(dfX,startY+DB_TABLES.length*(bh+gap)+8,W*.22,40,C.wk,'','','');
+  drawLabel(dfX+W*.11,startY+DB_TABLES.length*(bh+gap)+34,`Total: ${total.toLocaleString()} rows loaded`,C.wk,11);
+
+  updateParticles();
+  const totalTarget=DB_TABLES.reduce((a,b)=>a+b.rows,0);
+  updateUI(1,`Step 2 — Loading raw data from PostgreSQL`,`${total.toLocaleString()} / ${totalTarget.toLocaleString()} rows loaded`);
+}
+
+// ── Step 2: Cleaning ────────────────────────────────────────────
+const CLEAN_OPS=[
+  {col:'payment_date,\nexpire_sms/email,\njoin_date',before:'TIMESTAMPTZ +07\n2026-03-31 17:00+07',after:'Naive datetime\n2026-03-31 17:00:00',why:'Timezone strip',color:C.pg},
+  {col:'credit_sms,\ncredit_email',before:'"23466015"\n(string)',after:'23466015.0\n(float64)',why:'Numeric coerce',color:C.py},
+  {col:'amount,\ncredit_add',before:'Decimal("30000")\n(Python Decimal)',after:'30000.0\n(float64)',why:'Decimal→float',color:C.py},
+  {col:'year=2024\nmonth=3',before:'Two separate\ninteger columns',after:'period = 2024-03-01\n(Timestamp)',why:'Period synthesis',color:C.red},
+  {col:'All feature\ncolumns',before:'NaN / None\n(after merge)',after:'0.0\n(fillna)',why:'Missing→zero',color:C.ely},
+];
+let cleanStep=0;
+
+function drawCleaning(){
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  const n=CLEAN_OPS.length;
+  const cardW=Math.min(160,(W-80)/(n));
+  const cardH=180;
+  const startX=W/2-n*cardW/2+(cardW*.05);
+  const cy=H/2;
+
+  // Animate through cleaning ops
+  cleanStep=(cleanStep+1)%400;
+  const activeIdx=Math.floor(cleanStep/80)%n;
+
+  CLEAN_OPS.forEach((op,i)=>{
+    const x=startX+i*cardW;
+    const y=cy-cardH/2;
+    const active=i===activeIdx;
+
+    ctx.save();
+    if(active){ctx.shadowColor=op.color;ctx.shadowBlur=16;}
+    ctx.fillStyle=active?h2r(op.color,.12):h2r(op.color,.05);
+    ctx.strokeStyle=active?h2r(op.color,.7):h2r(op.color,.25);
+    ctx.lineWidth=active?2:1;
+    rr(x+4,y,cardW-8,cardH,8); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur=0;
+
+    // Column name
+    ctx.font=`700 10px Courier New`; ctx.textAlign='center';
+    ctx.fillStyle=op.color;
+    op.col.split('\n').forEach((l,li)=>ctx.fillText(l,x+cardW/2,y+20+li*13));
+
+    // Before box
+    ctx.fillStyle=h2r(C.red,.08); ctx.strokeStyle=h2r(C.red,.3); ctx.lineWidth=1;
+    rr(x+8,y+50,cardW-16,50,4); ctx.fill(); ctx.stroke();
+    ctx.font='8px Courier New'; ctx.fillStyle=h2r(C.red,.8);
+    op.before.split('\n').forEach((l,li)=>ctx.fillText(l,x+cardW/2,y+67+li*14));
+
+    // Arrow down
+    ctx.strokeStyle=h2r(op.color,.5); ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(x+cardW/2,y+102); ctx.lineTo(x+cardW/2,y+112); ctx.stroke();
+    ctx.font='700 9px -apple-system'; ctx.fillStyle=h2r(op.color,.8);
+    ctx.fillText(op.why,x+cardW/2,y+110);
+
+    // After box
+    ctx.fillStyle=h2r(C.wk,.08); ctx.strokeStyle=h2r(C.wk,.3); ctx.lineWidth=1;
+    rr(x+8,y+115,cardW-16,50,4); ctx.fill(); ctx.stroke();
+    ctx.font='8px Courier New'; ctx.fillStyle=h2r(C.wk,.9);
+    op.after.split('\n').forEach((l,li)=>ctx.fillText(l,x+cardW/2,y+132+li*14));
+
+    // Active indicator
+    if(active){
+      const pp=(cleanStep%80)/80;
+      ctx.fillStyle=op.color;
+      ctx.beginPath(); ctx.arc(x+cardW/2,y+62+pp*50,3,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  });
+
+  drawLabel(W/2,cy+cardH/2+30,'After cleaning: all timestamps are naive, all numbers are float64, NaN → 0',C.t3,10);
+  updateUI(2,`Step 3 — Type coercion and cleaning`,`5 transformation types applied`);
+}
+
+// ── Step 3: Features ───────────────────────────────────────────
+const FEAT_GROUPS=[
+  {label:'User Features',count:9,color:C.pg,icon:'👤',
+   feats:['days_since_join','days_since_last_send','days_since_last_access','days_until_sms_expire','days_until_email_expire','credit_sms_log','credit_email_log','is_paid_sms','is_paid_email']},
+  {label:'Payment Features',count:10,color:C.py,icon:'💳',
+   feats:['pay_recency_days','pay_frequency','pay_monetary_log','pay_avg_amount','pay_total_credits','pay_avg_interval','pay_overdue_ratio','pay_n_sms','pay_n_email','pay_tenure_days']},
+  {label:'Usage Features',count:11,color:C.red,icon:'📊',
+   feats:['usage_total_log','usage_months','usage_avg','usage_max','usage_std','usage_recent_3m','usage_prev_3m','usage_decay_ratio','usage_slope','usage_sms_total','usage_email_total']},
+];
+
+function drawFeatures(){
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  t++;
+
+  const inputX=W*.08, mergeX=W*.43, outputX=W*.65;
+  const inW=W*.17, outW=W*.3;
+  const srcH=100, srcGap=20;
+  const srcLabels=['raw_customers','raw_payments','raw_usage'];
+  const srcColors=[C.pg,C.py,C.red];
+  const srcRows=[25093,13882,76255];
+  const totalH=FEAT_GROUPS.length*(srcH+srcGap)-srcGap;
+  const startY=H/2-totalH/2;
+
+  // Draw input DataFrames
+  FEAT_GROUPS.forEach((fg,i)=>{
+    const y=startY+i*(srcH+srcGap);
+    ctx.fillStyle=h2r(srcColors[i],.08); ctx.strokeStyle=h2r(srcColors[i],.35); ctx.lineWidth=1.5;
+    rr(inputX,y,inW,srcH,7); ctx.fill(); ctx.stroke();
+    ctx.font='14px serif'; ctx.textAlign='left'; ctx.fillStyle=srcColors[i];
+    ctx.fillText(['👤','💳','📊'][i],inputX+12,y+30);
+    ctx.font='700 10px -apple-system'; ctx.fillStyle=srcColors[i];
+    ctx.fillText(srcLabels[i],inputX+32,y+26);
+    ctx.font='9px Courier New'; ctx.fillStyle=h2r(srcColors[i],.5);
+    ctx.fillText(`${srcRows[i].toLocaleString()} rows`,inputX+32,y+40);
+    ctx.fillText(`→ ${fg.count} features`,inputX+14,y+58);
+
+    // Animated arrow to merge point
+    const mx=mergeX, my=H/2;
+    const fx=inputX+inW,fy=y+srcH/2;
+    const prog=(Math.sin(t*0.025+i*1.2)+1)/2;
+    ctx.strokeStyle=h2r(srcColors[i],.3); ctx.lineWidth=1; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(fx,fy); ctx.bezierCurveTo(fx+60,fy,mx-60,my,mx,my); ctx.stroke();
+    // particle on path
+    const bx=bezier(fx,fx+60,mx-60,mx,prog), by=bezier(fy,fy,my,my,prog);
+    const grd=ctx.createRadialGradient(bx,by,0,bx,by,5);
+    grd.addColorStop(0,h2r(srcColors[i],1)); grd.addColorStop(1,h2r(srcColors[i],0));
+    ctx.beginPath(); ctx.arc(bx,by,4,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
+  });
+
+  // Merge box
+  drawBox(mergeX-20,H/2-45,40,90,C.acc,'merge','⊕','left join');
+
+  // Output feature DataFrame
+  const fy=H/2-totalH/2, fh=totalH;
+  ctx.fillStyle=h2r(C.ely,.07); ctx.strokeStyle=h2r(C.ely,.4); ctx.lineWidth=1.5;
+  rr(outputX,fy,outW,fh,10); ctx.fill(); ctx.stroke();
+  ctx.font='700 11px -apple-system'; ctx.textAlign='center'; ctx.fillStyle=C.ely;
+  ctx.fillText('Feature DataFrame',outputX+outW/2,fy+18);
+  ctx.font='800 28px -apple-system'; ctx.fillStyle=C.ely;
+  ctx.fillText('30',outputX+outW/2,fy+fh/2+10);
+  ctx.font='9px Courier New'; ctx.fillStyle=h2r(C.ely,.6);
+  ctx.fillText('features × 25,093 customers',outputX+outW/2,fy+fh/2+28);
+
+  // Feature pills inside output box
+  FEAT_GROUPS.forEach((fg,gi)=>{
+    const colX=outputX+10+gi*(outW/3);
+    const colW=outW/3-8;
+    ctx.font='700 8px -apple-system'; ctx.textAlign='left';
+    ctx.fillStyle=srcColors[gi];
+    ctx.fillText(`${fg.label} (${fg.count})`,colX,fy+40);
+    fg.feats.slice(0,5).forEach((f,fi)=>{
+      ctx.font='7.5px Courier New'; ctx.fillStyle=h2r(srcColors[gi],.6);
+      ctx.fillText(f,colX+2,fy+55+fi*13,colW-4);
+    });
+    if(fg.feats.length>5){
+      ctx.font='7px -apple-system'; ctx.fillStyle=h2r(srcColors[gi],.35);
+      ctx.fillText(`+${fg.feats.length-5} more`,colX+2,fy+55+5*13);
+    }
+  });
+
+  // Merge arrow
+  drawArrow(mergeX+22,H/2,outputX-4,H/2,C.acc,'fillna(0)');
+
+  drawLabel(W/2,H*.9,'All data strictly before cutoff_date — Point-in-Time safe',C.t3,10);
+  updateUI(3,'Step 4 — Feature Engineering','25,093 rows × 30 features computed');
+}
+
+function bezier(p0,p1,p2,p3,t){
+  return (1-t)**3*p0+3*(1-t)**2*t*p1+3*(1-t)*t**2*p2+t**3*p3;
+}
+
+// ── Step 4: Lifecycle ──────────────────────────────────────────
+const STAGES=[
+  {id:'ghost', label:'👻 Ghost',color:C.t2,count:12000,x:0,y:0},
+  {id:'churned',label:'💤 Churned',color:C.red,count:8900,x:0,y:0},
+  {id:'free',  label:'🆓 Active Free',color:C.ely,count:2500,x:0,y:0},
+  {id:'paid',  label:'💰 Active Paid',color:C.wk,count:1700,x:0,y:0},
+];
+let lcParticles=[];
+let lcTimer=0;
+
+function drawLifecycle(){
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  lcTimer++;
+
+  // Layout — decision tree
+  const cx=W/2, qW=140, qH=44, sx=W*.82, sy=H*.12, sGap=H*.2;
+  const srcX=W*.06,srcY=H/2-20;
+
+  // Source pool
+  ctx.fillStyle=h2r(C.acc,.08); ctx.strokeStyle=h2r(C.acc,.3); ctx.lineWidth=1.5;
+  rr(srcX,srcY,110,44,7); ctx.fill(); ctx.stroke();
+  ctx.font='700 10px -apple-system'; ctx.textAlign='center'; ctx.fillStyle=C.acc;
+  ctx.fillText('All Customers',srcX+55,srcY+16);
+  ctx.font='800 14px -apple-system'; ctx.fillStyle=C.acc;
+  ctx.fillText('25,093',srcX+55,srcY+34);
+
+  // Decision nodes
+  const nodes_=[
+    {x:W*.28,y:H*.28,label:'ever_active?',sub:'any payment\nor usage row'},
+    {x:W*.52,y:H*.5,label:'in active_set?',sub:'activity within\nlast 6 months'},
+    {x:W*.72,y:H*.68,label:'ever_paid?',sub:'any payment\nrecord exists'},
+  ];
+  nodes_.forEach(n=>{
+    ctx.fillStyle=h2r(C.acc,.1); ctx.strokeStyle=h2r(C.acc,.5); ctx.lineWidth=1.5;
+    rr(n.x-qW/2,n.y-qH/2,qW,qH,8); ctx.fill(); ctx.stroke();
+    ctx.font='700 11px -apple-system'; ctx.textAlign='center'; ctx.fillStyle=C.acc;
+    ctx.fillText(n.label,n.x,n.y-2);
+    ctx.font='9px Courier New'; ctx.fillStyle=h2r(C.acc,.5);
+    n.sub.split('\n').forEach((l,i)=>ctx.fillText(l,n.x,n.y+12+i*11));
+  });
+
+  // Stage outcome boxes
+  const outcomes=[
+    {x:W*.18,y:H*.72,color:C.t2, label:'👻 Ghost',  sub:'~12,000 (48%)',route:{node:0,yes:false}},
+    {x:W*.38,y:H*.16,color:C.red, label:'💤 Churned', sub:'~8,900 (35%)' ,route:{node:1,yes:false}},
+    {x:W*.62,y:H*.22,color:C.ely, label:'🆓 Free',    sub:'~2,500 (10%)' ,route:{node:2,yes:false}},
+    {x:W*.82,y:H*.42,color:C.wk,  label:'💰 Paid',    sub:'~1,700 (7%)',  route:{node:2,yes:true}},
+  ];
+  outcomes.forEach(o=>{
+    ctx.save(); ctx.shadowColor=o.color; ctx.shadowBlur=10;
+    ctx.fillStyle=h2r(o.color,.12); ctx.strokeStyle=h2r(o.color,.6); ctx.lineWidth=2;
+    rr(o.x-60,o.y-22,120,44,8); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.font='700 12px -apple-system'; ctx.textAlign='center'; ctx.fillStyle=o.color;
+    ctx.fillText(o.label,o.x,o.y-2);
+    ctx.font='9px -apple-system'; ctx.fillStyle=h2r(o.color,.6);
+    ctx.fillText(o.sub,o.x,o.y+12);
+    ctx.restore();
+  });
+
+  // Draw connection lines
+  const drawConn=(x1,y1,x2,y2,color,label)=>{
+    ctx.strokeStyle=h2r(color,.3); ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font='9px -apple-system'; ctx.textAlign='center'; ctx.fillStyle=h2r(color,.6);
+    ctx.fillText(label,(x1+x2)/2,(y1+y2)/2-4);
+  };
+
+  const n=nodes_;
+  // Source → Q1
+  drawConn(srcX+110,srcY+22,n[0].x-qW/2,n[0].y,C.acc,'');
+  // Q1 NO → Ghost
+  drawConn(n[0].x-30,n[0].y+qH/2,outcomes[0].x,outcomes[0].y-22,C.t2,'NO');
+  // Q1 YES → Q2
+  drawConn(n[0].x+30,n[0].y+qH/2,n[1].x-qW/2,n[1].y,C.acc,'YES');
+  // Q2 NO → Churned
+  drawConn(n[1].x-30,n[1].y-qH/2,outcomes[1].x,outcomes[1].y+22,C.red,'NO');
+  // Q2 YES → Q3
+  drawConn(n[1].x+qW/2,n[1].y,n[2].x-qW/2,n[2].y,C.acc,'YES');
+  // Q3 NO → Free
+  drawConn(n[2].x-30,n[2].y-qH/2,outcomes[2].x,outcomes[2].y+22,C.ely,'NO');
+  // Q3 YES → Paid
+  drawConn(n[2].x+qW/2,n[2].y,outcomes[3].x-60,outcomes[3].y,C.wk,'YES');
+
+  // Spawn animated customer particles
+  if(lcTimer%8===0){
+    const path=Math.floor(Math.random()*4);
+    const pts=[
+      [{x:srcX+110,y:srcY+22},{x:n[0].x,y:n[0].y},{x:outcomes[0].x,y:outcomes[0].y}],
+      [{x:srcX+110,y:srcY+22},{x:n[0].x,y:n[0].y},{x:n[1].x,y:n[1].y},{x:outcomes[1].x,y:outcomes[1].y}],
+      [{x:srcX+110,y:srcY+22},{x:n[0].x,y:n[0].y},{x:n[1].x,y:n[1].y},{x:n[2].x,y:n[2].y},{x:outcomes[2].x,y:outcomes[2].y}],
+      [{x:srcX+110,y:srcY+22},{x:n[0].x,y:n[0].y},{x:n[1].x,y:n[1].y},{x:n[2].x,y:n[2].y},{x:outcomes[3].x,y:outcomes[3].y}],
+    ];
+    const colors=[C.t2,C.red,C.ely,C.wk];
+    lcParticles.push({pts:pts[path],t:0,color:colors[path],speed:.02+Math.random()*.02});
+  }
+
+  // Update + draw LC particles
+  lcParticles=lcParticles.filter(p=>!p.done);
+  lcParticles.forEach(p=>{
+    const segment=Math.min(Math.floor(p.t*(p.pts.length-1)),p.pts.length-2);
+    const st=p.t*(p.pts.length-1)-segment;
+    const from=p.pts[segment], to=p.pts[segment+1];
+    const x=from.x+(to.x-from.x)*st;
+    const y=from.y+(to.y-from.y)*st;
+    const g=ctx.createRadialGradient(x,y,0,x,y,5);
+    g.addColorStop(0,h2r(p.color,1)); g.addColorStop(1,h2r(p.color,0));
+    ctx.beginPath(); ctx.arc(x,y,4,0,Math.PI*2); ctx.fillStyle=g; ctx.fill();
+    p.t+=p.speed;
+    if(p.t>=1) p.done=true;
+  });
+
+  updateUI(4,'Step 5 — Lifecycle Staging (rule-based)','Every customer classified, no ML needed');
+}
+
+// ── Step 5: Models ─────────────────────────────────────────────
+const MODEL_DEFS=[
+  {id:'churn',label:'Churn',icon:'🚨',color:C.churn,algo:'LightGBM\n+Optuna',cohort:'Active Paid',count:1700,out:'P(churn)',x:0,y:0},
+  {id:'clv',  label:'CLV',  icon:'💰',color:C.clv,  algo:'BG-NBD\n+Gamma-Gamma',cohort:'Paid accs',count:4495,out:'CLV 6m',x:0,y:0},
+  {id:'credit',label:'Credit',icon:'📊',color:C.credit,algo:'Quantile\nLightGBM×5',cohort:'Active Paid',count:1700,out:'p10..p90',x:0,y:0},
+  {id:'winback',label:'Winback',icon:'🔙',color:C.wb,algo:'LightGBM\n+Optuna',cohort:'Churned',count:8900,out:'P(comeback)',x:0,y:0},
+  {id:'conv',  label:'Convert',icon:'⬆️',color:C.cv,algo:'LightGBM\n+Optuna',cohort:'Active Free',count:2500,out:'P(convert)',x:0,y:0},
+];
+let modelProgress={churn:0,clv:0,credit:0,winback:0,conv:0};
+
+function drawModels(){
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  t++;
+
+  const n=MODEL_DEFS.length;
+  const cardW=Math.min(W*.17,(W-80)/n);
+  const cardH=H*.55;
+  const startX=W/2-n*cardW/2;
+  const cy=H*.5;
+
+  // Source box
+  drawBox(W*.03,cy-30,W*.1,60,C.acc,'Feature\nDataFrame','📦','25,093×30');
+
+  MODEL_DEFS.forEach((m,i)=>{
+    const x=startX+i*cardW+4;
+    const y=cy-cardH/2;
+
+    // Progress
+    const key=m.id;
+    if(modelProgress[key]<1) modelProgress[key]+=0.005;
+    const prog=modelProgress[key];
+
+    ctx.save();
+    ctx.shadowColor=m.color; ctx.shadowBlur=8;
+    ctx.fillStyle=h2r(m.color,.06); ctx.strokeStyle=h2r(m.color,prog>.5?.6:.3); ctx.lineWidth=1.5;
+    rr(x,y,cardW-8,cardH,8); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur=0;
+
+    // Top color bar
+    const barH=4*(cardH/100);
+    ctx.fillStyle=h2r(m.color,prog);
+    rr(x,y,Math.max(8,(cardW-8)*prog),barH,4);
+    ctx.fill();
+
+    // Icon + name
+    ctx.font='18px serif'; ctx.textAlign='center'; ctx.fillStyle=m.color;
+    ctx.fillText(m.icon,x+(cardW-8)/2,y+36);
+    ctx.font='700 11px -apple-system'; ctx.fillStyle=m.color;
+    ctx.fillText(m.label,x+(cardW-8)/2,y+52);
+
+    // Algo
+    ctx.font='8px Courier New'; ctx.fillStyle=h2r(m.color,.6);
+    m.algo.split('\n').forEach((l,li)=>ctx.fillText(l,x+(cardW-8)/2,y+66+li*11));
+
+    // Cohort + count
+    ctx.font='8px -apple-system'; ctx.fillStyle=h2r(m.color,.5);
+    ctx.fillText('cohort:',x+(cardW-8)/2,y+96);
+    ctx.font='700 9px -apple-system'; ctx.fillStyle=m.color;
+    ctx.fillText(m.cohort,x+(cardW-8)/2,y+108);
+    ctx.font='800 13px -apple-system'; ctx.fillStyle=m.color;
+    ctx.fillText(m.count.toLocaleString(),x+(cardW-8)/2,y+126);
+    ctx.font='8px -apple-system'; ctx.fillStyle=h2r(m.color,.5);
+    ctx.fillText('customers',x+(cardW-8)/2,y+138);
+
+    // Progress bar
+    ctx.fillStyle=h2r(m.color,.15); rr(x+8,y+148,cardW-24,8,3); ctx.fill();
+    ctx.fillStyle=h2r(m.color,.8); rr(x+8,y+148,(cardW-24)*prog,8,3); ctx.fill();
+    ctx.font='8px Courier New'; ctx.fillStyle=h2r(m.color,.5);
+    ctx.fillText(`${Math.round(prog*100)}%`,x+(cardW-8)/2,y+168);
+
+    // Output
+    const sep=y+cardH*.55;
+    ctx.strokeStyle=h2r(m.color,.2); ctx.lineWidth=1; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(x+8,sep); ctx.lineTo(x+cardW-16,sep); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.font='8px Courier New'; ctx.fillStyle=h2r(m.color,.5);
+    ctx.fillText('OUTPUT',x+(cardW-8)/2,sep+12);
+    ctx.font='700 10px Courier New'; ctx.fillStyle=m.color;
+    ctx.fillText(m.out,x+(cardW-8)/2,sep+26);
+    ctx.font='8px -apple-system'; ctx.fillStyle=h2r(m.color,.4);
+    ctx.fillText('per customer',x+(cardW-8)/2,sep+38);
+
+    // Draw model-specific output visualization
+    if(m.id==='credit'){
+      const bx=x+10,by=sep+44,bw=cardW-28;
+      const qs=[.1,.25,.5,.75,.9];
+      qs.forEach((q,qi)=>{
+        const bh=(q*0.5+0.05)*20;
+        ctx.fillStyle=h2r(m.color,.15+qi*.08);
+        ctx.fillRect(bx+qi*(bw/5),by+20-bh,bw/5-2,bh);
+      });
+      ['p10','p25','p50','p75','p90'].forEach((l,li)=>{
+        ctx.font='6px Courier New'; ctx.fillStyle=h2r(m.color,.5);
+        ctx.fillText(l,bx+li*(bw/5)+2,by+28);
+      });
+    }
+
+    // Connection from source
+    const srcRight=W*.03+W*.1;
+    if(prog<0.95){
+      const progX=(Math.sin(t*.03+i*0.8)+1)/2;
+      const px=srcRight+(x-srcRight)*progX;
+      const py=cy+(Math.sin(i*0.7)*40)*(1-progX);
+      const grd=ctx.createRadialGradient(px,py,0,px,py,4);
+      grd.addColorStop(0,h2r(m.color,.9)); grd.addColorStop(1,h2r(m.color,0));
+      ctx.beginPath(); ctx.arc(px,py,3.5,0,Math.PI*2);
+      ctx.fillStyle=grd; ctx.fill();
+    }
+    ctx.restore();
+  });
+
+  const total=Object.values(modelProgress).reduce((a,b)=>a+b,0);
+  updateUI(5,'Step 6 — 5 ML Models running',`${Math.round(total/n*100)}% average progress`);
+}
+
+// ── Step 6: Save ───────────────────────────────────────────────
+let saveProgress=0, savedRows=0;
+function drawSave(){
+  ctx.clearRect(0,0,W,H);
+  drawGrid();
+  t++;
+  saveProgress=Math.min(1,saveProgress+0.004);
+  savedRows=Math.floor(saveProgress*25093);
+
+  const cx=W/2,cy=H/2;
+
+  // Model outputs on left
+  const moColors=[C.churn,C.clv,C.credit,C.wb,C.cv];
+  const moLabels=['Churn','CLV','Credit','Winback','Conv'];
+  const moX=W*.06;
+  moColors.forEach((c,i)=>{
+    const y=cy-120+i*52;
+    ctx.fillStyle=h2r(c,.08); ctx.strokeStyle=h2r(c,.3); ctx.lineWidth=1;
+    rr(moX,y,100,40,6); ctx.fill(); ctx.stroke();
+    ctx.font='700 10px -apple-system'; ctx.textAlign='center'; ctx.fillStyle=c;
+    ctx.fillText(moLabels[i],moX+50,y+16);
+    ctx.font='8px Courier New'; ctx.fillStyle=h2r(c,.5);
+    ctx.fillText('output ready ✓',moX+50,y+28);
+
+    // Line to merge
+    const px=Math.min(moX+100+t*.5%200,cx-90);
+    ctx.strokeStyle=h2r(c,.25); ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(moX+100,y+20); ctx.lineTo(px,cy); ctx.stroke();
+    const grd=ctx.createRadialGradient(px,cy,0,px,cy,4);
+    grd.addColorStop(0,h2r(c,1)); grd.addColorStop(1,h2r(c,0));
+    ctx.beginPath(); ctx.arc(px,cy,3,0,Math.PI*2); ctx.fillStyle=grd; ctx.fill();
+  });
+
+  // Merge box
+  drawBox(cx-70,cy-40,140,80,C.acc,'_merge_all()','⊕','LEFT JOIN ×5',true);
+
+  // Final DataFrame
+  const fdX=cx+100, fdY=cy-70;
+  ctx.fillStyle=h2r(C.ely,.08); ctx.strokeStyle=h2r(C.ely,.4); ctx.lineWidth=1.5;
+  rr(fdX,fdY,W*.25,140,8); ctx.fill(); ctx.stroke();
+  ctx.font='700 10px -apple-system'; ctx.textAlign='center'; ctx.fillStyle=C.ely;
+  ctx.fillText('Final DataFrame',fdX+W*.125,fdY+16);
+  const cols=['lifecycle_stage','churn_probability','predicted_clv_6m','credit_p10..p90','comeback_probability','conversion_probability','revenue_at_risk','avg_transaction_value'];
+  cols.forEach((c,i)=>{
+    ctx.font='8px Courier New'; ctx.fillStyle=h2r(C.ely,.55);
+    ctx.fillText(c,fdX+W*.125,fdY+32+i*12);
+  });
+  drawArrow(cx+72,cy,fdX,cy,C.ely,'merge');
+
+  // PostgreSQL target
+  const pgX=cx+100+W*.25+20, pgY=cy-70;
+  drawBox(pgX,pgY,W*.17,140,C.pg,'predictions\ntable','🐘','25,093 rows',true);
+  drawArrow(fdX+W*.25,cy,pgX,cy,C.pg,`batch insert\n1000/batch`);
+
+  // Batch progress
+  const batches=Math.ceil(25093/1000);
+  const doneBatches=Math.ceil(saveProgress*batches);
+  ctx.font='9px Courier New'; ctx.textAlign='center'; ctx.fillStyle=h2r(C.pg,.6);
+  ctx.fillText(`Batch ${doneBatches}/${batches} — ${savedRows.toLocaleString()} rows written`,cx+100+W*.125+W*.17/2,pgY+160);
+
+  // Progress bar at bottom
+  const barX=W*.1,barW=W*.8,barY=H*.83;
+  ctx.fillStyle=h2r(C.pg,.15); rr(barX,barY,barW,16,8); ctx.fill();
+  ctx.fillStyle=h2r(C.pg,.7); rr(barX,barY,Math.max(16,barW*saveProgress),16,8); ctx.fill();
+  ctx.font='700 10px -apple-system'; ctx.textAlign='center'; ctx.fillStyle=C.pg;
+  ctx.fillText(`${savedRows.toLocaleString()} / 25,093 predictions written`,W/2,barY+11);
+
+  // Final update line
+  if(saveProgress>0.95){
+    ctx.font='700 11px -apple-system'; ctx.fillStyle=C.wk; ctx.textAlign='center';
+    ctx.fillText('✅ UPDATE prediction_runs SET status=\'done\', model_version_id=:churn_mv_id',W/2,H*.9);
+  }
+
+  updateUI(6,'Step 7 — Merge & Save to PostgreSQL',`${savedRows.toLocaleString()} / 25,093 rows written`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SHARED HELPERS
+// ═══════════════════════════════════════════════════════════════
+function drawGrid(){
+  ctx.save();
+  ctx.strokeStyle='rgba(22,32,53,.4)'; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=44){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=44){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.restore();
+}
+
+function updateParticles(){
+  particles=particles.filter(p=>!p.done);
+  particles.forEach(p=>{
+    p.t+=p.speed;
+    if(p.t>=1){p.done=true;return;}
+    const x=p.sx+(p.tx-p.sx)*p.t, y=p.sy+(p.ty-p.sy)*p.t;
+    const grd=ctx.createRadialGradient(x,y,0,x,y,p.size);
+    grd.addColorStop(0,h2r(p.color,1)); grd.addColorStop(1,h2r(p.color,0));
+    ctx.beginPath(); ctx.arc(x,y,p.size,0,Math.PI*2);
+    ctx.fillStyle=grd; ctx.fill();
+  });
+}
+
+function updateUI(step,label,count){
+  document.getElementById('step-label').textContent=label;
+  document.getElementById('particle-count').textContent=count;
+  document.getElementById('prog-fill').style.width=`${((step+1)/7)*100}%`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STEP CONTROL
+// ═══════════════════════════════════════════════════════════════
+function buildStep(s){
+  particles=[]; lcParticles=[]; nodes=[];
+  t=0;
+  if(s===1) loadedRows={};
+  if(s===5){modelProgress={churn:0,clv:0,credit:0,winback:0,conv:0};}
+  if(s===6){saveProgress=0;savedRows=0;}
+
+  // Update tabs
+  document.querySelectorAll('.stab').forEach((el,i)=>{
+    el.classList.remove('on','done');
+    if(i===s) el.classList.add('on');
+    else if(i<s) el.classList.add('done');
+  });
+
+  // Side panel
+  const info=SIDE_INFO[s];
+  document.getElementById('sp-title').textContent=info.title;
+  document.getElementById('sp-sub').textContent=info.sub;
+  document.getElementById('sp-body').innerHTML=info.body;
+}
+
+function goStep(s){
+  currentStep=s;
+  buildStep(s);
+}
+function nextStep(){
+  if(currentStep<6) goStep(currentStep+1);
+}
+function togglePlay(){
+  playing=!playing;
+  document.getElementById('playBtn').textContent=playing?'⏸ Pause':'▶ Play';
+  if(playing && currentStep>=6) goStep(0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN LOOP
+// ═══════════════════════════════════════════════════════════════
+let lastAuto=0;
+function loop(ts){
+  STEPS[currentStep]();
+  // Auto advance when playing
+  if(playing && ts-lastAuto>4000){
+    lastAuto=ts;
+    if(currentStep<6) goStep(currentStep+1);
+    else { playing=false; document.getElementById('playBtn').textContent='▶ Play'; }
+  }
+  animFrame=requestAnimationFrame(loop);
+}
+
+window.addEventListener('resize',resize);
+window.addEventListener('load',()=>{resize();buildStep(0);loop(0);});
+</script>
+</body>
+</html>

@@ -80,8 +80,13 @@ function Md({ text }: { text: string }) {
 /* ─────────────────────────────────────────────
    Timestamp
 ───────────────────────────────────────────── */
-const fmt = (d: Date) =>
-  d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+const TIME_FORMAT: Intl.DateTimeFormatOptions = {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Asia/Bangkok",
+};
+
+const fmt = (d: Date) => d.toLocaleTimeString("th-TH", TIME_FORMAT);
 
 /* ─────────────────────────────────────────────
    Suggested chips  (only shown on first load)

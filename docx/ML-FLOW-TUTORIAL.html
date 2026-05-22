@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Moby ML Flow — Follow One Customer Tutorial</title>
+<style>
+:root{
+  --bg:#04081c; --bg2:#0a1530; --bg3:#0f1c3a;
+  --line:#1a2848; --line2:#243859;
+  --t1:#d4e4ff; --t2:#7a92b8; --t3:#3a5278; --t4:#1e3050;
+  --acc:#60a5fa;
+  --ely:#a78bfa; --py:#fbbf24; --pg:#38bdf8; --wk:#34d399; --red:#fb7185; --pink:#f472b6;
+  --gh:#94a3b8; --ch:#fb7185; --af:#fbbf24; --ap:#34d399;
+  --mono:'SF Mono','Menlo','Monaco','Courier New',monospace;
+  --sans:-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);
+  display:flex;flex-direction:column;font-size:13px;line-height:1.45}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(26,40,72,.4) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(26,40,72,.4) 1px,transparent 1px);
+  background-size:42px 42px}
+
+/* ─── HEADER ─── */
+header{flex-shrink:0;display:flex;align-items:center;gap:0;
+  background:rgba(4,8,28,.96);border-bottom:1px solid var(--line);
+  padding:0 18px;height:54px;z-index:50;backdrop-filter:blur(12px)}
+.brand{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--wk);
+  letter-spacing:.1em;margin-right:18px;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.brand .dot{width:7px;height:7px;background:var(--wk);border-radius:50%;
+  box-shadow:0 0 10px var(--wk);animation:blink 1.8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+.brand-sub{color:var(--t3);font-weight:600;letter-spacing:.05em}
+
+.steps{display:flex;gap:1px;overflow-x:auto;flex:1;scrollbar-width:none;padding:0 4px}
+.steps::-webkit-scrollbar{display:none}
+.step{padding:6px 11px;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;cursor:pointer;color:var(--t3);border-radius:5px;
+  border:1px solid transparent;white-space:nowrap;transition:all .2s;
+  display:flex;align-items:center;gap:6px;font-family:var(--mono)}
+.step:hover{color:var(--t2);border-color:var(--line2);background:var(--bg2)}
+.step.on{color:#000;background:var(--acc);border-color:var(--acc);box-shadow:0 0 16px rgba(96,165,250,.45)}
+.step.done{color:var(--wk)}
+.step-n{font-size:9px;opacity:.7}
+.step.on .step-n{opacity:1}
+
+.controls{display:flex;gap:6px;margin-left:14px;flex-shrink:0}
+.btn{padding:6px 13px;font-size:11px;font-weight:800;cursor:pointer;
+  border-radius:5px;border:1px solid;background:transparent;
+  font-family:var(--mono);letter-spacing:.04em;transition:.2s}
+.btn-play{color:var(--acc);border-color:rgba(96,165,250,.4)}
+.btn-play:hover{background:rgba(96,165,250,.12)}
+.btn-play.playing{background:var(--acc);color:#000}
+.btn-nav{color:var(--t2);border-color:var(--line2)}
+.btn-nav:hover:not(:disabled){background:var(--bg3);color:var(--t1)}
+.btn-nav:disabled{opacity:.25;cursor:not-allowed}
+
+/* ─── PROGRESS BAR ─── */
+#prog{flex-shrink:0;height:2px;background:var(--line);position:relative;overflow:hidden}
+#prog-fill{height:100%;background:linear-gradient(90deg,var(--acc),var(--wk));
+  width:0;transition:width .45s ease}
+
+/* ─── MAIN LAYOUT ─── */
+main{flex:1;display:grid;grid-template-columns:1fr 380px;overflow:hidden;position:relative;z-index:1}
+@media(max-width:1100px){main{grid-template-columns:1fr 320px}}
+@media(max-width:880px){main{grid-template-columns:1fr;grid-template-rows:1fr 280px}}
+
+/* ── LEFT: VISUAL CANVAS ── */
+#stage{position:relative;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+#stage-head{padding:18px 26px 14px;border-bottom:1px solid var(--line);background:var(--bg2)}
+.s-label{font-family:var(--mono);font-size:10px;font-weight:800;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--acc);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.s-label::before{content:'//';opacity:.45}
+.s-title{font-size:20px;font-weight:900;letter-spacing:-.02em;margin-bottom:5px}
+.s-sub{font-size:12.5px;color:var(--t2);line-height:1.55;max-width:680px}
+
+#stage-body{flex:1;position:relative;overflow:auto;padding:24px 26px}
+#stage-body::-webkit-scrollbar{width:6px}
+#stage-body::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+#stage-body::-webkit-scrollbar-track{background:var(--bg)}
+
+/* ── RIGHT: INSPECTOR PANEL ── */
+#inspect{border-left:1px solid var(--line);background:var(--bg2);
+  overflow-y:auto;display:flex;flex-direction:column}
+#inspect::-webkit-scrollbar{width:5px}
+#inspect::-webkit-scrollbar-thumb{background:var(--line2);border-radius:2px}
+
+.ins-card{padding:14px 16px;border-bottom:1px solid var(--line)}
+.ins-h{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--t3);margin-bottom:9px;display:flex;align-items:center;gap:6px;font-family:var(--mono)}
+.ins-h .tag{margin-left:auto;font-size:9px;padding:2px 7px;border-radius:3px;
+  background:var(--bg3);border:1px solid var(--line2);color:var(--t2)}
+
+.kv{display:flex;justify-content:space-between;padding:4px 0;font-size:11.5px;
+  border-bottom:1px solid rgba(36,56,89,.4);gap:10px}
+.kv:last-child{border-bottom:none}
+.kv-k{color:var(--t2);flex-shrink:0;font-size:11px}
+.kv-v{font-family:var(--mono);color:var(--t1);text-align:right;
+  word-break:break-all;font-size:10.5px}
+.kv-v.bad{color:var(--red)}
+.kv-v.good{color:var(--wk)}
+.kv-v.new{color:var(--acc);background:rgba(96,165,250,.1);padding:1px 6px;border-radius:3px}
+
+.code{background:#020514;border:1px solid var(--line);border-radius:6px;
+  padding:11px 13px;font-family:var(--mono);font-size:10.5px;line-height:1.7;
+  color:var(--t2);overflow-x:auto;white-space:pre;margin-top:6px}
+.code .kw{color:#c084fc}
+.code .fn{color:#7dd3fc}
+.code .str{color:#86efac}
+.code .num{color:#fbbf24}
+.code .cm{color:var(--t3);font-style:italic}
+.code .hl{background:rgba(251,191,36,.12);border-radius:2px}
+
+/* ── BIG-VISUAL PRIMITIVES ── */
+.flow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:18px}
+.box{background:var(--bg2);border:1px solid var(--line2);border-radius:9px;
+  padding:13px 16px;font-family:var(--mono);min-width:130px;position:relative;transition:.3s}
+.box.hi{border-color:var(--acc);box-shadow:0 0 24px rgba(96,165,250,.25);
+  background:linear-gradient(180deg,var(--bg2),rgba(96,165,250,.06))}
+.box .b-lbl{font-size:9px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
+.box .b-val{font-size:12px;font-weight:700;color:var(--t1)}
+.box .b-tag{position:absolute;top:-9px;left:12px;font-size:8.5px;font-weight:800;
+  padding:2px 7px;border-radius:3px;letter-spacing:.06em;text-transform:uppercase}
+
+.arr{width:38px;height:2px;background:linear-gradient(90deg,var(--line2),var(--acc));position:relative;flex-shrink:0}
+.arr::after{content:'';position:absolute;right:-4px;top:-4px;
+  border:5px solid transparent;border-left-color:var(--acc)}
+.arr-lbl{position:absolute;top:-22px;left:50%;transform:translateX(-50%);
+  font-size:9.5px;color:var(--acc);font-family:var(--mono);white-space:nowrap;
+  background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--line)}
+
+/* Sheet table */
+.sheet{background:var(--bg2);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:14px}
+.sheet-head{padding:8px 14px;background:var(--bg3);border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--py);
+  letter-spacing:.04em;display:flex;align-items:center;gap:8px}
+.sheet-head .badge{font-size:9px;padding:1px 6px;border-radius:3px;
+  background:rgba(251,191,36,.12);color:var(--py);border:1px solid rgba(251,191,36,.3)}
+.sheet table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10.5px}
+.sheet th{background:var(--bg);color:var(--t2);font-weight:600;padding:7px 10px;
+  text-align:left;border-bottom:1px solid var(--line);font-size:9.5px;
+  letter-spacing:.05em;text-transform:uppercase}
+.sheet td{padding:6px 10px;border-bottom:1px solid var(--line);color:var(--t1)}
+.sheet tr:last-child td{border-bottom:none}
+.sheet tr.us{background:rgba(96,165,250,.06)}
+.sheet tr.us td{color:var(--acc)}
+.cell-bad{color:var(--red);text-decoration:line-through;opacity:.6}
+.cell-good{color:var(--wk);font-weight:700}
+.cell-tx{background:rgba(167,139,250,.12);color:var(--ely);font-weight:700;padding:1px 5px;border-radius:3px}
+
+/* Lifecycle tree */
+.tree{display:flex;flex-direction:column;gap:10px;font-family:var(--mono);font-size:11px;max-width:560px;margin:0 auto}
+.tnode{display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:6px;
+  background:var(--bg2);border:1px solid var(--line2)}
+.tnode.lit{border-color:var(--acc);background:rgba(96,165,250,.1)}
+.tnode.path{border-color:var(--wk);background:rgba(52,211,153,.08)}
+.tnode .cond{flex:1;color:var(--t1)}
+.tnode .ans{font-size:9.5px;padding:2px 7px;border-radius:3px;
+  background:var(--bg3);color:var(--t2);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.tnode.path .ans{background:rgba(52,211,153,.18);color:var(--wk);border:1px solid rgba(52,211,153,.3)}
+.tnode .br{width:20px;color:var(--t3)}
+
+/* Models grid */
+.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px;margin-bottom:14px}
+.mod{background:var(--bg2);border:1px solid var(--line2);border-radius:9px;
+  padding:12px 14px;position:relative;transition:.3s}
+.mod.active{border-color:var(--wk);background:linear-gradient(180deg,var(--bg2),rgba(52,211,153,.06))}
+.mod.skip{opacity:.4}
+.mod-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.mod-icon{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;
+  justify-content:center;font-size:13px;flex-shrink:0}
+.mod-name{font-size:11.5px;font-weight:800;letter-spacing:-.01em}
+.mod-bucket{font-size:9px;font-family:var(--mono);color:var(--t3);
+  margin-top:1px;letter-spacing:.06em;text-transform:uppercase}
+.mod-out{font-family:var(--mono);font-size:11px;color:var(--t2);
+  padding-top:8px;border-top:1px solid var(--line);margin-top:6px}
+.mod-out span{color:var(--acc);font-weight:700}
+
+/* Pills / chips */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;
+  border:1px solid;margin-right:4px;margin-bottom:4px}
+.pill.next{color:#00d4ff;border-color:rgba(0,212,255,.35);background:rgba(0,212,255,.06)}
+.pill.ely{color:var(--ely);border-color:rgba(167,139,250,.35);background:rgba(167,139,250,.06)}
+.pill.py{color:var(--py);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.06)}
+.pill.pg{color:var(--pg);border-color:rgba(56,189,248,.35);background:rgba(56,189,248,.06)}
+.pill.wk{color:var(--wk);border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.06)}
+
+/* Feature grid (30 features visual) */
+.fgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:14px 0}
+.f{padding:6px 8px;border-radius:5px;font-family:var(--mono);font-size:9.5px;
+  background:var(--bg2);border:1px solid var(--line);position:relative;text-align:center;transition:.2s}
+.f.user{border-color:rgba(167,139,250,.3)}
+.f.pay{border-color:rgba(251,191,36,.3)}
+.f.use{border-color:rgba(52,211,153,.3)}
+.f.flash{animation:flash 1.2s ease-out}
+@keyframes flash{0%{background:var(--acc);color:#000;transform:scale(1.08)}
+  100%{background:var(--bg2);color:var(--t1)}}
+.f .fk{color:var(--t3);font-size:8.5px;margin-bottom:2px;letter-spacing:.04em}
+.f .fv{color:var(--t1);font-weight:700;font-size:11px}
+
+/* Highlight */
+.hl-row{background:linear-gradient(90deg,rgba(96,165,250,.08),transparent);
+  border-left:2px solid var(--acc);padding:8px 12px;margin:10px 0;border-radius:0 5px 5px 0;
+  font-family:var(--mono);font-size:11.5px}
+.hl-row b{color:var(--acc)}
+
+/* Cleansing diff */
+.diff{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;
+  margin:14px 0;padding:14px;background:var(--bg2);border:1px solid var(--line);border-radius:8px}
+.diff-side{font-family:var(--mono);font-size:10.5px}
+.diff-side h4{font-size:9.5px;color:var(--t3);margin-bottom:8px;
+  letter-spacing:.08em;text-transform:uppercase;font-weight:700}
+.diff-side .ln{padding:3px 8px;border-radius:3px;margin-bottom:3px}
+.diff-side.b .ln{background:rgba(251,113,133,.08);color:var(--red)}
+.diff-side.a .ln{background:rgba(52,211,153,.08);color:var(--wk)}
+.diff-arr{color:var(--acc);font-size:18px;font-family:var(--mono)}
+
+/* Final prediction card */
+.pred{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.pcard{background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:12px 14px}
+.pc-l{font-size:9.5px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase;
+  font-family:var(--mono);margin-bottom:6px}
+.pc-v{font-size:20px;font-weight:900;letter-spacing:-.02em;font-family:var(--mono)}
+.pc-v.green{color:var(--wk)}
+.pc-v.blue{color:var(--acc)}
+.pc-v.pink{color:var(--pink)}
+.pc-v.yellow{color:var(--py)}
+.pc-v.red{color:var(--red)}
+.pc-sub{font-size:10px;color:var(--t2);margin-top:4px;font-family:var(--mono)}
+
+/* Stream events */
+.stream{font-family:var(--mono);font-size:10.5px;background:#020514;
+  border:1px solid var(--line);border-radius:6px;padding:12px;line-height:1.8}
+.ev{display:flex;gap:10px;padding:2px 0}
+.ev-t{color:var(--wk);font-weight:700}
+.ev-k{color:var(--py)}
+.ev-v{color:var(--t1)}
+
+/* fade-in */
+.fade{animation:fade .5s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* Tooltip caption above stage */
+.callout{background:linear-gradient(180deg,var(--bg2),var(--bg3));
+  border:1px solid var(--line2);border-radius:8px;padding:12px 14px;
+  margin-bottom:16px;display:flex;gap:12px;align-items:flex-start}
+.callout-i{font-size:22px;flex-shrink:0}
+.callout-b{flex:1;font-size:12px;line-height:1.6;color:var(--t1)}
+.callout-b b{color:var(--acc)}
+.callout-b code{font-family:var(--mono);font-size:11px;background:var(--bg);
+  padding:1px 5px;border-radius:3px;color:var(--py);border:1px solid var(--line)}
+
+.section-t{font-size:11px;font-weight:800;color:var(--t3);letter-spacing:.1em;
+  text-transform:uppercase;margin:18px 0 9px;font-family:var(--mono);
+  display:flex;align-items:center;gap:8px}
+.section-t::before{content:'';width:14px;height:1px;background:var(--line2)}
+.section-t::after{content:'';flex:1;height:1px;background:var(--line2)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="dot"></span>
+    <span>MOBY · ML FLOW</span>
+    <span class="brand-sub">/ FOLLOW acc_id=42</span>
+  </div>
+  <div class="steps" id="steps"></div>
+  <div class="controls">
+    <button class="btn btn-nav" id="prev">← Prev</button>
+    <button class="btn btn-play" id="play">▶ Auto-play</button>
+    <button class="btn btn-nav" id="next">Next →</button>
+  </div>
+</header>
+
+<div id="prog"><div id="prog-fill"></div></div>
+
+<main>
+  <section id="stage">
+    <div id="stage-head">
+      <div class="s-label" id="s-label">Step 1 of 8</div>
+      <h1 class="s-title" id="s-title">Stage title</h1>
+      <p class="s-sub" id="s-sub">Stage subtitle</p>
+    </div>
+    <div id="stage-body"></div>
+  </section>
+
+  <aside id="inspect"></aside>
+</main>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   SAMPLE CUSTOMER — acc_id = 42
+   The same row threads through every stage; we mutate it visually.
+   ════════════════════════════════════════════════════════════════ */
+const CUSTOMER = {
+  acc_id: 42,
+  // Excel raw cells (what was typed by user / exported from their system)
+  excel: {
+    user_row: {
+      "acc_id": 42,
+      "status (SMS)": "PAID",
+      "user.credit + user.credit_premium": "23466015",   // string in Excel
+      "credit_email": null,                              // empty cell
+      "expire": "2025-12-31",
+      "expire_email": "",                                // blank string
+      "status (Email)": "FREE",
+      "join_date": "2024-01-15",
+      "last_access": "2025-06-22 14:03:11",
+      "last_send":  "2025-06-22 14:03:09",
+      "__EMPTY_1":  null,                                // Excel ghost col
+    },
+    payments: [
+      { uid: 8001, payment_date: "2024-03-10", acc_id: 42, credit_add: 5000, amount: 1500, credit_type: "sms" },
+      { uid: 8202, payment_date: "2024-08-25", acc_id: 42, credit_add: 10000, amount: 2900, credit_type: "sms" },
+      { uid: 8455, payment_date: "2025-01-12", acc_id: 42, credit_add: 10000, amount: 2900, credit_type: "sms" },
+      { uid: 8702, payment_date: "2025-04-20", acc_id: 42, credit_add: 20000, amount: 5500, credit_type: "sms" },
+      { uid: 8801, payment_date: null,         acc_id: 42, credit_add: 0,     amount: 0,    credit_type: "sms" }, // bad row → skipped
+    ],
+    usage: [
+      { sheet:"SMS_usage (BC)",  year:2025, month:4, acc_id:42, usage: 1800 },
+      { sheet:"SMS_usage (API)", year:2025, month:4, acc_id:42, usage: 950  },
+      { sheet:"SMS_usage (BC)",  year:2025, month:5, acc_id:42, usage: 2100 },
+      { sheet:"SMS_usage (API)", year:2025, month:5, acc_id:42, usage: 880  },
+      { sheet:"SMS_usage (BC)",  year:2025, month:6, acc_id:42, usage: 2400 },
+      { sheet:"SMS_usage (BC)",  year:2025, month:6, acc_id:42, usage: 2400 }, // dup → dedup'd
+    ],
+  },
+};
+
+const CUTOFF = "2025-07-01";
+
+/* ════════════════════════════════════════════════════════════════
+   8 STAGES — each is rendered as a function returning HTML
+   ════════════════════════════════════════════════════════════════ */
+const STAGES = [
+  /* ─── 1. Excel arrives ────────────────────────────────────── */
+  {
+    key:"excel",
+    label:"Excel In",
+    icon:"📥",
+    title:"User uploads an Excel file with 8 sheets",
+    sub:"The browser POSTs the .xlsx to Elysia. Nothing has been touched yet — it's just raw bytes that XLSX.js will turn into JSON.",
+    pill:"next",
+    body: () => `
+<div class="callout">
+  <div class="callout-i">📑</div>
+  <div class="callout-b">
+    <b>Fixed schema:</b> the file must contain a sheet called
+    <code>Users+User_profile</code> plus <code>Backend_payment</code>.
+    The 6 usage sheets are optional but expected.
+    We zoom in on <b>acc_id = 42</b> and follow them all the way to a saved prediction row.
+  </div>
+</div>
+
+<div class="sheet">
+  <div class="sheet-head">🟡 Users+User_profile <span class="badge">REQUIRED</span> <span style="color:var(--t3);margin-left:auto">1 row per customer</span></div>
+  <table>
+    <thead><tr>
+      <th>acc_id</th><th>status (SMS)</th><th>user.credit + user.credit_premium</th>
+      <th>credit_email</th><th>expire</th><th>join_date</th><th>last_send</th>
+    </tr></thead>
+    <tbody>
+      <tr><td>17</td><td>FREE</td><td>0</td><td>—</td><td>—</td><td>2024-08-02</td><td>2025-01-04 10:21</td></tr>
+      <tr class="us"><td>42</td><td>PAID</td><td>"23466015"</td><td class="cell-bad">∅ null</td>
+        <td>2025-12-31</td><td>2024-01-15</td><td>2025-06-22 14:03:09</td></tr>
+      <tr><td>91</td><td>PAID</td><td>120000</td><td>5000</td><td>2026-02-01</td><td>2023-05-10</td><td>2025-06-30 09:11</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="sheet">
+  <div class="sheet-head">🟡 Backend_payment <span class="badge">REQUIRED</span> <span style="color:var(--t3);margin-left:auto">1 row per transaction</span></div>
+  <table>
+    <thead><tr><th>uid</th><th>payment_date</th><th>acc_id</th>
+      <th>credit_add</th><th>amount</th><th>credit_type</th></tr></thead>
+    <tbody>
+      <tr class="us"><td>8001</td><td>2024-03-10</td><td>42</td><td>5,000</td><td>1,500</td><td>sms</td></tr>
+      <tr class="us"><td>8202</td><td>2024-08-25</td><td>42</td><td>10,000</td><td>2,900</td><td>sms</td></tr>
+      <tr class="us"><td>8455</td><td>2025-01-12</td><td>42</td><td>10,000</td><td>2,900</td><td>sms</td></tr>
+      <tr class="us"><td>8702</td><td>2025-04-20</td><td>42</td><td>20,000</td><td>5,500</td><td>sms</td></tr>
+      <tr class="us"><td>8801</td><td class="cell-bad">∅ null</td><td>42</td><td>0</td><td>0</td><td>sms</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="hl-row"><b>Notice:</b> credit_email is blank for acc_id 42, expire_email is an empty string,
+and there's a payment row with no payment_date. <b>This is the messy reality.</b> Nothing has been validated or cleaned yet.</div>
+
+<div class="flow" style="margin-top:18px">
+  <div class="box hi"><span class="b-tag" style="background:rgba(0,212,255,.2);color:#00d4ff">browser</span>
+    <div class="b-lbl">User</div><div class="b-val">${'<input type="file">'.replace(/</g,'&lt;')}</div></div>
+  <div class="arr"><span class="arr-lbl">multipart/form-data</span></div>
+  <div class="box"><span class="b-tag" style="background:rgba(0,212,255,.2);color:#00d4ff">next.js</span>
+    <div class="b-lbl">/api/runs/:id/upload</div><div class="b-val">proxy → :3001</div></div>
+  <div class="arr"><span class="arr-lbl">rewrite</span></div>
+  <div class="box"><span class="b-tag" style="background:rgba(167,139,250,.2);color:var(--ely)">elysia</span>
+    <div class="b-lbl">uploads.ts</div><div class="b-val">XLSX.read(buffer)</div></div>
+</div>
+`,
+    inspect: () => `
+<div class="ins-card">
+  <div class="ins-h">Customer Snapshot <span class="tag">acc_id 42</span></div>
+  <div class="kv"><div class="kv-k">Status (SMS)</div><div class="kv-v">PAID</div></div>
+  <div class="kv"><div class="kv-k">Status (Email)</div><div class="kv-v">FREE</div></div>
+  <div class="kv"><div class="kv-k">Joined</div><div class="kv-v">2024-01-15</div></div>
+  <div class="kv"><div class="kv-k">Last send</div><div class="kv-v">2025-06-22</div></div>
+  <div class="kv"><div class="kv-k">Total payments</div><div class="kv-v">5 rows in sheet</div></div>
+  <div class="kv"><div class="kv-k">Usage rows</div><div class="kv-v">6 (incl. 1 dup)</div></div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Why this stage matters</div>
+  <div style="font-size:11.5px;color:var(--t2);line-height:1.65">
+    Excel is full of <b>weirdness</b>: empty cells, string-typed numbers, ghost
+    <code style="color:var(--py);font-family:var(--mono)">__EMPTY</code> columns from merged headers,
+    nulls disguised as <code style="color:var(--py);font-family:var(--mono)">""</code>.
+    The next stages have to <b>tame all of it</b> before any ML can run.
+  </div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Route handler</div>
+  <pre class="code"><span class="kw">.post</span>(<span class="str">"/runs/:id/upload"</span>, <span class="kw">async</span> ({ params, body }) =&gt; {
+  <span class="kw">const</span> buffer = <span class="fn">Buffer.from</span>(<span class="kw">await</span> body.file.<span class="fn">arrayBuffer</span>());
+  <span class="kw">const</span> wb = XLSX.<span class="fn">read</span>(buffer, { type: <span class="str">"buffer"</span>,
+                                  cellDates: <span class="kw">true</span> });
+  <span class="cm">// → wb.SheetNames, wb.Sheets[name]</span>
+})</pre>
+</div>
+`
+  },
+
+  /* ─── 2. Parse & Cleanse (Elysia) ─────────────────────────── */
+  {
+    key:"parse",
+    label:"Parse & Cleanse",
+    icon:"🧼",
+    title:"Elysia parses each sheet and coerces every cell to a safe type",
+    sub:"This is THE cleansing step. XLSX.js turns sheets into JSON; then per-row helpers (safeInt, safeTs, safeDate, safeNumStr) convert anything weird into either a valid value or null.",
+    pill:"ely",
+    body: () => `
+<div class="callout">
+  <div class="callout-i">🧼</div>
+  <div class="callout-b">
+    Each cell goes through a <b>safe-coerce</b> helper. If the value can't be coerced,
+    it becomes <code>null</code> instead of crashing. Empty <code>"__EMPTY"</code> ghost columns
+    are dropped. Payment rows with no <code>payment_date</code> are <b>filtered out entirely</b>.
+  </div>
+</div>
+
+<div class="diff">
+  <div class="diff-side b">
+    <h4>Before — what Excel gave us</h4>
+    <div class="ln">acc_id: 42</div>
+    <div class="ln">"status (SMS)": "PAID"</div>
+    <div class="ln">"user.credit + user.credit_premium": "23466015"</div>
+    <div class="ln">credit_email: null</div>
+    <div class="ln">expire: "2025-12-31"</div>
+    <div class="ln">expire_email: ""</div>
+    <div class="ln">last_send: "2025-06-22 14:03:09"</div>
+    <div class="ln">__EMPTY_1: null</div>
+  </div>
+  <div class="diff-arr">→</div>
+  <div class="diff-side a">
+    <h4>After — clean object for raw_customers</h4>
+    <div class="ln">accId: 42                  &lt;safeInt&gt;</div>
+    <div class="ln">statusSms: "PAID"</div>
+    <div class="ln">creditSms: "23466015"      &lt;safeNumStr&gt;</div>
+    <div class="ln">creditEmail: null          &lt;was null&gt;</div>
+    <div class="ln">expireSms: "2025-12-31"    &lt;safeDate&gt;</div>
+    <div class="ln">expireEmail: null          &lt;"" → null&gt;</div>
+    <div class="ln">lastSend: Date(2025-06-22) &lt;safeTs&gt;</div>
+    <div class="ln" style="opacity:.5">(dropped)                  &lt;__EMPTY&gt;</div>
+  </div>
+</div>
+
+<div class="section-t">The four cleansing helpers</div>
+<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;font-family:var(--mono);font-size:10.5px">
+  <div class="box">
+    <div class="b-lbl">safeInt(v)</div>
+    <div style="color:var(--t2);line-height:1.6;font-size:10.5px">
+      <code class="cell-tx">Number(v)</code> → if finite, <code class="cell-tx">Math.trunc</code> · else <code class="cell-tx">null</code>
+    </div>
+  </div>
+  <div class="box">
+    <div class="b-lbl">safeNumStr(v)</div>
+    <div style="color:var(--t2);line-height:1.6;font-size:10.5px">
+      <code class="cell-tx">Number(v)</code> → if finite, stringify · else <code class="cell-tx">null</code>
+      <br><span style="color:var(--t3)">(Drizzle numeric column expects string)</span>
+    </div>
+  </div>
+  <div class="box">
+    <div class="b-lbl">safeDate(v)</div>
+    <div style="color:var(--t2);line-height:1.6;font-size:10.5px">
+      Trim → <code class="cell-tx">new Date()</code> → ISO date · "" or invalid → <code class="cell-tx">null</code>
+    </div>
+  </div>
+  <div class="box">
+    <div class="b-lbl">safeTs(v)</div>
+    <div style="color:var(--t2);line-height:1.6;font-size:10.5px">
+      Same as safeDate but preserves full timestamp. Used for <code class="cell-tx">last_access</code>, <code class="cell-tx">last_send</code>, <code class="cell-tx">payment_date</code>.
+    </div>
+  </div>
+</div>
+
+<div class="hl-row" style="margin-top:18px">
+  <b>Payment filter:</b> <code class="cell-tx">payRows.filter(r =&gt; safeTs(r.payment_date) != null)</code> —
+  acc_id 42's bad row <span style="color:var(--red)">uid 8801</span> is dropped before insert.
+</div>
+`,
+    inspect: () => `
+<div class="ins-card">
+  <div class="ins-h">Validation gate</div>
+  <pre class="code"><span class="kw">const</span> required = [<span class="str">"Users+User_profile"</span>,
+                  <span class="str">"Backend_payment"</span>];
+<span class="kw">const</span> missing = required.<span class="fn">filter</span>(
+  s =&gt; !(s <span class="kw">in</span> sheetMap));
+<span class="kw">if</span> (missing.length &gt; 0) {
+  <span class="kw">await</span> <span class="fn">setRunStatus</span>(id, <span class="str">"failed"</span>, msg);
+  <span class="kw">return</span> { message: <span class="str">&#96;Missing sheets: …&#96;</span> };
+}</pre>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Rename map (USER_RENAMES)</div>
+  <div class="kv"><div class="kv-k">status (SMS)</div><div class="kv-v">→ status_sms</div></div>
+  <div class="kv"><div class="kv-k">user.credit + user.credit_premium</div><div class="kv-v">→ credit_sms</div></div>
+  <div class="kv"><div class="kv-k">expire</div><div class="kv-v">→ expire_sms</div></div>
+  <div class="kv"><div class="kv-k">status (Email)</div><div class="kv-v">→ status_email</div></div>
+  <div class="kv"><div class="kv-k">__EMPTY*</div><div class="kv-v bad">DROPPED</div></div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Row count delta</div>
+  <div class="kv"><div class="kv-k">Excel payment rows for 42</div><div class="kv-v">5</div></div>
+  <div class="kv"><div class="kv-k">After null-date filter</div><div class="kv-v good">4</div></div>
+  <div class="kv"><div class="kv-k">Excel usage rows for 42</div><div class="kv-v">6</div></div>
+  <div class="kv"><div class="kv-k">After dedup (insert step)</div><div class="kv-v good">5</div></div>
+</div>
+`
+  },
+
+  /* ─── 3. Batch insert to Postgres ─────────────────────────── */
+  {
+    key:"insert",
+    label:"Batch Insert",
+    icon:"💾",
+    title:"Cleaned rows are batched into raw_* tables, scoped by run_id",
+    sub:"Every row carries the run_id, so re-uploading clears and re-inserts only that run. The unique constraint on raw_usage silently dedupes duplicate rows from the source Excel.",
+    pill:"pg",
+    body: () => `
+<div class="flow">
+  <div class="box hi"><span class="b-tag" style="background:rgba(167,139,250,.2);color:var(--ely)">elysia</span>
+    <div class="b-lbl">cleaned rows</div><div class="b-val">3 arrays</div></div>
+  <div class="arr"><span class="arr-lbl">chunk(rows, 500)</span></div>
+  <div class="box"><span class="b-tag" style="background:rgba(167,139,250,.2);color:var(--ely)">drizzle</span>
+    <div class="b-lbl">batch insert</div><div class="b-val">.values([…])</div></div>
+  <div class="arr"><span class="arr-lbl">SQL</span></div>
+  <div class="box"><span class="b-tag" style="background:rgba(56,189,248,.2);color:var(--pg)">postgres</span>
+    <div class="b-lbl">raw_customers, raw_payments, raw_usage</div>
+    <div class="b-val">run_id scoped</div></div>
+</div>
+
+<div class="section-t">acc_id 42 lands in three tables</div>
+
+<div class="sheet">
+  <div class="sheet-head">🔵 raw_customers <span class="badge" style="background:rgba(56,189,248,.12);color:var(--pg);border-color:rgba(56,189,248,.3)">1 row</span></div>
+  <table>
+    <thead><tr><th>run_id</th><th>acc_id</th><th>status_sms</th><th>credit_sms</th>
+      <th>credit_email</th><th>expire_sms</th><th>last_send</th></tr></thead>
+    <tbody>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>PAID</td><td>23466015</td>
+        <td class="cell-bad">null</td><td>2025-12-31</td><td>2025-06-22 14:03:09</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="sheet">
+  <div class="sheet-head">🔵 raw_payments <span class="badge" style="background:rgba(56,189,248,.12);color:var(--pg);border-color:rgba(56,189,248,.3)">4 rows (1 dropped)</span></div>
+  <table>
+    <thead><tr><th>run_id</th><th>acc_id</th><th>payment_uid</th><th>payment_date</th>
+      <th>amount</th><th>credit_add</th><th>credit_type</th></tr></thead>
+    <tbody>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>8001</td><td>2024-03-10</td><td>1500</td><td>5000</td><td>sms</td></tr>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>8202</td><td>2024-08-25</td><td>2900</td><td>10000</td><td>sms</td></tr>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>8455</td><td>2025-01-12</td><td>2900</td><td>10000</td><td>sms</td></tr>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>8702</td><td>2025-04-20</td><td>5500</td><td>20000</td><td>sms</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="sheet">
+  <div class="sheet-head">🔵 raw_usage <span class="badge" style="background:rgba(56,189,248,.12);color:var(--pg);border-color:rgba(56,189,248,.3)">5 rows · 1 deduped by UNIQUE constraint</span></div>
+  <table>
+    <thead><tr><th>run_id</th><th>acc_id</th><th>year</th><th>month</th>
+      <th>channel</th><th>source</th><th>usage</th></tr></thead>
+    <tbody>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>2025</td><td>4</td><td>sms</td><td>bc</td><td>1800</td></tr>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>2025</td><td>4</td><td>sms</td><td>api</td><td>950</td></tr>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>2025</td><td>5</td><td>sms</td><td>bc</td><td>2100</td></tr>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>2025</td><td>5</td><td>sms</td><td>api</td><td>880</td></tr>
+      <tr class="us"><td>run-9f3a…</td><td>42</td><td>2025</td><td>6</td><td>sms</td><td>bc</td><td>2400</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="hl-row">
+  <b>After insert:</b> Elysia computes <code class="cell-tx">data_start_date</code> /
+  <code class="cell-tx">data_end_date</code> from MIN/MAX(payment_date), updates the run,
+  flips status to <code class="cell-tx">"processing"</code>, and <b>enqueues the Arq job</b>.
+</div>
+`,
+    inspect: () => `
+<div class="ins-card">
+  <div class="ins-h">Why run_id scoping</div>
+  <div style="font-size:11.5px;color:var(--t2);line-height:1.65">
+    Every row in <code style="color:var(--py);font-family:var(--mono)">raw_*</code> tables carries the run's UUID.
+    Re-uploading wipes only that run's rows with a <code style="color:var(--py);font-family:var(--mono)">DELETE … WHERE run_id = :r</code>
+    and re-inserts. The <code style="color:var(--py);font-family:var(--mono)">ON DELETE CASCADE</code> from
+    <code style="color:var(--py);font-family:var(--mono)">prediction_runs</code> means deleting a run cleans everything.
+  </div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Dedup constraint</div>
+  <pre class="code"><span class="cm">// raw_usage</span>
+<span class="kw">UNIQUE</span>(run_id, acc_id, year, month, channel, source)
+
+db.<span class="fn">insert</span>(rawUsage).<span class="fn">values</span>(batch)
+  .<span class="fn">onConflictDoNothing</span>()
+<span class="cm">// the duplicate June row is silently dropped</span></pre>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Job enqueue</div>
+  <pre class="code"><span class="kw">await</span> <span class="fn">enqueueArqJob</span>(
+  <span class="str">"run_prediction_pipeline"</span>,
+  runId,
+  MODEL_DIR
+);
+<span class="cm">// pushed to Redis arq:queue</span>
+<span class="cm">// worker is idle, polling → picks up</span></pre>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Status transitions</div>
+  <div class="kv"><div class="kv-k">pending</div><div class="kv-v">created run</div></div>
+  <div class="kv"><div class="kv-k">validating</div><div class="kv-v">after sheet check</div></div>
+  <div class="kv"><div class="kv-k">processing</div><div class="kv-v new">job queued</div></div>
+  <div class="kv"><div class="kv-k">done / failed</div><div class="kv-v">worker writes back</div></div>
+</div>
+`
+  },
+
+  /* ─── 4. Worker loads from DB ─────────────────────────────── */
+  {
+    key:"worker_load",
+    label:"Worker Loads",
+    icon:"🐍",
+    title:"Arq worker picks up the job and SELECTs the raw_* rows back into pandas",
+    sub:"This is the moment 'data arrives at the worker'. _load_from_db does one more defensive cleanse: timestamps become tz-naive, numerics get coerced, year+month becomes a 'period' datetime.",
+    pill:"py",
+    body: () => `
+<div class="flow">
+  <div class="box"><span class="b-tag" style="background:rgba(167,139,250,.2);color:var(--ely)">redis</span>
+    <div class="b-lbl">arq:queue</div><div class="b-val">job: run_id</div></div>
+  <div class="arr"><span class="arr-lbl">poll</span></div>
+  <div class="box hi"><span class="b-tag" style="background:rgba(52,211,153,.2);color:var(--wk)">arq worker</span>
+    <div class="b-lbl">predict_worker.py</div><div class="b-val">_pipeline(run_id)</div></div>
+  <div class="arr"><span class="arr-lbl">XADD progress:run 10%</span></div>
+  <div class="box"><span class="b-tag" style="background:rgba(251,191,36,.2);color:var(--py)">pandas</span>
+    <div class="b-lbl">_load_from_db</div><div class="b-val">3 DataFrames</div></div>
+</div>
+
+<div class="callout">
+  <div class="callout-i">🛡️</div>
+  <div class="callout-b">
+    <b>Defensive coercion:</b> even though Elysia already cleaned the data, the worker
+    treats DB values as untrusted. <code>pd.to_datetime(errors="coerce")</code> turns any
+    bad date into <code>NaT</code>, and <code>pd.to_numeric(errors="coerce")</code>
+    turns bad numbers into <code>NaN</code>. <b>Nothing crashes.</b>
+  </div>
+</div>
+
+<div class="diff">
+  <div class="diff-side b">
+    <h4>Postgres returns (column types vary)</h4>
+    <div class="ln">expire_sms     date</div>
+    <div class="ln">last_send      timestamp w/ tz</div>
+    <div class="ln">credit_sms     numeric (string)</div>
+    <div class="ln">payment_date   timestamp w/ tz</div>
+    <div class="ln">year, month    int (separate cols)</div>
+  </div>
+  <div class="diff-arr">→</div>
+  <div class="diff-side a">
+    <h4>After _load_from_db</h4>
+    <div class="ln">expire_sms     Timestamp (naive)</div>
+    <div class="ln">last_send      Timestamp (naive)</div>
+    <div class="ln">credit_sms     float64</div>
+    <div class="ln">payment_date   Timestamp (naive)</div>
+    <div class="ln">period         Timestamp = YYYY-MM-01</div>
+  </div>
+</div>
+
+<div class="section-t">Three DataFrames materialised for acc_id 42</div>
+
+<div class="sheet">
+  <div class="sheet-head">🟢 users DataFrame</div>
+  <table>
+    <thead><tr><th>acc_id</th><th>status_sms</th><th>credit_sms</th><th>expire_sms</th>
+      <th>join_date</th><th>last_send</th></tr></thead>
+    <tbody>
+      <tr class="us"><td>42</td><td>PAID</td><td>23466015.0</td><td>2025-12-31</td>
+        <td>2024-01-15</td><td>2025-06-22 14:03:09</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="sheet">
+  <div class="sheet-head">🟢 payments DataFrame</div>
+  <table>
+    <thead><tr><th>acc_id</th><th>payment_date</th><th>amount</th><th>credit_add</th><th>credit_type</th></tr></thead>
+    <tbody>
+      <tr class="us"><td>42</td><td>2024-03-10</td><td>1500.0</td><td>5000.0</td><td>sms</td></tr>
+      <tr class="us"><td>42</td><td>2024-08-25</td><td>2900.0</td><td>10000.0</td><td>sms</td></tr>
+      <tr class="us"><td>42</td><td>2025-01-12</td><td>2900.0</td><td>10000.0</td><td>sms</td></tr>
+      <tr class="us"><td>42</td><td>2025-04-20</td><td>5500.0</td><td>20000.0</td><td>sms</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="sheet">
+  <div class="sheet-head">🟢 usage DataFrame (with derived period column)</div>
+  <table>
+    <thead><tr><th>acc_id</th><th>year</th><th>month</th><th>channel</th><th>source</th><th>usage</th><th>period <span class="cell-tx">NEW</span></th></tr></thead>
+    <tbody>
+      <tr class="us"><td>42</td><td>2025</td><td>4</td><td>sms</td><td>bc</td><td>1800</td><td>2025-04-01</td></tr>
+      <tr class="us"><td>42</td><td>2025</td><td>4</td><td>sms</td><td>api</td><td>950</td><td>2025-04-01</td></tr>
+      <tr class="us"><td>42</td><td>2025</td><td>5</td><td>sms</td><td>bc</td><td>2100</td><td>2025-05-01</td></tr>
+      <tr class="us"><td>42</td><td>2025</td><td>5</td><td>sms</td><td>api</td><td>880</td><td>2025-05-01</td></tr>
+      <tr class="us"><td>42</td><td>2025</td><td>6</td><td>sms</td><td>bc</td><td>2400</td><td>2025-06-01</td></tr>
+    </tbody>
+  </table>
+</div>
+`,
+    inspect: () => `
+<div class="ins-card">
+  <div class="ins-h">Progress stream so far</div>
+  <div class="stream">
+    <div class="ev"><span class="ev-t">10%</span><span class="ev-k">step:</span><span class="ev-v">loading_data</span></div>
+  </div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">_load_from_db</div>
+  <pre class="code"><span class="kw">async def</span> <span class="fn">_load_from_db</span>(Session, run_id):
+  <span class="kw">def</span> <span class="fn">_to_naive</span>(series):
+    dt = pd.<span class="fn">to_datetime</span>(series,
+        errors=<span class="str">"coerce"</span>, utc=<span class="kw">True</span>)
+    <span class="kw">return</span> dt.dt.<span class="fn">tz_convert</span>(<span class="kw">None</span>)
+
+  <span class="cm"># users</span>
+  u = <span class="kw">await</span> db.<span class="fn">execute</span>(<span class="fn">text</span>(<span class="str">"""
+    SELECT acc_id, status_sms, credit_sms, …
+    FROM raw_customers WHERE run_id = :r
+  """</span>), {<span class="str">"r"</span>: run_id})
+  users = pd.<span class="fn">DataFrame</span>(…)
+  users[date_cols] = <span class="fn">_to_naive</span>(…)
+  users[num_cols]  = pd.<span class="fn">to_numeric</span>(…,
+                       errors=<span class="str">"coerce"</span>)</pre>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Cutoff date</div>
+  <div style="font-size:11.5px;color:var(--t2);line-height:1.65">
+    The worker reads <code style="color:var(--py);font-family:var(--mono)">cutoff_date</code> from
+    <code style="color:var(--py);font-family:var(--mono)">prediction_runs</code>, default <code style="color:var(--py);font-family:var(--mono)">2025-07-01</code>.
+    <b>All point-in-time features will only use data <i>before</i> this date.</b>
+  </div>
+  <div class="kv" style="margin-top:8px"><div class="kv-k">cutoff</div><div class="kv-v new">2025-07-01</div></div>
+</div>
+`
+  },
+
+  /* ─── 5. Feature Engineering ──────────────────────────────── */
+  {
+    key:"features",
+    label:"Features (30)",
+    icon:"⚗️",
+    title:"build_features() turns 3 DataFrames into 1 row × 30 features for acc_id 42",
+    sub:"Point-in-time safe: only rows where date < cutoff are used. fillna(0) handles missing merges. log1p compresses heavy-tailed money/usage values so models behave.",
+    pill:"py",
+    body: () => `
+<div class="flow">
+  <div class="box"><div class="b-lbl">users</div><div class="b-val">1 row</div></div>
+  <div class="box"><div class="b-lbl">payments</div><div class="b-val">4 rows pre-cutoff</div></div>
+  <div class="box"><div class="b-lbl">usage</div><div class="b-val">5 rows pre-cutoff</div></div>
+  <div class="arr"><span class="arr-lbl">build_features(cutoff)</span></div>
+  <div class="box hi"><div class="b-lbl">feat_df row for acc_id 42</div><div class="b-val">30 numeric features</div></div>
+</div>
+
+<div class="section-t">Live computation — acc_id 42</div>
+
+<div class="fgrid" id="fgrid">
+  <div class="f user"><div class="fk">days_since_join</div><div class="fv">533</div></div>
+  <div class="f user"><div class="fk">days_since_last_send</div><div class="fv">10</div></div>
+  <div class="f user"><div class="fk">days_since_last_access</div><div class="fv">10</div></div>
+  <div class="f user"><div class="fk">days_until_sms_expire</div><div class="fv">183</div></div>
+  <div class="f user"><div class="fk">days_until_email_exp</div><div class="fv">0</div></div>
+  <div class="f user"><div class="fk">credit_sms_log</div><div class="fv">16.97</div></div>
+  <div class="f user"><div class="fk">credit_email_log</div><div class="fv">0.00</div></div>
+  <div class="f user"><div class="fk">is_paid_sms</div><div class="fv">1</div></div>
+  <div class="f user"><div class="fk">is_paid_email</div><div class="fv">0</div></div>
+  <div class="f pay"><div class="fk">pay_recency_days</div><div class="fv">72</div></div>
+
+  <div class="f pay"><div class="fk">pay_frequency</div><div class="fv">4</div></div>
+  <div class="f pay"><div class="fk">pay_monetary_log</div><div class="fv">9.45</div></div>
+  <div class="f pay"><div class="fk">pay_avg_amount</div><div class="fv">3200</div></div>
+  <div class="f pay"><div class="fk">pay_total_credits</div><div class="fv">45000</div></div>
+  <div class="f pay"><div class="fk">pay_avg_interval</div><div class="fv">137</div></div>
+  <div class="f pay"><div class="fk">pay_overdue_ratio</div><div class="fv">0.53</div></div>
+  <div class="f pay"><div class="fk">pay_n_sms</div><div class="fv">4</div></div>
+  <div class="f pay"><div class="fk">pay_n_email</div><div class="fv">0</div></div>
+  <div class="f pay"><div class="fk">pay_tenure_days</div><div class="fv">406</div></div>
+  <div class="f use"><div class="fk">usage_total_log</div><div class="fv">9.10</div></div>
+
+  <div class="f use"><div class="fk">usage_months</div><div class="fv">3</div></div>
+  <div class="f use"><div class="fk">usage_avg</div><div class="fv">2710</div></div>
+  <div class="f use"><div class="fk">usage_max</div><div class="fv">2980</div></div>
+  <div class="f use"><div class="fk">usage_std</div><div class="fv">269</div></div>
+  <div class="f use"><div class="fk">usage_recent_3m</div><div class="fv">8130</div></div>
+  <div class="f use"><div class="fk">usage_prev_3m</div><div class="fv">0</div></div>
+  <div class="f use"><div class="fk">usage_decay_ratio</div><div class="fv">0.00</div></div>
+  <div class="f use"><div class="fk">usage_slope</div><div class="fv">160</div></div>
+  <div class="f use"><div class="fk">usage_sms_total</div><div class="fv">8130</div></div>
+  <div class="f use"><div class="fk">usage_email_total</div><div class="fv">0</div></div>
+</div>
+
+<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+  <span class="pill ely">user features × 9</span>
+  <span class="pill py">payment features × 10</span>
+  <span class="pill wk">usage features × 11</span>
+</div>
+
+<div class="callout">
+  <div class="callout-i">⏳</div>
+  <div class="callout-b">
+    <b>Point-in-time discipline:</b> features for last_send come from
+    <code>usage[period &lt; cutoff]</code>, NOT from the <code>last_send</code> column on the user row
+    (which could be updated post-cutoff and leak the future into training).
+    This was a real bug — see comment "FIX V3" in <code>features.py</code>.
+  </div>
+</div>
+
+<div class="hl-row">
+  <b>Last cleansing step:</b> after merging user + payment + usage features for acc_id 42,
+  any column that came up <code class="cell-tx">NaN</code> (e.g. <code class="cell-tx">usage_email_total</code> because
+  acc 42 never sent email) is filled with <code class="cell-tx">0</code> via
+  <code class="cell-tx">feat.fillna(0)</code>. Then <code class="cell-tx">pd.to_numeric</code> per column
+  guarantees float/int dtypes — no objects sneak into LightGBM.
+</div>
+`,
+    inspect: () => `
+<div class="ins-card">
+  <div class="ins-h">Progress</div>
+  <div class="stream">
+    <div class="ev"><span class="ev-t">10%</span><span class="ev-k">step:</span><span class="ev-v">loading_data</span></div>
+    <div class="ev"><span class="ev-t">25%</span><span class="ev-k">step:</span><span class="ev-v">building_features</span></div>
+  </div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">build_features signature</div>
+  <pre class="code"><span class="kw">def</span> <span class="fn">build_features</span>(users, payments, usage,
+                   cutoff) -&gt; pd.DataFrame:
+  user_f  = <span class="fn">_user_features</span>(users, payments,
+                              usage, cutoff)
+  pay_f   = <span class="fn">_payment_features</span>(payments, cutoff)
+  usage_f = <span class="fn">_usage_features</span>(usage, cutoff)
+  feat = user_f.<span class="fn">merge</span>(pay_f,  <span class="kw">on</span>=<span class="str">"acc_id"</span>)
+                .<span class="fn">merge</span>(usage_f,<span class="kw">on</span>=<span class="str">"acc_id"</span>)
+  <span class="hl">feat = feat.<span class="fn">fillna</span>(<span class="num">0</span>)</span>  <span class="cm"># missing → 0</span>
+  <span class="kw">return</span> feat</pre>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">log1p transforms</div>
+  <div style="font-size:11.5px;color:var(--t2);line-height:1.65">
+    Money & usage have huge dynamic range (zero → millions).
+    <code style="color:var(--py);font-family:var(--mono)">log1p(x) = ln(1+x)</code> compresses these
+    so the model isn't dominated by whales — and 0 stays 0.
+  </div>
+  <div class="kv" style="margin-top:8px"><div class="kv-k">credit_sms 23,466,015</div><div class="kv-v new">→ 16.97</div></div>
+  <div class="kv"><div class="kv-k">credit_email 0</div><div class="kv-v new">→ 0.00</div></div>
+</div>
+`
+  },
+
+  /* ─── 6. Lifecycle staging (rule-based) ───────────────────── */
+  {
+    key:"lifecycle",
+    label:"Lifecycle",
+    icon:"🌳",
+    title:"Rule-based decision tree assigns acc_id 42 to a stage",
+    sub:"No ML here — just logic. Four exclusive stages: Ghost, Churned, Active Free, Active Paid. Each gets a sub-stage. Decides which models run on this customer in the next step.",
+    pill:"py",
+    body: () => `
+<div class="callout">
+  <div class="callout-i">🌳</div>
+  <div class="callout-b">
+    The function <code>assign_lifecycle_stage()</code> walks <i>every</i> customer through this tree.
+    Below is acc_id 42's path highlighted in <b style="color:var(--wk)">green</b>.
+    The chosen stage determines which of the 5 ML models run on them.
+  </div>
+</div>
+
+<div class="tree">
+  <div class="tnode lit"><span class="br">┌</span><div class="cond">Did <b>acc_id 42</b> EVER have a payment or any usage &gt; 0 before cutoff?</div><span class="ans">yes ✓</span></div>
+  <div class="tnode" style="margin-left:18px"><span class="br">│</span><div class="cond">→ Skip <b>Ghost</b> stage (would need: never any activity)</div><span class="ans">skip</span></div>
+
+  <div class="tnode path" style="margin-left:18px"><span class="br">├</span><div class="cond">Any activity in last 6 months? (≥ 2025-01-01)</div><span class="ans">yes ✓</span></div>
+  <div class="tnode" style="margin-left:36px"><span class="br">│</span><div class="cond">→ Skip <b>Churned</b> stage (would need: no recent activity)</div><span class="ans">skip</span></div>
+
+  <div class="tnode path" style="margin-left:36px"><span class="br">├</span><div class="cond">Have they ever paid?</div><span class="ans">yes ✓</span></div>
+  <div class="tnode" style="margin-left:54px"><span class="br">│</span><div class="cond">→ Skip <b>Active Free</b> stage (would need: never paid)</div><span class="ans">skip</span></div>
+
+  <div class="tnode path" style="margin-left:54px"><span class="br">└</span><div class="cond">acc_id 42 → <b style="color:var(--wk)">Active Paid</b> · sub-stage: <b>Active Paid</b></div><span class="ans">match</span></div>
+</div>
+
+<div class="section-t">All 4 possible outcomes (per-customer)</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:11px">
+  <div class="box" style="border-color:rgba(148,163,184,.35)">
+    <span class="b-tag" style="background:rgba(148,163,184,.18);color:var(--gh)">ghost</span>
+    <div class="b-lbl">never any activity</div>
+    <div style="font-size:11px;color:var(--t2);line-height:1.6">sub: New Signup · Warm Ghost · Dead Ghost (by join age)</div>
+    <div style="font-size:10px;color:var(--t3);font-family:var(--mono);margin-top:8px">→ rule-based action only</div>
+  </div>
+  <div class="box" style="border-color:rgba(251,113,133,.35)">
+    <span class="b-tag" style="background:rgba(251,113,133,.18);color:var(--ch)">churned</span>
+    <div class="b-lbl">used to be active, gone now</div>
+    <div style="font-size:11px;color:var(--t2);line-height:1.6">sub: Churned Paid · Churned Free</div>
+    <div style="font-size:10px;color:var(--t3);font-family:var(--mono);margin-top:8px">→ Winback model</div>
+  </div>
+  <div class="box" style="border-color:rgba(251,191,36,.35)">
+    <span class="b-tag" style="background:rgba(251,191,36,.18);color:var(--af)">active free</span>
+    <div class="b-lbl">using but never paid</div>
+    <div style="font-size:11px;color:var(--t2);line-height:1.6">sub: High Usage Free · Low Usage Free</div>
+    <div style="font-size:10px;color:var(--t3);font-family:var(--mono);margin-top:8px">→ Conversion model</div>
+  </div>
+  <div class="box hi" style="border-color:var(--wk)">
+    <span class="b-tag" style="background:rgba(52,211,153,.2);color:var(--wk)">active paid ★</span>
+    <div class="b-lbl">using and ever paid</div>
+    <div style="font-size:11px;color:var(--t2);line-height:1.6">sub: Active Paid (model splits healthy/at-risk later)</div>
+    <div style="font-size:10px;color:var(--wk);font-family:var(--mono);margin-top:8px">→ Churn + CLV + Credit</div>
+  </div>
+</div>
+`,
+    inspect: () => `
+<div class="ins-card">
+  <div class="ins-h">acc_id 42 — derived facts</div>
+  <div class="kv"><div class="kv-k">ever_paid</div><div class="kv-v good">True (4 payments)</div></div>
+  <div class="kv"><div class="kv-k">last activity</div><div class="kv-v">2025-06-22</div></div>
+  <div class="kv"><div class="kv-k">cutoff − 6mo</div><div class="kv-v">2025-01-01</div></div>
+  <div class="kv"><div class="kv-k">is_active</div><div class="kv-v good">True</div></div>
+  <div class="kv"><div class="kv-k">days_since_last_activity</div><div class="kv-v">9</div></div>
+  <div class="kv"><div class="kv-k">total_revenue</div><div class="kv-v">฿12,800</div></div>
+  <div class="kv"><div class="kv-k">n_purchases</div><div class="kv-v">4</div></div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Stage assigned</div>
+  <div style="text-align:center;padding:14px;background:rgba(52,211,153,.08);
+              border:1px solid rgba(52,211,153,.3);border-radius:8px">
+    <div style="font-size:9.5px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);margin-bottom:6px">Lifecycle Stage</div>
+    <div style="font-size:22px;font-weight:900;color:var(--wk);font-family:var(--mono)">Active Paid</div>
+    <div style="font-size:10px;color:var(--t2);font-family:var(--mono);margin-top:4px">sub_stage: Active Paid</div>
+  </div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Code path</div>
+  <pre class="code"><span class="kw">for</span> _, u <span class="kw">in</span> users.<span class="fn">iterrows</span>():
+  acc = u[<span class="str">"acc_id"</span>]
+  ep = acc <span class="kw">in</span> pay_accs        <span class="cm"># ever paid?</span>
+  ea = acc <span class="kw">in</span> ever_active     <span class="cm"># ever any activity?</span>
+  ia = acc <span class="kw">in</span> active_set      <span class="cm"># active now?</span>
+  <span class="kw">if</span> <span class="kw">not</span> ea:    stage = <span class="str">"Ghost"</span>
+  <span class="kw">elif</span> <span class="kw">not</span> ia:  stage = <span class="str">"Churned"</span>
+  <span class="kw">elif</span> <span class="kw">not</span> ep:  stage = <span class="str">"Active Free"</span>
+  <span class="hl"><span class="kw">else</span>:         stage = <span class="str">"Active Paid"</span></span></pre>
+</div>
+`
+  },
+
+  /* ─── 7. 5 ML models run ──────────────────────────────────── */
+  {
+    key:"models",
+    label:"5 ML Models",
+    icon:"🧠",
+    title:"Each model runs only on customers in its target lifecycle stage",
+    sub:"acc_id 42 is Active Paid, so Churn + CLV + Credit run on them. Winback and Conversion skip them entirely. SHAP can later explain the churn score per-feature.",
+    pill:"py",
+    body: () => `
+<div class="mgrid">
+  <div class="mod active">
+    <div class="mod-head">
+      <div class="mod-icon" style="background:rgba(251,113,133,.2);color:var(--ch)">🎯</div>
+      <div><div class="mod-name">Churn</div><div class="mod-bucket">LightGBM + SHAP</div></div>
+    </div>
+    <div style="font-size:10.5px;color:var(--t2);line-height:1.55">
+      Trained with Optuna on 30 features × historic labels. Predicts P(stops using in next 6mo).
+    </div>
+    <div class="mod-out">acc_id 42 → <span>0.18</span> (Low risk)</div>
+  </div>
+
+  <div class="mod active">
+    <div class="mod-head">
+      <div class="mod-icon" style="background:rgba(96,165,250,.2);color:var(--acc)">💰</div>
+      <div><div class="mod-name">CLV</div><div class="mod-bucket">BG-NBD + Gamma-Gamma</div></div>
+    </div>
+    <div style="font-size:10.5px;color:var(--t2);line-height:1.55">
+      Probabilistic. Estimates p_alive and 6-mo expected revenue with 80% & 95% intervals.
+    </div>
+    <div class="mod-out">predicted_clv_6m → <span>฿4,820</span> · p_alive → <span>0.91</span></div>
+  </div>
+
+  <div class="mod active">
+    <div class="mod-head">
+      <div class="mod-icon" style="background:rgba(251,191,36,.2);color:var(--py)">📅</div>
+      <div><div class="mod-name">Credit</div><div class="mod-bucket">Quantile regression</div></div>
+    </div>
+    <div style="font-size:10.5px;color:var(--t2);line-height:1.55">
+      Predicts days-until-next-credit-purchase at 5 quantiles (p10..p90).
+    </div>
+    <div class="mod-out">p50 → <span>42 days</span> · p10/p90 → 18/87</div>
+  </div>
+
+  <div class="mod skip">
+    <div class="mod-head">
+      <div class="mod-icon" style="background:rgba(244,114,182,.2);color:var(--pink)">↩</div>
+      <div><div class="mod-name">Winback</div><div class="mod-bucket">Churned only</div></div>
+    </div>
+    <div style="font-size:10.5px;color:var(--t2);line-height:1.55">
+      P(comeback) for churned customers. <b style="color:var(--red)">acc_id 42 skipped</b> — not churned.
+    </div>
+    <div class="mod-out">comeback_probability → <span style="color:var(--t3)">NaN</span></div>
+  </div>
+
+  <div class="mod skip">
+    <div class="mod-head">
+      <div class="mod-icon" style="background:rgba(52,211,153,.2);color:var(--wk)">⬆</div>
+      <div><div class="mod-name">Conversion</div><div class="mod-bucket">Active Free only</div></div>
+    </div>
+    <div style="font-size:10.5px;color:var(--t2);line-height:1.55">
+      P(free → paid). <b style="color:var(--red)">acc_id 42 skipped</b> — already paid.
+    </div>
+    <div class="mod-out">conversion_probability → <span style="color:var(--t3)">NaN</span></div>
+  </div>
+</div>
+
+<div class="section-t">How Churn model uses acc_id 42's 30 features</div>
+
+<div class="flow">
+  <div class="box hi"><div class="b-lbl">feat_df row × 30 cols</div><div class="b-val">acc 42</div></div>
+  <div class="arr"><span class="arr-lbl">predict_proba</span></div>
+  <div class="box"><span class="b-tag" style="background:rgba(251,113,133,.2);color:var(--ch)">lgbm</span>
+    <div class="b-lbl">churn_model.pkl</div><div class="b-val">trained</div></div>
+  <div class="arr"><span class="arr-lbl">probability</span></div>
+  <div class="box hi" style="border-color:var(--ch)"><div class="b-lbl">churn_probability</div><div class="b-val" style="color:var(--ch);font-size:18px">0.18</div></div>
+</div>
+
+<div class="callout">
+  <div class="callout-i">🔎</div>
+  <div class="callout-b">
+    On the customer detail page, clicking "Explain" calls
+    <code>GET /runs/:id/predictions/:acc_id/explain</code>. Elysia proxies to FastAPI's
+    <code>/internal/explain</code>, which runs SHAP on those exact 30 features and returns
+    the top contributing features for that one customer.
+  </div>
+</div>
+`,
+    inspect: () => `
+<div class="ins-card">
+  <div class="ins-h">Progress</div>
+  <div class="stream">
+    <div class="ev"><span class="ev-t">25%</span><span class="ev-k">step:</span><span class="ev-v">building_features</span></div>
+    <div class="ev"><span class="ev-t">40%</span><span class="ev-k">step:</span><span class="ev-v">predicting_all</span></div>
+  </div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Model dispatch (per stage)</div>
+  <div class="kv"><div class="kv-k">Active Paid</div><div class="kv-v new">Churn + CLV + Credit</div></div>
+  <div class="kv"><div class="kv-k">Churned</div><div class="kv-v">Winback</div></div>
+  <div class="kv"><div class="kv-k">Active Free</div><div class="kv-v">Conversion</div></div>
+  <div class="kv"><div class="kv-k">Ghost</div><div class="kv-v">(rule-based action only)</div></div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">run_all_predictions()</div>
+  <pre class="code">predictor.<span class="fn">run_all_predictions</span>()
+<span class="cm"># Step 1: lifecycle → assigns stages</span>
+<span class="cm"># Step 2: churn (Active Paid filter)</span>
+active_feat = feat_df[
+    feat_df[<span class="str">"acc_id"</span>].<span class="fn">isin</span>(active_paid_ids)
+]
+churn_out = churn_model.<span class="fn">predict</span>(active_feat)
+<span class="cm"># Step 3: CLV (BG-NBD on all payments)</span>
+<span class="cm"># Step 4: Credit (quantile regression)</span>
+<span class="cm"># Step 5: Winback (churned only)</span>
+<span class="cm"># Step 6: Conversion (active free only)</span></pre>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Derived metrics</div>
+  <div class="kv"><div class="kv-k">revenue_at_risk</div><div class="kv-v">clv × churn_prob</div></div>
+  <div class="kv"><div class="kv-k">  = 4820 × 0.18</div><div class="kv-v new">฿867.60</div></div>
+  <div class="kv" style="margin-top:6px"><div class="kv-k">avg_txn_value</div><div class="kv-v">total_rev / n_purch</div></div>
+  <div class="kv"><div class="kv-k">  = 12800 / 4</div><div class="kv-v new">฿3,200</div></div>
+</div>
+`
+  },
+
+  /* ─── 8. Merge & Save ─────────────────────────────────────── */
+  {
+    key:"save",
+    label:"Save & Done",
+    icon:"✅",
+    title:"All 5 outputs left-joined onto lifecycle, batch-inserted into predictions",
+    sub:"One row per customer per run. Old predictions for this run are wiped first. Run status flips to 'done', and the SSE stream emits 100% — the UI updates live.",
+    pill:"wk",
+    body: () => `
+<div class="flow">
+  <div class="box"><div class="b-lbl">lifecycle</div><div class="b-val">acc 42 → Active Paid</div></div>
+  <div class="box"><div class="b-lbl">churn_out</div><div class="b-val">0.18</div></div>
+  <div class="box"><div class="b-lbl">clv_out</div><div class="b-val">฿4820, p_alive 0.91</div></div>
+  <div class="box"><div class="b-lbl">credit_out</div><div class="b-val">p10..p90</div></div>
+  <div class="arr"><span class="arr-lbl">_merge_all (left joins on acc_id)</span></div>
+  <div class="box hi"><div class="b-lbl">merged batch</div><div class="b-val">N rows × 25 cols</div></div>
+</div>
+
+<div class="section-t">acc_id 42 — the final predictions row</div>
+
+<div class="pred">
+  <div class="pcard"><div class="pc-l">lifecycle_stage</div><div class="pc-v green">Active Paid</div><div class="pc-sub">sub: Active Paid</div></div>
+  <div class="pcard"><div class="pc-l">churn_probability</div><div class="pc-v pink">0.18</div><div class="pc-sub">Low risk (&lt;0.30)</div></div>
+  <div class="pcard"><div class="pc-l">predicted_clv_6m</div><div class="pc-v blue">฿4,820</div><div class="pc-sub">95% CI: 3,100 — 7,250</div></div>
+  <div class="pcard"><div class="pc-l">p_alive</div><div class="pc-v green">0.91</div><div class="pc-sub">very likely still alive</div></div>
+  <div class="pcard"><div class="pc-l">credit p50</div><div class="pc-v yellow">42d</div><div class="pc-sub">p10 18 · p90 87</div></div>
+  <div class="pcard"><div class="pc-l">revenue_at_risk</div><div class="pc-v red">฿868</div><div class="pc-sub">clv × churn_prob</div></div>
+  <div class="pcard"><div class="pc-l">n_purchases</div><div class="pc-v blue">4</div><div class="pc-sub">total: ฿12,800</div></div>
+  <div class="pcard"><div class="pc-l">avg_transaction_value</div><div class="pc-v blue">฿3,200</div><div class="pc-sub">total_rev / n_purch</div></div>
+</div>
+
+<div class="callout" style="margin-top:18px">
+  <div class="callout-i">📡</div>
+  <div class="callout-b">
+    Worker calls <code>XADD progress:{run_id} 85 "saving_results"</code>, batch-inserts 1000 rows
+    at a time, then <code>XADD … 100 "done"</code>. The frontend's <b>SSE endpoint</b>
+    <code>GET /runs/:id/stream</code> XREADs that stream and pushes events live to the browser.
+    The dashboard re-renders without a page reload.
+  </div>
+</div>
+
+<div class="section-t">SSE stream timeline (full run)</div>
+
+<div class="stream">
+  <div class="ev"><span class="ev-t" style="color:var(--acc)">10%</span><span class="ev-k">step:</span><span class="ev-v">loading_data</span><span style="margin-left:auto;color:var(--t3)">— SELECT raw_*</span></div>
+  <div class="ev"><span class="ev-t" style="color:var(--acc)">25%</span><span class="ev-k">step:</span><span class="ev-v">building_features</span><span style="margin-left:auto;color:var(--t3)">— 30 features × N customers</span></div>
+  <div class="ev"><span class="ev-t" style="color:var(--acc)">40%</span><span class="ev-k">step:</span><span class="ev-v">predicting_all</span><span style="margin-left:auto;color:var(--t3)">— lifecycle + 5 models</span></div>
+  <div class="ev"><span class="ev-t" style="color:var(--acc)">85%</span><span class="ev-k">step:</span><span class="ev-v">saving_results</span><span style="margin-left:auto;color:var(--t3)">— INSERT predictions in 1000-row batches</span></div>
+  <div class="ev"><span class="ev-t" style="color:var(--wk);font-size:12px">100%</span><span class="ev-k">step:</span><span class="ev-v" style="color:var(--wk);font-weight:700">done</span><span style="margin-left:auto;color:var(--t3)">— prediction_runs.status = 'done'</span></div>
+</div>
+`,
+    inspect: () => `
+<div class="ins-card">
+  <div class="ins-h">Final progress</div>
+  <div class="stream">
+    <div class="ev"><span class="ev-t">40%</span><span class="ev-k">step:</span><span class="ev-v">predicting_all</span></div>
+    <div class="ev"><span class="ev-t">85%</span><span class="ev-k">step:</span><span class="ev-v">saving_results</span></div>
+    <div class="ev"><span class="ev-t" style="color:var(--wk)">100%</span><span class="ev-k">step:</span><span class="ev-v" style="color:var(--wk)">done</span></div>
+  </div>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">_save_predictions()</div>
+  <pre class="code"><span class="kw">await</span> db.<span class="fn">execute</span>(<span class="fn">text</span>(<span class="str">"""
+  DELETE FROM predictions
+  WHERE run_id = :r
+"""</span>), {<span class="str">"r"</span>: run_id})
+
+<span class="cm"># batch insert 1000 rows at a time</span>
+buf = []
+<span class="kw">for</span> _, row <span class="kw">in</span> batch.<span class="fn">iterrows</span>():
+  buf.<span class="fn">append</span>({...})
+  <span class="kw">if</span> <span class="fn">len</span>(buf) &gt;= <span class="num">1000</span>:
+    <span class="kw">await</span> db.<span class="fn">execute</span>(INSERT, buf)
+    buf = []</pre>
+</div>
+
+<div class="ins-card">
+  <div class="ins-h">Run update</div>
+  <pre class="code"><span class="kw">UPDATE</span> prediction_runs <span class="kw">SET</span>
+  status = <span class="str">'done'</span>,
+  total_customers  = :total,
+  active_customers = :active,
+  model_version_id = :mvid,
+  updated_at = NOW()
+<span class="kw">WHERE</span> id = :id</pre>
+</div>
+
+<div class="ins-card" style="background:linear-gradient(180deg,var(--bg2),rgba(52,211,153,.04))">
+  <div class="ins-h" style="color:var(--wk)">🎉 Pipeline complete</div>
+  <div style="font-size:11.5px;color:var(--t2);line-height:1.65">
+    From an Excel file with messy cells to a clean prediction row for every customer.
+    The browser is already showing the dashboard — SSE pushed the 100% event the moment the row was committed.
+  </div>
+</div>
+`
+  },
+];
+
+/* ════════════════════════════════════════════════════════════════
+   RENDER
+   ════════════════════════════════════════════════════════════════ */
+let current = 0;
+let playing = false;
+let playTimer = null;
+
+const $ = (id) => document.getElementById(id);
+const stepsEl  = $("steps");
+const stageBody= $("stage-body");
+const inspect  = $("inspect");
+const sLabel   = $("s-label");
+const sTitle   = $("s-title");
+const sSub     = $("s-sub");
+const progFill = $("prog-fill");
+const playBtn  = $("play");
+const prevBtn  = $("prev");
+const nextBtn  = $("next");
+
+function buildStepTabs(){
+  stepsEl.innerHTML = STAGES.map((s,i)=>
+    `<div class="step" data-i="${i}"><span class="step-n">${String(i+1).padStart(2,'0')}</span>
+       <span>${s.icon}</span> <span>${s.label}</span></div>`
+  ).join("");
+  stepsEl.querySelectorAll(".step").forEach(el=>{
+    el.addEventListener("click",()=>go(+el.dataset.i));
+  });
+}
+
+function render(){
+  const s = STAGES[current];
+
+  // tabs
+  stepsEl.querySelectorAll(".step").forEach((el,i)=>{
+    el.classList.toggle("on",  i===current);
+    el.classList.toggle("done", i<current);
+  });
+
+  // head
+  sLabel.textContent = `Step ${current+1} of ${STAGES.length} · ${s.label}`;
+  sTitle.textContent = s.title;
+  sSub.textContent   = s.sub;
+
+  // body
+  stageBody.innerHTML = `<div class="fade">${s.body()}</div>`;
+  inspect.innerHTML   = `<div class="fade">${s.inspect()}</div>`;
+
+  // animate feature grid if on features step
+  if(s.key==="features"){
+    const cells=document.querySelectorAll("#fgrid .f");
+    cells.forEach((c,i)=>setTimeout(()=>c.classList.add("flash"),i*30));
+  }
+
+  // progress
+  progFill.style.width = `${((current+1)/STAGES.length)*100}%`;
+
+  // nav buttons
+  prevBtn.disabled = current===0;
+  nextBtn.disabled = current===STAGES.length-1;
+}
+
+function go(i){
+  if(i<0||i>=STAGES.length)return;
+  current=i;
+  render();
+}
+
+function next(){
+  if(current<STAGES.length-1){go(current+1);}
+  else{stopPlay();}
+}
+
+function startPlay(){
+  playing=true;
+  playBtn.classList.add("playing");
+  playBtn.textContent="⏸ Pause";
+  playTimer=setInterval(()=>{
+    if(current>=STAGES.length-1){stopPlay();return}
+    next();
+  },5000);
+}
+function stopPlay(){
+  playing=false;
+  playBtn.classList.remove("playing");
+  playBtn.textContent="▶ Auto-play";
+  if(playTimer){clearInterval(playTimer);playTimer=null}
+}
+playBtn.addEventListener("click",()=>playing?stopPlay():startPlay());
+prevBtn.addEventListener("click",()=>go(current-1));
+nextBtn.addEventListener("click",next);
+
+// keyboard
+document.addEventListener("keydown",(e)=>{
+  if(e.key==="ArrowRight"||e.key===" "){e.preventDefault();next()}
+  else if(e.key==="ArrowLeft"){go(current-1)}
+  else if(e.key>="1"&&e.key<="8"){go(+e.key-1)}
+});
+
+buildStepTabs();
+render();
+</script>
+</body>
+</html>
