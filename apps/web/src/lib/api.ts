@@ -182,34 +182,49 @@ export interface ModelVersion {
 }
 
 export async function fetchSummary(runId: string): Promise<Record<string, unknown>> {
-  return asRecord(unwrap(await elysia.runs({ id: runId }).summary.get()));
+  const res = await apiFetch(`/api/runs/${runId}/summary`);
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Failed to load summary (${res.status})`);
+  }
+  return asRecord(body);
 }
 
 export async function fetchPredictions(
   runId: string,
   params: Record<string, string>
 ): Promise<PaginatedPredictions> {
-  return asPaginated(
-    unwrap(await elysia.runs({ id: runId }).predictions.get({ query: params as never }))
-  );
+  const qs = new URLSearchParams(params).toString();
+  const res = await apiFetch(`/api/runs/${runId}/predictions${qs ? `?${qs}` : ""}`);
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Failed to load predictions (${res.status})`);
+  }
+  return asPaginated(body);
 }
 
 export async function fetchCustomer(
   runId: string,
   accId: string
 ): Promise<Record<string, unknown>> {
-  return unwrap<Record<string, unknown>>(
-    await elysia.runs({ id: runId }).predictions({ acc_id: accId }).get()
-  );
+  const res = await apiFetch(`/api/runs/${runId}/predictions/${accId}`);
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Customer not found (${res.status})`);
+  }
+  return asRecord(body);
 }
 
 export async function fetchCustomerExplain(
   runId: string,
   accId: string
 ): Promise<Record<string, unknown>> {
-  return unwrap<Record<string, unknown>>(
-    await elysia.runs({ id: runId }).predictions({ acc_id: accId }).explain.get()
-  );
+  const res = await apiFetch(`/api/runs/${runId}/predictions/${accId}/explain`);
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Explain failed (${res.status})`);
+  }
+  return asRecord(body);
 }
 
 // ── Training — Eden Treaty ────────────────────────────────────────────────────

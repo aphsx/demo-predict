@@ -29,7 +29,11 @@ export default function Topbar() {
         const safeRuns = Array.isArray(r) ? r : [];
         setRuns(safeRuns);
         const fromUrl = sp.get("run");
-        const initial = fromUrl || (runId || safeRuns.find(x => x.status === "done")?.id || safeRuns[0]?.id || "");
+        const doneWithData = safeRuns.find(
+          (x) => x.status === "done" && (x.total_customers ?? 0) > 0
+        );
+        const initial =
+          fromUrl || runId || doneWithData?.id || safeRuns.find((x) => x.status === "done")?.id || safeRuns[0]?.id || "";
         if (initial) setRunId(initial);
       })
       .catch(() => {

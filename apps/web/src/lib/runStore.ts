@@ -16,11 +16,11 @@ export function useRunStore() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const initial = sp.get("run") || window.localStorage.getItem(KEY) || "";
+    const fromUrl = sp.get("run");
+    const initial = fromUrl || window.localStorage.getItem(KEY) || "";
     _setRunId(initial);
     setReady(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sp]);
 
   useEffect(() => {
     if (!ready || !runId) return;

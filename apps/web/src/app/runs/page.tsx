@@ -296,7 +296,7 @@ export default function RunsPage() {
                           )}
                           {run.status === "done" && (
                             <a
-                              href={`/?run=${run.id}`}
+                              href={`/customers?run=${run.id}`}
                               className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--moby-700)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1"
                             >
                               Open <ChevronRight size={11} />

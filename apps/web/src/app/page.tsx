@@ -25,20 +25,27 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<any>(null);
   const [preview, setPreview] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!runId) { setLoading(false); return; }
     setLoading(true);
+    setLoadError(null);
     Promise.all([
-      fetchSummary(runId).catch(() => null),
-      fetchPredictions(runId, { page: "1", page_size: "8", lifecycle_stage: "Active Paid" })
-        .then((d) => d.data)
-        .catch(() => []),
-    ]).then(([s, p]) => {
-      setSummary(s);
-      setPreview(Array.isArray(p) ? p : []);
-      setLoading(false);
-    });
+      fetchSummary(runId),
+      fetchPredictions(runId, { page: "1", page_size: "8" }),
+    ])
+      .then(([s, pag]) => {
+        setSummary(s);
+        setPreview(Array.isArray(pag.data) ? pag.data : []);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setSummary(null);
+        setPreview([]);
+        setLoadError(e instanceof Error ? e.message : "โหลดข้อมูลไม่สำเร็จ");
+        setLoading(false);
+      });
   }, [runId]);
 
   const ap = summary?.active_paid || {};
@@ -47,6 +54,7 @@ export default function Dashboard() {
   const lc = summary?.lifecycle || {};
 
   const totalCustomers = summary?.total_customers || 0;
+  const activePaidCount = lc["Active Paid"]?.total || 0;
 
   const anomalies = useMemo(() => buildAnomalies(summary), [summary]);
 
@@ -68,6 +76,18 @@ export default function Dashboard() {
       />
 
       <div className="px-8 mt-4 space-y-5">
+
+        {loadError && (
+          <div className="rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
+            {loadError}
+          </div>
+        )}
+
+        {!loading && !loadError && totalCustomers > 0 && activePaidCount === 0 && (
+          <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-[13px] text-[color:var(--ink-3)]">
+            ชุดข้อมูลนี้ไม่มีลูกค้า Active Paid — ดูได้ที่ Active Free, Churned หรือ Ghost ใน Customers
+          </div>
+        )}
 
         {/* KPI strip */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -186,9 +206,9 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
           <SectionCard
             title="Top accounts to act on"
-            hint="เรียงโดย Priority Score (churn × CLV × urgency × recency)"
+            hint="เรียงตาม churn probability (ทุก lifecycle stage)"
             className="xl:col-span-2"
-            right={<Link href="/playbooks" className="text-[12px] text-[color:var(--moby-700)] hover:underline">Open queue →</Link>}
+            right={<Link href="/customers" className="text-[12px] text-[color:var(--moby-700)] hover:underline">View all →</Link>}
           >
             <div className="-m-2 overflow-x-auto">
               <table className="table-base">
