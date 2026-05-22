@@ -38,26 +38,26 @@ import {
 import { api, Run } from "@/lib/api";
 
 const statusToTone: Record<string, "ok" | "warn" | "danger" | "info" | "neutral"> = {
-  done:       "ok",
+  done: "ok",
   processing: "info",
   validating: "info",
-  pending:    "neutral",
-  failed:     "danger",
+  pending: "neutral",
+  failed: "danger",
 };
 const statusIcon: Record<string, any> = {
-  done:       CheckCircle2,
+  done: CheckCircle2,
   processing: RefreshCw,
   validating: RefreshCw,
-  pending:    Clock3,
-  failed:     AlertCircle,
+  pending: Clock3,
+  failed: AlertCircle,
 };
 
 export default function RunsPage() {
-  const [runs, setRuns]       = useState<Run[]>([]);
+  const [runs, setRuns] = useState<Run[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [name, setName]       = useState("");
-  const [cutoff, setCutoff]   = useState("2025-07-01");
+  const [name, setName] = useState("");
+  const [cutoff, setCutoff] = useState("2025-07-01");
   const [uploading, setUploading] = useState<string | null>(null);
   const [streamingRun, setStreamingRun] = useState<string | null>(null);
 
