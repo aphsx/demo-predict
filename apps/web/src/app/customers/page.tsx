@@ -13,19 +13,19 @@ import {
 import { fetchPredictions, exportUrl } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
 
-const STAGES   = ["Active Paid", "Active Free", "Churned", "Ghost"];
+const STAGES = ["Active Paid", "Active Free", "Churned", "Ghost"];
 
 function Inner() {
   const router = useRouter();
-  const sp     = useSearchParams();
+  const sp = useSearchParams();
   const { runId } = useRunStore();
 
   const [page, setPage] = useState(1);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
-    lifecycle_stage:  sp.get("lifecycle_stage")  || "",
-    search:           sp.get("search")           || "",
+    lifecycle_stage: sp.get("lifecycle_stage") || "",
+    search: sp.get("search") || "",
   });
 
   useEffect(() => {
@@ -33,15 +33,19 @@ function Inner() {
     setLoading(true);
     const params: any = { page: String(page), page_size: "50" };
     Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
-    fetchPredictions(runId, params).then(d => { setData(d); setLoading(false); });
+    fetchPredictions(runId, params)
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
   }, [runId, page, filters]);
 
   const setFilter = (k: string, v: string) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); };
-  const clearAll  = () => { setFilters({
-    lifecycle_stage:"", search: "",
-  }); setPage(1); };
+  const clearAll = () => {
+    setFilters({
+      lifecycle_stage: "", search: "",
+    }); setPage(1);
+  };
 
-  const rows  = data?.data || [];
+  const rows = data?.data || [];
   const total = data?.total || 0;
   const pages = Math.max(1, Math.ceil(total / 50));
   const activeFilters = Object.entries(filters).filter(([_, v]) => v).length;
@@ -53,7 +57,7 @@ function Inner() {
         title="Customer Intelligence"
         actions={
           <a
-            href={exportUrl(runId, Object.fromEntries(Object.entries(filters).filter(([,v]) => v)))}
+            href={exportUrl(runId, Object.fromEntries(Object.entries(filters).filter(([, v]) => v)))}
             className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1.5"
           >
             <Download size={14} /> Export CSV
