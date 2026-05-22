@@ -49,7 +49,6 @@ export const trainingRoutes = new Elysia()
   // GET /model-versions/active — register before /model-versions to avoid ambiguity
   // Was unauthenticated in FastAPI; now requires auth
   .get("/model-versions/active", async () => {
-    // DISTINCT ON is PostgreSQL-specific; use raw SQL via Drizzle's sql tag
     const rows = await db.execute(sql`
       SELECT DISTINCT ON (model_type)
              id, model_type, version, trained_at,
@@ -58,7 +57,7 @@ export const trainingRoutes = new Elysia()
       WHERE is_active = TRUE
       ORDER BY model_type, trained_at DESC
     `);
-    return Array.from(rows);
+    return [...rows];
   })
 
   // GET /model-versions — was unauthenticated in FastAPI; now requires auth

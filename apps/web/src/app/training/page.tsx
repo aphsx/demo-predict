@@ -36,19 +36,25 @@ export default function TrainingPage() {
   const [activeVersions, setActiveVersions] = useState<ActiveVersions>({});
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = async () => {
+    setLoadError(null);
     try {
       const [allVersions, activeArr] = await Promise.all([
         fetchModelVersions(),
         fetchActiveModelVersions(),
       ]);
-      setVersions(allVersions);
+      setVersions(Array.isArray(allVersions) ? allVersions : []);
       const map: ActiveVersions = {};
-      activeArr.forEach((v: ModelVersion) => { map[v.model_type] = v; });
+      (Array.isArray(activeArr) ? activeArr : []).forEach((v) => {
+        map[v.model_type] = v;
+      });
       setActiveVersions(map);
-    } catch {
-      // leave state as-is on error
+    } catch (e) {
+      setVersions([]);
+      setActiveVersions({});
+      setLoadError(e instanceof Error ? e.message : "Failed to load model versions");
     } finally {
       setLoading(false);
     }
@@ -106,6 +112,10 @@ export default function TrainingPage() {
         }
       />
       <p className="px-8 text-sm text-[color:var(--ink-4)] -mt-4 mb-2">Monitor model versions and trigger new training runs</p>
+
+      {loadError && (
+        <p className="px-8 text-sm text-[color:var(--danger)]">{loadError}</p>
+      )}
 
       {/* Active Versions Summary */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">

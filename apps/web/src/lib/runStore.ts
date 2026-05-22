@@ -12,22 +12,25 @@ export function useRunStore() {
   const router   = useRouter();
   const pathname = usePathname();
   const sp       = useSearchParams();
-  const [runId, _setRunId] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return sp.get("run") || window.localStorage.getItem(KEY) || "";
-  });
+  const [runId, _setRunId] = useState<string>("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!runId) return;
-    if (typeof window !== "undefined") window.localStorage.setItem(KEY, runId);
-    // sync ?run= into URL (without scroll)
+    const initial = sp.get("run") || window.localStorage.getItem(KEY) || "";
+    _setRunId(initial);
+    setReady(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !runId) return;
+    window.localStorage.setItem(KEY, runId);
     const params = new URLSearchParams(Array.from(sp.entries()));
     if (params.get("run") !== runId) {
       params.set("run", runId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId]);
+  }, [runId, ready, pathname, router, sp]);
 
   return { runId, setRunId: _setRunId };
 }

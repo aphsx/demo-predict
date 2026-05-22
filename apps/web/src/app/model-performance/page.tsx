@@ -127,7 +127,9 @@ function ChurnTab({ m }: any) {
         ]} />
       </SectionCard>
       <SectionCard title="Top SHAP factors" hint="Mean |SHAP|">
-        {(m.churn_shap_top10 || []).length === 0 ? <EmptyState title="ไม่มีข้อมูล SHAP" /> : (
+        {!(Array.isArray(m.churn_shap_top10) && m.churn_shap_top10.length > 0) ? (
+          <EmptyState title="ไม่มีข้อมูล SHAP" />
+        ) : (
           <div className="space-y-2">
             {m.churn_shap_top10.map((d: any, i: number) => (
               <div key={i}>

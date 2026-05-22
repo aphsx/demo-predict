@@ -102,7 +102,7 @@ export default function Customer360() {
                 {explain?.top_risk_factors?.length > 0 && (
                   <div className="pt-2 border-t border-[color:var(--line)]">
                     <div className="text-[10.5px] uppercase tracking-[.10em] text-[color:var(--ink-5)] mb-2">Risk factors</div>
-                    {explain.top_risk_factors.map((f: any, i: number) => (
+                    {(Array.isArray(explain?.top_risk_factors) ? explain.top_risk_factors : []).map((f: any, i: number) => (
                       <div key={i} className="text-[12px] text-[color:var(--ink-3)] mb-1 flex items-start gap-1.5">
                         <span className="text-[color:var(--warn)] mt-0.5">·</span>
                         <span>{formatFeatureLabel(f.feature, f.feature_value)}</span>

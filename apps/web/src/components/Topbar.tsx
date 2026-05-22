@@ -36,7 +36,7 @@ export default function Topbar() {
         setRuns([]);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [sp]);
 
   const dyn = matchDynamicPath(pathname);
   const meta = TITLE_MAP[dyn] || { title: "1Moby", sub: "" };

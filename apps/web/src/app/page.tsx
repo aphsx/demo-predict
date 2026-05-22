@@ -30,11 +30,14 @@ export default function Dashboard() {
     if (!runId) { setLoading(false); return; }
     setLoading(true);
     Promise.all([
-      fetchSummary(runId),
+      fetchSummary(runId).catch(() => null),
       fetchPredictions(runId, { page: "1", page_size: "8", lifecycle_stage: "Active Paid" })
-        .then(d => d?.data || []).catch(() => []),
+        .then((d) => d.data)
+        .catch(() => []),
     ]).then(([s, p]) => {
-      setSummary(s); setPreview(p); setLoading(false);
+      setSummary(s);
+      setPreview(Array.isArray(p) ? p : []);
+      setLoading(false);
     });
   }, [runId]);
 

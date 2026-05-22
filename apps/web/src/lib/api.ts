@@ -17,13 +17,34 @@ import { elysia } from "./eden";
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 // Eden Treaty return types are { data: success | error-shape | null, error: E | null }.
-// We throw on error and cast to the explicit return type declared on each function.
-// The double-cast is intentional: Date fields in Drizzle become strings after JSON
-// serialisation, so the TypeScript types diverge from the runtime values.
+function isApiError(data: unknown): data is { message: string } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "message" in data &&
+    typeof (data as { message: unknown }).message === "string"
+  );
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
 function unwrap<T>(result: { data: unknown; error: unknown }): T {
-  if (result.error) throw result.error;
+  if (result.error) {
+    const err = result.error;
+    throw err instanceof Error ? err : new Error(String(err));
+  }
   if (result.data == null) throw new Error("API returned no data");
-  return result.data as unknown as T;
+  if (isApiError(result.data)) throw new Error(result.data.message);
+  return result.data as T;
 }
 
 /** Manual fetch — used only for file upload, SSE, and streaming routes. */
@@ -72,22 +93,55 @@ export interface ChatMessage {
   content: string;
 }
 
-// ── Runs — Eden Treaty ───────────────────────────────────────────────────────
+// ── Runs — manual fetch (Eden treaty mishandles GET /runs list in this setup) ─
+
+async function parseJson(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error("API returned invalid JSON");
+  }
+}
 
 export async function fetchRuns(): Promise<Run[]> {
-  return unwrap<Run[]>(await elysia.runs.get());
+  const res = await apiFetch("/api/runs");
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Failed to load runs (${res.status})`);
+  }
+  return asArray<Run>(body);
 }
 
-export async function createRun(name: string, cutoff_date: string) {
-  return unwrap(await elysia.runs.post({ name, cutoff_date }));
+export async function createRun(name: string, cutoff_date: string): Promise<Run> {
+  const res = await apiFetch("/api/runs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, cutoff_date }),
+  });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Failed to create run (${res.status})`);
+  }
+  return body as Run;
 }
 
-export async function deleteRun(id: string) {
-  return unwrap(await elysia.runs({ id }).delete());
+export async function deleteRun(id: string): Promise<void> {
+  const res = await apiFetch(`/api/runs/${id}`, { method: "DELETE" });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Failed to delete run (${res.status})`);
+  }
 }
 
-export async function fetchRun(id: string) {
-  return unwrap(await elysia.runs({ id }).get());
+export async function fetchRun(id: string): Promise<Run> {
+  const res = await apiFetch(`/api/runs/${id}`);
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Failed to load run (${res.status})`);
+  }
+  return body as Run;
 }
 
 export interface PaginatedPredictions {
@@ -95,6 +149,26 @@ export interface PaginatedPredictions {
   page: number;
   page_size: number;
   data: Record<string, unknown>[];
+}
+
+const EMPTY_PAGE: PaginatedPredictions = {
+  total: 0,
+  page: 1,
+  page_size: 50,
+  data: [],
+};
+
+function asPaginated(value: unknown): PaginatedPredictions {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return EMPTY_PAGE;
+  }
+  const o = value as Record<string, unknown>;
+  return {
+    total: Number(o.total ?? 0),
+    page: Number(o.page ?? 1),
+    page_size: Number(o.page_size ?? 50),
+    data: asArray<Record<string, unknown>>(o.data),
+  };
 }
 
 export interface ModelVersion {
@@ -108,15 +182,15 @@ export interface ModelVersion {
 }
 
 export async function fetchSummary(runId: string): Promise<Record<string, unknown>> {
-  return unwrap<Record<string, unknown>>(await elysia.runs({ id: runId }).summary.get());
+  return asRecord(unwrap(await elysia.runs({ id: runId }).summary.get()));
 }
 
 export async function fetchPredictions(
   runId: string,
   params: Record<string, string>
 ): Promise<PaginatedPredictions> {
-  return unwrap<PaginatedPredictions>(
-    await elysia.runs({ id: runId }).predictions.get({ query: params as never })
+  return asPaginated(
+    unwrap(await elysia.runs({ id: runId }).predictions.get({ query: params as never }))
   );
 }
 
@@ -141,7 +215,7 @@ export async function fetchCustomerExplain(
 // ── Training — Eden Treaty ────────────────────────────────────────────────────
 
 export async function fetchModelMetrics(): Promise<Record<string, unknown>> {
-  return unwrap<Record<string, unknown>>(await elysia["model-metrics"].get());
+  return asRecord(unwrap(await elysia["model-metrics"].get()));
 }
 
 export async function fetchTrainingLog(): Promise<{ log: string }> {
@@ -149,11 +223,11 @@ export async function fetchTrainingLog(): Promise<{ log: string }> {
 }
 
 export async function fetchModelVersions(): Promise<ModelVersion[]> {
-  return unwrap<ModelVersion[]>(await elysia["model-versions"].get());
+  return asArray<ModelVersion>(unwrap(await elysia["model-versions"].get()));
 }
 
 export async function fetchActiveModelVersions(): Promise<ModelVersion[]> {
-  return unwrap<ModelVersion[]>(await elysia["model-versions"].active.get());
+  return asArray<ModelVersion>(unwrap(await elysia["model-versions"].active.get()));
 }
 
 export async function trainModels(cutoff_date?: string): Promise<Record<string, unknown>> {

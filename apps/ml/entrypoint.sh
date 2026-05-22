@@ -4,9 +4,8 @@ set -e
 MODEL_DIR="${MODEL_DIR:-/app/models}"
 DATA_DIR="${DATA_DIR:-/data}"
 
-# ── Apply DB migrations ──
-echo "=== Running Alembic migrations ==="
-alembic upgrade head
+# ── Apply DB migrations (repairs partial-schema dev volumes) ──
+python scripts/migrate_or_repair.py
 
 # ── Build time: train only if no models exist ──
 if [ -n "$DOCKER_BUILD" ]; then

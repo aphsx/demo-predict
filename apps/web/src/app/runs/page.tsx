@@ -60,12 +60,22 @@ export default function RunsPage() {
   const [cutoff, setCutoff] = useState("2025-07-01");
   const [uploading, setUploading] = useState<string | null>(null);
   const [streamingRun, setStreamingRun] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const load = () =>
-    api.listRuns()
-      .then((d) => { setRuns(Array.isArray(d) ? d : []); setLoading(false); })
-      .catch(() => setLoading(false));
-  useEffect(() => { load(); }, []);
+  const load = async () => {
+    setError(null);
+    try {
+      const d = await api.listRuns();
+      setRuns(Array.isArray(d) ? d : []);
+    } catch (e) {
+      setRuns([]);
+      setError(e instanceof Error ? e.message : "โหลดรายการ run ไม่สำเร็จ");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { void load(); }, []);
 
   // SSE subscription for active runs
   useEffect(() => {
@@ -83,17 +93,47 @@ export default function RunsPage() {
   }, [runs, streamingRun]);
 
   const createRun = async () => {
-    if (!name) return;
-    await api.createRun({ name, cutoff_date: cutoff });
-    setCreating(false); setName(""); load();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("กรุณาใส่ชื่อ run");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await api.createRun({ name: trimmed, cutoff_date: cutoff });
+      setRuns((prev) => [created, ...prev.filter((r) => r.id !== created.id)]);
+      setCreating(false);
+      setName("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "สร้าง run ไม่สำเร็จ");
+    } finally {
+      setSaving(false);
+    }
   };
   const deleteRun = async (id: string) => {
     if (!confirm("ลบ Run นี้?")) return;
-    await api.deleteRun(id); load();
+    setError(null);
+    try {
+      await api.deleteRun(id);
+      setRuns((prev) => prev.filter((r) => r.id !== id));
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "ลบ run ไม่สำเร็จ");
+    }
   };
   const uploadFile = async (runId: string, file: File) => {
     setUploading(runId);
-    try { await api.uploadFile(runId, file); load(); } finally { setUploading(null); }
+    setError(null);
+    try {
+      await api.uploadFile(runId, file);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "อัปโหลดไฟล์ไม่สำเร็จ");
+    } finally {
+      setUploading(null);
+    }
   };
 
   const stats = {
@@ -119,6 +159,12 @@ export default function RunsPage() {
       />
 
       <div className="px-8 mt-4 space-y-5">
+        {error && (
+          <div className="rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
+            {error}
+          </div>
+        )}
+
         {/* Status strip */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MiniStat label="Total runs" value={stats.total} tone="slate" />
@@ -153,9 +199,10 @@ export default function RunsPage() {
             <div className="flex justify-end mt-4">
               <button
                 onClick={createRun}
-                className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)]"
+                disabled={saving}
+                className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] disabled:opacity-50"
               >
-                Create
+                {saving ? "Creating…" : "Create"}
               </button>
             </div>
           </SectionCard>
