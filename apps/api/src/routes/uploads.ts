@@ -2,7 +2,7 @@ import Elysia, { t } from "elysia";
 import * as XLSX from "xlsx";
 import { eq, max, min, sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { predictionRuns, rawCustomers, rawPayments, rawUsage } from "../db/schema";
+import { predictionRuns, predictions, rawCustomers, rawPayments, rawUsage } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { verifyRunOwnership } from "../lib/run-guard";
 import { enqueueArqJob } from "../services/job-producer";
@@ -82,6 +82,12 @@ function renameRow(row: RawRow, map: Record<string, string>): RawRow {
   return out;
 }
 
+/** Trim header keys (e.g. "acc_id " → "acc_id") and apply sheet-specific renames. */
+function normalizeSheetRows(rows: RawRow[], sheetName: string): RawRow[] {
+  const renames = sheetName === "Users+User_profile" ? USER_RENAMES : {};
+  return rows.map(r => renameRow(r, renames));
+}
+
 async function setRunStatus(runId: string, status: string, error?: string) {
   await db
     .update(predictionRuns)
@@ -103,7 +109,7 @@ export const uploadsRoutes = new Elysia()
         .where(eq(predictionRuns.id, params.id))
         .limit(1);
 
-      if (!run || !["pending", "failed", "processing", "validating"].includes(run.status)) {
+      if (!run || !["pending", "failed", "processing", "validating", "done"].includes(run.status)) {
         set.status = 400;
         return { message: `Run status is '${run?.status}' — cannot re-upload` };
       }
@@ -116,12 +122,18 @@ export const uploadsRoutes = new Elysia()
         if (body.file.name?.toLowerCase().endsWith(".csv")) {
           const firstSheet = Object.values(wb.Sheets)[0];
           sheetMap = {
-            "Users+User_profile": XLSX.utils.sheet_to_json<RawRow>(firstSheet, { defval: null }),
+            "Users+User_profile": normalizeSheetRows(
+              XLSX.utils.sheet_to_json<RawRow>(firstSheet, { defval: null }),
+              "Users+User_profile",
+            ),
           };
         } else {
           sheetMap = {};
           for (const name of wb.SheetNames) {
-            sheetMap[name] = XLSX.utils.sheet_to_json<RawRow>(wb.Sheets[name], { defval: null });
+            sheetMap[name] = normalizeSheetRows(
+              XLSX.utils.sheet_to_json<RawRow>(wb.Sheets[name], { defval: null }),
+              name,
+            );
           }
         }
       } catch (err) {
@@ -148,6 +160,7 @@ export const uploadsRoutes = new Elysia()
         const runId = params.id;
 
         await Promise.all([
+          db.delete(predictions).where(eq(predictions.runId, runId)),
           db.delete(rawUsage).where(eq(rawUsage.runId, runId)),
           db.delete(rawPayments).where(eq(rawPayments.runId, runId)),
           db.delete(rawCustomers).where(eq(rawCustomers.runId, runId)),

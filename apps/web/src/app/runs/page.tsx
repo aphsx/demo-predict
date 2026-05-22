@@ -275,7 +275,7 @@ export default function RunsPage() {
                       </td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {["pending", "failed", "processing", "validating"].includes(run.status) && (
+                          {["pending", "failed", "processing", "validating", "done"].includes(run.status) && (
                             <UploadButton
                               runId={run.id}
                               uploading={uploading === run.id}

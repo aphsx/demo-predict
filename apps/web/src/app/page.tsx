@@ -233,7 +233,11 @@ export default function Dashboard() {
                           ? `${(r.churn_probability * 100).toFixed(1)}%`
                           : "—"}
                       </td>
-                      <td className="num">{Number(r.predicted_clv_6m || 0).toLocaleString()} ฿</td>
+                      <td className="num">
+                        {r.predicted_clv_6m != null
+                          ? `${Number(r.predicted_clv_6m).toLocaleString()} ฿`
+                          : "—"}
+                      </td>
                       <td className="num">
                         {r.comeback_probability != null
                           ? `${(r.comeback_probability * 100).toFixed(1)}%`
