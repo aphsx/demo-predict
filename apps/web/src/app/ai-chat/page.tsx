@@ -44,10 +44,10 @@ function fmtTime(d: Date) {
 
 /* ── example prompts ────────────────────────────────────── */
 const QUICK_PROMPTS = [
-  { icon: TrendingUp,   label: "วิเคราะห์ churn risk ของพอร์ต" },
-  { icon: Users,        label: "สรุป lifecycle distribution" },
+  { icon: TrendingUp, label: "วิเคราะห์ churn risk ของพอร์ต" },
+  { icon: Users, label: "สรุป lifecycle distribution" },
   { icon: AlertTriangle, label: "บัญชีที่มีความเสี่ยงสูงสุด" },
-  { icon: Zap,          label: "แนะนำ action เร่งด่วน" },
+  { icon: Zap, label: "แนะนำ action เร่งด่วน" },
 ];
 
 const WELCOME = "สวัสดีครับ! ผมคือ **Moby AI** — วิเคราะห์ข้อมูลลูกค้าจากรอบการประเมินที่เลือกได้เลยครับ\n\nถามเรื่อง churn risk, CLV, lifecycle, หรือขอ action ที่แนะนำก็ได้ครับ";

@@ -7,20 +7,20 @@ import { useRunStore } from "@/lib/runStore";
 import { useSession, signOut } from "@/lib/auth-client";
 
 const TITLE_MAP: Record<string, { title: string; sub: string }> = {
-  "/":                   { title: "Command Center",   sub: "ภาพรวมพอร์ตลูกค้าและสัญญาณเตือน real-time" },
-  "/playbooks":          { title: "Action Queue",     sub: "งานที่ควรทำวันนี้ จัดอันดับด้วย Priority Score" },
-  "/customers":          { title: "Customers",        sub: "ค้นหา · กรอง · เจาะลึกลูกค้ารายบุคคล" },
-  "/alerts":             { title: "Alerts",           sub: "Anomaly · Drift · Threshold breach" },
-  "/model-performance":  { title: "Model Health",     sub: "Quality · Calibration · Feature importance" },
-  "/runs":               { title: "Pipelines & Data", sub: "Ingest · Validate · Predict" },
-  "/ai-chat":            { title: "AI Assistant",     sub: "Ask anything about your customers and predictions" },
+  "/": { title: "Command Center", sub: "ภาพรวมพอร์ตลูกค้าและสัญญาณเตือน real-time" },
+  "/playbooks": { title: "Action Queue", sub: "งานที่ควรทำวันนี้ จัดอันดับด้วย Priority Score" },
+  "/customers": { title: "Customers", sub: "ค้นหา · กรอง · เจาะลึกลูกค้ารายบุคคล" },
+  "/alerts": { title: "Alerts", sub: "Anomaly · Drift · Threshold breach" },
+  "/model-performance": { title: "Model Health", sub: "Quality · Calibration · Feature importance" },
+  "/runs": { title: "Pipelines & Data", sub: "Ingest · Validate · Predict" },
+  "/ai-chat": { title: "AI Assistant", sub: "Ask anything about your customers and predictions" },
 };
 
 export default function Topbar() {
   const pathname = usePathname();
-  const router   = useRouter();
-  const sp       = useSearchParams();
-  const [runs, setRuns]   = useState<Run[]>([]);
+  const router = useRouter();
+  const sp = useSearchParams();
+  const [runs, setRuns] = useState<Run[]>([]);
   const { runId, setRunId } = useRunStore();
 
   useEffect(() => {
@@ -102,11 +102,10 @@ export default function Topbar() {
 
       {/* Status */}
       <div className="hidden lg:flex items-center gap-2 h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white">
-        <span className={`w-1.5 h-1.5 rounded-full ${
-          activeRun?.status === "done" ? "bg-[color:var(--ok)]" :
-          activeRun?.status === "processing" ? "bg-[color:var(--info)] pulse-soft" :
-          activeRun?.status === "failed" ? "bg-[color:var(--danger)]" : "bg-[color:var(--ink-5)]"
-        }`} />
+        <span className={`w-1.5 h-1.5 rounded-full ${activeRun?.status === "done" ? "bg-[color:var(--ok)]" :
+            activeRun?.status === "processing" ? "bg-[color:var(--info)] pulse-soft" :
+              activeRun?.status === "failed" ? "bg-[color:var(--danger)]" : "bg-[color:var(--ink-5)]"
+          }`} />
         <span className="text-[12px] text-[color:var(--ink-3)] capitalize">{activeRun?.status || "—"}</span>
       </div>
 

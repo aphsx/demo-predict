@@ -40,18 +40,18 @@ interface Msg {
    Mock response engine
 ───────────────────────────────────────────── */
 const REPLIES: Record<string, string> = {
-  default:   "สวัสดีครับ! ผมคือ **Moby AI** ช่วยวิเคราะห์ข้อมูลลูกค้า, churn risk, CLV และ lifecycle stage ให้คุณได้ครับ 🐋",
-  churn:     "กลุ่ม **Active Paid** ที่มี churn probability > 60% คิดเป็นราว 12% ของพอร์ต แนะนำส่ง retention offer ภายใน 48 ชั่วโมงครับ",
-  clv:       "CLV 6 เดือน — **Median:** 8,400 ฿  |  **Top 10%:** > 42,000 ฿\nลูกค้า high-CLV มักใช้งาน > 15 ครั้ง/เดือนครับ",
+  default: "สวัสดีครับ! ผมคือ **Moby AI** ช่วยวิเคราะห์ข้อมูลลูกค้า, churn risk, CLV และ lifecycle stage ให้คุณได้ครับ 🐋",
+  churn: "กลุ่ม **Active Paid** ที่มี churn probability > 60% คิดเป็นราว 12% ของพอร์ต แนะนำส่ง retention offer ภายใน 48 ชั่วโมงครับ",
+  clv: "CLV 6 เดือน — **Median:** 8,400 ฿  |  **Top 10%:** > 42,000 ฿\nลูกค้า high-CLV มักใช้งาน > 15 ครั้ง/เดือนครับ",
   lifecycle: "Lifecycle แบ่งเป็น 4 stage: **Active Paid → Active Free → Churned → Ghost**\nCome-back probability เฉลี่ยอยู่ที่ 34% ครับ",
-  model:     "โมเดล XGBoost Ensemble ฝึกบน 90 features — AUC-ROC: **0.89**\nRetrain ทุก 7 วัน หรือเมื่อ drift score > 0.05 ครับ",
-  alert:     "ขณะนี้ไม่มี critical alert ที่ต้องการ action ด่วน ระบบ model health ทำงานปกติครับ",
+  model: "โมเดล XGBoost Ensemble ฝึกบน 90 features — AUC-ROC: **0.89**\nRetrain ทุก 7 วัน หรือเมื่อ drift score > 0.05 ครับ",
+  alert: "ขณะนี้ไม่มี critical alert ที่ต้องการ action ด่วน ระบบ model health ทำงานปกติครับ",
 };
 
 function getReply(text: string): string {
   const t = text.toLowerCase();
   if (t.includes("churn") || t.includes("เลิก") || t.includes("ออก")) return REPLIES.churn;
-  if (t.includes("clv") || t.includes("มูลค่า") || t.includes("revenue"))  return REPLIES.clv;
+  if (t.includes("clv") || t.includes("มูลค่า") || t.includes("revenue")) return REPLIES.clv;
   if (t.includes("lifecycle") || t.includes("stage") || t.includes("สรุป")) return REPLIES.lifecycle;
   if (t.includes("model") || t.includes("โมเดล") || t.includes("predict")) return REPLIES.model;
   if (t.includes("alert") || t.includes("แจ้งเตือน") || t.includes("signal")) return REPLIES.alert;
@@ -141,13 +141,13 @@ export default function AIChatWidget() {
     ts: new Date(),
   };
 
-  const [open,   setOpen]   = useState(false);
-  const [msgs,   setMsgs]   = useState<Msg[]>([INIT]);
-  const [input,  setInput]  = useState("");
-  const [busy,   setBusy]   = useState(false);
+  const [open, setOpen] = useState(false);
+  const [msgs, setMsgs] = useState<Msg[]>([INIT]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
   const [unread, setUnread] = useState(0);
 
-  const scrollRef   = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /* auto-scroll to bottom */
