@@ -3,10 +3,11 @@
 import { treaty } from "@elysiajs/eden";
 import type { App } from "@moby/api";
 
-// Direct to Elysia — same pattern as the auth client pre-cleanup.
-// NEXT_PUBLIC_API_URL defaults to localhost:3001 for local dev.
-// For Docker: both are on the same host so localhost:3001 is reachable from the browser.
-const BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001") as string;
+// Route through the Next.js proxy instead of calling Elysia directly.
+// next.config.js rewrites /api/:path* → Elysia /:path* (strips the /api prefix).
+// This keeps requests same-origin so the Better Auth session cookie is always sent.
+// NEXT_PUBLIC_AUTH_URL is already set to the Next.js origin (e.g. http://localhost:3000).
+const BASE = `${process.env.NEXT_PUBLIC_AUTH_URL ?? "http://localhost:3000"}/api` as string;
 
 export const elysia = treaty<App>(BASE, {
   fetch: { credentials: "include" },

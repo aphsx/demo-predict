@@ -61,7 +61,10 @@ export default function RunsPage() {
   const [uploading, setUploading] = useState<string | null>(null);
   const [streamingRun, setStreamingRun] = useState<string | null>(null);
 
-  const load = () => api.listRuns().then((d) => { setRuns(d); setLoading(false); });
+  const load = () =>
+    api.listRuns()
+      .then((d) => { setRuns(Array.isArray(d) ? d : []); setLoading(false); })
+      .catch(() => setLoading(false));
   useEffect(() => { load(); }, []);
 
   // SSE subscription for active runs

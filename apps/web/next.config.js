@@ -1,5 +1,10 @@
+const path = require("path");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {
+    root: path.resolve(__dirname, "../../"),
+  },
   async rewrites() {
     const elysiaUrl = process.env.ELYSIA_URL || "http://api:3001";
     return [

@@ -22,6 +22,7 @@ import { elysia } from "./eden";
 // serialisation, so the TypeScript types diverge from the runtime values.
 function unwrap<T>(result: { data: unknown; error: unknown }): T {
   if (result.error) throw result.error;
+  if (result.data == null) throw new Error("API returned no data");
   return result.data as unknown as T;
 }
 
