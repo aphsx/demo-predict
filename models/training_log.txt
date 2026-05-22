@@ -15,30 +15,30 @@
 
   Model competition (val set):
   Model                     AUC     F1   Prec    Rec
-  Logistic Regression    0.887 0.661 0.713 0.616
-  Random Forest          0.918 0.744 0.742 0.746
-  XGBoost                0.918 0.743 0.735 0.751
-  LightGBM               0.927 0.723 0.712 0.735
-  Optuna best AUC (val): 0.9307
+  Logistic Regression    0.870 0.676 0.681 0.670
+  Random Forest          0.921 0.750 0.754 0.746
+  XGBoost                0.919 0.747 0.753 0.741
+  LightGBM               0.918 0.729 0.723 0.735
+  Optuna best AUC (val): 0.9349
 
-  Leakage audit: AUC_full=0.9439 AUC_safe=0.9419 drop=0.002
+  Leakage audit: AUC_full=0.9425 AUC_safe=0.9368 drop=0.0057
   [OK]  No significant leakage detected
 
-  Final (test set): AUC=0.9408 F1=0.7772 Prec=0.7772 Rec=0.7772
+  Final (test set): AUC=0.9442 F1=0.7772 Prec=0.7772 Rec=0.7772
   CM: TN=395 FP=41 FN=41 TP=143
 
   SHAP Top 10:
                 feature     shap
- days_since_last_access 0.690105
-  days_until_sms_expire 0.618590
-           usage_months 0.411551
-        usage_recent_3m 0.266774
-      usage_decay_ratio 0.225939
-         credit_sms_log 0.172587
-   days_since_last_send 0.163481
-          usage_prev_3m 0.106963
-days_until_email_expire 0.091033
-              pay_n_sms 0.062793
+  days_until_sms_expire 0.818323
+        usage_recent_3m 0.593528
+           usage_months 0.498749
+   days_since_last_send 0.469300
+      usage_decay_ratio 0.304410
+         credit_sms_log 0.194580
+days_until_email_expire 0.097872
+      pay_overdue_ratio 0.090339
+       pay_recency_days 0.076492
+              pay_n_sms 0.070418
 
 [CLV] Training BG/NBD + Gamma-Gamma...
   Repeat buyers for fitting: 1,501
@@ -59,44 +59,44 @@ days_until_email_expire 0.091033
 [Credit] Training Quantile Regression × 5...
   Transaction pairs: 5,761 (outlier cutoff >393 days)
   XGBoost baseline: MAE=35.0d R²=0.358
-  LightGBM Q50: MAE=33.0d MedAE=9.4d R²=0.401
-  Coverage P10-P90: 73.4% -> 80.1% (x1.08)
-  Coverage P25-P75: 44.9% -> 50.4% (x1.10)
+  LightGBM Q50: MAE=32.9d MedAE=9.7d R²=0.412
+  Coverage P10-P90: 76.1% -> 80.4% (x1.04)
+  Coverage P25-P75: 47.4% -> 50.1% (x1.06)
 
   Per-quantile:
-    P10: MAE=46.9d MedAE=13.9d mean=13.2d
-    P25: MAE=39.4d MedAE=9.9d mean=24.1d
-    P50: MAE=33.0d MedAE=9.4d mean=45.0d
-    P75: MAE=37.5d MedAE=15.2d mean=69.6d
-    P90: MAE=52.9d MedAE=30.8d mean=96.7d
+    P10: MAE=48.0d MedAE=13.8d mean=11.9d
+    P25: MAE=39.2d MedAE=9.6d mean=24.3d
+    P50: MAE=32.9d MedAE=9.7d mean=45.1d
+    P75: MAE=37.7d MedAE=15.8d mean=69.5d
+    P90: MAE=60.9d MedAE=38.2d mean=107.4d
 
 [Win-back] Training...
   Churned: 4,948 | Comeback: 160 (3.2%)
   Comeback rate: 9.4%
-  Optuna best AUC: 0.9338
-  Final: AUC=0.9252 F1=0.4928 Prec=0.5862 Rec=0.425
+  Optuna best AUC: 0.9319
+  Final: AUC=0.932 F1=0.3667 Prec=0.55 Rec=0.275
 
   Feature importance:
-    days_as_customer: 124
-    credit_remaining_log: 96
-    days_since_last_activity: 94
-    usage_total_log: 67
-    total_revenue_log: 58
-    usage_avg: 57
-    ever_paid: 17
-    usage_months: 14
+    days_as_customer: 500
+    credit_remaining_log: 433
+    days_since_last_activity: 415
+    usage_avg: 219
+    usage_total_log: 216
+    total_revenue_log: 173
+    usage_months: 49
+    ever_paid: 45
 
 [Conversion] Training...
   Active Free: 1,912 | Converted: 80 (4.2%)
-  Optuna best AUC: 0.9729
-  Final: AUC=0.9629 F1=0.6667 Prec=0.6842 Rec=0.65
+  Optuna best AUC: 0.9790
+  Final: AUC=0.9715 F1=0.7143 Prec=0.6818 Rec=0.75
 
   Feature importance:
-    credit_email_log: 158
-    credit_sms_log: 133
-    usage_total_log: 97
-    days_since_join: 66
-    usage_slope: 58
-    usage_months: 57
-    usage_decay_ratio: 36
-    usage_prev_3m: 33
+    credit_sms_log: 154
+    days_since_join: 122
+    credit_email_log: 108
+    usage_total_log: 72
+    usage_prev_3m: 70
+    usage_slope: 70
+    usage_decay_ratio: 66
+    usage_months: 59
