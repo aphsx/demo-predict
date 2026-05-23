@@ -36,13 +36,19 @@ export function LoginBackground() {
           </radialGradient>
 
           <radialGradient id="blueSheen" cx="360" cy="450" r="480" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor={LOGIN_BRAND.blueLight} stopOpacity="0.28" />
+            <stop offset="0%" stopColor={LOGIN_BRAND.blueLight} stopOpacity="0.16" />
             <stop offset="100%" stopColor={LOGIN_BRAND.blue} stopOpacity="0" />
+          </radialGradient>
+
+          <radialGradient id="softGlow" cx="50%" cy="50%" r="65%" gradientUnits="objectBoundingBox">
+            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.14" />
+            <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
           </radialGradient>
         </defs>
 
         <rect width="1440" height="900" fill={LOGIN_BRAND.blue} />
         <rect width="1440" height="900" fill="url(#blueSheen)" />
+        <rect width="1440" height="900" fill="url(#softGlow)" />
 
         <g clipPath="url(#loginRightZone)">
           <rect width="1440" height="900" fill="url(#rightFill)" />
