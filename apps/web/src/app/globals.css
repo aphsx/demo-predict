@@ -2,6 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "Geometrica";
+  src: url("/fonts/GeometricaEN/Geometrica-Light.otf") format("opentype");
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Geometrica";
+  src: url("/fonts/GeometricaEN/Geometrica-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Geometrica";
+  src: url("/fonts/GeometricaEN/Geometrica-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Geometrica";
+  src: url("/fonts/GeometricaEN/Geometrica-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Geometrica";
+  src: url("/fonts/GeometricaEN/Geometrica-ExtraBold.otf") format("opentype");
+  font-weight: 800;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Mero Thai";
+  src: url("/fonts/MeroTH/MeroThai-Regular.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Mero Thai";
+  src: url("/fonts/MeroTH/MeroThai-Medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Mero Thai";
+  src: url("/fonts/MeroTH/MeroThai-Bold.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+}
+
 /* ───────────────────────────────────────────────────────────
    1Moby — Light Premium Design Tokens
    Inspired by Salesforce / Tableau / Stripe
@@ -59,7 +115,7 @@
   --shadow-3: 0 8px 24px rgba(15,23,42,.08);
 
   /* Type */
-  --font-ui:  'Inter', 'Sarabun', 'Noto Sans Thai', system-ui, -apple-system, sans-serif;
+  --font-ui: 'Geometrica', 'Mero Thai', 'Sarabun', 'Noto Sans Thai', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-num: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 

@@ -54,7 +54,7 @@ export default function Sidebar() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <aside className="w-[232px] shrink-0 bg-white border-r border-[color:var(--line)] flex flex-col">
+    <aside className="w-[248px] shrink-0 bg-white border-r border-[color:var(--line)] flex flex-col">
       {/* Brand */}
       <div
         className="px-5 pt-5 pb-4 border-b border-[color:var(--line)]"
@@ -80,11 +80,11 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3">
         {PRIMARY_GROUPS.map(g => (
-          <div key={g.title} className="mb-3">
-            <div className="px-5 mb-1.5 text-[10px] font-semibold tracking-[.16em] text-[color:var(--ink-5)] uppercase">
+          <div key={g.title} className="mb-4">
+            <div className="px-5 mb-2 text-[11px] font-semibold tracking-[.16em] text-[color:var(--ink-5)] uppercase">
               {g.title}
             </div>
-            <ul className="px-2 space-y-0.5">
+            <ul className="px-3 space-y-1">
               {g.items.map(it => {
                 const Icon = it.icon;
                 const active = isActive(it.href);
@@ -92,21 +92,21 @@ export default function Sidebar() {
                   <li key={it.href}>
                     <Link
                       href={it.href}
-                      className={`group flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors
+                      className={`group flex min-h-[44px] items-center gap-3 px-4 py-2.5 rounded-xl text-[15px] transition-colors
                         ${active
                           ? "bg-[color:var(--moby-50)] text-[color:var(--moby-700)] font-medium"
                           : "text-[color:var(--ink-3)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-1)]"}`}
                     >
-                      <Icon size={15} strokeWidth={active ? 2.2 : 1.8}
+                      <Icon size={17} strokeWidth={active ? 2.2 : 1.9}
                         className={active ? "text-[color:var(--moby-600)]" : "text-[color:var(--ink-4)]"} />
                       <span>{it.label}</span>
                       {it.href === "/ai-chat" && !active && (
-                        <span className="ml-auto px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wide
+                        <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide
                           bg-gradient-to-r from-[color:var(--moby-600)] to-[color:var(--moby-800)] text-white">
                           AI
                         </span>
                       )}
-                      {active && <span className="ml-auto w-1 h-4 rounded-full bg-[color:var(--moby-600)]" />}
+                      {active && <span className="ml-auto w-1.5 h-5 rounded-full bg-[color:var(--moby-600)]" />}
                     </Link>
                   </li>
                 );
@@ -118,11 +118,11 @@ export default function Sidebar() {
 
       <div className="py-3">
         {FOOTER_GROUPS.map(g => (
-          <div key={g.title} className="mb-3 last:mb-0">
-            <div className="px-5 mb-1.5 text-[10px] font-semibold tracking-[.16em] text-[color:var(--ink-5)] uppercase">
+          <div key={g.title} className="mb-4 last:mb-0">
+            <div className="px-5 mb-2 text-[11px] font-semibold tracking-[.16em] text-[color:var(--ink-5)] uppercase">
               {g.title}
             </div>
-            <ul className="px-2 space-y-0.5">
+            <ul className="px-3 space-y-1">
               {g.items.map(it => {
                 const Icon = it.icon;
                 const active = isActive(it.href);
@@ -130,15 +130,15 @@ export default function Sidebar() {
                   <li key={it.href}>
                     <Link
                       href={it.href}
-                      className={`group flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors
+                      className={`group flex min-h-[44px] items-center gap-3 px-4 py-2.5 rounded-xl text-[15px] transition-colors
                         ${active
                           ? "bg-[color:var(--moby-50)] text-[color:var(--moby-700)] font-medium"
                           : "text-[color:var(--ink-3)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-1)]"}`}
                     >
-                      <Icon size={15} strokeWidth={active ? 2.2 : 1.8}
+                      <Icon size={17} strokeWidth={active ? 2.2 : 1.9}
                         className={active ? "text-[color:var(--moby-600)]" : "text-[color:var(--ink-4)]"} />
                       <span>{it.label}</span>
-                      {active && <span className="ml-auto w-1 h-4 rounded-full bg-[color:var(--moby-600)]" />}
+                      {active && <span className="ml-auto w-1.5 h-5 rounded-full bg-[color:var(--moby-600)]" />}
                     </Link>
                   </li>
                 );
