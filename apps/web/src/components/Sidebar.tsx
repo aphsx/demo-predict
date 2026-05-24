@@ -9,33 +9,41 @@ import {
 
 type Item = { href: string; label: string; icon: any };
 
-const GROUPS: { title: string; items: Item[] }[] = [
+const PRIMARY_GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "Operate",
     items: [
       { href: "/",          label: "Dashboard", icon: LayoutDashboard },
-      { href: "/playbooks", label: "Action Queue",   icon: ListChecks },
       { href: "/customers", label: "Customers",      icon: Users },
       { href: "/alerts",    label: "Alerts",         icon: Bell },
     ],
   },
   {
-    title: "Analyze",
+    title: "Actions",
     items: [
-      { href: "/model-performance", label: "Model Health", icon: Activity },
-    ],
-  },
-  {
-    title: "Configure",
-    items: [
-      { href: "/runs", label: "Pipelines & Data", icon: Database },
-      { href: "/training", label: "Model Training", icon: Activity },
+      { href: "/playbooks", label: "Action Queue", icon: ListChecks },
     ],
   },
   {
     title: "Assistant",
     items: [
       { href: "/ai-chat", label: "AI Assistant", icon: MessageSquareMore },
+    ],
+  },
+];
+
+const FOOTER_GROUPS: { title: string; items: Item[] }[] = [
+  {
+    title: "Prediction",
+    items: [
+      { href: "/runs", label: "Prediction Runs", icon: Database },
+      { href: "/training", label: "Model Training", icon: Activity },
+    ],
+  },
+  {
+    title: "Models",
+    items: [
+      { href: "/model-performance", label: "Model Metrics", icon: Activity },
     ],
   },
 ];
@@ -71,7 +79,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3">
-        {GROUPS.map(g => (
+        {PRIMARY_GROUPS.map(g => (
           <div key={g.title} className="mb-3">
             <div className="px-5 mb-1.5 text-[10px] font-semibold tracking-[.16em] text-[color:var(--ink-5)] uppercase">
               {g.title}
@@ -108,8 +116,40 @@ export default function Sidebar() {
         ))}
       </nav>
 
+      <div className="py-3">
+        {FOOTER_GROUPS.map(g => (
+          <div key={g.title} className="mb-3 last:mb-0">
+            <div className="px-5 mb-1.5 text-[10px] font-semibold tracking-[.16em] text-[color:var(--ink-5)] uppercase">
+              {g.title}
+            </div>
+            <ul className="px-2 space-y-0.5">
+              {g.items.map(it => {
+                const Icon = it.icon;
+                const active = isActive(it.href);
+                return (
+                  <li key={it.href}>
+                    <Link
+                      href={it.href}
+                      className={`group flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] transition-colors
+                        ${active
+                          ? "bg-[color:var(--moby-50)] text-[color:var(--moby-700)] font-medium"
+                          : "text-[color:var(--ink-3)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-1)]"}`}
+                    >
+                      <Icon size={15} strokeWidth={active ? 2.2 : 1.8}
+                        className={active ? "text-[color:var(--moby-600)]" : "text-[color:var(--ink-4)]"} />
+                      <span>{it.label}</span>
+                      {active && <span className="ml-auto w-1 h-4 rounded-full bg-[color:var(--moby-600)]" />}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </div>
+
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-[color:var(--line)] flex items-center gap-2 text-[11.5px] text-[color:var(--ink-4)]">
+      <div className="px-4 py-3 flex items-center gap-2 text-[11.5px] text-[color:var(--ink-4)]">
         <ShieldCheck size={13} className="text-[color:var(--ok)]" />
         <span>5 models · point-in-time safe</span>
       </div>
