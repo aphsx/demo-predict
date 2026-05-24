@@ -14,7 +14,8 @@ Train-only typed tables populated from `train_raw_sheet_*` after Excel import.
 
 - `import_status`: `pending` \| `importing` \| `cleaning` \| `ready` \| `failed`
 - `sheet_manifest`: raw row counts per sheet
-- `clean_manifest`: `{ customers, payments, usage, warnings }`
+- `clean_manifest`: `{ raw, clean: { customers, payments, usage }, skipped, warnings }`
+- `train_clean_*`: `excel_row`, `raw_row_id` (lineage to raw row)
 - `cleaned_at`: when clean ETL finished
 
 ## API

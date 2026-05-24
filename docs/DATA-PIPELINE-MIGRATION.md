@@ -33,6 +33,7 @@ Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 | `003_*` | `predict_data_sources` exists |
 | `004_*` | `raw_customers` already dropped |
 | `005_*` | `train_clean_customers` exists |
+| `006_*` | always runs (`IF NOT EXISTS` lineage columns) |
 
 **Apply 005 on existing DB (if migrate_or_repair did not run it):**
 

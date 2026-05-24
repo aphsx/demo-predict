@@ -246,6 +246,8 @@ export const trainCleanCustomers = pgTable(
     sourceId: uuid("source_id")
       .notNull()
       .references(() => trainDataSources.id, { onDelete: "cascade" }),
+    rawRowId: bigint("raw_row_id", { mode: "number" }).notNull(),
+    excelRow: integer("excel_row").notNull(),
     accId: integer("acc_id").notNull(),
     statusSms: text("status_sms"),
     creditSms: numeric("credit_sms"),
@@ -270,6 +272,8 @@ export const trainCleanPayments = pgTable(
     sourceId: uuid("source_id")
       .notNull()
       .references(() => trainDataSources.id, { onDelete: "cascade" }),
+    rawRowId: bigint("raw_row_id", { mode: "number" }).notNull(),
+    excelRow: integer("excel_row").notNull(),
     accId: integer("acc_id").notNull(),
     paymentUid: bigint("payment_uid", { mode: "number" }),
     paymentDate: timestamp("payment_date", { withTimezone: true }).notNull(),
@@ -290,6 +294,8 @@ export const trainCleanUsage = pgTable(
     sourceId: uuid("source_id")
       .notNull()
       .references(() => trainDataSources.id, { onDelete: "cascade" }),
+    rawRowId: bigint("raw_row_id", { mode: "number" }).notNull(),
+    excelRow: integer("excel_row").notNull(),
     accId: integer("acc_id").notNull(),
     year: integer("year"),
     month: integer("month"),

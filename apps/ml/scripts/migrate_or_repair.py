@@ -33,6 +33,7 @@ MIGRATION_MARKERS: dict[str, str | None] = {
     "002": None,  # additive ALTER on train_data_sources
     "003": PREDICT_RAW_MARKER,
     "005": "train_clean_customers",
+    "006": None,  # additive lineage columns on train_clean_*
 }
 LEGACY_RAW_MARKER = "raw_customers"
 # Skip drop migration when legacy tables are already gone.

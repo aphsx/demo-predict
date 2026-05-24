@@ -28,4 +28,12 @@ export const USAGE_SHEET_CHANNEL: Record<string, { channel: string; usageSource:
 
 export const USAGE_SHEET_NAMES = Object.keys(USAGE_SHEET_CHANNEL) as TrainSheetName[];
 
-export const PAYMENT_FIELDS = ["uid", "acc_id", "payment_date", "amount", "credit_add", "credit_type"] as const;
+/** Excel Backend_payment headers — see excel_schema.yaml */
+export const PAYMENT_EXCEL_HEADERS = [
+  "uid",
+  "acc_id",
+  "payment_date",
+  "amount",
+  "credit_add",
+  "credit_type",
+] as const;

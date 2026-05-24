@@ -338,12 +338,25 @@ export interface TrainImportDone {
   import_status: string;
   sheet_manifest: Record<string, number>;
   file_checksum_sha256?: string;
-  clean_manifest?: {
+  clean_manifest?: TrainCleanManifest;
+}
+
+export interface TrainCleanSkipped {
+  customers_no_acc_id: number;
+  payments_no_acc_id: number;
+  payments_no_date: number;
+  usage_no_acc_id: number;
+}
+
+export interface TrainCleanManifest {
+  raw: Record<string, number>;
+  clean: {
     customers: number;
     payments: number;
     usage: number;
-    warnings: string[];
   };
+  skipped: TrainCleanSkipped;
+  warnings: string[];
 }
 
 /** Import with real-time progress via POST async + GET SSE (works through Next proxy). */

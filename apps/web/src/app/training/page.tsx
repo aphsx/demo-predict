@@ -116,9 +116,20 @@ export default function TrainingPage() {
       setImportProgress(100);
       setImportStep("Ready for model training");
       const clean = result.clean_manifest;
-      const cleanSummary = clean
-        ? ` — clean: ${clean.customers.toLocaleString()} customers, ${clean.payments.toLocaleString()} payments, ${clean.usage.toLocaleString()} usage rows`
-        : "";
+      let cleanSummary = "";
+      if (clean) {
+        const c = clean.clean;
+        cleanSummary = ` — clean: ${c.customers.toLocaleString()} customers, ${c.payments.toLocaleString()} payments, ${c.usage.toLocaleString()} usage rows`;
+        const skipParts: string[] = [];
+        const s = clean.skipped;
+        if (s.customers_no_acc_id > 0) skipParts.push(`${s.customers_no_acc_id} users without acc_id`);
+        if (s.payments_no_acc_id > 0) skipParts.push(`${s.payments_no_acc_id} payments without acc_id`);
+        if (s.payments_no_date > 0) skipParts.push(`${s.payments_no_date} payments without date`);
+        if (s.usage_no_acc_id > 0) skipParts.push(`${s.usage_no_acc_id} usage without acc_id`);
+        if (skipParts.length > 0) {
+          cleanSummary += ` (skipped: ${skipParts.join("; ")})`;
+        }
+      }
       setImportSuccess(
         `Imported ${result.source_id.slice(0, 8)}… (${Object.keys(result.sheet_manifest).length} sheets)${cleanSummary}`
       );

@@ -1,6 +1,6 @@
 /**
  * [NEW] Train clean — ETL from train_raw_sheet_* → train_clean_* for model training.
- * Train-only; not used by predict path.
+ * Parse + lineage only; ML rules (period, labels) stay in Python.
  */
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
@@ -18,19 +18,18 @@ import {
   trainRawSheetSmsUsageOtp,
   trainRawSheetUsersUserProfile,
 } from "../db/schema";
+import {
+  emptySkippedCounts,
+  mapPaymentRow,
+  mapUsageRow,
+  mapUserRow,
+  type CleanSkipReason,
+  type RawRowInput,
+} from "./sheet-cleaners";
 import { TRAIN_IMPORT_BATCH_SIZE } from "./train-excel-contract";
 import {
-  parseCellDate,
-  parseCellDateOnly,
-  parseCellInt,
-  parseCellNumeric,
-  parseCellString,
-} from "./train-clean-cell";
-import {
-  PAYMENT_FIELDS,
   USAGE_SHEET_CHANNEL,
   USAGE_SHEET_NAMES,
-  USER_PAYLOAD_TO_COLUMN,
 } from "./train-clean-mapping";
 import type { TrainPipelineProgressEvent } from "./train-pipeline-progress";
 import {
@@ -41,10 +40,21 @@ import {
   progressPipelineDone,
 } from "./train-pipeline-progress";
 
+export interface TrainCleanSkipped {
+  customers_no_acc_id: number;
+  payments_no_acc_id: number;
+  payments_no_date: number;
+  usage_no_acc_id: number;
+}
+
 export interface TrainCleanManifest {
-  customers: number;
-  payments: number;
-  usage: number;
+  raw: Record<string, number>;
+  clean: {
+    customers: number;
+    payments: number;
+    usage: number;
+  };
+  skipped: TrainCleanSkipped;
   warnings: string[];
 }
 
@@ -63,65 +73,19 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-function mapUserRow(payload: Record<string, unknown>, sourceId: string) {
-  const accId = parseCellInt(payload.acc_id);
-  if (accId == null) return null;
-
-  const creditSms = parseCellNumeric(payload["user.credit + user.credit_premium"] ?? payload.credit_sms);
-  const creditEmail = parseCellNumeric(payload.credit_email);
-
-  return {
-    sourceId,
-    accId,
-    statusSms: parseCellString(payload["status (SMS)"] ?? payload.status_sms),
-    creditSms: creditSms ?? "0",
-    creditEmail: creditEmail ?? "0",
-    expireSms: parseCellDateOnly(payload.expire),
-    expireEmail: parseCellDateOnly(payload.expire_email),
-    statusEmail: parseCellString(payload["status (Email)"] ?? payload.status_email),
-    joinDate: parseCellDateOnly(payload.join_date),
-    lastAccess: parseCellDate(payload.last_access),
-    lastSend: parseCellDate(payload.last_send),
-  };
+function bumpSkip(skipped: Record<CleanSkipReason, number>, reason: CleanSkipReason): void {
+  skipped[reason] += 1;
 }
 
-function mapPaymentRow(payload: Record<string, unknown>, sourceId: string) {
-  const accId = parseCellInt(payload.acc_id);
-  const paymentDate = parseCellDate(payload.payment_date);
-  if (accId == null || !paymentDate) return null;
-
-  const uid = parseCellInt(payload.uid);
-
+function toRawInput(row: {
+  id: number;
+  excelRow: number;
+  rowPayload: unknown;
+}): RawRowInput {
   return {
-    sourceId,
-    accId,
-    paymentUid: uid,
-    paymentDate,
-    amount: parseCellNumeric(payload.amount),
-    creditAdd: parseCellNumeric(payload.credit_add),
-    creditType: parseCellString(payload.credit_type),
-  };
-}
-
-function mapUsageRow(
-  payload: Record<string, unknown>,
-  sourceId: string,
-  channel: string,
-  usageSource: string
-) {
-  const accId = parseCellInt(payload.acc_id);
-  if (accId == null) return null;
-
-  const usageVal = parseCellNumeric(payload.usage);
-
-  return {
-    sourceId,
-    accId,
-    year: parseCellInt(payload.year),
-    month: parseCellInt(payload.month),
-    usage: usageVal ?? "0",
-    channel,
-    usageSource,
+    excelRow: row.excelRow,
+    rawRowId: row.id,
+    payload: row.rowPayload as Record<string, unknown>,
   };
 }
 
@@ -130,7 +94,15 @@ export async function cleanTrainFromRaw(
   onProgress?: (event: TrainPipelineProgressEvent) => void
 ): Promise<TrainCleanManifest> {
   const emit = onProgress;
-  const warnings: string[] = [];
+
+  const [sourceRow] = await db
+    .select({ sheetManifest: trainDataSources.sheetManifest })
+    .from(trainDataSources)
+    .where(eq(trainDataSources.id, sourceId))
+    .limit(1);
+
+  const rawManifest =
+    (sourceRow?.sheetManifest as Record<string, number> | null) ?? {};
 
   await db
     .update(trainDataSources)
@@ -139,79 +111,113 @@ export async function cleanTrainFromRaw(
 
   emit?.(progressCleanStart());
 
-  await db.delete(trainCleanCustomers).where(eq(trainCleanCustomers.sourceId, sourceId));
-  await db.delete(trainCleanPayments).where(eq(trainCleanPayments.sourceId, sourceId));
-  await db.delete(trainCleanUsage).where(eq(trainCleanUsage.sourceId, sourceId));
-
-  emit?.(progressCleanCustomers());
-  const userRows = await db
-    .select({ rowPayload: trainRawSheetUsersUserProfile.rowPayload })
-    .from(trainRawSheetUsersUserProfile)
-    .where(eq(trainRawSheetUsersUserProfile.sourceId, sourceId));
-
-  const customerValues = [];
-  for (const r of userRows) {
-    const payload = r.rowPayload as Record<string, unknown>;
-    const mapped = mapUserRow(payload, sourceId);
-    if (mapped) customerValues.push(mapped);
-  }
-
+  const skipped = emptySkippedCounts();
+  const warnings: string[] = [];
   let customers = 0;
-  for (const batch of chunk(customerValues, TRAIN_IMPORT_BATCH_SIZE)) {
-    await db.insert(trainCleanCustomers).values(batch);
-    customers += batch.length;
-  }
-
-  emit?.(progressCleanPayments());
-  const payRows = await db
-    .select({ rowPayload: trainRawSheetBackendPayment.rowPayload })
-    .from(trainRawSheetBackendPayment)
-    .where(eq(trainRawSheetBackendPayment.sourceId, sourceId));
-
-  const paymentValues = [];
-  for (const r of payRows) {
-    const mapped = mapPaymentRow(r.rowPayload as Record<string, unknown>, sourceId);
-    if (mapped) paymentValues.push(mapped);
-  }
-
   let payments = 0;
-  for (const batch of chunk(paymentValues, TRAIN_IMPORT_BATCH_SIZE)) {
-    await db.insert(trainCleanPayments).values(batch);
-    payments += batch.length;
-  }
-
   let usage = 0;
-  const usageSheetCount = USAGE_SHEET_NAMES.length;
-  for (let i = 0; i < usageSheetCount; i++) {
-    const sheetName = USAGE_SHEET_NAMES[i];
-    const meta = USAGE_SHEET_CHANNEL[sheetName];
-    const table = USAGE_RAW_TABLES[sheetName as keyof typeof USAGE_RAW_TABLES];
 
-    const rawUsage = await db
-      .select({ rowPayload: table.rowPayload })
-      .from(table)
-      .where(eq(table.sourceId, sourceId));
+  await db.transaction(async (tx) => {
+    await tx.delete(trainCleanCustomers).where(eq(trainCleanCustomers.sourceId, sourceId));
+    await tx.delete(trainCleanPayments).where(eq(trainCleanPayments.sourceId, sourceId));
+    await tx.delete(trainCleanUsage).where(eq(trainCleanUsage.sourceId, sourceId));
 
-    const usageValues = [];
-    for (const r of rawUsage) {
-      const mapped = mapUsageRow(
-        r.rowPayload as Record<string, unknown>,
-        sourceId,
-        meta.channel,
-        meta.usageSource
-      );
-      if (mapped) usageValues.push(mapped);
+    emit?.(progressCleanCustomers());
+    const userRows = await tx
+      .select({
+        id: trainRawSheetUsersUserProfile.id,
+        excelRow: trainRawSheetUsersUserProfile.excelRow,
+        rowPayload: trainRawSheetUsersUserProfile.rowPayload,
+      })
+      .from(trainRawSheetUsersUserProfile)
+      .where(eq(trainRawSheetUsersUserProfile.sourceId, sourceId));
+
+    const customerValues = [];
+    for (const r of userRows) {
+      const mapped = mapUserRow(toRawInput(r), sourceId);
+      if (!mapped.ok) {
+        bumpSkip(skipped, mapped.reason);
+        continue;
+      }
+      customerValues.push(mapped.value);
     }
 
-    for (const batch of chunk(usageValues, TRAIN_IMPORT_BATCH_SIZE)) {
-      await db.insert(trainCleanUsage).values(batch);
-      usage += batch.length;
+    for (const batch of chunk(customerValues, TRAIN_IMPORT_BATCH_SIZE)) {
+      await tx.insert(trainCleanCustomers).values(batch);
+      customers += batch.length;
     }
 
-    emit?.(progressCleanUsageSheet(i, usageSheetCount, sheetName, usageValues.length));
-  }
+    emit?.(progressCleanPayments());
+    const payRows = await tx
+      .select({
+        id: trainRawSheetBackendPayment.id,
+        excelRow: trainRawSheetBackendPayment.excelRow,
+        rowPayload: trainRawSheetBackendPayment.rowPayload,
+      })
+      .from(trainRawSheetBackendPayment)
+      .where(eq(trainRawSheetBackendPayment.sourceId, sourceId));
 
-  const manifest: TrainCleanManifest = { customers, payments, usage, warnings };
+    const paymentValues = [];
+    for (const r of payRows) {
+      const mapped = mapPaymentRow(toRawInput(r), sourceId);
+      if (!mapped.ok) {
+        bumpSkip(skipped, mapped.reason);
+        continue;
+      }
+      paymentValues.push(mapped.value);
+    }
+
+    for (const batch of chunk(paymentValues, TRAIN_IMPORT_BATCH_SIZE)) {
+      await tx.insert(trainCleanPayments).values(batch);
+      payments += batch.length;
+    }
+
+    const usageSheetCount = USAGE_SHEET_NAMES.length;
+    for (let i = 0; i < usageSheetCount; i++) {
+      const sheetName = USAGE_SHEET_NAMES[i];
+      const meta = USAGE_SHEET_CHANNEL[sheetName];
+      const table = USAGE_RAW_TABLES[sheetName as keyof typeof USAGE_RAW_TABLES];
+
+      const rawUsage = await tx
+        .select({
+          id: table.id,
+          excelRow: table.excelRow,
+          rowPayload: table.rowPayload,
+        })
+        .from(table)
+        .where(eq(table.sourceId, sourceId));
+
+      const usageValues = [];
+      for (const r of rawUsage) {
+        const mapped = mapUsageRow(toRawInput(r), sourceId, meta.channel, meta.usageSource);
+        if (!mapped.ok) {
+          bumpSkip(skipped, mapped.reason);
+          continue;
+        }
+        if (mapped.warnings) warnings.push(...mapped.warnings);
+        usageValues.push(mapped.value);
+      }
+
+      for (const batch of chunk(usageValues, TRAIN_IMPORT_BATCH_SIZE)) {
+        await tx.insert(trainCleanUsage).values(batch);
+        usage += batch.length;
+      }
+
+      emit?.(progressCleanUsageSheet(i, usageSheetCount, sheetName, usageValues.length));
+    }
+  });
+
+  const manifest: TrainCleanManifest = {
+    raw: rawManifest,
+    clean: { customers, payments, usage },
+    skipped: {
+      customers_no_acc_id: skipped.customers_no_acc_id,
+      payments_no_acc_id: skipped.payments_no_acc_id,
+      payments_no_date: skipped.payments_no_date,
+      usage_no_acc_id: skipped.usage_no_acc_id,
+    },
+    warnings,
+  };
 
   await db
     .update(trainDataSources)
