@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 import { LoginBackground } from "@/components/LoginBackground";
-import { LOGIN_BRAND } from "@/lib/login-brand-colors";
+import { INTRO_ASSETS, LOGIN_BRAND } from "@/lib/login-brand-colors";
 
 type Provider = "google";
 
@@ -49,7 +49,7 @@ function LoginForm() {
           }}
         >
           <img
-            src="https://lineforbusiness.com/files/1Moby%20logo.png"
+            src={INTRO_ASSETS.logo}
             alt="1Moby"
             className="mx-auto mb-6 block h-12 w-auto"
             style={{ filter: "brightness(0) invert(1)" }}

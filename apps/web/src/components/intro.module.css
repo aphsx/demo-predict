@@ -1,0 +1,80 @@
+.introSection {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: #000;
+}
+
+.bgCover {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  background:
+    radial-gradient(rgba(7, 29, 126, 0.608) 0%, transparent 40%),
+    url(/assets/intro/about_bg.webp),
+    linear-gradient(180deg, #000 -20%, transparent 50%),
+    linear-gradient(
+      140deg,
+      #1d1f2a -10%,
+      #006bff 55%,
+      #1893f0 70%,
+      #ffa400 85%,
+      #fc4c02 90%
+    );
+  background-repeat: no-repeat;
+  background-size: 160% 100%, 200%, 100%;
+  background-position: 50%, left 60% top 0, top;
+}
+
+@media screen and (min-width: 768px) {
+  .bgCover {
+    background:
+      radial-gradient(rgba(7, 29, 126, 0.608) 0%, transparent 40%),
+      url(/assets/intro/about_bg.webp),
+      linear-gradient(180deg, #000 -20%, transparent 50%),
+      linear-gradient(
+        140deg,
+        #1d1f2a -10%,
+        #006bff 65%,
+        #1893f0 75%,
+        #ffa400 90%,
+        #fc4c02
+      );
+    background-size: 100% 100%, cover, 100%;
+  }
+}
+
+.bgCoverStatic {
+  opacity: 1;
+}
+
+.bgBlue {
+  position: absolute;
+  inset: 0;
+  top: 100%;
+  z-index: 10;
+  background:
+    url(/assets/intro/intro_sm_bg.webp),
+    #006bff;
+  background-size: 95%;
+  background-position: center 0;
+  background-repeat: no-repeat;
+}
+
+.logo {
+  position: relative;
+  z-index: 10;
+  width: 66.666667%;
+  opacity: 0;
+}
+
+@media screen and (min-width: 768px) {
+  .logo {
+    width: 33.333333%;
+  }
+}
