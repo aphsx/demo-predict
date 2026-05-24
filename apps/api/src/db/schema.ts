@@ -89,8 +89,7 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
 
-// ── [LEGACY] ML / predict pipeline tables ─────────────────────────────────────
-// Scoped per prediction_runs upload. Being replaced by train_* / predict_* families.
+// ── [LEGACY] ML output tables (raw_customers/payments/usage removed — see 004_drop_*) ──
 // See docs/DATA-PIPELINE-MIGRATION.md
 
 export const modelVersions = pgTable(
@@ -129,62 +128,6 @@ export const predictionRuns = pgTable(
   },
   (t) => [
     index("idx_runs_user_id").on(t.userId),
-  ]
-);
-
-// [LEGACY] Typed raw rows per run — predict path only (uploads.ts → Arq)
-export const rawCustomers = pgTable(
-  "raw_customers",
-  {
-    id: bigserial("id", { mode: "number" }).primaryKey(),
-    runId: uuid("run_id").references(() => predictionRuns.id, { onDelete: "cascade" }),
-    accId: integer("acc_id").notNull(),
-    statusSms: text("status_sms"),
-    creditSms: numeric("credit_sms"),
-    creditEmail: numeric("credit_email"),
-    expireSms: date("expire_sms"),
-    expireEmail: date("expire_email"),
-    statusEmail: text("status_email"),
-    joinDate: date("join_date"),
-    lastAccess: timestamp("last_access", { withTimezone: true }),
-    lastSend: timestamp("last_send", { withTimezone: true }),
-  },
-  (t) => [
-    index("idx_raw_cust_run").on(t.runId),
-  ]
-);
-
-export const rawPayments = pgTable(
-  "raw_payments",
-  {
-    id: bigserial("id", { mode: "number" }).primaryKey(),
-    runId: uuid("run_id").references(() => predictionRuns.id, { onDelete: "cascade" }),
-    accId: integer("acc_id").notNull(),
-    paymentUid: bigint("payment_uid", { mode: "number" }),  // original uid from Excel
-    paymentDate: timestamp("payment_date", { withTimezone: true }).notNull(),
-    amount: numeric("amount"),
-    creditAdd: numeric("credit_add"),
-    creditType: text("credit_type"),
-  },
-  (t) => [
-    index("idx_raw_pay_run").on(t.runId),
-  ]
-);
-
-export const rawUsage = pgTable(
-  "raw_usage",
-  {
-    id: bigserial("id", { mode: "number" }).primaryKey(),
-    runId: uuid("run_id").references(() => predictionRuns.id, { onDelete: "cascade" }),
-    accId: integer("acc_id").notNull(),
-    year: integer("year"),
-    month: integer("month"),
-    usage: numeric("usage"),
-    channel: text("channel"),
-    source: text("source"),
-  },
-  (t) => [
-    index("idx_raw_usage_run").on(t.runId),
   ]
 );
 

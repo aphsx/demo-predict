@@ -1,51 +1,48 @@
 # Data pipeline migration (in progress)
 
-We are replacing the legacy predict path with a greenfield layout. **Do not extend** `[LEGACY]` tables for new work.
+Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 
 | Purpose | Layer | Status | Tables / routes |
 |---------|-------|--------|-----------------|
 | **Train** | raw | **NEW** | `train_data_sources`, `train_raw_sheet_*` · `POST /train-data-sources/import` · `/training` |
 | **Train** | clean | planned | `train_clean_*` |
-| **Predict** | raw | **NEW** | `predict_data_sources`, `predict_raw_sheet_*` · `POST /predict-data-sources/import` · `/runs` upload |
+| **Predict** | raw | **NEW** (import only) | `predict_data_sources`, `predict_raw_sheet_*` · `POST /predict-data-sources/import` · `/runs` upload |
 | Predict | clean | planned | `predict_clean_*` |
-| **Predict** | ML + legacy raw | **LEGACY** | `raw_*`, Arq worker · `POST /runs/:id/upload` (still in API, not used by `/runs` UI) |
+| **Predict** | ML output | **LEGACY** (still used) | `prediction_runs`, `predictions` · Arq worker (not wired to `predict_raw_*` yet) |
+| ~~Predict~~ | ~~typed raw~~ | **removed** | ~~`raw_customers`, `raw_payments`, `raw_usage`~~ · ~~`POST /runs/:id/upload`~~ |
 
-Look for `[NEW]` and `[LEGACY]` in the codebase.
+## Removed (004)
 
-Spec: `moby-data-prep/docs/naming-convention.md`
+- PostgreSQL: `DROP` `raw_usage`, `raw_payments`, `raw_customers` (`moby-data-prep/migrations/004_drop_legacy_raw_tables.sql`)
+- API: `apps/api/src/routes/uploads.ts` deleted
+- Drizzle / SQLAlchemy models for `raw_*` removed
+- Worker / SHAP: return error until `predict_raw_*` loader exists
 
-## Predict raw import (current behavior)
+## Predict raw import (current)
 
-1. User creates a run (`POST /runs`) — status `pending`.
-2. User uploads Excel on `/runs` → `POST /predict-data-sources/import` with `prediction_run_id`.
-3. Rows land in `predict_raw_sheet_*` (`row_payload` JSONB per Excel row).
-4. Run status → `imported` (raw only; **Arq / ML pipeline not wired** to `predict_*` yet).
+1. Create run → upload on `/runs` → `predict_raw_sheet_*`
+2. Run status → `imported`
+3. **No ML pipeline** from raw yet (retry → 503)
 
-Re-upload = new `predict_data_sources` row (new snapshot), same as train.
-
-## Docker (`DOCKER_BUILD=1` / `docker compose up --build`)
-
-1. **Alembic** — `[LEGACY]` auth + `prediction_runs`, `raw_*`, `predictions`, …
-2. **moby-data-prep SQL** (same script, after Alembic) — `moby-data-prep/migrations/*.sql` at `/app/train-migrations`
-
-Per-file apply (`migrate_or_repair.py`):
+## Docker migrations
 
 | File | Skip when |
 |------|-----------|
 | `001_*` | `train_data_sources` exists |
-| `002_*` | always runs (`ADD COLUMN IF NOT EXISTS`) |
+| `002_*` | always runs (`IF NOT EXISTS`) |
 | `003_*` | `predict_data_sources` exists |
+| `004_*` | `raw_customers` already dropped |
 
-**Local without Docker:**
+**Apply 004 on existing DB:**
 
 ```bash
-psql "postgresql://moby:moby1234@localhost:5433/moby" -f moby-data-prep/migrations/001_train_raw_eight_tables.sql
-psql "postgresql://moby:moby1234@localhost:5433/moby" -f moby-data-prep/migrations/002_add_imported_by.sql
-psql "postgresql://moby:moby1234@localhost:5433/moby" -f moby-data-prep/migrations/003_predict_raw_eight_tables.sql
+docker exec -i demo-predict-db-1 psql -U moby -d moby \
+  < moby-data-prep/migrations/004_drop_legacy_raw_tables.sql
 ```
 
-## Next steps
+Then **Refresh** in DBeaver (`localhost:5433`).
 
-- Worker / `data_loader` read `predict_raw_*` instead of `raw_*`.
-- `predict_clean_*` + enqueue pipeline after clean.
-- Remove `[LEGACY]` `uploads.ts`, `raw_*` tables, and old routes.
+## Next
+
+- Worker `load_from_db` from `predict_raw_*`
+- Remove retry 503 / explain 503 when wired

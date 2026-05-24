@@ -6,7 +6,7 @@
  *
  * Manual fetch is kept for:
  *   - subscribeRunStatus  — EventSource (GET SSE, browser-native)
- *   - uploadFile          — multipart/form-data
+ *   - uploadPredictDataForRun — multipart (predict raw)
  *   - exportUrl           — returns a URL string for <a href>, not a fetch call
  *   - streamChat          — POST SSE via fetch + AbortController
  *   - generateExplanation / fetchExplanation — simple POST/GET, kept manual for clarity
@@ -372,8 +372,6 @@ export async function uploadPredictDataForRun(
   };
 }
 
-// ── [LEGACY] Predict run file upload — raw_* + Arq pipeline ─────────────────
-
 export async function retryRun(runId: string): Promise<{ run_id: string; status: string; message: string }> {
   const res = await apiFetch(`/api/runs/${runId}/retry`, { method: "POST" });
   const body = await parseJson(res);
@@ -381,13 +379,6 @@ export async function retryRun(runId: string): Promise<{ run_id: string; status:
     throw new Error(isApiError(body) ? body.message : `Failed to retry run (${res.status})`);
   }
   return body as { run_id: string; status: string; message: string };
-}
-
-export async function uploadFile(runId: string, file: File) {
-  const fd = new FormData();
-  fd.append("file", file);
-  const res = await apiFetch(`/api/runs/${runId}/upload`, { method: "POST", body: fd });
-  return res.json();
 }
 
 // ── Export URL — returns href string for <a> tags ─────────────────────────────
@@ -486,7 +477,6 @@ export const api = {
   listRuns:         fetchRuns,
   createRun:        (arg: { name: string; cutoff_date: string }) => createRun(arg.name, arg.cutoff_date),
   deleteRun,
-  uploadFile,
   uploadPredictDataForRun,
   fetchRun,
   fetchSummary,

@@ -1,5 +1,5 @@
 -- [NEW] Train raw layer: one PostgreSQL table per Excel sheet (8) + catalog.
--- [LEGACY] predict uses prediction_runs + raw_customers/payments/usage (apps/api uploads.ts).
+-- Predict path: prediction_runs + predict_raw_sheet_* (legacy raw_* removed in 004).
 -- Predict/clean families: see moby-data-prep/docs/naming-convention.md and docs/DATA-PIPELINE-MIGRATION.md.
 -- Run: psql "$DATABASE_URL" -f migrations/001_train_raw_eight_tables.sql
 

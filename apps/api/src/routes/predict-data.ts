@@ -1,6 +1,6 @@
 /**
  * [NEW] Predict raw data API — import Excel into predict_data_sources + predict_raw_sheet_*.
- * Replaces [LEGACY] POST /runs/:id/upload → raw_customers/payments/usage (still in uploads.ts).
+ * Replaces removed [LEGACY] POST /runs/:id/upload → raw_customers/payments/usage.
  */
 import Elysia, { t } from "elysia";
 import { desc, eq } from "drizzle-orm";

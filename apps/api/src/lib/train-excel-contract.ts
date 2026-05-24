@@ -1,6 +1,6 @@
 /**
  * [NEW] Train raw Excel contract — mirrors moby-data-prep/config/excel_schema.yaml.
- * [LEGACY] predict upload uses inline constants in routes/uploads.ts (different storage).
+ * Predict raw uses the same sheet list in predict-excel-contract.ts.
  */
 
 export const TRAIN_REQUIRED_SHEETS = ["Users+User_profile", "Backend_payment"] as const;

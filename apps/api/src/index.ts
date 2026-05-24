@@ -6,7 +6,6 @@ import { auth } from "./auth";
 import { runsRoutes } from "./routes/runs";
 import { predictionsRoutes } from "./routes/predictions";
 import { trainingRoutes } from "./routes/training";
-import { uploadsRoutes } from "./routes/uploads";
 import { explanationsRoutes } from "./routes/explanations";
 import { eventsRoutes } from "./routes/events";
 import { insightsRoutes } from "./routes/insights";
@@ -31,13 +30,11 @@ const app = new Elysia()
   )
   // Better Auth handles all /api/auth/* routes; returns null for everything else
   .mount(auth.handler)
-  // [LEGACY] Predict/inference — prediction_runs, raw_*, predictions, Arq worker
+  // [LEGACY] Predict/inference — prediction_runs, predictions, Arq worker (raw_* removed)
   .use(runsRoutes)
   .use(predictionsRoutes)
   // [LEGACY] Model artifact registry + POST /model-versions/train (FastAPI subprocess)
   .use(trainingRoutes)
-  // [LEGACY] Excel upload per run → raw_* + enqueue pipeline (/runs page)
-  .use(uploadsRoutes)
   // Phase 4e routes (SHAP explain — proxied to FastAPI /internal/explain)
   .use(explanationsRoutes)
   // Phase 4g routes (SSE — Redis Streams XREAD with DB fallback)

@@ -62,61 +62,6 @@ class PredictionRun(Base):
     )
 
 
-# ── Raw Data (uploaded per run) ───────────────────────────────────
-class RawCustomer(Base):
-    __tablename__ = "raw_customers"
-
-    id:           Mapped[int]  = mapped_column(BigInteger, primary_key=True)
-    run_id:       Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("prediction_runs.id", ondelete="CASCADE"),
-        index=True,
-    )
-    acc_id:       Mapped[int]  = mapped_column(Integer, nullable=False)
-    status_sms:   Mapped[str | None]    = mapped_column(Text)
-    credit_sms:   Mapped[float | None]  = mapped_column(Numeric)
-    credit_email: Mapped[float | None]  = mapped_column(Numeric)
-    expire_sms:   Mapped[date | None]   = mapped_column(Date)
-    expire_email: Mapped[date | None]   = mapped_column(Date)
-    status_email: Mapped[str | None]    = mapped_column(Text)
-    join_date:    Mapped[date | None]   = mapped_column(Date)
-    last_access:  Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
-    last_send:    Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
-
-
-class RawPayment(Base):
-    __tablename__ = "raw_payments"
-
-    id:           Mapped[int]  = mapped_column(BigInteger, primary_key=True)
-    run_id:       Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("prediction_runs.id", ondelete="CASCADE"),
-        index=True,
-    )
-    acc_id:       Mapped[int]  = mapped_column(Integer, nullable=False)
-    payment_date: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    amount:       Mapped[float | None] = mapped_column(Numeric)
-    credit_add:   Mapped[float | None] = mapped_column(Numeric)
-    credit_type:  Mapped[str | None]   = mapped_column(Text)
-
-
-class RawUsage(Base):
-    __tablename__ = "raw_usage"
-
-    id:      Mapped[int]  = mapped_column(BigInteger, primary_key=True)
-    run_id:  Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("prediction_runs.id", ondelete="CASCADE"),
-        index=True,
-    )
-    acc_id:  Mapped[int]  = mapped_column(Integer, nullable=False)
-    year:    Mapped[int | None]   = mapped_column(Integer)
-    month:   Mapped[int | None]   = mapped_column(Integer)
-    usage:   Mapped[float | None] = mapped_column(Numeric)
-    channel: Mapped[str | None]   = mapped_column(Text)
-    source:  Mapped[str | None]   = mapped_column(Text)
-
-
 # ── Predictions V2 (ML output) ────────────────────────────────────
 class Prediction(Base):
     __tablename__ = "predictions"

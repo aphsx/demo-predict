@@ -1,12 +1,9 @@
 import Elysia, { t } from "elysia";
-import { count, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { predictionRuns, rawCustomers } from "../db/schema";
+import { predictionRuns } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { verifyRunOwnership } from "../lib/run-guard";
-import { enqueueArqJob } from "../services/job-producer";
-
-const MODEL_DIR = process.env.MODEL_DIR ?? "/app/models";
 
 // Shape returned by POST /runs — matches FastAPI's RETURNING clause
 const RUN_CREATE_RETURNING = {
@@ -89,7 +86,7 @@ export const runsRoutes = new Elysia({ prefix: "/runs" })
     { params: t.Object({ id: t.String() }) }
   )
 
-  // POST /runs/:id/retry — re-enqueue pipeline for stuck processing/failed runs
+  // POST /runs/:id/retry — disabled until worker reads predict_raw_* (raw_* dropped)
   .post(
     "/:id/retry",
     async ({ params, userId, set }) => {
@@ -98,46 +95,11 @@ export const runsRoutes = new Elysia({ prefix: "/runs" })
         set.status = guard.status;
         return { message: guard.message };
       }
-
-      const [run] = await db
-        .select({ status: predictionRuns.status })
-        .from(predictionRuns)
-        .where(eq(predictionRuns.id, params.id))
-        .limit(1);
-
-      if (!run || !["processing", "failed"].includes(run.status)) {
-        set.status = 400;
-        return { message: `Run status is '${run?.status}' — cannot retry` };
-      }
-
-      const [row] = await db
-        .select({ n: count() })
-        .from(rawCustomers)
-        .where(eq(rawCustomers.runId, params.id));
-
-      if (!row?.n) {
-        set.status = 400;
-        return { message: "No uploaded data — upload Excel first" };
-      }
-
-      await db
-        .update(predictionRuns)
-        .set({ status: "processing", errorMessage: null })
-        .where(eq(predictionRuns.id, params.id));
-
-      try {
-        await enqueueArqJob("run_prediction_pipeline", params.id, MODEL_DIR);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        await db
-          .update(predictionRuns)
-          .set({ status: "failed", errorMessage: `Queue error: ${msg}` })
-          .where(eq(predictionRuns.id, params.id));
-        set.status = 500;
-        return { message: `Failed to enqueue prediction job: ${msg}` };
-      }
-
-      return { run_id: params.id, status: "processing", message: "Prediction re-queued" };
+      set.status = 503;
+      return {
+        message:
+          "ML pipeline retry is unavailable: legacy raw_* tables were removed. Wire worker to predict_raw_* first.",
+      };
     },
     { params: t.Object({ id: t.String() }) }
   )

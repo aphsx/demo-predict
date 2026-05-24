@@ -1,6 +1,6 @@
 /**
  * [NEW] Predict raw Excel contract — same 8 sheets as train, different table names.
- * [LEGACY] uploads.ts writes to raw_customers/payments/usage (being replaced).
+ * Legacy raw_customers/payments/usage removed (see 004_drop_legacy_raw_tables.sql).
  */
 export {
   TRAIN_REQUIRED_SHEETS as PREDICT_REQUIRED_SHEETS,

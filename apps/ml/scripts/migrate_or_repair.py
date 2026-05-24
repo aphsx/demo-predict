@@ -33,6 +33,11 @@ MIGRATION_MARKERS: dict[str, str | None] = {
     "002": None,  # additive ALTER on train_data_sources
     "003": PREDICT_RAW_MARKER,
 }
+LEGACY_RAW_MARKER = "raw_customers"
+# Skip drop migration when legacy tables are already gone.
+SKIP_MIGRATION_IF_TABLE_ABSENT: dict[str, str] = {
+    "004": LEGACY_RAW_MARKER,
+}
 
 
 async def schema_state(database_url: str) -> str:
@@ -127,6 +132,12 @@ async def apply_moby_data_prep_migrations(database_url: str) -> None:
     print("=== Applying [NEW] moby-data-prep migrations ===", flush=True)
     async with engine.begin() as conn:
         for path in sql_files:
+            prefix = path.name.split("_", 1)[0]
+            absent_marker = SKIP_MIGRATION_IF_TABLE_ABSENT.get(prefix)
+            if absent_marker is not None:
+                if not await _table_exists(conn, absent_marker):
+                    print(f"  skip {path.name} ({absent_marker} already dropped)", flush=True)
+                    continue
             marker = _migration_marker(path.name)
             if marker is not None:
                 if await _table_exists(conn, marker):

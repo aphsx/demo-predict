@@ -132,45 +132,10 @@ async def _pipeline(run_id: str, model_dir: str):
 
 
 async def _load_from_db(Session, run_id: str):
-    async with Session() as db:
-        def _to_naive(series):
-            dt = pd.to_datetime(series, errors="coerce", utc=True)
-            return dt.dt.tz_convert(None)
-
-        u = await db.execute(text("""
-            SELECT acc_id,status_sms,credit_sms,credit_email,
-                   expire_sms,expire_email,status_email,join_date,last_access,last_send
-            FROM raw_customers WHERE run_id = :r
-        """), {"r": run_id})
-        users = pd.DataFrame([dict(row._mapping) for row in u])
-        for col in ["expire_sms","expire_email","join_date","last_access","last_send"]:
-            if col in users.columns:
-                users[col] = _to_naive(users[col])
-        for col in ["credit_sms", "credit_email"]:
-            if col in users.columns:
-                users[col] = pd.to_numeric(users[col], errors="coerce")
-
-        p = await db.execute(text("""
-            SELECT acc_id,payment_date,amount,credit_add,credit_type
-            FROM raw_payments WHERE run_id = :r
-        """), {"r": run_id})
-        payments = pd.DataFrame([dict(row._mapping) for row in p])
-        if len(payments) > 0:
-            payments["payment_date"] = _to_naive(payments["payment_date"])
-            for col in ["amount", "credit_add"]:
-                payments[col] = pd.to_numeric(payments[col], errors="coerce")
-
-        u2 = await db.execute(text("""
-            SELECT acc_id,year,month,usage,channel,source FROM raw_usage WHERE run_id = :r
-        """), {"r": run_id})
-        usage = pd.DataFrame([dict(row._mapping) for row in u2])
-        if len(usage) > 0:
-            for col in ["usage", "year", "month"]:
-                usage[col] = pd.to_numeric(usage[col], errors="coerce")
-            usage["period"] = pd.to_datetime(
-                usage["year"].astype(str) + "-" + usage["month"].astype(str).str.zfill(2) + "-01"
-            )
-        return users, payments, usage
+    raise RuntimeError(
+        "legacy raw_customers/raw_payments/raw_usage were removed; "
+        "load from predict_raw_sheet_* is not wired yet"
+    )
 
 
 async def _save_predictions(db, run_id, batch):
