@@ -23,7 +23,10 @@ pip install -r requirements.txt
 
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5433/moby
 
+# Docker: applied automatically when ml starts (see docs/DATA-PIPELINE-MIGRATION.md)
+# Local manual:
 psql "$DATABASE_URL" -f migrations/001_train_raw_eight_tables.sql
+psql "$DATABASE_URL" -f migrations/002_add_imported_by.sql
 
 python scripts/import_train_raw.py \
   --file "../data/[1Moby] Data_example for Bangkok university.xlsx" \

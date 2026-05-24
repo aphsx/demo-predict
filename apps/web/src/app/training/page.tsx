@@ -22,6 +22,7 @@ import {
   type TrainDataSource,
 } from "@/lib/api";
 import { getDisplayError } from "@/lib/ui-error";
+import { useSession } from "@/lib/auth-client";
 
 interface ModelVersion {
   id: string;
@@ -46,6 +47,9 @@ const modelLabels: Record<string, string> = {
 };
 
 export default function TrainingPage() {
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id ?? null;
+
   const [versions, setVersions] = useState<ModelVersion[]>([]);
   const [activeVersions, setActiveVersions] = useState<ActiveVersions>({});
   const [trainSources, setTrainSources] = useState<TrainDataSource[]>([]);
@@ -165,8 +169,19 @@ export default function TrainingPage() {
         {/* [NEW] Train raw import — replaces filesystem-only training data for new pipeline */}
         <SectionCard
           title="Training data (raw)"
-          hint="[NEW] 8-sheet Excel → train_data_sources + train_raw_sheet_* (stored as-is)"
+          hint="Imports are tied to your account (imported_by) — you only see datasets you uploaded"
         >
+          {session?.user && (
+            <p className="text-[13px] text-[color:var(--ink-4)] mb-3">
+              Signed in as{" "}
+              <span className="font-medium text-[color:var(--ink-1)]">
+                {session.user.name || session.user.email}
+              </span>
+              {session.user.email && session.user.name ? (
+                <span className="text-[color:var(--ink-5)]"> ({session.user.email})</span>
+              ) : null}
+            </p>
+          )}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <label className="flex-1 text-sm">
               <span className="text-[color:var(--ink-5)] text-xs uppercase tracking-wider">Dataset name</span>
@@ -201,7 +216,7 @@ export default function TrainingPage() {
               />
               <button
                 type="button"
-                disabled={importing}
+                disabled={importing || !session?.user}
                 onClick={() => fileInputRef.current?.click()}
                 className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] hover:bg-[color:var(--surface-1)] inline-flex items-center gap-1.5 disabled:opacity-50"
               >
@@ -222,7 +237,11 @@ export default function TrainingPage() {
               <EmptyState
                 icon={FileSpreadsheet}
                 title="No training datasets yet"
-                hint="Upload an 8-sheet Excel file to store raw rows in the database"
+                hint={
+                  session?.user
+                    ? "Upload an 8-sheet Excel file — it will be linked to your account"
+                    : "Sign in to import training data"
+                }
               />
             </div>
           ) : (
@@ -239,8 +258,20 @@ export default function TrainingPage() {
                 </thead>
                 <tbody>
                   {trainSources.map((s) => (
-                    <tr key={s.id} className="border-b border-[color:var(--line)]">
-                      <td className="py-2 px-2 font-medium text-[color:var(--ink-1)]">{s.name}</td>
+                    <tr
+                      key={s.id}
+                      className={`border-b border-[color:var(--line)] ${
+                        s.imported_by === currentUserId ? "bg-[color:var(--moby-50)]/40" : ""
+                      }`}
+                    >
+                      <td className="py-2 px-2 font-medium text-[color:var(--ink-1)]">
+                        {s.name}
+                        {s.is_mine && (
+                          <span className="ml-2 text-[10px] uppercase tracking-wide text-[color:var(--moby-700)]">
+                            yours
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2 px-2 text-[color:var(--ink-4)] text-xs">{s.original_filename}</td>
                       <td className="py-2 px-2">
                         <StatusPill tone={s.import_status === "ready" ? "ok" : s.import_status === "failed" ? "danger" : "neutral"}>
@@ -248,7 +279,7 @@ export default function TrainingPage() {
                         </StatusPill>
                       </td>
                       <td className="py-2 px-2 text-[color:var(--ink-4)] text-xs">
-                        {s.importer_name ?? s.importer_email ?? s.imported_by ?? "—"}
+                        {s.importer?.name ?? s.importer?.email ?? "—"}
                       </td>
                       <td className="py-2 px-2 text-[color:var(--ink-4)] text-xs">
                         {s.imported_at

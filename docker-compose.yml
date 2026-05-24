@@ -38,6 +38,8 @@ services:
     volumes:
       - ./models:/app/models
       - ./data:/data
+      # [NEW] train raw DDL — applied by migrate_or_repair.py after Alembic
+      - ./moby-data-prep/migrations:/app/train-migrations:ro
     depends_on:
       db:
         condition: service_healthy
