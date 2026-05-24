@@ -83,8 +83,6 @@ export default function Dashboard() {
             <div className="space-y-5">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill tone="info">Dashboard</StatusPill>
-                <StatusPill tone="brand">{runId ? `Run ${runId.slice(0, 8)}` : "No run selected"}</StatusPill>
-                <StatusPill tone="neutral">{loading ? "Syncing live data" : "Live portfolio snapshot"}</StatusPill>
               </div>
 
               <div className="max-w-3xl">
