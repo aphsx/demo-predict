@@ -30,17 +30,13 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
-# ML artifacts and local data
-ml/models/*
-!ml/models/.gitkeep
-ml/data/*.xlsx
-
-# Node / Next.js
-web/node_modules/
-web/.next/
-web/out/
-web/.turbo/
-web/.vercel/
+# Node — catch all node_modules and build artifacts at any depth
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+.vercel/
 
 # Build caches
 .cache/
@@ -49,3 +45,5 @@ temp/
 
 # Docker
 *.pid
+
+models/

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-10T07:36:49.841166",
+  "generated_at": "2026-05-22T14:11:00.126557",
   "cutoff_date": "2025-07-01",
   "data_summary": {
     "total_users": 25093,
@@ -10,79 +10,79 @@
     "n_features": 30
   },
   "churn": {
-    "auc": 0.9408,
+    "auc": 0.9442,
     "f1": 0.7772,
     "precision": 0.7772,
     "recall": 0.7772,
-    "auc_without_leak_suspects": 0.9419,
-    "auc_drop_leakage_test": 0.002
+    "auc_without_leak_suspects": 0.9368,
+    "auc_drop_leakage_test": 0.0057
   },
   "churn_competition": {
     "Logistic Regression": {
-      "auc": 0.8873,
-      "f1": 0.6609,
-      "precision": 0.7125,
-      "recall": 0.6162
+      "auc": 0.8704,
+      "f1": 0.6757,
+      "precision": 0.6813,
+      "recall": 0.6703
     },
     "Random Forest": {
-      "auc": 0.9183,
-      "f1": 0.7439,
-      "precision": 0.7419,
+      "auc": 0.9207,
+      "f1": 0.75,
+      "precision": 0.7541,
       "recall": 0.7459
     },
     "XGBoost": {
-      "auc": 0.9184,
-      "f1": 0.7433,
-      "precision": 0.7354,
-      "recall": 0.7514
+      "auc": 0.9188,
+      "f1": 0.7466,
+      "precision": 0.7527,
+      "recall": 0.7405
     },
     "LightGBM": {
-      "auc": 0.9267,
-      "f1": 0.7234,
-      "precision": 0.712,
+      "auc": 0.9183,
+      "f1": 0.7292,
+      "precision": 0.7234,
       "recall": 0.7351
     }
   },
   "churn_shap_top10": [
     {
-      "feature": "days_since_last_access",
-      "shap": 0.6901046554066368
-    },
-    {
       "feature": "days_until_sms_expire",
-      "shap": 0.6185895975691745
-    },
-    {
-      "feature": "usage_months",
-      "shap": 0.41155059476172695
+      "shap": 0.8183232427167316
     },
     {
       "feature": "usage_recent_3m",
-      "shap": 0.266774185840179
+      "shap": 0.5935276873302328
     },
     {
-      "feature": "usage_decay_ratio",
-      "shap": 0.22593854309531658
-    },
-    {
-      "feature": "credit_sms_log",
-      "shap": 0.17258679499915502
+      "feature": "usage_months",
+      "shap": 0.49874875831954746
     },
     {
       "feature": "days_since_last_send",
-      "shap": 0.16348121040875066
+      "shap": 0.4693002287752986
     },
     {
-      "feature": "usage_prev_3m",
-      "shap": 0.10696283756101221
+      "feature": "usage_decay_ratio",
+      "shap": 0.3044103883890052
+    },
+    {
+      "feature": "credit_sms_log",
+      "shap": 0.19457950782065742
     },
     {
       "feature": "days_until_email_expire",
-      "shap": 0.09103338088301083
+      "shap": 0.09787222594172729
+    },
+    {
+      "feature": "pay_overdue_ratio",
+      "shap": 0.0903386067616748
+    },
+    {
+      "feature": "pay_recency_days",
+      "shap": 0.07649152249922439
     },
     {
       "feature": "pay_n_sms",
-      "shap": 0.06279294693387065
+      "shap": 0.07041832476947663
     }
   ],
   "clv": {
@@ -97,30 +97,30 @@
     "coverage_80": 0.7909
   },
   "credit": {
-    "p50_mae": 32.96,
-    "p50_medae": 9.39,
-    "p50_r2": 0.4014,
+    "p50_mae": 32.92,
+    "p50_medae": 9.68,
+    "p50_r2": 0.4118,
     "xgb_baseline_mae": 34.98,
-    "coverage_p10_p90_before": 0.7337,
-    "coverage_p10_p90_after": 0.8014,
-    "coverage_p25_p75_before": 0.4493,
-    "coverage_p25_p75_after": 0.5039,
-    "conformal_mult_80": 1.08,
-    "conformal_mult_50": 1.1
+    "coverage_p10_p90_before": 0.7606,
+    "coverage_p10_p90_after": 0.804,
+    "coverage_p25_p75_before": 0.4744,
+    "coverage_p25_p75_after": 0.5013,
+    "conformal_mult_80": 1.04,
+    "conformal_mult_50": 1.06
   },
   "winback": {
-    "auc": 0.9252,
-    "f1": 0.4928,
-    "precision": 0.5862,
-    "recall": 0.425,
+    "auc": 0.932,
+    "f1": 0.3667,
+    "precision": 0.55,
+    "recall": 0.275,
     "n_churned": 4948,
     "n_comeback": 160
   },
   "conversion": {
-    "auc": 0.9629,
-    "f1": 0.6667,
-    "precision": 0.6842,
-    "recall": 0.65,
+    "auc": 0.9715,
+    "f1": 0.7143,
+    "precision": 0.6818,
+    "recall": 0.75,
     "n_free": 1912,
     "n_converted": 80
   }
