@@ -392,7 +392,11 @@ export function uploadTrainDataFileWithProgress(
     const sourceId = (body as { source_id?: string }).source_id;
     if (!sourceId) throw new Error("Import did not return source_id");
 
-    onProgress({ progress: 5, step: "Upload received — raw import…", phase: "raw" });
+    onProgress({
+      progress: 2,
+      step: "Upload received — preparing data (raw → clean)…",
+      phase: "raw",
+    });
 
     return new Promise<TrainImportDone>((resolve, reject) => {
       const es = new EventSource(

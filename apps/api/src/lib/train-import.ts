@@ -263,7 +263,7 @@ export async function importTrainExcel(params: {
           sheetManifest: manifest,
         })
         .where(eq(trainDataSources.id, sourceId));
-      emit?.({ progress: 97, step: "Raw import complete — starting clean…" });
+      emit?.({ progress: 97, step: "Raw complete — cleaning automatically…" });
     } else {
       emit?.({ progress: 97, step: "Finalizing…" });
       await db

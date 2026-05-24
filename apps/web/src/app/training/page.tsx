@@ -98,7 +98,7 @@ export default function TrainingPage() {
     setImportError(null);
     setImportSuccess(null);
     setImportProgress(0);
-    setImportStep("Starting import…");
+    setImportStep("กำลังเตรียมข้อมูล (raw → clean)…");
     setImportPhase(null);
     try {
       const result = await uploadTrainDataFileWithProgress(
@@ -131,11 +131,14 @@ export default function TrainingPage() {
         }
       }
       setImportSuccess(
-        `Imported ${result.source_id.slice(0, 8)}… (${Object.keys(result.sheet_manifest).length} sheets)${cleanSummary}`
+        `เตรียมข้อมูลเสร็จ ${result.source_id.slice(0, 8)}… (${Object.keys(result.sheet_manifest).length} sheets)${cleanSummary}`
       );
       await new Promise((r) => setTimeout(r, 450));
       await load();
     } catch (e) {
+      setImportProgress(0);
+      setImportStep("");
+      setImportPhase(null);
       const err = e as Error & { code?: string; source_id?: string };
       if (err.code === "DUPLICATE_FILE" && err.source_id) {
         setImportError(
@@ -146,9 +149,6 @@ export default function TrainingPage() {
       }
     } finally {
       setImporting(false);
-      setImportProgress(0);
-      setImportStep("");
-      setImportPhase(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -221,13 +221,12 @@ export default function TrainingPage() {
       />
       <div className="px-8 mt-4 space-y-5">
         <p className="text-sm text-[color:var(--ink-4)]">
-          Import Excel → raw sheets in DB, then train clean (typed rows for model training)
+          อัปโหลดไฟล์ .xlsx ครั้งเดียว — ระบบนำเข้า raw แล้ว clean ให้อัตโนมัติ (progress เดียว)
         </p>
 
-        {/* [NEW] Train raw import — replaces filesystem-only training data for new pipeline */}
         <SectionCard
-          title="Training data"
-          hint="[NEW] Raw import + train clean in one step (train_raw_sheet_* → train_clean_*)"
+          title="อัปโหลดข้อมูลเทรน"
+          hint="Excel 8 ชีต → raw ใน DB → clean สำหรับเทรนโมเดล (ไม่ต้องกดแยก)"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <label className="flex-1 text-sm">
@@ -281,7 +280,7 @@ export default function TrainingPage() {
                 className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] inline-flex items-center gap-1.5 disabled:opacity-50"
               >
                 <FileSpreadsheet size={15} />
-                Import
+                อัปโหลด
               </button>
             </div>
           </div>
@@ -295,22 +294,26 @@ export default function TrainingPage() {
             <div className="mt-4 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-1)] p-4 space-y-3">
               <div className="flex items-center gap-2 text-[13px] text-[color:var(--ink-2)]">
                 <RefreshCw size={14} className="animate-spin shrink-0 text-[color:var(--moby-600)]" />
-                <span className="font-medium">
-                  {importPhase === "clean" ? "Cleaning for training…" : "Importing raw sheets…"}
+                <span className="font-medium">กำลังเตรียมข้อมูลเทรน…</span>
+                <span className="ml-auto text-[11px] text-[color:var(--ink-5)]">
+                  {importPhase === "clean"
+                    ? "ขั้นที่ 2/2 · Clean"
+                    : importPhase === "raw"
+                      ? "ขั้นที่ 1/2 · Raw"
+                      : "Raw → Clean"}
                 </span>
-                {importPhase && (
-                  <span className="ml-auto text-[11px] uppercase tracking-wide text-[color:var(--ink-5)]">
-                    {importPhase === "clean" ? "Clean" : "Raw"}
-                  </span>
-                )}
               </div>
-              <div className="w-full h-3 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
+              <div className="relative w-full h-3 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
+                <div
+                  className="absolute inset-y-0 left-[45%] w-px bg-[color:var(--line)] z-10"
+                  aria-hidden
+                />
                 <div
                   className="h-full rounded-full bg-[color:var(--moby-600)] transition-[width] duration-300 ease-out"
                   style={{ width: `${Math.max(importProgress > 0 ? 4 : 0, importProgress)}%` }}
                 />
               </div>
-              <p className="text-[12px] text-[color:var(--ink-4)]">{importStep || "Working…"}</p>
+              <p className="text-[12px] text-[color:var(--ink-4)]">{importStep || "กำลังประมวลผล…"}</p>
               <p className="num text-[13px] font-medium text-[color:var(--moby-700)]">{importProgress}%</p>
             </div>
           )}

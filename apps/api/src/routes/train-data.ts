@@ -116,6 +116,10 @@ async function runTrainImportPipeline(params: {
     deferReadyCatalog: true,
     onSourceCreated: (id) => {
       sourceId = id;
+      publishRawProgress(sourceId, {
+        progress: 0,
+        step: "Reading workbook…",
+      });
       params.onSourceCreated?.(id);
     },
     onProgress: (event) => {
@@ -419,6 +423,11 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
                 imported_by: userId!,
                 onSourceCreated: (id) => {
                   sid = id;
+                  void publishTrainPipelineProgress(id, {
+                    progress: 5,
+                    step: "Upload received — starting raw import…",
+                    phase: "raw",
+                  });
                   resolve(id);
                 },
               });
