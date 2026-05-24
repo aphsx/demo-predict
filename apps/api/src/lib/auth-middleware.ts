@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { auth } from "../auth";
+import { getDevAuthBypassUserId, isDevAuthBypassEnabled } from "./dev-auth";
 
 /**
  * Derives { userId } on every request by reading the Better Auth session.
@@ -9,6 +10,10 @@ import { auth } from "../auth";
 export const userPlugin = new Elysia({ name: "user-plugin" }).derive(
   { as: "global" },
   async ({ request }) => {
+    if (isDevAuthBypassEnabled()) {
+      return { userId: getDevAuthBypassUserId() };
+    }
+
     const sessionData = await auth.api
       .getSession({ headers: request.headers })
       .catch(() => null);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
+import { isDevAuthBypassEnabled } from "@/lib/dev-auth";
 
 const PUBLIC_PATHS = ["/login"];
 
@@ -12,6 +13,10 @@ export function middleware(request: NextRequest) {
   }
 
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return NextResponse.next();
+  }
+
+  if (isDevAuthBypassEnabled()) {
     return NextResponse.next();
   }
 

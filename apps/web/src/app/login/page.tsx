@@ -1,9 +1,10 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 import { LoginBackground } from "@/components/LoginBackground";
+import { isDevAuthBypassEnabled } from "@/lib/dev-auth";
 import { INTRO_ASSETS, LOGIN_BRAND } from "@/lib/login-brand-colors";
 
 type Provider = "google";
@@ -17,15 +18,23 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
+  const router = useRouter();
   const sp = useSearchParams();
   const callbackURL = sp.get("redirect") || "/";
   const [busy, setBusy] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const devAuthBypassEnabled = isDevAuthBypassEnabled();
 
   const handle = async (provider: Provider) => {
     try {
       setBusy(provider);
       setError(null);
+
+      if (devAuthBypassEnabled) {
+        router.replace(callbackURL);
+        return;
+      }
+
       await signIn.social({ provider, callbackURL });
     } catch (e: any) {
       setError(e?.message || "Sign-in failed");
@@ -81,12 +90,12 @@ function LoginForm() {
             {busy === "google" ? (
               <>
                 <Spinner />
-                <span>Connecting to Google...</span>
+                <span>{devAuthBypassEnabled ? "Opening workspace..." : "Connecting to Google..."}</span>
               </>
             ) : (
               <>
                 <GoogleIcon />
-                <span>Continue with Google</span>
+                <span>{devAuthBypassEnabled ? "Enter workspace" : "Continue with Google"}</span>
               </>
             )}
           </button>
@@ -101,7 +110,9 @@ function LoginForm() {
           )}
 
           <p className="mt-6 text-xs leading-5" style={{ color: "rgba(255,255,255,0.52)" }}>
-            หากเข้าไม่ได้ ให้ตรวจสอบว่าบัญชี Google ของคุณถูกเพิ่มสิทธิ์ในระบบแล้ว
+            {devAuthBypassEnabled
+              ? "โหมด local dev เปิดอยู่ ปุ่มนี้จะพาเข้า workspace โดยไม่เรียก Google OAuth"
+              : "หากเข้าไม่ได้ ให้ตรวจสอบว่าบัญชี Google ของคุณถูกเพิ่มสิทธิ์ในระบบแล้ว"}
           </p>
         </div>
 
