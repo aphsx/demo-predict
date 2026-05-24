@@ -21,7 +21,7 @@ Train-only typed tables populated from `train_raw_sheet_*` after Excel import.
 ## API
 
 - `POST /train-data-sources/import` and `/import/async` run raw then clean in one job
-- Progress: Redis stream `train-import:{source_id}` with `phase` = `raw` \| `clean`, combined 0–100%
+- Progress: Redis stream `train-import:{source_id}`; UI polls `GET /train-data-sources/:id/import/progress`
 
 ## Not in scope
 

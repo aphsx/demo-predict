@@ -161,24 +161,16 @@ async function insertSheetRows(
   return inserted;
 }
 
-export async function importTrainExcel(params: {
+/** Create catalog row early so SSE can subscribe before sheet import (async upload). */
+export async function prepareTrainDataSource(params: {
   buffer: Buffer;
   filename: string;
   name: string;
   client_label?: string | null;
   notes?: string | null;
   imported_by: string;
-  onProgress?: (event: TrainImportProgressEvent) => void;
-  /** Fired as soon as train_data_sources row exists (for async import + SSE subscribe). */
-  onSourceCreated?: (sourceId: string) => void;
-  /** When true, leave status `importing` after raw (clean step sets `ready`). */
-  deferReadyCatalog?: boolean;
-}): Promise<TrainImportResult> {
-  const emit = params.onProgress;
-
+}): Promise<string> {
   const checksum = createHash("sha256").update(params.buffer).digest("hex");
-
-  emit?.({ progress: 0, step: "Reading workbook…" });
 
   const wb = XLSX.read(params.buffer, { type: "buffer", cellDates: true });
   for (const req of TRAIN_REQUIRED_SHEETS) {
@@ -217,14 +209,85 @@ export async function importTrainExcel(params: {
     })
     .returning({ id: trainDataSources.id });
 
-  const sourceId = created.id;
-  params.onSourceCreated?.(sourceId);
-  const manifest: Record<string, number> = {};
+  return created.id;
+}
 
-  emit?.({
-    progress: progressAfterValidate(),
-    step: "Catalog created — importing sheets…",
-  });
+export async function importTrainExcel(params: {
+  buffer: Buffer;
+  filename: string;
+  name: string;
+  client_label?: string | null;
+  notes?: string | null;
+  imported_by: string;
+  /** When set, skip catalog insert (used after prepareTrainDataSource). */
+  sourceId?: string;
+  onProgress?: (event: TrainImportProgressEvent) => void;
+  /** Fired as soon as train_data_sources row exists (for async import + SSE subscribe). */
+  onSourceCreated?: (sourceId: string) => void;
+  /** When true, leave status `importing` after raw (clean step sets `ready`). */
+  deferReadyCatalog?: boolean;
+}): Promise<TrainImportResult> {
+  const emit = params.onProgress;
+  const checksum = createHash("sha256").update(params.buffer).digest("hex");
+
+  let sourceId: string;
+  if (params.sourceId) {
+    sourceId = params.sourceId;
+    params.onSourceCreated?.(sourceId);
+    emit?.({
+      progress: progressAfterValidate(),
+      step: "Catalog created — importing sheets…",
+    });
+  } else {
+    emit?.({ progress: 0, step: "Reading workbook…" });
+
+    const wb = XLSX.read(params.buffer, { type: "buffer", cellDates: true });
+    for (const req of TRAIN_REQUIRED_SHEETS) {
+      if (!wb.SheetNames.includes(req)) {
+        throw new Error(`Missing required sheet: ${req}`);
+      }
+    }
+
+    const existing = await db
+      .select({ id: trainDataSources.id })
+      .from(trainDataSources)
+      .where(eq(trainDataSources.fileChecksumSha256, checksum))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const err = new Error("This file was already imported (checksum match)") as Error & {
+        code: string;
+        source_id: string;
+      };
+      err.code = "DUPLICATE_FILE";
+      err.source_id = existing[0].id;
+      throw err;
+    }
+
+    const [created] = await db
+      .insert(trainDataSources)
+      .values({
+        name: params.name,
+        clientLabel: params.client_label ?? null,
+        originalFilename: params.filename,
+        fileChecksumSha256: checksum,
+        fileSizeBytes: params.buffer.length,
+        importStatus: "importing",
+        importedBy: params.imported_by,
+        notes: params.notes ?? null,
+      })
+      .returning({ id: trainDataSources.id });
+
+    sourceId = created.id;
+    params.onSourceCreated?.(sourceId);
+    emit?.({
+      progress: progressAfterValidate(),
+      step: "Catalog created — importing sheets…",
+    });
+  }
+
+  const manifest: Record<string, number> = {};
+  const wb = XLSX.read(params.buffer, { type: "buffer", cellDates: true });
 
   try {
     const sheetOrder = wb.SheetNames.filter(

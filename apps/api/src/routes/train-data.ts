@@ -2,30 +2,47 @@
  * [NEW] Train raw data API — import 8-sheet Excel into train_data_sources + train_raw_sheet_*.
  */
 import Elysia, { t } from "elysia";
-import IORedis from "ioredis";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
-import { importTrainExcel, type TrainImportResult } from "../lib/train-import";
+import { importTrainExcel, prepareTrainDataSource, type TrainImportResult } from "../lib/train-import";
 import type { TrainImportProgressEvent } from "../lib/train-import-progress";
 import { abortTrainDataSource, releaseStaleTrainImports } from "../lib/abort-data-source";
 import { cleanTrainFromRaw } from "../lib/train-clean";
 import { mapRawImportProgress } from "../lib/train-pipeline-progress";
-import { sseFrame } from "../lib/sse";
 import {
   publishTrainImportDone,
   publishTrainImportError,
   publishTrainPipelineProgress,
-  trainImportStreamKey,
+  readLatestTrainImportStreamEntry,
 } from "../lib/train-import-stream";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-const REDIS_HOST = process.env.REDIS_HOST || "redis";
-const REDIS_PORT = Number(process.env.REDIS_PORT ?? 6379);
 
-type StreamEntry = [id: string, fields: string[]];
-type XReadResult = Array<[key: string, entries: StreamEntry[]]> | null;
+function runTrainImportJob(
+  sourceId: string,
+  params: {
+    buffer: Buffer;
+    filename: string;
+    name: string;
+    client_label: string | null;
+    notes: string | null;
+    imported_by: string;
+  }
+): void {
+  void (async () => {
+    try {
+      const result = await runTrainImportPipeline({ ...params, sourceId });
+      await publishTrainImportDone(sourceId, result);
+    } catch (e) {
+      const err = e as Error & { code?: string; source_id?: string };
+      if (err.code === "DUPLICATE_FILE") return;
+      await publishTrainImportError(sourceId, err.message ?? "Import failed");
+      await abortTrainDataSource(sourceId);
+    }
+  })();
+}
 
 function mapSource(row: {
   id: string;
@@ -87,8 +104,11 @@ const sourceSelect = {
   importerEmail: user.email,
 };
 
-function publishRawProgress(sourceId: string, event: TrainImportProgressEvent): void {
-  void publishTrainPipelineProgress(sourceId, {
+async function publishRawProgress(
+  sourceId: string,
+  event: TrainImportProgressEvent
+): Promise<void> {
+  await publishTrainPipelineProgress(sourceId, {
     progress: mapRawImportProgress(event.progress),
     step: event.step,
     phase: "raw",
@@ -104,10 +124,11 @@ async function runTrainImportPipeline(params: {
   client_label: string | null;
   notes: string | null;
   imported_by: string;
-  onSourceCreated?: (sourceId: string) => void;
+  sourceId: string;
 }): Promise<TrainImportResult> {
-  let sourceId = "";
+  const sourceId = params.sourceId;
   try {
+    await publishRawProgress(sourceId, { progress: 0, step: "Reading workbook…" });
     const rawResult = await importTrainExcel({
       buffer: params.buffer,
       filename: params.filename,
@@ -115,20 +136,12 @@ async function runTrainImportPipeline(params: {
       client_label: params.client_label,
       notes: params.notes,
       imported_by: params.imported_by,
+      sourceId,
       deferReadyCatalog: true,
-      onSourceCreated: (id) => {
-        sourceId = id;
-        publishRawProgress(sourceId, {
-          progress: 0,
-          step: "Reading workbook…",
-        });
-        params.onSourceCreated?.(id);
-      },
       onProgress: (event) => {
-        if (sourceId) publishRawProgress(sourceId, event);
+        void publishRawProgress(sourceId, event);
       },
     });
-    sourceId = rawResult.source_id;
 
     const cleanManifest = await cleanTrainFromRaw(sourceId, (event) => {
       void publishTrainPipelineProgress(sourceId, event);
@@ -169,158 +182,95 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
     return rows.map(mapSource);
   })
   .get(
-    "/:id/import/stream",
-    ({ params }) => {
+    "/:id/import/progress",
+    async ({ params, set }) => {
       const sourceId = params.id;
-      let streamRedis: IORedis | null = null;
-      let cancelled = false;
+      const [row] = await db
+        .select({
+          importStatus: trainDataSources.importStatus,
+          errorMessage: trainDataSources.errorMessage,
+          sheetManifest: trainDataSources.sheetManifest,
+          cleanManifest: trainDataSources.cleanManifest,
+        })
+        .from(trainDataSources)
+        .where(eq(trainDataSources.id, sourceId))
+        .limit(1);
 
-      const stream = new ReadableStream({
-        async start(controller) {
-          const streamKey = trainImportStreamKey(sourceId);
+      if (!row) {
+        set.status = 404;
+        return { status: "not_found" as const, message: "Train data source not found" };
+      }
 
-          try {
-            streamRedis = new IORedis(REDIS_PORT, REDIS_HOST, {
-              lazyConnect: false,
-              maxRetriesPerRequest: 1,
-            });
+      const snap = await readLatestTrainImportStreamEntry(sourceId);
 
-            let lastId = "0";
+      if (snap.kind === "done") {
+        return {
+          status: "ready" as const,
+          progress: 100,
+          step: "Ready for model training",
+          phase: "clean" as const,
+          result: {
+            source_id: snap.result.source_id,
+            import_status: snap.result.import_status,
+            sheet_manifest: snap.result.sheet_manifest,
+            file_checksum_sha256: snap.result.file_checksum_sha256,
+            clean_manifest: snap.result.clean_manifest,
+          },
+        };
+      }
 
-            while (!cancelled) {
-              const result = (await streamRedis.xread(
-                "COUNT", "10",
-                "BLOCK", "1000",
-                "STREAMS", streamKey, lastId
-              )) as unknown as XReadResult;
+      if (snap.kind === "failed") {
+        return {
+          status: "failed" as const,
+          progress: 0,
+          step: snap.message,
+          message: snap.message,
+          code: snap.code,
+          source_id: snap.source_id,
+        };
+      }
 
-              if (result && !cancelled) {
-                for (const [, entries] of result) {
-                  for (const [msgId, fields] of entries) {
-                    lastId = msgId;
-                    const fieldMap = new Map<string, string>();
-                    for (let i = 0; i < fields.length; i += 2) {
-                      fieldMap.set(fields[i], fields[i + 1]);
-                    }
+      if (snap.kind === "progress") {
+        return {
+          status: "importing" as const,
+          progress: snap.event.progress,
+          step: snap.event.step,
+          phase: snap.event.phase,
+          sheet: snap.event.sheet,
+          rows: snap.event.rows,
+        };
+      }
 
-                    const status = fieldMap.get("status");
-                    const progress = Number(fieldMap.get("progress") ?? "0");
-                    const step = fieldMap.get("step") ?? "";
+      if (row.importStatus === "ready") {
+        return {
+          status: "ready" as const,
+          progress: 100,
+          step: "Ready for model training",
+          phase: "clean" as const,
+          result: {
+            source_id: sourceId,
+            import_status: "ready",
+            sheet_manifest: (row.sheetManifest ?? {}) as Record<string, number>,
+            clean_manifest: row.cleanManifest ?? undefined,
+          },
+        };
+      }
 
-                    if (status === "failed") {
-                      controller.enqueue(
-                        sseFrame(
-                          "error",
-                          JSON.stringify({
-                            message: fieldMap.get("message") ?? step,
-                            code: fieldMap.get("code"),
-                            source_id: fieldMap.get("source_id"),
-                          })
-                        )
-                      );
-                      controller.close();
-                      return;
-                    }
+      if (row.importStatus === "failed") {
+        return {
+          status: "failed" as const,
+          progress: 0,
+          step: row.errorMessage ?? "Import failed",
+          message: row.errorMessage ?? "Import failed",
+        };
+      }
 
-                    if (status === "done") {
-                      const payloadRaw = fieldMap.get("payload");
-                      const payload = payloadRaw
-                        ? (JSON.parse(payloadRaw) as TrainImportResult)
-                        : { source_id: sourceId, import_status: "ready" };
-                      controller.enqueue(sseFrame("done", JSON.stringify(payload)));
-                      controller.close();
-                      return;
-                    }
-
-                    const phaseRaw = fieldMap.get("phase");
-                    controller.enqueue(
-                      sseFrame(
-                        "progress",
-                        JSON.stringify({
-                          progress,
-                          step,
-                          phase: phaseRaw === "clean" ? "clean" : "raw",
-                          sheet: fieldMap.get("sheet"),
-                          rows: fieldMap.get("rows")
-                            ? Number(fieldMap.get("rows"))
-                            : undefined,
-                        })
-                      )
-                    );
-                  }
-                }
-              }
-
-              if (cancelled) break;
-
-              const [row] = await db
-                .select({
-                  importStatus: trainDataSources.importStatus,
-                  errorMessage: trainDataSources.errorMessage,
-                  sheetManifest: trainDataSources.sheetManifest,
-                  cleanManifest: trainDataSources.cleanManifest,
-                })
-                .from(trainDataSources)
-                .where(eq(trainDataSources.id, sourceId))
-                .limit(1);
-
-              if (!row) {
-                controller.enqueue(sseFrame("error", JSON.stringify({ message: "Source not found" })));
-                break;
-              }
-
-              if (row.importStatus === "ready") {
-                controller.enqueue(
-                  sseFrame(
-                    "done",
-                    JSON.stringify({
-                      source_id: sourceId,
-                      import_status: "ready",
-                      sheet_manifest: row.sheetManifest ?? {},
-                      clean_manifest: row.cleanManifest ?? undefined,
-                    })
-                  )
-                );
-                break;
-              }
-
-              if (row.importStatus === "failed") {
-                controller.enqueue(
-                  sseFrame(
-                    "error",
-                    JSON.stringify({ message: row.errorMessage ?? "Import failed" })
-                  )
-                );
-                break;
-              }
-            }
-          } catch {
-            controller.enqueue(
-              sseFrame("error", JSON.stringify({ message: "Progress stream unavailable" }))
-            );
-          } finally {
-            streamRedis?.disconnect();
-            try {
-              controller.close();
-            } catch {
-              /* already closed */
-            }
-          }
-        },
-        cancel() {
-          cancelled = true;
-          streamRedis?.disconnect();
-        },
-      });
-
-      return new Response(stream, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "X-Accel-Buffering": "no",
-        },
-      });
+      return {
+        status: "importing" as const,
+        progress: 0,
+        step: "Waiting for import to start…",
+        phase: "raw" as const,
+      };
     },
     { params: t.Object({ id: t.String() }) }
   )
@@ -369,6 +319,14 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
       const buffer = await readImportBuffer(body.file);
 
       try {
+        const sourceId = await prepareTrainDataSource({
+          buffer,
+          filename,
+          name: body.name,
+          client_label: body.client_label ?? null,
+          notes: body.notes ?? null,
+          imported_by: userId!,
+        });
         const result = await runTrainImportPipeline({
           buffer,
           filename,
@@ -376,6 +334,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
           client_label: body.client_label ?? null,
           notes: body.notes ?? null,
           imported_by: userId!,
+          sourceId,
         });
         return result;
       } catch (e) {
@@ -415,42 +374,28 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
       }
 
       try {
-        const sourceId = await new Promise<string>((resolve, reject) => {
-          void (async () => {
-            let sid = "";
-            try {
-              const result = await runTrainImportPipeline({
-                buffer,
-                filename,
-                name: body.name,
-                client_label: body.client_label ?? null,
-                notes: body.notes ?? null,
-                imported_by: userId!,
-                onSourceCreated: (id) => {
-                  sid = id;
-                  void publishTrainPipelineProgress(id, {
-                    progress: 5,
-                    step: "Upload received — starting raw import…",
-                    phase: "raw",
-                  });
-                  resolve(id);
-                },
-              });
-              await publishTrainImportDone(sid, result);
-            } catch (e) {
-              const err = e as Error & { code?: string; source_id?: string };
-              if (!sid) {
-                reject(err);
-                return;
-              }
-              if (err.code === "DUPLICATE_FILE") {
-                reject(err);
-                return;
-              }
-              await publishTrainImportError(sid, err.message ?? "Import failed");
-              await abortTrainDataSource(sid);
-            }
-          })();
+        const sourceId = await prepareTrainDataSource({
+          buffer,
+          filename,
+          name: body.name,
+          client_label: body.client_label ?? null,
+          notes: body.notes ?? null,
+          imported_by: userId!,
+        });
+
+        await publishTrainPipelineProgress(sourceId, {
+          progress: 3,
+          step: "Upload received — connecting progress…",
+          phase: "raw",
+        });
+
+        runTrainImportJob(sourceId, {
+          buffer,
+          filename,
+          name: body.name,
+          client_label: body.client_label ?? null,
+          notes: body.notes ?? null,
+          imported_by: userId!,
         });
 
         return { source_id: sourceId, import_status: "importing" };

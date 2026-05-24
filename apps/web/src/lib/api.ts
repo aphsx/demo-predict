@@ -5,7 +5,8 @@
  * input or output shape changes, TypeScript flags it here immediately.
  *
  * Manual fetch is kept for:
- *   - subscribeRunStatus  — EventSource (GET SSE, browser-native)
+ *   - subscribeRunStatus  — EventSource (GET SSE for ML runs)
+ *   - uploadTrainDataFileWithProgress — XHR upload + poll import progress
  *   - uploadPredictDataForRun — multipart (predict raw)
  *   - exportUrl           — returns a URL string for <a href>, not a fetch call
  *   - streamChat          — POST SSE via fetch + AbortController
@@ -341,6 +342,19 @@ export interface TrainImportDone {
   clean_manifest?: TrainCleanManifest;
 }
 
+interface TrainImportProgressPoll {
+  status: "importing" | "ready" | "failed" | "not_found";
+  progress: number;
+  step: string;
+  phase?: TrainPipelinePhase;
+  sheet?: string;
+  rows?: number;
+  message?: string;
+  code?: string;
+  source_id?: string;
+  result?: TrainImportDone;
+}
+
 export interface TrainCleanSkipped {
   customers_no_acc_id: number;
   payments_no_acc_id: number;
@@ -359,7 +373,167 @@ export interface TrainCleanManifest {
   warnings: string[];
 }
 
-/** Import with real-time progress via POST async + GET SSE (works through Next proxy). */
+/** Monotonic pipeline progress (server may burst many SSE events in one frame). */
+function createTrainImportProgressSink(
+  onProgress: (event: TrainImportProgress) => void
+): (event: TrainImportProgress) => void {
+  let last = 0;
+  return (event) => {
+    const progress = Math.max(last, event.progress);
+    last = progress;
+    onProgress({ ...event, progress });
+  };
+}
+
+function postTrainImportAsync(
+  fd: FormData,
+  onUploadBytes?: (loaded: number, total: number) => void,
+  onServerProcessing?: () => void
+): Promise<{ source_id: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/train-data-sources/import/async");
+    xhr.withCredentials = true;
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onUploadBytes) {
+        onUploadBytes(e.loaded, e.total);
+      }
+    };
+
+    xhr.upload.onload = () => {
+      onServerProcessing?.();
+    };
+
+    xhr.onload = () => {
+      let body: unknown;
+      try {
+        body = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        reject(new Error(`Import failed (${xhr.status})`));
+        return;
+      }
+
+      if (xhr.status === 401 && typeof window !== "undefined") {
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+        reject(new Error("Unauthorized"));
+        return;
+      }
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const err = new Error(
+          isApiError(body) ? body.message : `Import failed (${xhr.status})`
+        ) as Error & { code?: string; source_id?: string };
+        if (typeof body === "object" && body !== null) {
+          const b = body as Record<string, unknown>;
+          if (typeof b.code === "string") err.code = b.code;
+          if (typeof b.source_id === "string") err.source_id = b.source_id;
+        }
+        reject(err);
+        return;
+      }
+
+      const sourceId = (body as { source_id?: string }).source_id;
+      if (!sourceId) {
+        reject(new Error("Import did not return source_id"));
+        return;
+      }
+      resolve({ source_id: sourceId });
+    };
+
+    xhr.onerror = () => reject(new Error("Upload failed"));
+    xhr.send(fd);
+  });
+}
+
+const TRAIN_IMPORT_POLL_MS = 400;
+
+async function pollTrainImportProgress(sourceId: string): Promise<TrainImportProgressPoll> {
+  const res = await apiFetch(`/api/train-data-sources/${sourceId}/import/progress`);
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(
+      isApiError(body) ? body.message : `Progress poll failed (${res.status})`
+    );
+  }
+  return body as TrainImportProgressPoll;
+}
+
+function waitForTrainImportDone(
+  sourceId: string,
+  emit: (event: TrainImportProgress) => void
+): Promise<TrainImportDone> {
+  return new Promise((resolve, reject) => {
+    let stopped = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const stop = () => {
+      stopped = true;
+      if (timer) clearInterval(timer);
+      timer = null;
+    };
+
+    const tick = async () => {
+      if (stopped) return;
+      try {
+        const snap = await pollTrainImportProgress(sourceId);
+
+        if (snap.status === "not_found") {
+          stop();
+          reject(new Error("Import source not found"));
+          return;
+        }
+
+        if (snap.status === "failed") {
+          stop();
+          const err = new Error(snap.message ?? "Import failed") as Error & {
+            code?: string;
+            source_id?: string;
+          };
+          if (snap.code) err.code = snap.code;
+          if (snap.source_id) err.source_id = snap.source_id;
+          reject(err);
+          return;
+        }
+
+        if (snap.status === "importing") {
+          emit({
+            progress: snap.progress,
+            step: snap.step,
+            phase: snap.phase,
+            sheet: snap.sheet,
+            rows: snap.rows,
+          });
+          return;
+        }
+
+        if (snap.status === "ready") {
+          stop();
+          emit({
+            progress: 100,
+            step: snap.step || "Ready for model training",
+            phase: "clean",
+          });
+          resolve(
+            snap.result ?? {
+              source_id: sourceId,
+              import_status: "ready",
+              sheet_manifest: {},
+            }
+          );
+        }
+      } catch (e) {
+        stop();
+        reject(e);
+      }
+    };
+
+    timer = setInterval(() => void tick(), TRAIN_IMPORT_POLL_MS);
+    void tick();
+  });
+}
+
+/** Import with progress: XHR upload + poll Redis (avoids browser SSE batching 4%→100%). */
 export function uploadTrainDataFileWithProgress(
   file: File,
   name: string,
@@ -371,79 +545,29 @@ export function uploadTrainDataFileWithProgress(
   fd.append("name", name);
   if (client_label) fd.append("client_label", client_label);
 
+  const emit = createTrainImportProgressSink(onProgress);
+
   return (async () => {
-    const res = await apiFetch("/api/train-data-sources/import/async", {
-      method: "POST",
-      body: fd,
-    });
-    const body = await parseJson(res);
-    if (!res.ok) {
-      const err = new Error(
-        isApiError(body) ? body.message : `Import failed (${res.status})`
-      ) as Error & { code?: string; source_id?: string };
-      if (typeof body === "object" && body !== null) {
-        const b = body as Record<string, unknown>;
-        if (typeof b.code === "string") err.code = b.code;
-        if (typeof b.source_id === "string") err.source_id = b.source_id;
+    const { source_id: sourceId } = await postTrainImportAsync(
+      fd,
+      (loaded, total) => {
+        const uploadPct = total > 0 ? Math.round((loaded / total) * 4) : 0;
+        emit({
+          progress: Math.min(4, Math.max(1, uploadPct)),
+          step: `กำลังอัปโหลดไฟล์… ${Math.round((loaded / total) * 100)}%`,
+          phase: "raw",
+        });
+      },
+      () => {
+        emit({
+          progress: 4,
+          step: "กำลังตรวจสอบไฟล์บนเซิร์ฟ…",
+          phase: "raw",
+        });
       }
-      throw err;
-    }
+    );
 
-    const sourceId = (body as { source_id?: string }).source_id;
-    if (!sourceId) throw new Error("Import did not return source_id");
-
-    onProgress({
-      progress: 2,
-      step: "Upload received — preparing data (raw → clean)…",
-      phase: "raw",
-    });
-
-    return new Promise<TrainImportDone>((resolve, reject) => {
-      const es = new EventSource(
-        `/api/train-data-sources/${sourceId}/import/stream`,
-        { withCredentials: true }
-      );
-
-      const cleanup = () => es.close();
-
-      es.addEventListener("progress", (e) => {
-        try {
-          onProgress(JSON.parse(e.data) as TrainImportProgress);
-        } catch {
-          /* ignore malformed */
-        }
-      });
-
-      es.addEventListener("done", (e) => {
-        cleanup();
-        try {
-          resolve(JSON.parse(e.data) as TrainImportDone);
-        } catch {
-          reject(new Error("Invalid done payload"));
-        }
-      });
-
-      es.addEventListener("error", (e) => {
-        cleanup();
-        try {
-          const payload = JSON.parse((e as MessageEvent).data) as Record<string, unknown>;
-          const err = new Error(String(payload.message ?? "Import failed")) as Error & {
-            code?: string;
-            source_id?: string;
-          };
-          if (typeof payload.code === "string") err.code = payload.code;
-          if (typeof payload.source_id === "string") err.source_id = payload.source_id;
-          reject(err);
-        } catch {
-          reject(new Error("Import failed"));
-        }
-      });
-
-      es.onerror = () => {
-        cleanup();
-        reject(new Error("Lost connection to import progress stream"));
-      };
-    });
+    return waitForTrainImportDone(sourceId, emit);
   })();
 }
 

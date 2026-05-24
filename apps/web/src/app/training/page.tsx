@@ -97,8 +97,8 @@ export default function TrainingPage() {
     setImporting(true);
     setImportError(null);
     setImportSuccess(null);
-    setImportProgress(0);
-    setImportStep("กำลังเตรียมข้อมูล (raw → clean)…");
+    setImportProgress(1);
+    setImportStep("กำลังอัปโหลดไฟล์…");
     setImportPhase(null);
     try {
       const result = await uploadTrainDataFileWithProgress(
