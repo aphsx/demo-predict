@@ -55,6 +55,7 @@ export default function TrainingPage() {
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importStep, setImportStep] = useState("");
+  const [importPhase, setImportPhase] = useState<"raw" | "clean" | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [importName, setImportName] = useState("");
@@ -98,6 +99,7 @@ export default function TrainingPage() {
     setImportSuccess(null);
     setImportProgress(0);
     setImportStep("Starting import…");
+    setImportPhase(null);
     try {
       const result = await uploadTrainDataFileWithProgress(
         file,
@@ -105,14 +107,21 @@ export default function TrainingPage() {
         (event) => {
           setImportProgress(event.progress);
           setImportStep(event.step);
+          if (event.phase) setImportPhase(event.phase);
         },
         importClient.trim() || undefined
       );
       setImportName("");
       setPendingFile(null);
       setImportProgress(100);
-      setImportStep("Import complete");
-      setImportSuccess(`Imported ${result.source_id.slice(0, 8)}… (${Object.keys(result.sheet_manifest).length} sheets)`);
+      setImportStep("Ready for model training");
+      const clean = result.clean_manifest;
+      const cleanSummary = clean
+        ? ` — clean: ${clean.customers.toLocaleString()} customers, ${clean.payments.toLocaleString()} payments, ${clean.usage.toLocaleString()} usage rows`
+        : "";
+      setImportSuccess(
+        `Imported ${result.source_id.slice(0, 8)}… (${Object.keys(result.sheet_manifest).length} sheets)${cleanSummary}`
+      );
       await new Promise((r) => setTimeout(r, 450));
       await load();
     } catch (e) {
@@ -128,6 +137,7 @@ export default function TrainingPage() {
       setImporting(false);
       setImportProgress(0);
       setImportStep("");
+      setImportPhase(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -200,13 +210,13 @@ export default function TrainingPage() {
       />
       <div className="px-8 mt-4 space-y-5">
         <p className="text-sm text-[color:var(--ink-4)]">
-          Import Excel training data (raw) then train models when clean pipeline is ready
+          Import Excel → raw sheets in DB, then train clean (typed rows for model training)
         </p>
 
         {/* [NEW] Train raw import — replaces filesystem-only training data for new pipeline */}
         <SectionCard
-          title="Training data (raw)"
-          hint="[NEW] 8-sheet Excel → train_data_sources + train_raw_sheet_* (stored as-is)"
+          title="Training data"
+          hint="[NEW] Raw import + train clean in one step (train_raw_sheet_* → train_clean_*)"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <label className="flex-1 text-sm">
@@ -274,7 +284,14 @@ export default function TrainingPage() {
             <div className="mt-4 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-1)] p-4 space-y-3">
               <div className="flex items-center gap-2 text-[13px] text-[color:var(--ink-2)]">
                 <RefreshCw size={14} className="animate-spin shrink-0 text-[color:var(--moby-600)]" />
-                <span className="font-medium">Importing dataset…</span>
+                <span className="font-medium">
+                  {importPhase === "clean" ? "Cleaning for training…" : "Importing raw sheets…"}
+                </span>
+                {importPhase && (
+                  <span className="ml-auto text-[11px] uppercase tracking-wide text-[color:var(--ink-5)]">
+                    {importPhase === "clean" ? "Clean" : "Raw"}
+                  </span>
+                )}
               </div>
               <div className="w-full h-3 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
                 <div
@@ -319,8 +336,16 @@ export default function TrainingPage() {
                       <td className="py-2 px-2 font-medium text-[color:var(--ink-1)]">{s.name}</td>
                       <td className="py-2 px-2 text-[color:var(--ink-4)] text-xs">{s.original_filename}</td>
                       <td className="py-2 px-2">
-                        <StatusPill tone={s.import_status === "ready" ? "ok" : s.import_status === "failed" ? "danger" : "neutral"}>
-                          {s.import_status}
+                        <StatusPill
+                          tone={
+                            s.import_status === "ready"
+                              ? "ok"
+                              : s.import_status === "failed"
+                                ? "danger"
+                                : "neutral"
+                          }
+                        >
+                          {s.import_status === "cleaning" ? "cleaning" : s.import_status}
                         </StatusPill>
                       </td>
                       <td className="py-2 px-2 text-[color:var(--ink-4)] text-xs">
@@ -334,9 +359,17 @@ export default function TrainingPage() {
                       <td className="py-2 px-2 text-right">
                         <button
                           type="button"
-                          disabled={deletingId === s.id || s.import_status === "importing"}
+                          disabled={
+                            deletingId === s.id
+                            || s.import_status === "importing"
+                            || s.import_status === "cleaning"
+                          }
                           onClick={() => void deleteSource(s.id, s.name)}
-                          title={s.import_status === "importing" ? "รอ import เสร็จก่อน" : "ลบ dataset"}
+                          title={
+                            s.import_status === "importing" || s.import_status === "cleaning"
+                              ? "รอ import/clean เสร็จก่อน"
+                              : "ลบ dataset"
+                          }
                           className="h-7 w-7 grid place-items-center rounded-md text-[color:var(--ink-4)] hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] disabled:opacity-40"
                         >
                           {deletingId === s.id ? (

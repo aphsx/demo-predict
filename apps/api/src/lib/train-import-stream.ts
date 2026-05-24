@@ -2,8 +2,8 @@
  * Redis Streams progress for async train import (GET SSE — not buffered like POST stream).
  */
 import IORedis from "ioredis";
-import type { TrainImportProgressEvent } from "./train-import-progress";
 import type { TrainImportResult } from "./train-import";
+import type { TrainPipelineProgressEvent } from "./train-pipeline-progress";
 
 const REDIS_HOST = process.env.REDIS_HOST || "redis";
 const REDIS_PORT = Number(process.env.REDIS_PORT ?? 6379);
@@ -20,15 +20,16 @@ function redisClient(): IORedis {
   });
 }
 
-export async function publishTrainImportProgress(
+export async function publishTrainPipelineProgress(
   sourceId: string,
-  event: TrainImportProgressEvent
+  event: TrainPipelineProgressEvent
 ): Promise<void> {
   const redis = redisClient();
   try {
     const fields: string[] = [
       "progress", String(event.progress),
       "step", event.step,
+      "phase", event.phase,
     ];
     if (event.sheet) fields.push("sheet", event.sheet);
     if (event.rows != null) fields.push("rows", String(event.rows));
@@ -49,7 +50,7 @@ export async function publishTrainImportDone(
       trainImportStreamKey(sourceId),
       "*",
       "progress", "100",
-      "step", "Import complete",
+      "step", "Ready for model training",
       "status", "done",
       "payload", JSON.stringify(result)
     );

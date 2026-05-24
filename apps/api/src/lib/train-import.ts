@@ -31,6 +31,7 @@ import {
   progressBeforeSheet,
   progressFinalize,
 } from "./train-import-progress";
+import type { TrainCleanManifest } from "./train-clean";
 
 type CellJson = string | number | boolean | null | Record<string, unknown>;
 
@@ -52,6 +53,7 @@ export interface TrainImportResult {
   import_status: string;
   sheet_manifest: Record<string, number>;
   file_checksum_sha256: string;
+  clean_manifest?: TrainCleanManifest;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -169,6 +171,8 @@ export async function importTrainExcel(params: {
   onProgress?: (event: TrainImportProgressEvent) => void;
   /** Fired as soon as train_data_sources row exists (for async import + SSE subscribe). */
   onSourceCreated?: (sourceId: string) => void;
+  /** When true, leave status `importing` after raw (clean step sets `ready`). */
+  deferReadyCatalog?: boolean;
 }): Promise<TrainImportResult> {
   const emit = params.onProgress;
 
@@ -251,22 +255,31 @@ export async function importTrainExcel(params: {
       });
     }
 
-    emit?.({ progress: 97, step: "Finalizing…" });
-
-    await db
-      .update(trainDataSources)
-      .set({
-        importStatus: "ready",
-        importedAt: new Date(),
-        sheetManifest: manifest,
-      })
-      .where(eq(trainDataSources.id, sourceId));
-
-    emit?.({ progress: progressFinalize(), step: "Import complete" });
+    if (params.deferReadyCatalog) {
+      await db
+        .update(trainDataSources)
+        .set({
+          importedAt: new Date(),
+          sheetManifest: manifest,
+        })
+        .where(eq(trainDataSources.id, sourceId));
+      emit?.({ progress: 97, step: "Raw import complete — starting clean…" });
+    } else {
+      emit?.({ progress: 97, step: "Finalizing…" });
+      await db
+        .update(trainDataSources)
+        .set({
+          importStatus: "ready",
+          importedAt: new Date(),
+          sheetManifest: manifest,
+        })
+        .where(eq(trainDataSources.id, sourceId));
+      emit?.({ progress: progressFinalize(), step: "Import complete" });
+    }
 
     return {
       source_id: sourceId,
-      import_status: "ready",
+      import_status: params.deferReadyCatalog ? "importing" : "ready",
       sheet_manifest: manifest,
       file_checksum_sha256: checksum,
     };

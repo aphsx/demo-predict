@@ -5,7 +5,7 @@ Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 | Purpose | Layer | Status | Tables / routes |
 |---------|-------|--------|-----------------|
 | **Train** | raw | **NEW** | `train_data_sources`, `train_raw_sheet_*` · `POST /train-data-sources/import` · `/training` |
-| **Train** | clean | planned | `train_clean_*` |
+| **Train** | clean | **NEW** | `train_clean_*` · runs after raw on same import (async SSE `phase`: raw \| clean) |
 | **Predict** | raw | **NEW** (import only) | `predict_data_sources`, `predict_raw_sheet_*` · `POST /predict-data-sources/import` · `/runs` upload |
 | Predict | clean | planned | `predict_clean_*` |
 | **Predict** | ML output | **LEGACY** (still used) | `prediction_runs`, `predictions` · Arq worker (not wired to `predict_raw_*` yet) |
@@ -32,6 +32,14 @@ Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 | `002_*` | always runs (`IF NOT EXISTS`) |
 | `003_*` | `predict_data_sources` exists |
 | `004_*` | `raw_customers` already dropped |
+| `005_*` | `train_clean_customers` exists |
+
+**Apply 005 on existing DB (if migrate_or_repair did not run it):**
+
+```bash
+docker exec -i demo-predict-db-1 psql -U moby -d moby \
+  < moby-data-prep/migrations/005_train_clean_tables.sql
+```
 
 **Apply 004 on existing DB:**
 

@@ -294,6 +294,8 @@ export interface TrainDataSource {
   import_status: string;
   imported_at: string | null;
   sheet_manifest: Record<string, number> | null;
+  clean_manifest: Record<string, unknown> | null;
+  cleaned_at: string | null;
   notes: string | null;
   error_message: string | null;
   imported_by: string | null;
@@ -321,9 +323,12 @@ export async function deleteTrainDataSource(id: string): Promise<void> {
   }
 }
 
+export type TrainPipelinePhase = "raw" | "clean";
+
 export interface TrainImportProgress {
   progress: number;
   step: string;
+  phase?: TrainPipelinePhase;
   sheet?: string;
   rows?: number;
 }
@@ -332,7 +337,13 @@ export interface TrainImportDone {
   source_id: string;
   import_status: string;
   sheet_manifest: Record<string, number>;
-  file_checksum_sha256: string;
+  file_checksum_sha256?: string;
+  clean_manifest?: {
+    customers: number;
+    payments: number;
+    usage: number;
+    warnings: string[];
+  };
 }
 
 /** Import with real-time progress via POST async + GET SSE (works through Next proxy). */
@@ -368,7 +379,7 @@ export function uploadTrainDataFileWithProgress(
     const sourceId = (body as { source_id?: string }).source_id;
     if (!sourceId) throw new Error("Import did not return source_id");
 
-    onProgress({ progress: 5, step: "Upload received — importing sheets…" });
+    onProgress({ progress: 5, step: "Upload received — raw import…", phase: "raw" });
 
     return new Promise<TrainImportDone>((resolve, reject) => {
       const es = new EventSource(

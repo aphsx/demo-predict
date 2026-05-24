@@ -198,6 +198,8 @@ export const trainDataSources = pgTable(
     importStatus:         text("import_status").notNull().default("pending"),
     importedAt:           timestamp("imported_at", { withTimezone: true }),
     sheetManifest:        jsonb("sheet_manifest"),
+    cleanManifest:        jsonb("clean_manifest"),
+    cleanedAt:            timestamp("cleaned_at", { withTimezone: true }),
     notes:                text("notes"),
     errorMessage:         text("error_message"),
     importedBy:           text("imported_by").references(() => user.id, { onDelete: "set null" }),
@@ -234,6 +236,72 @@ export const trainRawSheetSmsUsageOtp = trainRawSheet("train_raw_sheet_sms_usage
 export const trainRawSheetEmailUsageBc = trainRawSheet("train_raw_sheet_email_usage_bc");
 export const trainRawSheetEmailUsageApi = trainRawSheet("train_raw_sheet_email_usage_api");
 export const trainRawSheetEmailUsageOtp = trainRawSheet("train_raw_sheet_email_usage_otp");
+
+// ── [NEW] Train clean — typed rows for model training (moby-data-prep/migrations/005_*) ──
+
+export const trainCleanCustomers = pgTable(
+  "train_clean_customers",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => trainDataSources.id, { onDelete: "cascade" }),
+    accId: integer("acc_id").notNull(),
+    statusSms: text("status_sms"),
+    creditSms: numeric("credit_sms"),
+    creditEmail: numeric("credit_email"),
+    expireSms: date("expire_sms"),
+    expireEmail: date("expire_email"),
+    statusEmail: text("status_email"),
+    joinDate: date("join_date"),
+    lastAccess: timestamp("last_access", { withTimezone: true }),
+    lastSend: timestamp("last_send", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_train_clean_customers_source").on(t.sourceId),
+    index("idx_train_clean_customers_acc").on(t.sourceId, t.accId),
+  ]
+);
+
+export const trainCleanPayments = pgTable(
+  "train_clean_payments",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => trainDataSources.id, { onDelete: "cascade" }),
+    accId: integer("acc_id").notNull(),
+    paymentUid: bigint("payment_uid", { mode: "number" }),
+    paymentDate: timestamp("payment_date", { withTimezone: true }).notNull(),
+    amount: numeric("amount"),
+    creditAdd: numeric("credit_add"),
+    creditType: text("credit_type"),
+  },
+  (t) => [
+    index("idx_train_clean_payments_source").on(t.sourceId),
+    index("idx_train_clean_payments_acc").on(t.sourceId, t.accId),
+  ]
+);
+
+export const trainCleanUsage = pgTable(
+  "train_clean_usage",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => trainDataSources.id, { onDelete: "cascade" }),
+    accId: integer("acc_id").notNull(),
+    year: integer("year"),
+    month: integer("month"),
+    usage: numeric("usage"),
+    channel: text("channel").notNull(),
+    usageSource: text("usage_source").notNull(),
+  },
+  (t) => [
+    index("idx_train_clean_usage_source").on(t.sourceId),
+    index("idx_train_clean_usage_acc").on(t.sourceId, t.accId),
+  ]
+);
 
 // ── [NEW] Predict raw data — greenfield (moby-data-prep/migrations/003_*) ─────
 // NOT train_* or [LEGACY] raw_*. prediction_run_id bridges to runs UI until legacy is removed.

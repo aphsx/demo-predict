@@ -8,11 +8,14 @@ import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { importTrainExcel, type TrainImportResult } from "../lib/train-import";
+import type { TrainImportProgressEvent } from "../lib/train-import-progress";
+import { cleanTrainFromRaw } from "../lib/train-clean";
+import { mapRawImportProgress } from "../lib/train-pipeline-progress";
 import { sseFrame } from "../lib/sse";
 import {
   publishTrainImportDone,
   publishTrainImportError,
-  publishTrainImportProgress,
+  publishTrainPipelineProgress,
   trainImportStreamKey,
 } from "../lib/train-import-stream";
 
@@ -33,6 +36,8 @@ function mapSource(row: {
   importStatus: string;
   importedAt: Date | null;
   sheetManifest: unknown;
+  cleanManifest: unknown;
+  cleanedAt: Date | null;
   notes: string | null;
   errorMessage: string | null;
   importedBy: string | null;
@@ -50,6 +55,8 @@ function mapSource(row: {
     import_status: row.importStatus,
     imported_at: row.importedAt?.toISOString() ?? null,
     sheet_manifest: row.sheetManifest,
+    clean_manifest: row.cleanManifest,
+    cleaned_at: row.cleanedAt?.toISOString() ?? null,
     notes: row.notes,
     error_message: row.errorMessage,
     imported_by: row.importedBy,
@@ -69,6 +76,8 @@ const sourceSelect = {
   importStatus: trainDataSources.importStatus,
   importedAt: trainDataSources.importedAt,
   sheetManifest: trainDataSources.sheetManifest,
+  cleanManifest: trainDataSources.cleanManifest,
+  cleanedAt: trainDataSources.cleanedAt,
   notes: trainDataSources.notes,
   errorMessage: trainDataSources.errorMessage,
   importedBy: trainDataSources.importedBy,
@@ -76,6 +85,55 @@ const sourceSelect = {
   importerName: user.name,
   importerEmail: user.email,
 };
+
+function publishRawProgress(sourceId: string, event: TrainImportProgressEvent): void {
+  void publishTrainPipelineProgress(sourceId, {
+    progress: mapRawImportProgress(event.progress),
+    step: event.step,
+    phase: "raw",
+    sheet: event.sheet,
+    rows: event.rows,
+  });
+}
+
+async function runTrainImportPipeline(params: {
+  buffer: Buffer;
+  filename: string;
+  name: string;
+  client_label: string | null;
+  notes: string | null;
+  imported_by: string;
+  onSourceCreated?: (sourceId: string) => void;
+}): Promise<TrainImportResult> {
+  let sourceId = "";
+  const rawResult = await importTrainExcel({
+    buffer: params.buffer,
+    filename: params.filename,
+    name: params.name,
+    client_label: params.client_label,
+    notes: params.notes,
+    imported_by: params.imported_by,
+    deferReadyCatalog: true,
+    onSourceCreated: (id) => {
+      sourceId = id;
+      params.onSourceCreated?.(id);
+    },
+    onProgress: (event) => {
+      if (sourceId) publishRawProgress(sourceId, event);
+    },
+  });
+  sourceId = rawResult.source_id;
+
+  const cleanManifest = await cleanTrainFromRaw(sourceId, (event) => {
+    void publishTrainPipelineProgress(sourceId, event);
+  });
+
+  return {
+    ...rawResult,
+    import_status: "ready",
+    clean_manifest: cleanManifest,
+  };
+}
 
 async function readImportBuffer(file: File): Promise<Buffer> {
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -160,12 +218,14 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
                       return;
                     }
 
+                    const phaseRaw = fieldMap.get("phase");
                     controller.enqueue(
                       sseFrame(
                         "progress",
                         JSON.stringify({
                           progress,
                           step,
+                          phase: phaseRaw === "clean" ? "clean" : "raw",
                           sheet: fieldMap.get("sheet"),
                           rows: fieldMap.get("rows")
                             ? Number(fieldMap.get("rows"))
@@ -184,6 +244,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
                   importStatus: trainDataSources.importStatus,
                   errorMessage: trainDataSources.errorMessage,
                   sheetManifest: trainDataSources.sheetManifest,
+                  cleanManifest: trainDataSources.cleanManifest,
                 })
                 .from(trainDataSources)
                 .where(eq(trainDataSources.id, sourceId))
@@ -202,6 +263,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
                       source_id: sourceId,
                       import_status: "ready",
                       sheet_manifest: row.sheetManifest ?? {},
+                      clean_manifest: row.cleanManifest ?? undefined,
                     })
                   )
                 );
@@ -276,9 +338,9 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         return { message: "Train data source not found" };
       }
 
-      if (row.importStatus === "importing") {
+      if (row.importStatus === "importing" || row.importStatus === "cleaning") {
         set.status = 400;
-        return { message: "Cannot delete while import is in progress" };
+        return { message: "Cannot delete while import or clean is in progress" };
       }
 
       await db.delete(trainDataSources).where(eq(trainDataSources.id, params.id));
@@ -298,7 +360,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
       const buffer = await readImportBuffer(body.file);
 
       try {
-        const result = await importTrainExcel({
+        const result = await runTrainImportPipeline({
           buffer,
           filename,
           name: body.name,
@@ -348,7 +410,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
           void (async () => {
             let sid = "";
             try {
-              const result = await importTrainExcel({
+              const result = await runTrainImportPipeline({
                 buffer,
                 filename,
                 name: body.name,
@@ -358,9 +420,6 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
                 onSourceCreated: (id) => {
                   sid = id;
                   resolve(id);
-                },
-                onProgress: (event) => {
-                  if (sid) void publishTrainImportProgress(sid, event);
                 },
               });
               await publishTrainImportDone(sid, result);
