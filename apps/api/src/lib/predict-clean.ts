@@ -1,23 +1,24 @@
 /**
- * [NEW] Train clean — ETL from train_raw_sheet_* → train_clean_* for model training.
- * Parse + lineage only; ML rules (period, labels) stay in Python.
+ * [NEW] Predict clean — ETL from predict_raw_sheet_* → predict_clean_* per upload/run.
+ * Same parse + lineage rules as train clean; ML semantics stay in Python.
  */
 import { eq } from "drizzle-orm";
 import { db } from "../db/client";
 import {
-  trainCleanCustomers,
-  trainCleanPayments,
-  trainCleanUsage,
-  trainDataSources,
-  trainRawSheetBackendPayment,
-  trainRawSheetEmailUsageApi,
-  trainRawSheetEmailUsageBc,
-  trainRawSheetEmailUsageOtp,
-  trainRawSheetSmsUsageApi,
-  trainRawSheetSmsUsageBc,
-  trainRawSheetSmsUsageOtp,
-  trainRawSheetUsersUserProfile,
+  predictCleanCustomers,
+  predictCleanPayments,
+  predictCleanUsage,
+  predictDataSources,
+  predictRawSheetBackendPayment,
+  predictRawSheetEmailUsageApi,
+  predictRawSheetEmailUsageBc,
+  predictRawSheetEmailUsageOtp,
+  predictRawSheetSmsUsageApi,
+  predictRawSheetSmsUsageBc,
+  predictRawSheetSmsUsageOtp,
+  predictRawSheetUsersUserProfile,
 } from "../db/schema";
+import type { CleanManifest } from "./clean-manifest";
 import {
   emptySkippedCounts,
   mapPaymentRow,
@@ -26,29 +27,21 @@ import {
   type CleanSkipReason,
   type RawRowInput,
 } from "./sheet-cleaners";
-import { TRAIN_IMPORT_BATCH_SIZE } from "./train-excel-contract";
+import { PREDICT_IMPORT_BATCH_SIZE } from "./predict-excel-contract";
 import {
   USAGE_SHEET_CHANNEL,
   USAGE_SHEET_NAMES,
 } from "./train-clean-mapping";
-import type { CleanManifest } from "./clean-manifest";
-export type { CleanManifest, CleanSkipped, TrainCleanManifest, TrainCleanSkipped } from "./clean-manifest";
-import type { TrainPipelineProgressEvent } from "./train-pipeline-progress";
-import {
-  progressCleanCustomers,
-  progressCleanPayments,
-  progressCleanStart,
-  progressCleanUsageSheet,
-  progressPipelineDone,
-} from "./train-pipeline-progress";
+
+export type { CleanManifest };
 
 const USAGE_RAW_TABLES = {
-  "SMS_usage (BC)": trainRawSheetSmsUsageBc,
-  "SMS_usage (API)": trainRawSheetSmsUsageApi,
-  "SMS_usage (OTP)": trainRawSheetSmsUsageOtp,
-  "Email_usage (BC)": trainRawSheetEmailUsageBc,
-  "Email_usage (API)": trainRawSheetEmailUsageApi,
-  "Email_usage (OTP)": trainRawSheetEmailUsageOtp,
+  "SMS_usage (BC)": predictRawSheetSmsUsageBc,
+  "SMS_usage (API)": predictRawSheetSmsUsageApi,
+  "SMS_usage (OTP)": predictRawSheetSmsUsageOtp,
+  "Email_usage (BC)": predictRawSheetEmailUsageBc,
+  "Email_usage (API)": predictRawSheetEmailUsageApi,
+  "Email_usage (OTP)": predictRawSheetEmailUsageOtp,
 } as const;
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -73,27 +66,20 @@ function toRawInput(row: {
   };
 }
 
-export async function cleanTrainFromRaw(
-  sourceId: string,
-  onProgress?: (event: TrainPipelineProgressEvent) => void
-): Promise<CleanManifest> {
-  const emit = onProgress;
-
+export async function cleanPredictFromRaw(sourceId: string): Promise<CleanManifest> {
   const [sourceRow] = await db
-    .select({ sheetManifest: trainDataSources.sheetManifest })
-    .from(trainDataSources)
-    .where(eq(trainDataSources.id, sourceId))
+    .select({ sheetManifest: predictDataSources.sheetManifest })
+    .from(predictDataSources)
+    .where(eq(predictDataSources.id, sourceId))
     .limit(1);
 
   const rawManifest =
     (sourceRow?.sheetManifest as Record<string, number> | null) ?? {};
 
   await db
-    .update(trainDataSources)
+    .update(predictDataSources)
     .set({ importStatus: "cleaning", errorMessage: null })
-    .where(eq(trainDataSources.id, sourceId));
-
-  emit?.(progressCleanStart());
+    .where(eq(predictDataSources.id, sourceId));
 
   const skipped = emptySkippedCounts();
   const warnings: string[] = [];
@@ -102,19 +88,18 @@ export async function cleanTrainFromRaw(
   let usage = 0;
 
   await db.transaction(async (tx) => {
-    await tx.delete(trainCleanCustomers).where(eq(trainCleanCustomers.sourceId, sourceId));
-    await tx.delete(trainCleanPayments).where(eq(trainCleanPayments.sourceId, sourceId));
-    await tx.delete(trainCleanUsage).where(eq(trainCleanUsage.sourceId, sourceId));
+    await tx.delete(predictCleanCustomers).where(eq(predictCleanCustomers.sourceId, sourceId));
+    await tx.delete(predictCleanPayments).where(eq(predictCleanPayments.sourceId, sourceId));
+    await tx.delete(predictCleanUsage).where(eq(predictCleanUsage.sourceId, sourceId));
 
-    emit?.(progressCleanCustomers());
     const userRows = await tx
       .select({
-        id: trainRawSheetUsersUserProfile.id,
-        excelRow: trainRawSheetUsersUserProfile.excelRow,
-        rowPayload: trainRawSheetUsersUserProfile.rowPayload,
+        id: predictRawSheetUsersUserProfile.id,
+        excelRow: predictRawSheetUsersUserProfile.excelRow,
+        rowPayload: predictRawSheetUsersUserProfile.rowPayload,
       })
-      .from(trainRawSheetUsersUserProfile)
-      .where(eq(trainRawSheetUsersUserProfile.sourceId, sourceId));
+      .from(predictRawSheetUsersUserProfile)
+      .where(eq(predictRawSheetUsersUserProfile.sourceId, sourceId));
 
     const customerValues = [];
     for (const r of userRows) {
@@ -126,20 +111,19 @@ export async function cleanTrainFromRaw(
       customerValues.push(mapped.value);
     }
 
-    for (const batch of chunk(customerValues, TRAIN_IMPORT_BATCH_SIZE)) {
-      await tx.insert(trainCleanCustomers).values(batch);
+    for (const batch of chunk(customerValues, PREDICT_IMPORT_BATCH_SIZE)) {
+      await tx.insert(predictCleanCustomers).values(batch);
       customers += batch.length;
     }
 
-    emit?.(progressCleanPayments());
     const payRows = await tx
       .select({
-        id: trainRawSheetBackendPayment.id,
-        excelRow: trainRawSheetBackendPayment.excelRow,
-        rowPayload: trainRawSheetBackendPayment.rowPayload,
+        id: predictRawSheetBackendPayment.id,
+        excelRow: predictRawSheetBackendPayment.excelRow,
+        rowPayload: predictRawSheetBackendPayment.rowPayload,
       })
-      .from(trainRawSheetBackendPayment)
-      .where(eq(trainRawSheetBackendPayment.sourceId, sourceId));
+      .from(predictRawSheetBackendPayment)
+      .where(eq(predictRawSheetBackendPayment.sourceId, sourceId));
 
     const paymentValues = [];
     for (const r of payRows) {
@@ -151,14 +135,12 @@ export async function cleanTrainFromRaw(
       paymentValues.push(mapped.value);
     }
 
-    for (const batch of chunk(paymentValues, TRAIN_IMPORT_BATCH_SIZE)) {
-      await tx.insert(trainCleanPayments).values(batch);
+    for (const batch of chunk(paymentValues, PREDICT_IMPORT_BATCH_SIZE)) {
+      await tx.insert(predictCleanPayments).values(batch);
       payments += batch.length;
     }
 
-    const usageSheetCount = USAGE_SHEET_NAMES.length;
-    for (let i = 0; i < usageSheetCount; i++) {
-      const sheetName = USAGE_SHEET_NAMES[i];
+    for (const sheetName of USAGE_SHEET_NAMES) {
       const meta = USAGE_SHEET_CHANNEL[sheetName];
       const table = USAGE_RAW_TABLES[sheetName as keyof typeof USAGE_RAW_TABLES];
 
@@ -182,12 +164,10 @@ export async function cleanTrainFromRaw(
         usageValues.push(mapped.value);
       }
 
-      for (const batch of chunk(usageValues, TRAIN_IMPORT_BATCH_SIZE)) {
-        await tx.insert(trainCleanUsage).values(batch);
+      for (const batch of chunk(usageValues, PREDICT_IMPORT_BATCH_SIZE)) {
+        await tx.insert(predictCleanUsage).values(batch);
         usage += batch.length;
       }
-
-      emit?.(progressCleanUsageSheet(i, usageSheetCount, sheetName, usageValues.length));
     }
   });
 
@@ -204,16 +184,14 @@ export async function cleanTrainFromRaw(
   };
 
   await db
-    .update(trainDataSources)
+    .update(predictDataSources)
     .set({
       importStatus: "ready",
       cleanManifest: manifest,
       cleanedAt: new Date(),
       errorMessage: null,
     })
-    .where(eq(trainDataSources.id, sourceId));
-
-  emit?.(progressPipelineDone());
+    .where(eq(predictDataSources.id, sourceId));
 
   return manifest;
 }

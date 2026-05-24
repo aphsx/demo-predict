@@ -1,6 +1,5 @@
 /**
- * [NEW] Predict raw data API — import Excel into predict_data_sources + predict_raw_sheet_*.
- * Replaces removed [LEGACY] POST /runs/:id/upload → raw_customers/payments/usage.
+ * [NEW] Predict raw + clean API — Excel → predict_raw_sheet_* → predict_clean_*.
  */
 import Elysia, { t } from "elysia";
 import { desc, eq } from "drizzle-orm";
@@ -8,7 +7,8 @@ import { db } from "../db/client";
 import { predictDataSources, predictionRuns, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { verifyRunOwnership } from "../lib/run-guard";
-import { importPredictExcel } from "../lib/predict-import";
+import { importPredictExcel, type PredictImportResult } from "../lib/predict-import";
+import { cleanPredictFromRaw } from "../lib/predict-clean";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -22,6 +22,8 @@ function mapSource(row: {
   importStatus: string;
   importedAt: Date | null;
   sheetManifest: unknown;
+  cleanManifest: unknown;
+  cleanedAt: Date | null;
   notes: string | null;
   errorMessage: string | null;
   importedBy: string | null;
@@ -40,6 +42,8 @@ function mapSource(row: {
     import_status: row.importStatus,
     imported_at: row.importedAt?.toISOString() ?? null,
     sheet_manifest: row.sheetManifest,
+    clean_manifest: row.cleanManifest,
+    cleaned_at: row.cleanedAt?.toISOString() ?? null,
     notes: row.notes,
     error_message: row.errorMessage,
     imported_by: row.importedBy,
@@ -60,6 +64,8 @@ const sourceSelect = {
   importStatus: predictDataSources.importStatus,
   importedAt: predictDataSources.importedAt,
   sheetManifest: predictDataSources.sheetManifest,
+  cleanManifest: predictDataSources.cleanManifest,
+  cleanedAt: predictDataSources.cleanedAt,
   notes: predictDataSources.notes,
   errorMessage: predictDataSources.errorMessage,
   importedBy: predictDataSources.importedBy,
@@ -68,6 +74,25 @@ const sourceSelect = {
   importerName: user.name,
   importerEmail: user.email,
 };
+
+async function finalizePredictionRun(
+  runId: string,
+  result: PredictImportResult
+): Promise<void> {
+  const customerCount =
+    result.clean_manifest?.clean.customers ??
+    result.sheet_manifest["Users+User_profile"] ??
+    null;
+
+  await db
+    .update(predictionRuns)
+    .set({
+      status: "imported",
+      totalCustomers: customerCount,
+      errorMessage: null,
+    })
+    .where(eq(predictionRuns.id, runId));
+}
 
 export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
   .use(requireUser)
@@ -120,33 +145,49 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
         body.name?.trim() ||
         (body.prediction_run_id ? `Run ${body.prediction_run_id.slice(0, 8)}` : filename);
 
+      const runId = body.prediction_run_id ?? null;
+      let sourceId = "";
+
       try {
-        const result = await importPredictExcel({
+        const rawResult = await importPredictExcel({
           buffer,
           filename,
           name: displayName,
           imported_by: userId!,
-          prediction_run_id: body.prediction_run_id ?? null,
+          prediction_run_id: runId,
           client_label: body.client_label ?? null,
           notes: body.notes ?? null,
+          deferReadyCatalog: true,
         });
+        sourceId = rawResult.source_id;
 
-        if (body.prediction_run_id) {
-          const customerCount =
-            result.sheet_manifest["Users+User_profile"] ?? null;
-          await db
-            .update(predictionRuns)
-            .set({
-              status: "imported",
-              totalCustomers: customerCount,
-              errorMessage: null,
-            })
-            .where(eq(predictionRuns.id, body.prediction_run_id));
+        const cleanManifest = await cleanPredictFromRaw(sourceId);
+        const result: PredictImportResult = {
+          ...rawResult,
+          import_status: "ready",
+          clean_manifest: cleanManifest,
+        };
+
+        if (runId) {
+          await finalizePredictionRun(runId, result);
         }
 
         return result;
       } catch (e) {
         const err = e as Error;
+        const message = err.message?.slice(0, 500) ?? "Import failed";
+        if (sourceId) {
+          await db
+            .update(predictDataSources)
+            .set({ importStatus: "failed", errorMessage: message })
+            .where(eq(predictDataSources.id, sourceId));
+        }
+        if (runId) {
+          await db
+            .update(predictionRuns)
+            .set({ status: "failed", errorMessage: message })
+            .where(eq(predictionRuns.id, runId));
+        }
         set.status = 400;
         return { message: err.message ?? "Import failed" };
       }

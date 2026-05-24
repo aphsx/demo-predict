@@ -474,6 +474,7 @@ export async function uploadPredictDataForRun(
   import_status: string;
   sheet_manifest: Record<string, number>;
   file_checksum_sha256: string;
+  clean_manifest?: TrainCleanManifest;
 }> {
   const fd = new FormData();
   fd.append("file", file);
@@ -490,6 +491,7 @@ export async function uploadPredictDataForRun(
     import_status: string;
     sheet_manifest: Record<string, number>;
     file_checksum_sha256: string;
+    clean_manifest?: TrainCleanManifest;
   };
 }
 

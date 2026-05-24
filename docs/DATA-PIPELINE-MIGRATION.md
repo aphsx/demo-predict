@@ -7,7 +7,7 @@ Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 | **Train** | raw | **NEW** | `train_data_sources`, `train_raw_sheet_*` · `POST /train-data-sources/import` · `/training` |
 | **Train** | clean | **NEW** | `train_clean_*` · runs after raw on same import (async SSE `phase`: raw \| clean) |
 | **Predict** | raw | **NEW** (import only) | `predict_data_sources`, `predict_raw_sheet_*` · `POST /predict-data-sources/import` · `/runs` upload |
-| Predict | clean | planned | `predict_clean_*` |
+| Predict | clean | **NEW** | `predict_clean_*` · runs after raw on `POST /predict-data-sources/import` |
 | **Predict** | ML output | **LEGACY** (still used) | `prediction_runs`, `predictions` · Arq worker (not wired to `predict_raw_*` yet) |
 | ~~Predict~~ | ~~typed raw~~ | **removed** | ~~`raw_customers`, `raw_payments`, `raw_usage`~~ · ~~`POST /runs/:id/upload`~~ |
 
@@ -21,8 +21,9 @@ Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 ## Predict raw import (current)
 
 1. Create run → upload on `/runs` → `predict_raw_sheet_*`
-2. Run status → `imported`
-3. **No ML pipeline** from raw yet (retry → 503)
+2. Raw import → predict clean (typed + manifest)
+3. Run status → `imported` (customer count from `clean_manifest`)
+4. **No ML pipeline** from clean yet (retry → 503)
 
 ## Docker migrations
 
@@ -34,6 +35,7 @@ Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 | `004_*` | `raw_customers` already dropped |
 | `005_*` | `train_clean_customers` exists |
 | `006_*` | always runs (`IF NOT EXISTS` lineage columns) |
+| `007_*` | `predict_clean_customers` exists |
 
 **Apply 005 on existing DB (if migrate_or_repair did not run it):**
 

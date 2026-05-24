@@ -24,6 +24,7 @@ import {
   PREDICT_SHEET_CONFIG,
   type PredictSheetName,
 } from "./predict-excel-contract";
+import type { CleanManifest } from "./clean-manifest";
 
 type CellJson = string | number | boolean | null | Record<string, unknown>;
 type RawInsertTable = PgTable;
@@ -45,6 +46,7 @@ export interface PredictImportResult {
   import_status: string;
   sheet_manifest: Record<string, number>;
   file_checksum_sha256: string;
+  clean_manifest?: CleanManifest;
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -160,6 +162,8 @@ export async function importPredictExcel(params: {
   prediction_run_id?: string | null;
   client_label?: string | null;
   notes?: string | null;
+  /** When true, leave status `importing` after raw (clean step sets `ready`). */
+  deferReadyCatalog?: boolean;
 }): Promise<PredictImportResult> {
   const checksum = createHash("sha256").update(params.buffer).digest("hex");
 
@@ -202,19 +206,29 @@ export async function importPredictExcel(params: {
       manifest[sheetName] = await insertSheetRows(table, sourceId, rows);
     }
 
-    await db
-      .update(predictDataSources)
-      .set({
-        importStatus: "ready",
-        importedAt: new Date(),
-        sheetManifest: manifest,
-      })
-      .where(eq(predictDataSources.id, sourceId));
+    if (params.deferReadyCatalog) {
+      await db
+        .update(predictDataSources)
+        .set({
+          importedAt: new Date(),
+          sheetManifest: manifest,
+        })
+        .where(eq(predictDataSources.id, sourceId));
+    } else {
+      await db
+        .update(predictDataSources)
+        .set({
+          importStatus: "ready",
+          importedAt: new Date(),
+          sheetManifest: manifest,
+        })
+        .where(eq(predictDataSources.id, sourceId));
+    }
 
     return {
       source_id: sourceId,
       prediction_run_id: params.prediction_run_id ?? null,
-      import_status: "ready",
+      import_status: params.deferReadyCatalog ? "importing" : "ready",
       sheet_manifest: manifest,
       file_checksum_sha256: checksum,
     };

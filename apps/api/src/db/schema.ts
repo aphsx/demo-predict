@@ -184,7 +184,7 @@ export const explanations = pgTable(
 
 // ── [NEW] Train raw data — greenfield (moby-data-prep migrations) ─────────────
 // 8 sheet tables + catalog. NOT prediction_runs. Migrations: moby-data-prep/migrations/
-// Future: predict_raw_sheet_*, train_clean_*, predict_clean_*
+// Predict clean: predict_clean_* (007). ML worker wiring deferred.
 
 export const trainDataSources = pgTable(
   "train_data_sources",
@@ -324,6 +324,8 @@ export const predictDataSources = pgTable(
     importStatus:         text("import_status").notNull().default("pending"),
     importedAt:           timestamp("imported_at", { withTimezone: true }),
     sheetManifest:        jsonb("sheet_manifest"),
+    cleanManifest:        jsonb("clean_manifest"),
+    cleanedAt:            timestamp("cleaned_at", { withTimezone: true }),
     notes:                text("notes"),
     errorMessage:         text("error_message"),
     importedBy:           text("imported_by").references(() => user.id, { onDelete: "set null" }),
@@ -366,6 +368,78 @@ export const predictRawSheetSmsUsageOtp = predictRawSheet("predict_raw_sheet_sms
 export const predictRawSheetEmailUsageBc = predictRawSheet("predict_raw_sheet_email_usage_bc");
 export const predictRawSheetEmailUsageApi = predictRawSheet("predict_raw_sheet_email_usage_api");
 export const predictRawSheetEmailUsageOtp = predictRawSheet("predict_raw_sheet_email_usage_otp");
+
+// ── [NEW] Predict clean — typed rows per run (moby-data-prep/migrations/007_*) ──
+
+export const predictCleanCustomers = pgTable(
+  "predict_clean_customers",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => predictDataSources.id, { onDelete: "cascade" }),
+    rawRowId: bigint("raw_row_id", { mode: "number" }).notNull(),
+    excelRow: integer("excel_row").notNull(),
+    accId: integer("acc_id").notNull(),
+    statusSms: text("status_sms"),
+    creditSms: numeric("credit_sms"),
+    creditEmail: numeric("credit_email"),
+    expireSms: date("expire_sms"),
+    expireEmail: date("expire_email"),
+    statusEmail: text("status_email"),
+    joinDate: date("join_date"),
+    lastAccess: timestamp("last_access", { withTimezone: true }),
+    lastSend: timestamp("last_send", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_predict_clean_customers_source").on(t.sourceId),
+    index("idx_predict_clean_customers_acc").on(t.sourceId, t.accId),
+  ]
+);
+
+export const predictCleanPayments = pgTable(
+  "predict_clean_payments",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => predictDataSources.id, { onDelete: "cascade" }),
+    rawRowId: bigint("raw_row_id", { mode: "number" }).notNull(),
+    excelRow: integer("excel_row").notNull(),
+    accId: integer("acc_id").notNull(),
+    paymentUid: bigint("payment_uid", { mode: "number" }),
+    paymentDate: timestamp("payment_date", { withTimezone: true }).notNull(),
+    amount: numeric("amount"),
+    creditAdd: numeric("credit_add"),
+    creditType: text("credit_type"),
+  },
+  (t) => [
+    index("idx_predict_clean_payments_source").on(t.sourceId),
+    index("idx_predict_clean_payments_acc").on(t.sourceId, t.accId),
+  ]
+);
+
+export const predictCleanUsage = pgTable(
+  "predict_clean_usage",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sourceId: uuid("source_id")
+      .notNull()
+      .references(() => predictDataSources.id, { onDelete: "cascade" }),
+    rawRowId: bigint("raw_row_id", { mode: "number" }).notNull(),
+    excelRow: integer("excel_row").notNull(),
+    accId: integer("acc_id").notNull(),
+    year: integer("year"),
+    month: integer("month"),
+    usage: numeric("usage"),
+    channel: text("channel").notNull(),
+    usageSource: text("usage_source").notNull(),
+  },
+  (t) => [
+    index("idx_predict_clean_usage_source").on(t.sourceId),
+    index("idx_predict_clean_usage_acc").on(t.sourceId, t.accId),
+  ]
+);
 
 // ── Convenience type exports ───────────────────────────────────────────────────
 
