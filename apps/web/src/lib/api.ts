@@ -341,7 +341,38 @@ export async function uploadTrainDataFile(
   };
 }
 
-// ── [LEGACY] Predict run file upload — manual fetch (multipart/form-data) ─────
+// ── [NEW] Predict raw data import (per run) ───────────────────────────────────
+// predict_data_sources + predict_raw_sheet_*. Replaces uploadFile when wired on /runs.
+
+export async function uploadPredictDataForRun(
+  runId: string,
+  file: File
+): Promise<{
+  source_id: string;
+  prediction_run_id: string | null;
+  import_status: string;
+  sheet_manifest: Record<string, number>;
+  file_checksum_sha256: string;
+}> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("prediction_run_id", runId);
+
+  const res = await apiFetch("/api/predict-data-sources/import", { method: "POST", body: fd });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Import failed (${res.status})`);
+  }
+  return body as {
+    source_id: string;
+    prediction_run_id: string | null;
+    import_status: string;
+    sheet_manifest: Record<string, number>;
+    file_checksum_sha256: string;
+  };
+}
+
+// ── [LEGACY] Predict run file upload — raw_* + Arq pipeline ─────────────────
 
 export async function retryRun(runId: string): Promise<{ run_id: string; status: string; message: string }> {
   const res = await apiFetch(`/api/runs/${runId}/retry`, { method: "POST" });
@@ -456,6 +487,7 @@ export const api = {
   createRun:        (arg: { name: string; cutoff_date: string }) => createRun(arg.name, arg.cutoff_date),
   deleteRun,
   uploadFile,
+  uploadPredictDataForRun,
   fetchRun,
   fetchSummary,
   fetchPredictions,

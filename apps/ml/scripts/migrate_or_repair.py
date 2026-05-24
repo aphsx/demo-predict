@@ -4,8 +4,8 @@ Run Alembic migrations, repairing partial-schema Docker volumes.
 If ML tables exist but alembic_version is missing (failed mid-baseline),
 reset the public schema when DOCKER_BUILD=1 and re-run from scratch.
 
-After Alembic: apply [NEW] train raw SQL from moby-data-prep/migrations
-(mounted at /app/train-migrations in Docker).
+After Alembic: apply [NEW] moby-data-prep SQL (train + predict raw) from
+moby-data-prep/migrations (mounted at /app/train-migrations in Docker).
 """
 from __future__ import annotations
 
@@ -22,9 +22,17 @@ from sqlalchemy.ext.asyncio import create_async_engine
 ML_MARKERS = ("model_versions", "prediction_runs", "predictions")
 AUTH_MARKER = "user"
 TRAIN_RAW_MARKER = "train_data_sources"
+PREDICT_RAW_MARKER = "predict_data_sources"
 TRAIN_MIGRATIONS_DIR = os.environ.get(
     "TRAIN_MIGRATIONS_DIR", "/app/train-migrations"
 )
+
+# Per-file skip: apply only when marker table is missing (002 uses IF NOT EXISTS).
+MIGRATION_MARKERS: dict[str, str | None] = {
+    "001": TRAIN_RAW_MARKER,
+    "002": None,  # additive ALTER on train_data_sources
+    "003": PREDICT_RAW_MARKER,
+}
 
 
 async def schema_state(database_url: str) -> str:
@@ -84,46 +92,53 @@ def _split_sql_statements(sql: str) -> list[str]:
     return out
 
 
-async def apply_train_raw_migrations(database_url: str) -> None:
-    """[NEW] moby-data-prep train tables — not in Alembic."""
+async def _table_exists(conn, table: str) -> bool:
+    row = await conn.execute(
+        text("SELECT to_regclass(:name)"),
+        {"name": f"public.{table}"},
+    )
+    return row.scalar() is not None
+
+
+def _migration_marker(filename: str) -> str | None:
+    prefix = filename.split("_", 1)[0]
+    return MIGRATION_MARKERS.get(prefix)
+
+
+async def apply_moby_data_prep_migrations(database_url: str) -> None:
+    """[NEW] moby-data-prep SQL (train + predict raw) — not in Alembic."""
     mig_dir = Path(TRAIN_MIGRATIONS_DIR)
     if not mig_dir.is_dir():
         print(
-            f"=== Train raw migrations skipped (no dir {mig_dir}) — "
+            f"=== moby-data-prep migrations skipped (no dir {mig_dir}) — "
             "run moby-data-prep/migrations/*.sql manually if needed ===",
             flush=True,
         )
         return
 
-    async_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
-    engine = create_async_engine(async_url)
-
-    async with engine.connect() as conn:
-        row = await conn.execute(
-            text("SELECT to_regclass(:name)"),
-            {"name": f"public.{TRAIN_RAW_MARKER}"},
-        )
-        if row.scalar() is not None:
-            print("=== Train raw tables already present ===", flush=True)
-            await engine.dispose()
-            return
-
     sql_files = sorted(mig_dir.glob("*.sql"))
     if not sql_files:
         print(f"=== No .sql files in {mig_dir} ===", flush=True)
-        await engine.dispose()
         return
 
-    print("=== Applying [NEW] train raw migrations ===", flush=True)
+    async_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
+    engine = create_async_engine(async_url)
+
+    print("=== Applying [NEW] moby-data-prep migrations ===", flush=True)
     async with engine.begin() as conn:
         for path in sql_files:
+            marker = _migration_marker(path.name)
+            if marker is not None:
+                if await _table_exists(conn, marker):
+                    print(f"  skip {path.name} ({marker} exists)", flush=True)
+                    continue
             print(f"  -> {path.name}", flush=True)
             raw = path.read_text(encoding="utf-8")
             for stmt in _split_sql_statements(raw):
                 await conn.execute(text(stmt))
 
     await engine.dispose()
-    print("=== Train raw migrations done ===", flush=True)
+    print("=== moby-data-prep migrations done ===", flush=True)
 
 
 async def main() -> None:
@@ -151,7 +166,7 @@ async def main() -> None:
         stamp = subprocess.run(["alembic", "stamp", "head"], check=False)
         if stamp.returncode != 0:
             sys.exit(stamp.returncode)
-        await apply_train_raw_migrations(database_url)
+        await apply_moby_data_prep_migrations(database_url)
         sys.exit(0)
 
     print("=== Running Alembic migrations ===", flush=True)
@@ -159,7 +174,7 @@ async def main() -> None:
     if code != 0:
         sys.exit(code)
 
-    await apply_train_raw_migrations(database_url)
+    await apply_moby_data_prep_migrations(database_url)
 
 
 if __name__ == "__main__":

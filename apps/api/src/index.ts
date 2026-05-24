@@ -12,6 +12,7 @@ import { eventsRoutes } from "./routes/events";
 import { insightsRoutes } from "./routes/insights";
 // [NEW] Train raw Excel import — greenfield; not tied to prediction_runs (see docs/DATA-PIPELINE-MIGRATION.md)
 import { trainDataRoutes } from "./routes/train-data";
+import { predictDataRoutes } from "./routes/predict-data";
 
 const PORT      = Number(process.env.PORT ?? 3001);
 const MODEL_DIR = process.env.MODEL_DIR ?? "/app/models";
@@ -45,6 +46,8 @@ const app = new Elysia()
   .use(insightsRoutes)
   // [NEW] Train raw import → train_data_sources + train_raw_sheet_* (/training page)
   .use(trainDataRoutes)
+  // [NEW] Predict raw import → predict_data_sources + predict_raw_sheet_* (/runs page)
+  .use(predictDataRoutes)
   .get("/health", () => {
     const churn      = existsSync(join(MODEL_DIR, "churn_model.pkl"));
     const winback    = existsSync(join(MODEL_DIR, "winback_model.pkl"));

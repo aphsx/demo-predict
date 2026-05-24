@@ -1,6 +1,7 @@
 /**
- * [LEGACY] Prediction runs — Excel upload → raw_* per run_id + Arq ML pipeline.
- * For training datasets use [NEW] /training (train_data_sources). See docs/DATA-PIPELINE-MIGRATION.md.
+ * Prediction runs — [NEW] Excel → predict_raw_sheet_* per run (no Arq yet).
+ * [LEGACY] POST /runs/:id/upload still exists in API; training data: /training.
+ * See docs/DATA-PIPELINE-MIGRATION.md.
  */
 "use client";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ function UploadButton({ runId, uploading, onUpload }: {
         Upload
       </button>
       <input
-        ref={ref} type="file" accept=".xlsx,.csv" className="hidden"
+        ref={ref} type="file" accept=".xlsx" className="hidden"
         onChange={e => {
           const f = e.target.files?.[0];
           if (f) { onUpload(runId, f); e.target.value = ""; }
@@ -44,6 +45,7 @@ import { getDisplayError } from "@/lib/ui-error";
 
 const statusToTone: Record<string, "ok" | "warn" | "danger" | "info" | "neutral"> = {
   done: "ok",
+  imported: "ok",
   processing: "info",
   validating: "info",
   pending: "neutral",
@@ -51,6 +53,7 @@ const statusToTone: Record<string, "ok" | "warn" | "danger" | "info" | "neutral"
 };
 const statusIcon: Record<string, any> = {
   done: CheckCircle2,
+  imported: FileSpreadsheet,
   processing: RefreshCw,
   validating: RefreshCw,
   pending: Clock3,
@@ -142,11 +145,11 @@ export default function RunsPage() {
     }
   };
 
-  const uploadFile = async (runId: string, file: File) => {
+  const uploadRunExcel = async (runId: string, file: File) => {
     setUploading(runId);
     setError(null);
     try {
-      await api.uploadFile(runId, file);
+      await api.uploadPredictDataForRun(runId, file);
       await load();
     } catch (e) {
       setError(getDisplayError(e, "อัปโหลดไฟล์ไม่สำเร็จ"));
@@ -158,6 +161,7 @@ export default function RunsPage() {
   const stats = {
     total: runs.length,
     active: runs.filter(r => ["processing", "validating"].includes(r.status)).length,
+    imported: runs.filter(r => r.status === "imported").length,
     done: runs.filter(r => r.status === "done").length,
     failed: runs.filter(r => r.status === "failed").length,
   };
@@ -185,9 +189,10 @@ export default function RunsPage() {
         )}
 
         {/* Status strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <MiniStat label="Total runs" value={stats.total} tone="slate" />
           <MiniStat label="In progress" value={stats.active} tone="blue" />
+          <MiniStat label="Raw imported" value={stats.imported} tone="emerald" />
           <MiniStat label="Completed" value={stats.done} tone="emerald" />
           <MiniStat label="Failed" value={stats.failed} tone="rose" />
         </div>
@@ -280,11 +285,11 @@ export default function RunsPage() {
                       </td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {["pending", "failed", "processing", "validating", "done"].includes(run.status) && (
+                          {["pending", "failed", "imported", "processing", "validating", "done"].includes(run.status) && (
                             <UploadButton
                               runId={run.id}
                               uploading={uploading === run.id}
-                              onUpload={uploadFile}
+                              onUpload={uploadRunExcel}
                             />
                           )}
                           {["processing", "failed"].includes(run.status) && (

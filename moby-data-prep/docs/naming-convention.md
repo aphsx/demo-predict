@@ -31,17 +31,24 @@ Prefix by **purpose** and **layer** so train, predict, and clean never collide.
 Import CLI: `scripts/import_train_raw.py`  
 Config: `config/excel_schema.yaml` (train raw only)
 
-## Reserved (not created yet)
-
-### Predict raw (inference / per-run upload)
+## Implemented (predict raw)
 
 | Table | Role |
 |-------|------|
-| `predict_data_sources` | Catalog per predict upload or run |
-| `predict_raw_sheet_users_user_profile` | Same 8-sheet shape as train |
+| `predict_data_sources` | Catalog per upload; optional `prediction_run_id` → `prediction_runs` |
+| `predict_raw_sheet_users_user_profile` | Raw sheet mirror (same 8 sheets as train) |
 | `predict_raw_sheet_backend_payment` | … |
 | `predict_raw_sheet_sms_usage_bc` | … |
-| … | (six remaining usage sheets) |
+| `predict_raw_sheet_sms_usage_api` | … |
+| `predict_raw_sheet_sms_usage_otp` | … |
+| `predict_raw_sheet_email_usage_bc` | … |
+| `predict_raw_sheet_email_usage_api` | … |
+| `predict_raw_sheet_email_usage_otp` | … |
+
+Migration: `migrations/003_predict_raw_eight_tables.sql`  
+API: `POST /predict-data-sources/import` (Elysia) · `/runs` page upload
+
+## Reserved (not created yet)
 
 ### Clean (after ETL)
 

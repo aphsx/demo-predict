@@ -292,6 +292,64 @@ export const trainRawSheetEmailUsageBc = trainRawSheet("train_raw_sheet_email_us
 export const trainRawSheetEmailUsageApi = trainRawSheet("train_raw_sheet_email_usage_api");
 export const trainRawSheetEmailUsageOtp = trainRawSheet("train_raw_sheet_email_usage_otp");
 
+// ── [NEW] Predict raw data — greenfield (moby-data-prep/migrations/003_*) ─────
+// NOT train_* or [LEGACY] raw_*. prediction_run_id bridges to runs UI until legacy is removed.
+
+export const predictDataSources = pgTable(
+  "predict_data_sources",
+  {
+    id:                   uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    name:                 text("name").notNull(),
+    clientLabel:          text("client_label"),
+    originalFilename:     text("original_filename").notNull(),
+    fileChecksumSha256:   text("file_checksum_sha256").notNull(),
+    fileSizeBytes:        bigint("file_size_bytes", { mode: "number" }),
+    importStatus:         text("import_status").notNull().default("pending"),
+    importedAt:           timestamp("imported_at", { withTimezone: true }),
+    sheetManifest:        jsonb("sheet_manifest"),
+    notes:                text("notes"),
+    errorMessage:         text("error_message"),
+    importedBy:           text("imported_by").references(() => user.id, { onDelete: "set null" }),
+    predictionRunId:      uuid("prediction_run_id").references(() => predictionRuns.id, {
+      onDelete: "set null",
+    }),
+    createdAt:            timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    index("idx_predict_data_sources_status").on(t.importStatus),
+    index("idx_predict_data_sources_client").on(t.clientLabel),
+    index("idx_predict_data_sources_imported_by").on(t.importedBy),
+    index("idx_predict_data_sources_run").on(t.predictionRunId),
+  ]
+);
+
+function predictRawSheet(tableName: string) {
+  return pgTable(
+    tableName,
+    {
+      id:         bigserial("id", { mode: "number" }).primaryKey(),
+      sourceId:   uuid("source_id")
+        .notNull()
+        .references(() => predictDataSources.id, { onDelete: "cascade" }),
+      excelRow:   integer("excel_row").notNull(),
+      rowPayload: jsonb("row_payload").notNull(),
+      importedAt: timestamp("imported_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+    },
+    (t) => [index(`idx_${tableName}_source`).on(t.sourceId)]
+  );
+}
+
+export const predictRawSheetUsersUserProfile = predictRawSheet(
+  "predict_raw_sheet_users_user_profile"
+);
+export const predictRawSheetBackendPayment = predictRawSheet("predict_raw_sheet_backend_payment");
+export const predictRawSheetSmsUsageBc = predictRawSheet("predict_raw_sheet_sms_usage_bc");
+export const predictRawSheetSmsUsageApi = predictRawSheet("predict_raw_sheet_sms_usage_api");
+export const predictRawSheetSmsUsageOtp = predictRawSheet("predict_raw_sheet_sms_usage_otp");
+export const predictRawSheetEmailUsageBc = predictRawSheet("predict_raw_sheet_email_usage_bc");
+export const predictRawSheetEmailUsageApi = predictRawSheet("predict_raw_sheet_email_usage_api");
+export const predictRawSheetEmailUsageOtp = predictRawSheet("predict_raw_sheet_email_usage_otp");
+
 // ── Convenience type exports ───────────────────────────────────────────────────
 
 export type User         = typeof user.$inferSelect;
