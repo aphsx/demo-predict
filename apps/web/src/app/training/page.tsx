@@ -8,16 +8,17 @@
 export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
 import {
-  Play, CheckCircle2, AlertCircle, RefreshCw, Database, Upload, FileSpreadsheet,
+  Play, CheckCircle2, AlertCircle, RefreshCw, Database, Upload, FileSpreadsheet, Trash2,
 } from "lucide-react";
 import {
-  PageHeader, SectionCard, StatusPill, Skeleton, EmptyState, ProgressMeter,
+  PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
 } from "@/components/ui";
 import {
   fetchModelVersions,
   fetchActiveModelVersions,
   trainModels,
   fetchTrainDataSources,
+  deleteTrainDataSource,
   uploadTrainDataFileWithProgress,
   type TrainDataSource,
 } from "@/lib/api";
@@ -59,6 +60,7 @@ export default function TrainingPage() {
   const [importName, setImportName] = useState("");
   const [importClient, setImportClient] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -108,7 +110,10 @@ export default function TrainingPage() {
       );
       setImportName("");
       setPendingFile(null);
+      setImportProgress(100);
+      setImportStep("Import complete");
       setImportSuccess(`Imported ${result.source_id.slice(0, 8)}… (${Object.keys(result.sheet_manifest).length} sheets)`);
+      await new Promise((r) => setTimeout(r, 450));
       await load();
     } catch (e) {
       const err = e as Error & { code?: string; source_id?: string };
@@ -124,6 +129,20 @@ export default function TrainingPage() {
       setImportProgress(0);
       setImportStep("");
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const deleteSource = async (id: string, name: string) => {
+    if (!confirm(`ลบ dataset "${name}"? ข้อมูล raw ทั้งหมดจะถูกลบถาวร`)) return;
+    setDeletingId(id);
+    setImportError(null);
+    try {
+      await deleteTrainDataSource(id);
+      setTrainSources((prev) => prev.filter((s) => s.id !== id));
+    } catch (e) {
+      setImportError(getDisplayError(e, "ลบ dataset ไม่สำเร็จ"));
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -240,12 +259,8 @@ export default function TrainingPage() {
                 onClick={() => pendingFile && void handleImportFile(pendingFile)}
                 className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                {importing ? (
-                  <RefreshCw size={15} className="animate-spin" />
-                ) : (
-                  <FileSpreadsheet size={15} />
-                )}
-                {importing ? "Importing…" : "Import"}
+                <FileSpreadsheet size={15} />
+                Import
               </button>
             </div>
           </div>
@@ -256,13 +271,19 @@ export default function TrainingPage() {
             </p>
           )}
           {importing && (
-            <div className="mt-4 space-y-1">
-              <ProgressMeter
-                value={importProgress}
-                max={100}
-                tone="blue"
-                label={importStep || "Importing…"}
-              />
+            <div className="mt-4 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-1)] p-4 space-y-3">
+              <div className="flex items-center gap-2 text-[13px] text-[color:var(--ink-2)]">
+                <RefreshCw size={14} className="animate-spin shrink-0 text-[color:var(--moby-600)]" />
+                <span className="font-medium">Importing dataset…</span>
+              </div>
+              <div className="w-full h-3 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[color:var(--moby-600)] transition-[width] duration-300 ease-out"
+                  style={{ width: `${Math.max(importProgress > 0 ? 4 : 0, importProgress)}%` }}
+                />
+              </div>
+              <p className="text-[12px] text-[color:var(--ink-4)]">{importStep || "Working…"}</p>
+              <p className="num text-[13px] font-medium text-[color:var(--moby-700)]">{importProgress}%</p>
             </div>
           )}
           {importSuccess && !importing && (
@@ -289,6 +310,7 @@ export default function TrainingPage() {
                     <th className="text-left py-2 px-2 text-xs text-[color:var(--ink-5)] uppercase">Status</th>
                     <th className="text-left py-2 px-2 text-xs text-[color:var(--ink-5)] uppercase">Imported by</th>
                     <th className="text-left py-2 px-2 text-xs text-[color:var(--ink-5)] uppercase">When</th>
+                    <th className="text-right py-2 px-2 text-xs text-[color:var(--ink-5)] uppercase w-12" />
                   </tr>
                 </thead>
                 <tbody>
@@ -308,6 +330,21 @@ export default function TrainingPage() {
                         {s.imported_at
                           ? new Date(s.imported_at).toLocaleString("th-TH")
                           : new Date(s.created_at).toLocaleString("th-TH")}
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        <button
+                          type="button"
+                          disabled={deletingId === s.id || s.import_status === "importing"}
+                          onClick={() => void deleteSource(s.id, s.name)}
+                          title={s.import_status === "importing" ? "รอ import เสร็จก่อน" : "ลบ dataset"}
+                          className="h-7 w-7 grid place-items-center rounded-md text-[color:var(--ink-4)] hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] disabled:opacity-40"
+                        >
+                          {deletingId === s.id ? (
+                            <RefreshCw size={13} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={13} />
+                          )}
+                        </button>
                       </td>
                     </tr>
                   ))}

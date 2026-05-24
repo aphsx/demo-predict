@@ -167,6 +167,8 @@ export async function importTrainExcel(params: {
   notes?: string | null;
   imported_by: string;
   onProgress?: (event: TrainImportProgressEvent) => void;
+  /** Fired as soon as train_data_sources row exists (for async import + SSE subscribe). */
+  onSourceCreated?: (sourceId: string) => void;
 }): Promise<TrainImportResult> {
   const emit = params.onProgress;
 
@@ -212,6 +214,7 @@ export async function importTrainExcel(params: {
     .returning({ id: trainDataSources.id });
 
   const sourceId = created.id;
+  params.onSourceCreated?.(sourceId);
   const manifest: Record<string, number> = {};
 
   emit?.({

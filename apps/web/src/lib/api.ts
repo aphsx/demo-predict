@@ -313,6 +313,14 @@ export async function fetchTrainDataSources(): Promise<TrainDataSource[]> {
   return asArray<TrainDataSource>(body);
 }
 
+export async function deleteTrainDataSource(id: string): Promise<void> {
+  const res = await apiFetch(`/api/train-data-sources/${id}`, { method: "DELETE" });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Failed to delete dataset (${res.status})`);
+  }
+}
+
 export interface TrainImportProgress {
   progress: number;
   step: string;
@@ -327,8 +335,8 @@ export interface TrainImportDone {
   file_checksum_sha256: string;
 }
 
-/** Import with server-driven SSE progress (per-sheet DB inserts). */
-export async function uploadTrainDataFileWithProgress(
+/** Import with real-time progress via POST async + GET SSE (works through Next proxy). */
+export function uploadTrainDataFileWithProgress(
   file: File,
   name: string,
   onProgress: (event: TrainImportProgress) => void,
@@ -339,58 +347,76 @@ export async function uploadTrainDataFileWithProgress(
   fd.append("name", name);
   if (client_label) fd.append("client_label", client_label);
 
-  const res = await apiFetch("/api/train-data-sources/import/stream", {
-    method: "POST",
-    body: fd,
-  });
-
-  if (!res.ok || !res.body) {
+  return (async () => {
+    const res = await apiFetch("/api/train-data-sources/import/async", {
+      method: "POST",
+      body: fd,
+    });
     const body = await parseJson(res);
-    throw new Error(isApiError(body) ? body.message : `Import failed (${res.status})`);
-  }
-
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = "";
-  let result: TrainImportDone | null = null;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-
-    const blocks = buf.split("\n\n");
-    buf = blocks.pop() ?? "";
-
-    for (const block of blocks) {
-      if (!block.trim()) continue;
-      let eventName = "message";
-      let dataLine = "";
-      for (const line of block.split("\n")) {
-        if (line.startsWith("event: ")) eventName = line.slice(7).trim();
-        else if (line.startsWith("data: ")) dataLine = line.slice(6);
+    if (!res.ok) {
+      const err = new Error(
+        isApiError(body) ? body.message : `Import failed (${res.status})`
+      ) as Error & { code?: string; source_id?: string };
+      if (typeof body === "object" && body !== null) {
+        const b = body as Record<string, unknown>;
+        if (typeof b.code === "string") err.code = b.code;
+        if (typeof b.source_id === "string") err.source_id = b.source_id;
       }
-      if (!dataLine) continue;
-
-      const payload = JSON.parse(dataLine) as Record<string, unknown>;
-      if (eventName === "progress") {
-        onProgress(payload as unknown as TrainImportProgress);
-      } else if (eventName === "done") {
-        result = payload as unknown as TrainImportDone;
-      } else if (eventName === "error") {
-        const err = new Error(String(payload.message ?? "Import failed")) as Error & {
-          code?: string;
-          source_id?: string;
-        };
-        if (typeof payload.code === "string") err.code = payload.code;
-        if (typeof payload.source_id === "string") err.source_id = payload.source_id;
-        throw err;
-      }
+      throw err;
     }
-  }
 
-  if (!result) throw new Error("Import ended without completion");
-  return result;
+    const sourceId = (body as { source_id?: string }).source_id;
+    if (!sourceId) throw new Error("Import did not return source_id");
+
+    onProgress({ progress: 5, step: "Upload received — importing sheets…" });
+
+    return new Promise<TrainImportDone>((resolve, reject) => {
+      const es = new EventSource(
+        `/api/train-data-sources/${sourceId}/import/stream`,
+        { withCredentials: true }
+      );
+
+      const cleanup = () => es.close();
+
+      es.addEventListener("progress", (e) => {
+        try {
+          onProgress(JSON.parse(e.data) as TrainImportProgress);
+        } catch {
+          /* ignore malformed */
+        }
+      });
+
+      es.addEventListener("done", (e) => {
+        cleanup();
+        try {
+          resolve(JSON.parse(e.data) as TrainImportDone);
+        } catch {
+          reject(new Error("Invalid done payload"));
+        }
+      });
+
+      es.addEventListener("error", (e) => {
+        cleanup();
+        try {
+          const payload = JSON.parse((e as MessageEvent).data) as Record<string, unknown>;
+          const err = new Error(String(payload.message ?? "Import failed")) as Error & {
+            code?: string;
+            source_id?: string;
+          };
+          if (typeof payload.code === "string") err.code = payload.code;
+          if (typeof payload.source_id === "string") err.source_id = payload.source_id;
+          reject(err);
+        } catch {
+          reject(new Error("Import failed"));
+        }
+      });
+
+      es.onerror = () => {
+        cleanup();
+        reject(new Error("Lost connection to import progress stream"));
+      };
+    });
+  })();
 }
 
 /** JSON import (no progress stream) — prefer uploadTrainDataFileWithProgress in UI. */
