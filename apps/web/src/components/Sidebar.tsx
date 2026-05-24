@@ -1,9 +1,10 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { INTRO_ASSETS } from "@/lib/login-brand-colors";
 import {
   LayoutDashboard, Users, ListChecks, Database,
-  Activity, Bell, ShieldCheck, Sparkles, MessageSquareMore,
+  Activity, Bell, ShieldCheck, MessageSquareMore,
 } from "lucide-react";
 
 type Item = { href: string; label: string; icon: any };
@@ -47,18 +48,25 @@ export default function Sidebar() {
   return (
     <aside className="w-[232px] shrink-0 bg-white border-r border-[color:var(--line)] flex flex-col">
       {/* Brand */}
-      <div className="px-5 pt-5 pb-4 border-b border-[color:var(--line)]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] flex items-center justify-center text-white">
-            <Sparkles size={16} />
-          </div>
-          <div>
-            <div className="text-[15px] font-semibold text-[color:var(--ink-1)] leading-tight">1Moby</div>
-            <div className="text-[10.5px] uppercase tracking-[.12em] text-[color:var(--ink-5)] mt-0.5">
-              Intelligence
-            </div>
-          </div>
-        </div>
+      <div
+        className="px-5 pt-5 pb-4 border-b border-[color:var(--line)]"
+        style={{
+          backgroundImage: [
+            "radial-gradient(rgba(7, 29, 126, 0.42) 0%, transparent 42%)",
+            "url(/assets/intro/about_bg.webp)",
+            "linear-gradient(140deg, #1d1f2a -10%, #006bff 58%, #1893f0 74%, #ffa400 88%, #fc4c02 96%)",
+          ].join(", "),
+          backgroundRepeat: "no-repeat, no-repeat, no-repeat",
+          backgroundSize: "150% 130%, cover, 100% 100%",
+          backgroundPosition: "center, left 58% top 0, center",
+        }}
+      >
+        <img
+          src={INTRO_ASSETS.logo}
+          alt="1Moby"
+          className="block h-8 w-auto"
+          style={{ filter: "brightness(0) invert(1)" }}
+        />
       </div>
 
       {/* Nav */}
