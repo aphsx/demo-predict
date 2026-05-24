@@ -13,7 +13,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "Operate",
     items: [
-      { href: "/",          label: "Command Center", icon: LayoutDashboard },
+      { href: "/",          label: "Dashboard", icon: LayoutDashboard },
       { href: "/playbooks", label: "Action Queue",   icon: ListChecks },
       { href: "/customers", label: "Customers",      icon: Users },
       { href: "/alerts",    label: "Alerts",         icon: Bell },

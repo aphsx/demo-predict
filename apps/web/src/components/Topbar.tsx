@@ -7,7 +7,7 @@ import { useRunStore } from "@/lib/runStore";
 import { useSession, signOut } from "@/lib/auth-client";
 
 const TITLE_MAP: Record<string, { title: string; sub: string }> = {
-  "/": { title: "Command Center", sub: "ภาพรวมพอร์ตลูกค้าและสัญญาณเตือน real-time" },
+  "/": { title: "Dashboard", sub: "ภาพรวมพอร์ตลูกค้าและสัญญาณเตือน real-time" },
   "/playbooks": { title: "Action Queue", sub: "งานที่ควรทำวันนี้ จัดอันดับด้วย Priority Score" },
   "/customers": { title: "Customers", sub: "ค้นหา · กรอง · เจาะลึกลูกค้ารายบุคคล" },
   "/alerts": { title: "Alerts", sub: "Anomaly · Drift · Threshold breach" },

@@ -1,16 +1,15 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Users, AlertTriangle, Wallet, Zap, Flame, ShieldOff, ArrowUpRight,
-  Sparkles, RefreshCw, ChevronRight, Activity,
+  Users, Zap, ArrowUpRight, Activity,
 } from "lucide-react";
 import {
-  KpiCard, SectionCard, StatusPill, AlertItem,
-  PageHeader, ActionChip, Skeleton, lifecycleTone,
+  KpiCard, SectionCard, StatusPill,
+  Skeleton, lifecycleTone,
 } from "@/components/ui";
-import { fetchSummary, fetchPredictions } from "@/lib/api";
+import { fetchSummary } from "@/lib/api";
 import { getDisplayError } from "@/lib/ui-error";
 import { useRunStore } from "@/lib/runStore";
 
@@ -24,7 +23,6 @@ const LIFECYCLE_COLOR: Record<string, string> = {
 export default function Dashboard() {
   const { runId } = useRunStore();
   const [summary, setSummary] = useState<any>(null);
-  const [preview, setPreview] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -32,18 +30,13 @@ export default function Dashboard() {
     if (!runId) { setLoading(false); return; }
     setLoading(true);
     setLoadError(null);
-    Promise.all([
-      fetchSummary(runId),
-      fetchPredictions(runId, { page: "1", page_size: "8" }),
-    ])
-      .then(([s, pag]) => {
+    fetchSummary(runId)
+      .then((s) => {
         setSummary(s);
-        setPreview(Array.isArray(pag.data) ? pag.data : []);
         setLoading(false);
       })
       .catch((e) => {
         setSummary(null);
-        setPreview([]);
         setLoadError(getDisplayError(e, "โหลดข้อมูลไม่สำเร็จ"));
         setLoading(false);
       });
@@ -56,260 +49,251 @@ export default function Dashboard() {
 
   const totalCustomers = summary?.total_customers || 0;
   const activePaidCount = lc["Active Paid"]?.total || 0;
-
-  const anomalies = useMemo(() => buildAnomalies(summary), [summary]);
+  const activeFreeCount = lc["Active Free"]?.total || 0;
+  const churnedCount = lc["Churned"]?.total || 0;
+  const ghostCount = lc["Ghost"]?.total || 0;
 
   return (
-    <div className="pb-12">
-      <PageHeader
-        eyebrow="Today · Real-time"
-        title="ภาพรวมพอร์ตลูกค้า"
-        actions={
-          <>
-            <Link href="/playbooks" className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1.5">
-              <Zap size={14} className="text-[color:var(--moby-600)]" /> Open action queue
-            </Link>
-            <Link href="/customers" className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] inline-flex items-center gap-1.5">
-              <Users size={14} /> Browse customers
-            </Link>
-          </>
-        }
-      />
+    <div className="px-8 py-6 pb-12 space-y-6">
+      <section
+        className="relative overflow-hidden rounded-[30px] border border-white/20 px-6 py-6 text-white shadow-[0_28px_80px_rgba(10,18,38,0.22)] sm:px-7 lg:px-8"
+        style={{
+          backgroundImage: [
+            "radial-gradient(rgba(7, 29, 126, 0.52) 0%, transparent 42%)",
+            "url(/assets/intro/about_bg.webp)",
+            "linear-gradient(180deg, rgba(0,0,0,0.24) 0%, rgba(0,0,0,0.04) 38%, rgba(0,0,0,0.16) 100%)",
+            "linear-gradient(140deg, #1d1f2a -10%, #006bff 57%, #1893f0 72%, #ffa400 87%, #fc4c02 97%)",
+          ].join(", "),
+          backgroundRepeat: "no-repeat, no-repeat, no-repeat, no-repeat",
+          backgroundSize: "140% 150%, cover, 100% 100%, 100% 100%",
+          backgroundPosition: "center, center, center, center",
+        }}
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.10),transparent_45%)]" />
+        <div className="relative grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_360px]">
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone="info">Dashboard</StatusPill>
+              <StatusPill tone="brand">{runId ? `Run ${runId.slice(0, 8)}` : "No run selected"}</StatusPill>
+              <StatusPill tone="neutral">{loading ? "Syncing live data" : "Live portfolio snapshot"}</StatusPill>
+            </div>
 
-      <div className="px-8 mt-4 space-y-5">
+            <div className="max-w-3xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
+                Portfolio intelligence
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-[42px]">
+                Dashboard
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px]">
+                มองภาพรวมลูกค้าทั้งพอร์ตในหน้าเดียว ทั้ง churn risk, conversion, win-back
+                และสัญญาณที่ควรลงมือก่อน เพื่อให้ทีมตัดสินใจได้เร็วขึ้น
+              </p>
+            </div>
 
-        {loadError && (
-          <div className="rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
-            {loadError}
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/customers"
+                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/20 bg-white/96 px-4 text-[13px] font-semibold text-slate-900 transition hover:bg-white"
+              >
+                <Users size={15} />
+                Browse customers
+              </Link>
+              <Link
+                href="/playbooks"
+                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/22 bg-white/12 px-4 text-[13px] font-semibold text-white transition hover:bg-white/18"
+              >
+                <Zap size={15} />
+                Open action queue
+              </Link>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <HeroMetric
+                label="Active Paid"
+                value={activePaidCount}
+                detail={`Avg churn ${formatPercent(ap.avg_churn)}`}
+              />
+              <HeroMetric
+                label="Active Free"
+                value={activeFreeCount}
+                detail={`Avg convert ${formatPercent(cv.avg_convert)}`}
+              />
+              <HeroMetric
+                label="Churned"
+                value={churnedCount}
+                detail={`Avg comeback ${formatPercent(wb.avg_comeback)}`}
+              />
+            </div>
           </div>
-        )}
 
-        {!loading && !loadError && totalCustomers > 0 && activePaidCount === 0 && (
-          <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-[13px] text-[color:var(--ink-3)]">
-            ชุดข้อมูลนี้ไม่มีลูกค้า Active Paid — ดูได้ที่ Active Free, Churned หรือ Ghost ใน Customers
-          </div>
-        )}
+          <div className="rounded-[26px] border border-white/18 bg-[rgba(255,255,255,0.14)] p-5 backdrop-blur-xl">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/62">
+                  Snapshot
+                </p>
+                <h2 className="mt-1 text-lg font-semibold text-white">Today&apos;s focus</h2>
+              </div>
+              <Activity size={18} className="text-white/72" />
+            </div>
 
-        {/* KPI strip */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {loading ? (
-            [...Array(4)].map((_, i) => <Skeleton key={i} className="h-[112px]" />)
-          ) : (
-            <>
-              <KpiCard
+            <div className="mt-5 space-y-3">
+              <QuickSignal
                 label="Total customers"
                 value={totalCustomers}
-                hint="ในรอบประเมินนี้"
-                accent="slate"
+                detail="ในรอบประเมินล่าสุด"
               />
-              <KpiCard
-                label="Avg Churn Probability"
-                value={Number(ap.avg_churn || 0)}
-                format="percent"
-                hint="Active Paid cohort"
-                accent="rose"
-              />
-              <KpiCard
-                label="Avg CLV (6m)"
-                value={Number(ap.avg_clv || 0)}
-                format="currency"
-                hint="Active Paid cohort"
-                accent="blue"
-              />
-            </>
-          )}
-        </div>
-
-        {/* Lifecycle + Anomaly */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          {/* Lifecycle */}
-          <SectionCard
-            title="Customer Lifecycle"
-            hint="กระจายของลูกค้าใน 4 stage หลัก"
-            className="xl:col-span-2"
-            right={
-              <Link href="/customers" className="text-[12px] text-[color:var(--moby-700)] hover:underline">
-                View all →
-              </Link>
-            }
-          >
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <LifecycleTile
-                color={LIFECYCLE_COLOR["Active Paid"]}
-                label="Active Paid"
-                count={lc["Active Paid"]?.total || 0}
-                detail={`Avg churn ${((ap.avg_churn || 0) * 100).toFixed(1)}% · Avg CLV ${Number(ap.avg_clv || 0).toLocaleString()} ฿`}
-                href="/customers?lifecycle_stage=Active%20Paid"
-              />
-              <LifecycleTile
-                color={LIFECYCLE_COLOR["Active Free"]}
-                label="Active Free"
-                count={lc["Active Free"]?.total || 0}
-                detail={`Avg convert ${((cv.avg_convert || 0) * 100).toFixed(1)}%`}
-                href="/customers?lifecycle_stage=Active%20Free"
-              />
-              <LifecycleTile
-                color={LIFECYCLE_COLOR["Churned"]}
-                label="Churned"
-                count={lc["Churned"]?.total || 0}
-                detail={`Avg comeback ${((wb.avg_comeback || 0) * 100).toFixed(1)}%`}
-                href="/customers?lifecycle_stage=Churned"
-              />
-              <LifecycleTile
-                color={LIFECYCLE_COLOR["Ghost"]}
-                label="Ghost"
-                count={lc["Ghost"]?.total || 0}
-                detail="ไม่เคยใช้งาน"
-                href="/customers?lifecycle_stage=Ghost"
-              />
-            </div>
-
-                      </SectionCard>
-
-          {/* Anomaly feed */}
-          <SectionCard
-            title="Real-time Signals"
-            hint="ตรวจจับ anomaly · drift · threshold breach"
-            right={
-              <Link href="/alerts" className="text-[12px] text-[color:var(--moby-700)] hover:underline">
-                View all →
-              </Link>
-            }
-          >
-            <div className="-mx-5 -my-5">
-              {anomalies.length === 0 && !loading && (
-                <div className="px-5 py-10 text-center text-[12.5px] text-[color:var(--ink-5)]">
-                  ระบบไม่พบสัญญาณผิดปกติ
-                </div>
-              )}
-              {loading && (
-                <div className="p-5 space-y-2">
-                  <Skeleton className="h-12" />
-                  <Skeleton className="h-12" />
-                  <Skeleton className="h-12" />
-                </div>
-              )}
-              {!loading && anomalies.map((a, i) => (
-                <AlertItem
-                  key={i}
-                  severity={a.severity as any}
-                  title={a.title}
-                  time={a.time}
-                >
-                  {a.body}
-                </AlertItem>
-              ))}
-            </div>
-          </SectionCard>
-        </div>
-
-        {/* Action queue preview + Conversion / Win-back */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <SectionCard
-            title="Top accounts to act on"
-            hint="เรียงตาม churn probability (ทุก lifecycle stage)"
-            className="xl:col-span-2"
-            right={<Link href="/customers" className="text-[12px] text-[color:var(--moby-700)] hover:underline">View all →</Link>}
-          >
-            <div className="-m-2 overflow-x-auto">
-              <table className="table-base">
-                <thead>
-                  <tr>
-                    <th>Account</th>
-                    <th>Stage</th>
-                    <th>Churn Prob</th>
-                    <th>CLV (6m)</th>
-                    <th>Comeback Prob</th>
-                    <th>Convert Prob</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.map((r: any) => (
-                    <tr key={r.acc_id}>
-                      <td className="num text-[color:var(--moby-700)]">{r.acc_id}</td>
-                      <td><StatusPill tone={lifecycleTone(r.lifecycle_stage)}>{r.lifecycle_stage}</StatusPill></td>
-                      <td className="num">
-                        {r.churn_probability != null
-                          ? `${(r.churn_probability * 100).toFixed(1)}%`
-                          : "—"}
-                      </td>
-                      <td className="num">
-                        {r.predicted_clv_6m != null
-                          ? `${Number(r.predicted_clv_6m).toLocaleString()} ฿`
-                          : "—"}
-                      </td>
-                      <td className="num">
-                        {r.comeback_probability != null
-                          ? `${(r.comeback_probability * 100).toFixed(1)}%`
-                          : "—"}
-                      </td>
-                      <td className="num">
-                        {r.conversion_probability != null
-                          ? `${(r.conversion_probability * 100).toFixed(1)}%`
-                          : "—"}
-                      </td>
-                      <td className="text-right">
-                        <Link href={`/customers/${r.acc_id}`} className="inline-flex items-center gap-0.5 text-[12px] text-[color:var(--moby-700)] hover:underline">
-                          Brief <ChevronRight size={12} />
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                  {!loading && preview.length === 0 && (
-                    <tr><td colSpan={8} className="text-center text-[color:var(--ink-5)] py-6">ยังไม่มีลูกค้า</td></tr>
-                  )}
-                  {loading && [...Array(5)].map((_, i) => (
-                    <tr key={i}><td colSpan={8}><Skeleton className="h-6 my-1" /></td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Growth signals" hint="Conversion · Win-back" >
-            <div className="space-y-4">
-              <SignalRow
-                icon={<Sparkles size={14} />}
-                label="Active Free users"
-                value={lc["Active Free"]?.total || 0}
-                sub={`Avg convert ${(((cv.avg_convert || 0) * 100)).toFixed(1)}%`}
-                tone="violet"
-                href="/customers?lifecycle_stage=Active%20Free"
-              />
-              <SignalRow
-                icon={<Flame size={14} />}
-                label="Churned customers"
-                value={lc["Churned"]?.total || 0}
-                sub={`Avg comeback ${(((wb.avg_comeback || 0) * 100)).toFixed(1)}%`}
-                tone="amber"
-                href="/customers?lifecycle_stage=Churned"
-              />
-              <SignalRow
-                icon={<Wallet size={14} />}
-                label="Active Paid customers"
-                value={lc["Active Paid"]?.total || 0}
-                sub={`Avg churn ${(((ap.avg_churn || 0) * 100)).toFixed(1)}% · Avg CLV ${Number(ap.avg_clv || 0).toLocaleString()} ฿`}
-                tone="blue"
-                href="/customers?lifecycle_stage=Active%20Paid"
-              />
-              <SignalRow
-                icon={<ShieldOff size={14} />}
+              <QuickSignal
                 label="Ghost accounts"
-                value={lc["Ghost"]?.total || 0}
-                sub="ไม่เคยใช้งาน"
-                tone="rose"
-                href="/customers?lifecycle_stage=Ghost"
+                value={ghostCount}
+                detail="บัญชีที่ยังไม่เคยใช้งาน"
+              />
+              <QuickSignal
+                label="Conversion opportunities"
+                value={activeFreeCount}
+                detail={activeFreeCount > 0 ? "ฐานที่พร้อมผลักไป paid" : "ยังไม่พบกลุ่ม conversion เด่น"}
               />
             </div>
-          </SectionCard>
+
+            <div className="mt-5 rounded-2xl border border-white/12 bg-black/10 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/62">
+                  Priority pulse
+                </span>
+                <ArrowUpRight size={13} className="text-white/62" />
+              </div>
+              <p className="mt-2 text-[13px] leading-6 text-white/80">
+                {activePaidCount > 0
+                  ? `${activePaidCount.toLocaleString()} Active Paid accounts กำลังเป็น core revenue base ของรอบนี้`
+                  : "ยังไม่มี Active Paid ใน run นี้ ให้โฟกัสที่ conversion และ win-back แทน"}
+              </p>
+            </div>
+          </div>
         </div>
+      </section>
+
+      {loadError && (
+        <div className="rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
+          {loadError}
+        </div>
+      )}
+
+      {!loading && !loadError && totalCustomers > 0 && activePaidCount === 0 && (
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[linear-gradient(180deg,#ffffff,rgba(250,251,253,0.96))] px-4 py-3 text-[13px] text-[color:var(--ink-3)] shadow-[var(--shadow-1)]">
+          ชุดข้อมูลนี้ไม่มีลูกค้า Active Paid — ดูได้ที่ Active Free, Churned หรือ Ghost ใน Customers
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {loading ? (
+          [...Array(4)].map((_, i) => <Skeleton key={i} className="h-[124px]" />)
+        ) : (
+          <>
+            <KpiCard
+              label="Total customers"
+              value={totalCustomers}
+              hint="Portfolio coverage"
+              accent="slate"
+            />
+            <KpiCard
+              label="Active paid base"
+              value={activePaidCount}
+              hint="Core revenue cohort"
+              accent="blue"
+            />
+            <KpiCard
+              label="Avg churn probability"
+              value={Number(ap.avg_churn || 0) * 100}
+              format="percent"
+              hint="Active Paid cohort"
+              accent="rose"
+            />
+            <KpiCard
+              label="Avg CLV (6m)"
+              value={Number(ap.avg_clv || 0)}
+              format="currency"
+              hint="Revenue forecast"
+              accent="amber"
+            />
+          </>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <SectionCard
+          title="Lifecycle mix"
+          hint="กระจายของลูกค้าใน 4 stage หลัก"
+          className="xl:col-span-2"
+          right={
+            <Link href="/customers" className="text-[12px] text-[color:var(--moby-700)] hover:underline">
+              View all →
+            </Link>
+          }
+        >
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <LifecycleTile
+              color={LIFECYCLE_COLOR["Active Paid"]}
+              label="Active Paid"
+              count={activePaidCount}
+              detail={`Avg churn ${formatPercent(ap.avg_churn)} · Avg CLV ${formatCurrency(ap.avg_clv)}`}
+              href="/customers?lifecycle_stage=Active%20Paid"
+            />
+            <LifecycleTile
+              color={LIFECYCLE_COLOR["Active Free"]}
+              label="Active Free"
+              count={activeFreeCount}
+              detail={`Avg convert ${formatPercent(cv.avg_convert)}`}
+              href="/customers?lifecycle_stage=Active%20Free"
+            />
+            <LifecycleTile
+              color={LIFECYCLE_COLOR["Churned"]}
+              label="Churned"
+              count={churnedCount}
+              detail={`Avg comeback ${formatPercent(wb.avg_comeback)}`}
+              href="/customers?lifecycle_stage=Churned"
+            />
+            <LifecycleTile
+              color={LIFECYCLE_COLOR["Ghost"]}
+              label="Ghost"
+              count={ghostCount}
+              detail="ไม่เคยใช้งาน"
+              href="/customers?lifecycle_stage=Ghost"
+            />
+          </div>
+        </SectionCard>
       </div>
     </div>
   );
 }
 
 /* ── helpers ──────────────────────────────────────────── */
+
+function HeroMetric({
+  label, value, detail,
+}: { label: string; value: number; detail: string }) {
+  return (
+    <div className="rounded-2xl border border-white/14 bg-white/10 px-4 py-3 backdrop-blur-sm">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/60">{label}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">{value.toLocaleString()}</div>
+      <div className="mt-1 text-[11px] text-white/68">{detail}</div>
+    </div>
+  );
+}
+
+function QuickSignal({
+  label, value, detail,
+}: { label: string; value: number; detail: string }) {
+  return (
+    <div className="rounded-2xl border border-white/12 bg-white/8 px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[12px] text-white/72">{label}</span>
+        <span className="text-xl font-semibold text-white">{value.toLocaleString()}</span>
+      </div>
+      <div className="mt-1 text-[11px] text-white/56">{detail}</div>
+    </div>
+  );
+}
 
 function LifecycleTile({
   color, label, count, detail, href,
@@ -329,45 +313,10 @@ function LifecycleTile({
   );
 }
 
-function SignalRow({
-  icon, label, value, sub, tone, href,
-}: { icon: any; label: string; value: number; sub: string; tone: "violet" | "amber" | "rose" | "blue"; href: string }) {
-  const bg = ({ violet: "#f5f3ff", amber: "#fffbeb", rose: "#fef2f2", blue: "#eff6ff" } as const)[tone];
-  const fg = ({ violet: "#6d28d9", amber: "#b45309", rose: "#b91c1c", blue: "#1d4ed8" } as const)[tone];
-  return (
-    <Link href={href} className="flex items-center gap-3 p-3 rounded-lg hover:bg-[color:var(--surface-2)]">
-      <div className="w-8 h-8 rounded-lg grid place-items-center" style={{ background: bg, color: fg }}>{icon}</div>
-      <div className="flex-1 min-w-0">
-        <div className="text-[12.5px] text-[color:var(--ink-2)] truncate">{label}</div>
-        <div className="text-[11px] text-[color:var(--ink-5)] truncate">{sub}</div>
-      </div>
-      <div className="num text-[18px] font-semibold text-[color:var(--ink-1)]">{value.toLocaleString()}</div>
-      <ChevronRight size={14} className="text-[color:var(--ink-5)]" />
-    </Link>
-  );
+function formatPercent(value: unknown) {
+  return `${(Number(value || 0) * 100).toFixed(1)}%`;
 }
 
-/* derive anomaly signals from summary numbers */
-function buildAnomalies(summary: any): { severity: string; title: string; time: string; body: string }[] {
-  if (!summary) return [];
-  const out: any[] = [];
-  const ap = summary.active_paid || {};
-
-  const avgChurn = ap.avg_churn || 0;
-  if (avgChurn > 0.4) {
-    out.push({
-      severity: "danger",
-      title: `High avg churn probability at ${(avgChurn * 100).toFixed(1)}%`,
-      body: `Active Paid cohort มีค่าเฉลี่ย churn สูง — ตรวจสอบ retention strategy`,
-      time: "now",
-    });
-  }
-  // Always show at least 1 info signal
-  out.push({
-    severity: "info",
-    title: "Model freshness ปกติ",
-    body: "ไม่มี drift ตรวจพบ",
-    time: "5m",
-  });
-  return out;
+function formatCurrency(value: unknown) {
+  return `${Number(value || 0).toLocaleString()} ฿`;
 }
