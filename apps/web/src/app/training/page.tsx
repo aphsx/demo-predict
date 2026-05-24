@@ -11,14 +11,14 @@ import {
   Play, CheckCircle2, AlertCircle, RefreshCw, Database, Upload, FileSpreadsheet,
 } from "lucide-react";
 import {
-  PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
+  PageHeader, SectionCard, StatusPill, Skeleton, EmptyState, ProgressMeter,
 } from "@/components/ui";
 import {
   fetchModelVersions,
   fetchActiveModelVersions,
   trainModels,
   fetchTrainDataSources,
-  uploadTrainDataFile,
+  uploadTrainDataFileWithProgress,
   type TrainDataSource,
 } from "@/lib/api";
 import { getDisplayError } from "@/lib/ui-error";
@@ -52,6 +52,10 @@ export default function TrainingPage() {
   const [loading, setLoading] = useState(true);
   const [training, setTraining] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [importStep, setImportStep] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [importName, setImportName] = useState("");
   const [importClient, setImportClient] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
@@ -89,18 +93,36 @@ export default function TrainingPage() {
     const name = importName.trim() || file.name.replace(/\.xlsx$/i, "");
     setImporting(true);
     setImportError(null);
+    setImportSuccess(null);
+    setImportProgress(0);
+    setImportStep("Starting import…");
     try {
-      await uploadTrainDataFile(
+      const result = await uploadTrainDataFileWithProgress(
         file,
         name,
+        (event) => {
+          setImportProgress(event.progress);
+          setImportStep(event.step);
+        },
         importClient.trim() || undefined
       );
       setImportName("");
+      setPendingFile(null);
+      setImportSuccess(`Imported ${result.source_id.slice(0, 8)}… (${Object.keys(result.sheet_manifest).length} sheets)`);
       await load();
     } catch (e) {
-      setImportError(getDisplayError(e, "Import failed"));
+      const err = e as Error & { code?: string; source_id?: string };
+      if (err.code === "DUPLICATE_FILE" && err.source_id) {
+        setImportError(
+          `${err.message} (existing source ${err.source_id.slice(0, 8)}…)`
+        );
+      } else {
+        setImportError(getDisplayError(e, "Import failed"));
+      }
     } finally {
       setImporting(false);
+      setImportProgress(0);
+      setImportStep("");
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
@@ -196,7 +218,11 @@ export default function TrainingPage() {
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
-                  if (f) void handleImportFile(f);
+                  if (f) {
+                    setPendingFile(f);
+                    setImportError(null);
+                    setImportSuccess(null);
+                  }
                 }}
               />
               <button
@@ -205,15 +231,43 @@ export default function TrainingPage() {
                 onClick={() => fileInputRef.current?.click()}
                 className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] hover:bg-[color:var(--surface-1)] inline-flex items-center gap-1.5 disabled:opacity-50"
               >
+                <Upload size={15} />
+                Choose .xlsx
+              </button>
+              <button
+                type="button"
+                disabled={importing || !pendingFile}
+                onClick={() => pendingFile && void handleImportFile(pendingFile)}
+                className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
                 {importing ? (
                   <RefreshCw size={15} className="animate-spin" />
                 ) : (
-                  <Upload size={15} />
+                  <FileSpreadsheet size={15} />
                 )}
-                {importing ? "Importing…" : "Import .xlsx"}
+                {importing ? "Importing…" : "Import"}
               </button>
             </div>
           </div>
+          {pendingFile && !importing && (
+            <p className="mt-2 text-[12px] text-[color:var(--ink-4)]">
+              Selected: <span className="font-medium text-[color:var(--ink-2)]">{pendingFile.name}</span>
+              {" "}({(pendingFile.size / (1024 * 1024)).toFixed(2)} MB)
+            </p>
+          )}
+          {importing && (
+            <div className="mt-4 space-y-1">
+              <ProgressMeter
+                value={importProgress}
+                max={100}
+                tone="blue"
+                label={importStep || "Importing…"}
+              />
+            </div>
+          )}
+          {importSuccess && !importing && (
+            <p className="mt-3 text-[13px] text-[color:var(--ok)]">{importSuccess}</p>
+          )}
           {importError && (
             <p className="mt-3 text-[13px] text-[color:var(--danger)]">{importError}</p>
           )}

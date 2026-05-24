@@ -24,6 +24,13 @@ import {
   TRAIN_SHEET_CONFIG,
   type TrainSheetName,
 } from "./train-excel-contract";
+import {
+  type TrainImportProgressEvent,
+  progressAfterSheet,
+  progressAfterValidate,
+  progressBeforeSheet,
+  progressFinalize,
+} from "./train-import-progress";
 
 type CellJson = string | number | boolean | null | Record<string, unknown>;
 
@@ -159,8 +166,13 @@ export async function importTrainExcel(params: {
   client_label?: string | null;
   notes?: string | null;
   imported_by: string;
+  onProgress?: (event: TrainImportProgressEvent) => void;
 }): Promise<TrainImportResult> {
+  const emit = params.onProgress;
+
   const checksum = createHash("sha256").update(params.buffer).digest("hex");
+
+  emit?.({ progress: 0, step: "Reading workbook…" });
 
   const wb = XLSX.read(params.buffer, { type: "buffer", cellDates: true });
   for (const req of TRAIN_REQUIRED_SHEETS) {
@@ -202,19 +214,41 @@ export async function importTrainExcel(params: {
   const sourceId = created.id;
   const manifest: Record<string, number> = {};
 
+  emit?.({
+    progress: progressAfterValidate(),
+    step: "Catalog created — importing sheets…",
+  });
+
   try {
     const sheetOrder = wb.SheetNames.filter(
       (n): n is TrainSheetName => n in TRAIN_SHEET_CONFIG
     );
 
-    for (const sheetName of sheetOrder) {
+    for (let i = 0; i < sheetOrder.length; i++) {
+      const sheetName = sheetOrder[i];
       const cfg = TRAIN_SHEET_CONFIG[sheetName];
       const table = TRAIN_RAW_TABLE_BY_NAME[cfg.table];
       if (!table) throw new Error(`No table mapping for ${cfg.table}`);
 
+      emit?.({
+        progress: progressBeforeSheet(i, sheetOrder.length),
+        step: `Importing: ${sheetName}…`,
+        sheet: sheetName,
+      });
+
       const rows = parseSheetRows(params.buffer, sheetName, true);
-      manifest[sheetName] = await insertSheetRows(table, sourceId, rows);
+      const rowCount = await insertSheetRows(table, sourceId, rows);
+      manifest[sheetName] = rowCount;
+
+      emit?.({
+        progress: progressAfterSheet(i, sheetOrder.length),
+        step: `Imported: ${sheetName} (${rowCount.toLocaleString()} rows)`,
+        sheet: sheetName,
+        rows: rowCount,
+      });
     }
+
+    emit?.({ progress: 97, step: "Finalizing…" });
 
     await db
       .update(trainDataSources)
@@ -224,6 +258,8 @@ export async function importTrainExcel(params: {
         sheetManifest: manifest,
       })
       .where(eq(trainDataSources.id, sourceId));
+
+    emit?.({ progress: progressFinalize(), step: "Import complete" });
 
     return {
       source_id: sourceId,

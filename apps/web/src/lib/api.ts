@@ -313,16 +313,92 @@ export async function fetchTrainDataSources(): Promise<TrainDataSource[]> {
   return asArray<TrainDataSource>(body);
 }
 
-export async function uploadTrainDataFile(
-  file: File,
-  name: string,
-  client_label?: string
-): Promise<{
+export interface TrainImportProgress {
+  progress: number;
+  step: string;
+  sheet?: string;
+  rows?: number;
+}
+
+export interface TrainImportDone {
   source_id: string;
   import_status: string;
   sheet_manifest: Record<string, number>;
   file_checksum_sha256: string;
-}> {
+}
+
+/** Import with server-driven SSE progress (per-sheet DB inserts). */
+export async function uploadTrainDataFileWithProgress(
+  file: File,
+  name: string,
+  onProgress: (event: TrainImportProgress) => void,
+  client_label?: string
+): Promise<TrainImportDone> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("name", name);
+  if (client_label) fd.append("client_label", client_label);
+
+  const res = await apiFetch("/api/train-data-sources/import/stream", {
+    method: "POST",
+    body: fd,
+  });
+
+  if (!res.ok || !res.body) {
+    const body = await parseJson(res);
+    throw new Error(isApiError(body) ? body.message : `Import failed (${res.status})`);
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let result: TrainImportDone | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+
+    const blocks = buf.split("\n\n");
+    buf = blocks.pop() ?? "";
+
+    for (const block of blocks) {
+      if (!block.trim()) continue;
+      let eventName = "message";
+      let dataLine = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event: ")) eventName = line.slice(7).trim();
+        else if (line.startsWith("data: ")) dataLine = line.slice(6);
+      }
+      if (!dataLine) continue;
+
+      const payload = JSON.parse(dataLine) as Record<string, unknown>;
+      if (eventName === "progress") {
+        onProgress(payload as unknown as TrainImportProgress);
+      } else if (eventName === "done") {
+        result = payload as unknown as TrainImportDone;
+      } else if (eventName === "error") {
+        const err = new Error(String(payload.message ?? "Import failed")) as Error & {
+          code?: string;
+          source_id?: string;
+        };
+        if (typeof payload.code === "string") err.code = payload.code;
+        if (typeof payload.source_id === "string") err.source_id = payload.source_id;
+        throw err;
+      }
+    }
+  }
+
+  if (!result) throw new Error("Import ended without completion");
+  return result;
+}
+
+/** JSON import (no progress stream) — prefer uploadTrainDataFileWithProgress in UI. */
+export async function uploadTrainDataFile(
+  file: File,
+  name: string,
+  client_label?: string
+): Promise<TrainImportDone> {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("name", name);
@@ -333,12 +409,7 @@ export async function uploadTrainDataFile(
   if (!res.ok) {
     throw new Error(isApiError(body) ? body.message : `Import failed (${res.status})`);
   }
-  return body as {
-    source_id: string;
-    import_status: string;
-    sheet_manifest: Record<string, number>;
-    file_checksum_sha256: string;
-  };
+  return body as TrainImportDone;
 }
 
 // ── [NEW] Predict raw data import (per run) ───────────────────────────────────

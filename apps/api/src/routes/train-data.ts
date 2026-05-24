@@ -9,6 +9,7 @@ import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { importTrainExcel } from "../lib/train-import";
+import { sseFrame } from "../lib/sse";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -139,6 +140,72 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         set.status = 400;
         return { message: err.message ?? "Import failed" };
       }
+    },
+    {
+      body: t.Object({
+        file: t.File(),
+        name: t.String({ minLength: 1 }),
+        client_label: t.Optional(t.String()),
+        notes: t.Optional(t.String()),
+      }),
+    }
+  )
+  .post(
+    "/import/stream",
+    async ({ body, userId, set }) => {
+      const filename = body.file.name ?? "upload.xlsx";
+      if (!filename.toLowerCase().endsWith(".xlsx")) {
+        set.status = 400;
+        return { message: "Only .xlsx files are supported" };
+      }
+
+      const buffer = Buffer.from(await body.file.arrayBuffer());
+      if (buffer.length > MAX_UPLOAD_BYTES) {
+        set.status = 413;
+        return { message: `File exceeds ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB limit` };
+      }
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (event: string, data: unknown) => {
+            controller.enqueue(sseFrame(event, JSON.stringify(data)));
+          };
+
+          try {
+            const result = await importTrainExcel({
+              buffer,
+              filename,
+              name: body.name,
+              client_label: body.client_label ?? null,
+              notes: body.notes ?? null,
+              imported_by: userId!,
+              onProgress: (event) => send("progress", event),
+            });
+            send("done", result);
+          } catch (e) {
+            const err = e as Error & { code?: string; source_id?: string };
+            if (err.code === "DUPLICATE_FILE") {
+              send("error", {
+                message: err.message,
+                code: "DUPLICATE_FILE",
+                source_id: err.source_id,
+              });
+            } else {
+              send("error", { message: err.message ?? "Import failed" });
+            }
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
     },
     {
       body: t.Object({
