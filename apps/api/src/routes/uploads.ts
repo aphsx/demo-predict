@@ -1,3 +1,8 @@
+/**
+ * [LEGACY] Predict-path Excel upload: POST /runs/:id/upload → raw_customers/payments/usage
+ * + Arq prediction pipeline. Will be superseded by predict_data_sources + predict_raw_sheet_*.
+ * For training data use [NEW] routes/train-data.ts instead.
+ */
 import Elysia, { t } from "elysia";
 import * as XLSX from "xlsx";
 import { eq, max, min, sql } from "drizzle-orm";

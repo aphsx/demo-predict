@@ -280,7 +280,68 @@ export async function trainModels(cutoff_date?: string): Promise<Record<string, 
   );
 }
 
-// ── File upload — manual fetch (multipart/form-data) ──────────────────────────
+// ── [NEW] Train raw data import ───────────────────────────────────────────────
+// train_data_sources + train_raw_sheet_*. NOT uploadFile (/runs).
+// See docs/DATA-PIPELINE-MIGRATION.md
+
+export interface TrainDataSource {
+  id: string;
+  name: string;
+  client_label: string | null;
+  original_filename: string;
+  file_checksum_sha256: string;
+  file_size_bytes: number | null;
+  import_status: string;
+  imported_at: string | null;
+  sheet_manifest: Record<string, number> | null;
+  notes: string | null;
+  error_message: string | null;
+  imported_by: string | null;
+  importer_name: string | null;
+  importer_email: string | null;
+  created_at: string;
+}
+
+export async function fetchTrainDataSources(): Promise<TrainDataSource[]> {
+  const res = await apiFetch("/api/train-data-sources");
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(
+      isApiError(body) ? body.message : `Failed to load train data sources (${res.status})`
+    );
+  }
+  return asArray<TrainDataSource>(body);
+}
+
+export async function uploadTrainDataFile(
+  file: File,
+  name: string,
+  client_label?: string
+): Promise<{
+  source_id: string;
+  import_status: string;
+  sheet_manifest: Record<string, number>;
+  file_checksum_sha256: string;
+}> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("name", name);
+  if (client_label) fd.append("client_label", client_label);
+
+  const res = await apiFetch("/api/train-data-sources/import", { method: "POST", body: fd });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(isApiError(body) ? body.message : `Import failed (${res.status})`);
+  }
+  return body as {
+    source_id: string;
+    import_status: string;
+    sheet_manifest: Record<string, number>;
+    file_checksum_sha256: string;
+  };
+}
+
+// ── [LEGACY] Predict run file upload — manual fetch (multipart/form-data) ─────
 
 export async function retryRun(runId: string): Promise<{ run_id: string; status: string; message: string }> {
   const res = await apiFetch(`/api/runs/${runId}/retry`, { method: "POST" });

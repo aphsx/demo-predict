@@ -32,12 +32,13 @@ const PRIMARY_GROUPS: { title: string; items: Item[] }[] = [
   },
 ];
 
+// Footer nav: [LEGACY] /runs = predict upload · /training = [NEW] train raw import + [LEGACY] model train
 const FOOTER_GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "Prediction",
     items: [
-      { href: "/runs", label: "Prediction Runs", icon: Database },
-      { href: "/training", label: "Model Training", icon: Activity },
+      { href: "/runs", label: "Prediction Runs", icon: Database },       // [LEGACY] predict raw_*
+      { href: "/training", label: "Model Training", icon: Activity },   // [NEW] train raw + [LEGACY] train models
     ],
   },
   {

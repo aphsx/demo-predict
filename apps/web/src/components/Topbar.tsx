@@ -13,6 +13,7 @@ const TITLE_MAP: Record<string, { title: string; sub: string }> = {
   "/alerts": { title: "Alerts", sub: "Anomaly · Drift · Threshold breach" },
   "/model-performance": { title: "Model Health", sub: "Quality · Calibration · Feature importance" },
   "/runs": { title: "Pipelines & Data", sub: "Ingest · Validate · Predict" },
+  "/training": { title: "Model Training", sub: "Import training data · Train models" },
   "/ai-chat": { title: "AI Assistant", sub: "Ask anything about your customers and predictions" },
 };
 

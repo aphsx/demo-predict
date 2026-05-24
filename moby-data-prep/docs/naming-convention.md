@@ -18,7 +18,7 @@ Prefix by **purpose** and **layer** so train, predict, and clean never collide.
 
 | Table | Role |
 |-------|------|
-| `train_data_sources` | Catalog: one row per imported training `.xlsx` |
+| `train_data_sources` | Catalog: one row per imported training `.xlsx` (`imported_by` = user who uploaded) |
 | `train_raw_sheet_users_user_profile` | Raw sheet mirror |
 | `train_raw_sheet_backend_payment` | Raw sheet mirror |
 | `train_raw_sheet_sms_usage_bc` | Raw sheet mirror |

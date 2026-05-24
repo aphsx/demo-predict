@@ -1,3 +1,7 @@
+/**
+ * [LEGACY] Prediction runs — Excel upload → raw_* per run_id + Arq ML pipeline.
+ * For training datasets use [NEW] /training (train_data_sources). See docs/DATA-PIPELINE-MIGRATION.md.
+ */
 "use client";
 export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";

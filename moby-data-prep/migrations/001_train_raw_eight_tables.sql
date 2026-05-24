@@ -1,5 +1,6 @@
--- Train raw layer: one PostgreSQL table per Excel sheet (8) + catalog.
--- Predict and clean use separate table families (see docs/naming-convention.md).
+-- [NEW] Train raw layer: one PostgreSQL table per Excel sheet (8) + catalog.
+-- [LEGACY] predict uses prediction_runs + raw_customers/payments/usage (apps/api uploads.ts).
+-- Predict/clean families: see moby-data-prep/docs/naming-convention.md and docs/DATA-PIPELINE-MIGRATION.md.
 -- Run: psql "$DATABASE_URL" -f migrations/001_train_raw_eight_tables.sql
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -17,11 +18,13 @@ CREATE TABLE train_data_sources (
     sheet_manifest       JSONB,
     notes                TEXT,
     error_message        TEXT,
+    imported_by          TEXT,  -- Better Auth user.id (who uploaded)
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_train_data_sources_status ON train_data_sources (import_status);
 CREATE INDEX idx_train_data_sources_client ON train_data_sources (client_label);
+CREATE INDEX idx_train_data_sources_imported_by ON train_data_sources (imported_by);
 
 CREATE TABLE train_raw_sheet_users_user_profile (
     id           BIGSERIAL PRIMARY KEY,

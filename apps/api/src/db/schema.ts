@@ -89,7 +89,9 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
 
-// ── ML tables ─────────────────────────────────────────────────────────────────
+// ── [LEGACY] ML / predict pipeline tables ─────────────────────────────────────
+// Scoped per prediction_runs upload. Being replaced by train_* / predict_* families.
+// See docs/DATA-PIPELINE-MIGRATION.md
 
 export const modelVersions = pgTable(
   "model_versions",
@@ -130,6 +132,7 @@ export const predictionRuns = pgTable(
   ]
 );
 
+// [LEGACY] Typed raw rows per run — predict path only (uploads.ts → Arq)
 export const rawCustomers = pgTable(
   "raw_customers",
   {
@@ -235,6 +238,59 @@ export const explanations = pgTable(
   },
   (t) => [index("idx_explanations_run_id").on(t.runId)]
 );
+
+// ── [NEW] Train raw data — greenfield (moby-data-prep migrations) ─────────────
+// 8 sheet tables + catalog. NOT prediction_runs. Migrations: moby-data-prep/migrations/
+// Future: predict_raw_sheet_*, train_clean_*, predict_clean_*
+
+export const trainDataSources = pgTable(
+  "train_data_sources",
+  {
+    id:                   uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    name:                 text("name").notNull(),
+    clientLabel:          text("client_label"),
+    originalFilename:     text("original_filename").notNull(),
+    fileChecksumSha256: text("file_checksum_sha256").notNull().unique(),
+    fileSizeBytes:        bigint("file_size_bytes", { mode: "number" }),
+    importStatus:         text("import_status").notNull().default("pending"),
+    importedAt:           timestamp("imported_at", { withTimezone: true }),
+    sheetManifest:        jsonb("sheet_manifest"),
+    notes:                text("notes"),
+    errorMessage:         text("error_message"),
+    importedBy:           text("imported_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt:            timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    index("idx_train_data_sources_status").on(t.importStatus),
+    index("idx_train_data_sources_client").on(t.clientLabel),
+    index("idx_train_data_sources_imported_by").on(t.importedBy),
+  ]
+);
+
+function trainRawSheet(tableName: string) {
+  return pgTable(
+    tableName,
+    {
+      id:          bigserial("id", { mode: "number" }).primaryKey(),
+      sourceId:    uuid("source_id")
+        .notNull()
+        .references(() => trainDataSources.id, { onDelete: "cascade" }),
+      excelRow:    integer("excel_row").notNull(),
+      rowPayload:  jsonb("row_payload").notNull(),
+      importedAt:  timestamp("imported_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+    },
+    (t) => [index(`idx_${tableName}_source`).on(t.sourceId)]
+  );
+}
+
+export const trainRawSheetUsersUserProfile = trainRawSheet("train_raw_sheet_users_user_profile");
+export const trainRawSheetBackendPayment = trainRawSheet("train_raw_sheet_backend_payment");
+export const trainRawSheetSmsUsageBc = trainRawSheet("train_raw_sheet_sms_usage_bc");
+export const trainRawSheetSmsUsageApi = trainRawSheet("train_raw_sheet_sms_usage_api");
+export const trainRawSheetSmsUsageOtp = trainRawSheet("train_raw_sheet_sms_usage_otp");
+export const trainRawSheetEmailUsageBc = trainRawSheet("train_raw_sheet_email_usage_bc");
+export const trainRawSheetEmailUsageApi = trainRawSheet("train_raw_sheet_email_usage_api");
+export const trainRawSheetEmailUsageOtp = trainRawSheet("train_raw_sheet_email_usage_otp");
 
 // ── Convenience type exports ───────────────────────────────────────────────────
 

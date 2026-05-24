@@ -1,3 +1,8 @@
+/**
+ * [LEGACY] Model versions registry + trigger training via FastAPI /internal/train.
+ * Does NOT import train raw Excel (that is [NEW] train-data.ts).
+ * Will eventually read from train_clean_* after ETL.
+ */
 import Elysia, { t } from "elysia";
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { readFile } from "node:fs/promises";

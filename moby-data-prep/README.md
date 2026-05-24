@@ -1,5 +1,8 @@
 # moby-data-prep
 
+**[NEW]** Greenfield data prep (this folder). The monorepo `apps/api` still has **[LEGACY]** predict tables
+(`prediction_runs`, `raw_*`) until migration finishes — see [`docs/DATA-PIPELINE-MIGRATION.md`](../docs/DATA-PIPELINE-MIGRATION.md).
+
 Data preparation for 1Moby ML — **separate table families** for train, predict, and clean.
 
 | Purpose | Layer | Catalog | Sheet tables (×8) |
