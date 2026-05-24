@@ -9,6 +9,7 @@ import {
 } from "@/components/ui";
 import { fetchModelMetrics, fetchTrainingLog } from "@/lib/api";
 import { formatFeatureLabel } from "@/lib/featureLabels";
+import { getDisplayError } from "@/lib/ui-error";
 
 type Tab = "overview" | "churn" | "clv" | "credit" | "winback" | "conversion" | "log";
 
@@ -30,7 +31,7 @@ export default function ModelHealth() {
         setLoading(false);
       })
       .catch((e) => {
-        setErr(e instanceof Error ? e.message : "Metrics ยังไม่พร้อม — train โมเดลก่อน");
+        setErr(getDisplayError(e, "Metrics ยังไม่พร้อม — train โมเดลก่อน"));
         setLoading(false);
       });
     fetchTrainingLog()

@@ -36,6 +36,7 @@ import {
   PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
 } from "@/components/ui";
 import { api, retryRun, Run } from "@/lib/api";
+import { getDisplayError } from "@/lib/ui-error";
 
 const statusToTone: Record<string, "ok" | "warn" | "danger" | "info" | "neutral"> = {
   done: "ok",
@@ -71,7 +72,7 @@ export default function RunsPage() {
       setRuns(Array.isArray(d) ? d : []);
     } catch (e) {
       setRuns([]);
-      setError(e instanceof Error ? e.message : "โหลดรายการ run ไม่สำเร็จ");
+      setError(getDisplayError(e, "โหลดรายการ run ไม่สำเร็จ"));
     } finally {
       setLoading(false);
     }
@@ -108,7 +109,7 @@ export default function RunsPage() {
       setName("");
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "สร้าง run ไม่สำเร็จ");
+      setError(getDisplayError(e, "สร้าง run ไม่สำเร็จ"));
     } finally {
       setSaving(false);
     }
@@ -121,7 +122,7 @@ export default function RunsPage() {
       setRuns((prev) => prev.filter((r) => r.id !== id));
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "ลบ run ไม่สำเร็จ");
+      setError(getDisplayError(e, "ลบ run ไม่สำเร็จ"));
     }
   };
   const retryPipeline = async (runId: string) => {
@@ -131,7 +132,7 @@ export default function RunsPage() {
       await retryRun(runId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Retry ไม่สำเร็จ");
+      setError(getDisplayError(e, "Retry ไม่สำเร็จ"));
     } finally {
       setRetrying(null);
     }
@@ -144,7 +145,7 @@ export default function RunsPage() {
       await api.uploadFile(runId, file);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "อัปโหลดไฟล์ไม่สำเร็จ");
+      setError(getDisplayError(e, "อัปโหลดไฟล์ไม่สำเร็จ"));
     } finally {
       setUploading(null);
     }

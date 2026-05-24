@@ -8,6 +8,7 @@ import {
   PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
 } from "@/components/ui";
 import { fetchModelVersions, fetchActiveModelVersions, trainModels } from "@/lib/api";
+import { getDisplayError } from "@/lib/ui-error";
 
 interface ModelVersion {
   id: string;
@@ -54,7 +55,7 @@ export default function TrainingPage() {
     } catch (e) {
       setVersions([]);
       setActiveVersions({});
-      setLoadError(e instanceof Error ? e.message : "Failed to load model versions");
+      setLoadError(getDisplayError(e, "Failed to load model versions"));
     } finally {
       setLoading(false);
     }

@@ -11,6 +11,7 @@ import {
   PageHeader, ActionChip, Skeleton, lifecycleTone,
 } from "@/components/ui";
 import { fetchSummary, fetchPredictions } from "@/lib/api";
+import { getDisplayError } from "@/lib/ui-error";
 import { useRunStore } from "@/lib/runStore";
 
 const LIFECYCLE_COLOR: Record<string, string> = {
@@ -43,7 +44,7 @@ export default function Dashboard() {
       .catch((e) => {
         setSummary(null);
         setPreview([]);
-        setLoadError(e instanceof Error ? e.message : "โหลดข้อมูลไม่สำเร็จ");
+        setLoadError(getDisplayError(e, "โหลดข้อมูลไม่สำเร็จ"));
         setLoading(false);
       });
   }, [runId]);
