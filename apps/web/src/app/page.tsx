@@ -7,7 +7,9 @@ import {
 } from "lucide-react";
 import {
   StatusPill,
-  Skeleton, lifecycleTone,
+  Skeleton,
+  StackBar,
+  lifecycleTone,
 } from "@/components/ui";
 import { fetchPredictions, fetchSummary } from "@/lib/api";
 import { getDisplayError } from "@/lib/ui-error";
@@ -168,67 +170,117 @@ export default function Dashboard() {
         )}
       </div>
 
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.9fr)]">
-        <div className="overflow-hidden rounded-lg border border-[color:var(--line)] bg-white">
-          <SectionTop
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div className="surface-elev overflow-hidden">
+          <PanelHeader
             eyebrow="Lifecycle"
             title="Lifecycle mix"
-            hint="กระจายของลูกค้าใน 4 stage หลัก"
+            hint="สัดส่วนลูกค้าใน 4 stage หลักของพอร์ต"
             actionHref="/customers"
           />
-          <div className="grid gap-3 p-4 md:grid-cols-2">
-            <LifecycleFeatureTile
-              color={LIFECYCLE_COLOR["Active Paid"]}
-              label="Active Paid"
-              count={activePaidCount}
-              detail={`Avg churn ${formatPercent(ap.avg_churn)} · Avg CLV ${formatCurrency(ap.avg_clv)}`}
-              href="/customers?lifecycle_stage=Active%20Paid"
-            />
-            <LifecycleFeatureTile
-              color={LIFECYCLE_COLOR["Active Free"]}
-              label="Active Free"
-              count={activeFreeCount}
-              detail={`Avg convert ${formatPercent(cv.avg_convert)}`}
-              href="/customers?lifecycle_stage=Active%20Free"
-            />
-            <LifecycleFeatureTile
-              color={LIFECYCLE_COLOR["Churned"]}
-              label="Churned"
-              count={churnedCount}
-              detail={`Avg comeback ${formatPercent(wb.avg_comeback)}`}
-              href="/customers?lifecycle_stage=Churned"
-            />
-            <LifecycleFeatureTile
-              color={LIFECYCLE_COLOR["Ghost"]}
-              label="Ghost"
-              count={ghostCount}
-              detail="ไม่เคยใช้งาน"
-              href="/customers?lifecycle_stage=Ghost"
-            />
+          <div className="border-t border-[color:var(--line-2)] px-5 py-5">
+            {loading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-2.5 w-full rounded-full" />
+                <div className="space-y-2.5">
+                  {[...Array(4)].map((_, i) => (
+                    <Skeleton key={i} className="h-[68px] rounded-[var(--r-md)]" />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                <StackBar
+                  data={{
+                    "Active Paid": activePaidCount,
+                    "Active Free": activeFreeCount,
+                    Churned: churnedCount,
+                    Ghost: ghostCount,
+                  }}
+                  palette={LIFECYCLE_COLOR}
+                  height={10}
+                />
+                <div className="mt-5 space-y-2">
+                  <LifecycleStageRow
+                    color={LIFECYCLE_COLOR["Active Paid"]}
+                    label="Active Paid"
+                    count={activePaidCount}
+                    total={totalCustomers}
+                    detail={`Avg churn ${formatPercent(ap.avg_churn)} · CLV ${formatCurrency(ap.avg_clv)}`}
+                    href="/customers?lifecycle_stage=Active%20Paid"
+                  />
+                  <LifecycleStageRow
+                    color={LIFECYCLE_COLOR["Active Free"]}
+                    label="Active Free"
+                    count={activeFreeCount}
+                    total={totalCustomers}
+                    detail={`Avg convert ${formatPercent(cv.avg_convert)}`}
+                    href="/customers?lifecycle_stage=Active%20Free"
+                  />
+                  <LifecycleStageRow
+                    color={LIFECYCLE_COLOR["Churned"]}
+                    label="Churned"
+                    count={churnedCount}
+                    total={totalCustomers}
+                    detail={`Avg comeback ${formatPercent(wb.avg_comeback)}`}
+                    href="/customers?lifecycle_stage=Churned"
+                  />
+                  <LifecycleStageRow
+                    color={LIFECYCLE_COLOR["Ghost"]}
+                    label="Ghost"
+                    count={ghostCount}
+                    total={totalCustomers}
+                    detail="สมัครแล้วแต่ไม่เคยใช้งาน"
+                    href="/customers?lifecycle_stage=Ghost"
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-[color:var(--line)] bg-white">
-          <SectionTop
+        <div className="surface-elev overflow-hidden">
+          <PanelHeader
             eyebrow="Customers"
             title="Customer list"
-            hint="ตัวอย่างลูกค้าจาก run ปัจจุบัน"
+            hint="ตัวอย่างจาก run ปัจจุบัน — คลิกแถวเพื่อดูรายละเอียด"
             actionHref="/customers"
           />
-          <div className="p-3">
-            <div className="space-y-3">
-              {loading && [...Array(6)].map((_, i) => (
-                <Skeleton key={i} className="h-[74px] rounded-[20px]" />
-              ))}
-              {!loading && previewCustomers.map((customer: any) => (
-                <CustomerPreviewCard key={customer.acc_id} customer={customer} />
-              ))}
-              {!loading && previewCustomers.length === 0 && (
-                <div className="rounded-[22px] border border-dashed border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-8 text-center text-[13px] text-[color:var(--ink-5)]">
-                  ยังไม่มีลูกค้า
-                </div>
-              )}
-            </div>
+          <div className="border-t border-[color:var(--line-2)]">
+            {loading ? (
+              <div className="space-y-0 p-1">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="border-b border-[color:var(--line-2)] px-4 py-3 last:border-0">
+                    <Skeleton className="mb-2 h-4 w-28" />
+                    <Skeleton className="h-3 w-40" />
+                  </div>
+                ))}
+              </div>
+            ) : previewCustomers.length === 0 ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-[13px] font-medium text-[color:var(--ink-2)]">ยังไม่มีลูกค้า</p>
+                <p className="mt-1 text-[12px] text-[color:var(--ink-5)]">อัปโหลดข้อมูลและรัน analysis ก่อน</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table-base">
+                  <thead>
+                    <tr>
+                      <th>Account</th>
+                      <th>Stage</th>
+                      <th>Churn</th>
+                      <th className="hidden sm:table-cell">CLV (6m)</th>
+                      <th aria-label="Open" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewCustomers.map((customer: Record<string, unknown>) => (
+                      <CustomerPreviewRow key={String(customer.acc_id)} customer={customer} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -296,7 +348,7 @@ function SummaryStatCard({
   );
 }
 
-function SectionTop({
+function PanelHeader({
   eyebrow, title, hint, actionHref,
 }: {
   eyebrow: string;
@@ -305,75 +357,139 @@ function SectionTop({
   actionHref: string;
 }) {
   return (
-    <div className="flex items-end justify-between gap-4 px-4 pt-4 pb-2">
-      <div>
-        <div className="text-[11px] font-normal text-[color:var(--ink-5)]">
+    <header className="flex items-start justify-between gap-4 px-5 py-4">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
           {eyebrow}
-        </div>
-        <h3 className="mt-1 text-[18px] font-medium tracking-[-0.02em] text-[#08060d]">
+        </p>
+        <h3 className="mt-1 text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
           {title}
         </h3>
-        <p className="mt-1 text-[11px] text-[color:var(--ink-4)]">{hint}</p>
+        <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">{hint}</p>
       </div>
       <Link
         href={actionHref}
-        className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-normal text-[color:var(--ink-4)]"
+        className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-[color:var(--line)] bg-white px-3 text-[12px] font-medium text-[color:var(--ink-2)] transition-colors hover:bg-[color:var(--surface-2)]"
       >
-        View all <ChevronRight size={13} />
+        View all <ChevronRight size={13} className="text-[color:var(--ink-5)]" />
       </Link>
-    </div>
+    </header>
   );
 }
 
-function LifecycleFeatureTile({
-  color, label, count, detail, href,
-}: { color: string; label: string; count: number; detail: string; href: string }) {
+function LifecycleStageRow({
+  color, label, count, total, detail, href,
+}: {
+  color: string;
+  label: string;
+  count: number;
+  total: number;
+  detail: string;
+  href: string;
+}) {
+  const share = total > 0 ? (count / total) * 100 : 0;
+
   return (
     <Link
       href={href}
-      className="rounded-[20px] border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4"
+      className="group lift block rounded-[var(--r-md)] border border-[color:var(--line-2)] bg-[color:var(--surface-2)] px-4 py-3.5 hover:border-[color:var(--line)] hover:bg-white"
     >
-      <div className="flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-        <span className="text-[12px] font-semibold text-[color:var(--ink-2)]">{label}</span>
-        <ArrowUpRight size={12} className="ml-auto text-[color:var(--ink-5)]" />
+      <div className="flex items-start gap-3">
+        <span
+          className="mt-1 h-9 w-1 shrink-0 rounded-full"
+          style={{ background: color }}
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</span>
+            <span className="num text-[12px] text-[color:var(--ink-5)]">
+              {share.toFixed(1)}% of portfolio
+            </span>
+            <ArrowUpRight
+              size={13}
+              className="ml-auto text-[color:var(--ink-5)] opacity-0 transition-opacity group-hover:opacity-100"
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="num text-[22px] font-bold leading-none tracking-[-0.03em] text-[color:var(--ink-1)]">
+              {count.toLocaleString()}
+            </span>
+            <span className="text-[11.5px] leading-5 text-[color:var(--ink-4)]">{detail}</span>
+          </div>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white">
+            <div
+              className="h-full rounded-full transition-[width] duration-300"
+              style={{ width: `${share}%`, background: color }}
+            />
+          </div>
+        </div>
       </div>
-      <div className="num mt-3 text-[28px] font-bold leading-none tracking-[-0.03em] text-[color:var(--ink-2)]">
-        {count.toLocaleString()}
-      </div>
-      <div className="mt-2 text-[11px] leading-5 text-[color:var(--ink-4)]">{detail}</div>
     </Link>
   );
 }
 
-function CustomerPreviewCard({
+function CustomerPreviewRow({
   customer,
 }: {
-  customer: any;
+  customer: Record<string, unknown>;
 }) {
+  const accId = String(customer.acc_id ?? "");
+  const stage = String(customer.lifecycle_stage ?? "");
+  const churn =
+    customer.churn_probability != null
+      ? `${(Number(customer.churn_probability) * 100).toFixed(1)}%`
+      : "—";
+  const clv =
+    customer.predicted_clv_6m != null
+      ? `${Number(customer.predicted_clv_6m).toLocaleString()} ฿`
+      : "—";
+  const churnPct = customer.churn_probability != null ? Number(customer.churn_probability) * 100 : null;
+
   return (
-    <Link
-      href={`/customers/${customer.acc_id}`}
-      className="flex items-center gap-3 rounded-[20px] border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3"
-    >
-      <div className="min-w-0 flex-1">
+    <tr className="group cursor-pointer">
+      <td>
+        <Link
+          href={`/customers/${accId}`}
+          className="num font-semibold text-[color:var(--moby-700)] group-hover:text-[color:var(--moby-800)]"
+        >
+          {accId}
+        </Link>
+      </td>
+      <td>
+        <StatusPill tone={lifecycleTone(stage)} dot={false}>
+          {stage}
+        </StatusPill>
+      </td>
+      <td>
         <div className="flex items-center gap-2">
-          <span className="num text-[16px] font-semibold text-[color:var(--moby-700)]">
-            {customer.acc_id}
-          </span>
-          <StatusPill tone={lifecycleTone(customer.lifecycle_stage)}>
-            {customer.lifecycle_stage}
-          </StatusPill>
+          <span className="num text-[13px] text-[color:var(--ink-2)]">{churn}</span>
+          {churnPct != null && (
+            <span className="hidden h-1.5 w-14 overflow-hidden rounded-full bg-[color:var(--surface-2)] md:inline-block">
+              <span
+                className="block h-full rounded-full"
+                style={{
+                  width: `${Math.min(100, churnPct)}%`,
+                  background:
+                    churnPct >= 70 ? "var(--danger)"
+                    : churnPct >= 40 ? "var(--warn)"
+                    : "var(--ok)",
+                }}
+              />
+            </span>
+          )}
         </div>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-[color:var(--ink-4)]">
-          <span>Churn {customer.churn_probability != null ? `${(customer.churn_probability * 100).toFixed(1)}%` : "—"}</span>
-          <span>CLV {customer.predicted_clv_6m != null ? `${Number(customer.predicted_clv_6m).toLocaleString()} ฿` : "—"}</span>
-        </div>
-      </div>
-      <div className="inline-flex items-center gap-1 text-[12px] font-medium text-[color:var(--moby-700)]">
-        Open <ChevronRight size={13} />
-      </div>
-    </Link>
+      </td>
+      <td className="num hidden sm:table-cell text-[color:var(--ink-3)]">{clv}</td>
+      <td className="text-right">
+        <Link
+          href={`/customers/${accId}`}
+          className="inline-flex items-center gap-0.5 text-[12px] font-medium text-[color:var(--ink-5)] opacity-0 transition-opacity group-hover:text-[color:var(--moby-700)] group-hover:opacity-100"
+        >
+          Open <ChevronRight size={13} />
+        </Link>
+      </td>
+    </tr>
   );
 }
 
