@@ -18,7 +18,7 @@ CREATE TABLE train_data_sources (
     sheet_manifest       JSONB,
     notes                TEXT,
     error_message        TEXT,
-    imported_by          TEXT REFERENCES "user" (id) ON DELETE SET NULL,
+    imported_by          TEXT,  -- Better Auth user.id (who uploaded)
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

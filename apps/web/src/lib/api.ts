@@ -284,13 +284,6 @@ export async function trainModels(cutoff_date?: string): Promise<Record<string, 
 // train_data_sources + train_raw_sheet_*. NOT uploadFile (/runs).
 // See docs/DATA-PIPELINE-MIGRATION.md
 
-export interface TrainImporter {
-  id: string;
-  name: string | null;
-  email: string | null;
-  image: string | null;
-}
-
 export interface TrainDataSource {
   id: string;
   name: string;
@@ -304,8 +297,8 @@ export interface TrainDataSource {
   notes: string | null;
   error_message: string | null;
   imported_by: string | null;
-  is_mine: boolean;
-  importer: TrainImporter | null;
+  importer_name: string | null;
+  importer_email: string | null;
   created_at: string;
 }
 
@@ -324,7 +317,12 @@ export async function uploadTrainDataFile(
   file: File,
   name: string,
   client_label?: string
-): Promise<TrainDataSource> {
+): Promise<{
+  source_id: string;
+  import_status: string;
+  sheet_manifest: Record<string, number>;
+  file_checksum_sha256: string;
+}> {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("name", name);
@@ -335,7 +333,12 @@ export async function uploadTrainDataFile(
   if (!res.ok) {
     throw new Error(isApiError(body) ? body.message : `Import failed (${res.status})`);
   }
-  return body as TrainDataSource;
+  return body as {
+    source_id: string;
+    import_status: string;
+    sheet_manifest: Record<string, number>;
+    file_checksum_sha256: string;
+  };
 }
 
 // ── [LEGACY] Predict run file upload — manual fetch (multipart/form-data) ─────
