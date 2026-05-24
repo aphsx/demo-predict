@@ -153,8 +153,12 @@ export default function TrainingPage() {
     }
   };
 
-  const deleteSource = async (id: string, name: string) => {
-    if (!confirm(`ลบ dataset "${name}"? ข้อมูล raw ทั้งหมดจะถูกลบถาวร`)) return;
+  const deleteSource = async (id: string, name: string, status: string) => {
+    const stuck = status === "importing" || status === "cleaning";
+    const msg = stuck
+      ? `งาน import อาจค้างอยู่ — ลบ dataset "${name}" และข้อมูล raw/clean ทั้งหมด?`
+      : `ลบ dataset "${name}"? ข้อมูล raw/clean ทั้งหมดจะถูกลบถาวร`;
+    if (!confirm(msg)) return;
     setDeletingId(id);
     setImportError(null);
     try {
@@ -373,17 +377,9 @@ export default function TrainingPage() {
                       <td className="py-2 px-2 text-right">
                         <button
                           type="button"
-                          disabled={
-                            deletingId === s.id
-                            || s.import_status === "importing"
-                            || s.import_status === "cleaning"
-                          }
-                          onClick={() => void deleteSource(s.id, s.name)}
-                          title={
-                            s.import_status === "importing" || s.import_status === "cleaning"
-                              ? "รอ import/clean เสร็จก่อน"
-                              : "ลบ dataset"
-                          }
+                          disabled={deletingId === s.id}
+                          onClick={() => void deleteSource(s.id, s.name, s.import_status)}
+                          title="ลบ dataset (raw + clean)"
                           className="h-7 w-7 grid place-items-center rounded-md text-[color:var(--ink-4)] hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] disabled:opacity-40"
                         >
                           {deletingId === s.id ? (

@@ -33,6 +33,7 @@ import {
 } from "./train-clean-mapping";
 import type { CleanManifest } from "./clean-manifest";
 export type { CleanManifest, CleanSkipped, TrainCleanManifest, TrainCleanSkipped } from "./clean-manifest";
+import { abortTrainDataSource } from "./abort-data-source";
 import type { TrainPipelineProgressEvent } from "./train-pipeline-progress";
 import {
   progressCleanCustomers,
@@ -101,6 +102,7 @@ export async function cleanTrainFromRaw(
   let payments = 0;
   let usage = 0;
 
+  try {
   await db.transaction(async (tx) => {
     await tx.delete(trainCleanCustomers).where(eq(trainCleanCustomers.sourceId, sourceId));
     await tx.delete(trainCleanPayments).where(eq(trainCleanPayments.sourceId, sourceId));
@@ -216,4 +218,8 @@ export async function cleanTrainFromRaw(
   emit?.(progressPipelineDone());
 
   return manifest;
+  } catch (e) {
+    await abortTrainDataSource(sourceId);
+    throw e;
+  }
 }

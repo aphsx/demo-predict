@@ -8,6 +8,7 @@ import { predictDataSources, predictionRuns, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { verifyRunOwnership } from "../lib/run-guard";
 import { importPredictExcel, type PredictImportResult } from "../lib/predict-import";
+import { abortPredictDataSource } from "../lib/abort-data-source";
 import { cleanPredictFromRaw } from "../lib/predict-clean";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -177,10 +178,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
         const err = e as Error;
         const message = err.message?.slice(0, 500) ?? "Import failed";
         if (sourceId) {
-          await db
-            .update(predictDataSources)
-            .set({ importStatus: "failed", errorMessage: message })
-            .where(eq(predictDataSources.id, sourceId));
+          await abortPredictDataSource(sourceId);
         }
         if (runId) {
           await db

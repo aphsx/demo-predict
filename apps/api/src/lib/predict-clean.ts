@@ -18,6 +18,7 @@ import {
   predictRawSheetSmsUsageOtp,
   predictRawSheetUsersUserProfile,
 } from "../db/schema";
+import { abortPredictDataSource } from "./abort-data-source";
 import type { CleanManifest } from "./clean-manifest";
 import {
   emptySkippedCounts,
@@ -87,6 +88,7 @@ export async function cleanPredictFromRaw(sourceId: string): Promise<CleanManife
   let payments = 0;
   let usage = 0;
 
+  try {
   await db.transaction(async (tx) => {
     await tx.delete(predictCleanCustomers).where(eq(predictCleanCustomers.sourceId, sourceId));
     await tx.delete(predictCleanPayments).where(eq(predictCleanPayments.sourceId, sourceId));
@@ -194,4 +196,8 @@ export async function cleanPredictFromRaw(sourceId: string): Promise<CleanManife
     .where(eq(predictDataSources.id, sourceId));
 
   return manifest;
+  } catch (e) {
+    await abortPredictDataSource(sourceId);
+    throw e;
+  }
 }

@@ -9,6 +9,7 @@ import { trainDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { importTrainExcel, type TrainImportResult } from "../lib/train-import";
 import type { TrainImportProgressEvent } from "../lib/train-import-progress";
+import { abortTrainDataSource, releaseStaleTrainImports } from "../lib/abort-data-source";
 import { cleanTrainFromRaw } from "../lib/train-clean";
 import { mapRawImportProgress } from "../lib/train-pipeline-progress";
 import { sseFrame } from "../lib/sse";
@@ -106,37 +107,45 @@ async function runTrainImportPipeline(params: {
   onSourceCreated?: (sourceId: string) => void;
 }): Promise<TrainImportResult> {
   let sourceId = "";
-  const rawResult = await importTrainExcel({
-    buffer: params.buffer,
-    filename: params.filename,
-    name: params.name,
-    client_label: params.client_label,
-    notes: params.notes,
-    imported_by: params.imported_by,
-    deferReadyCatalog: true,
-    onSourceCreated: (id) => {
-      sourceId = id;
-      publishRawProgress(sourceId, {
-        progress: 0,
-        step: "Reading workbook…",
-      });
-      params.onSourceCreated?.(id);
-    },
-    onProgress: (event) => {
-      if (sourceId) publishRawProgress(sourceId, event);
-    },
-  });
-  sourceId = rawResult.source_id;
+  try {
+    const rawResult = await importTrainExcel({
+      buffer: params.buffer,
+      filename: params.filename,
+      name: params.name,
+      client_label: params.client_label,
+      notes: params.notes,
+      imported_by: params.imported_by,
+      deferReadyCatalog: true,
+      onSourceCreated: (id) => {
+        sourceId = id;
+        publishRawProgress(sourceId, {
+          progress: 0,
+          step: "Reading workbook…",
+        });
+        params.onSourceCreated?.(id);
+      },
+      onProgress: (event) => {
+        if (sourceId) publishRawProgress(sourceId, event);
+      },
+    });
+    sourceId = rawResult.source_id;
 
-  const cleanManifest = await cleanTrainFromRaw(sourceId, (event) => {
-    void publishTrainPipelineProgress(sourceId, event);
-  });
+    const cleanManifest = await cleanTrainFromRaw(sourceId, (event) => {
+      void publishTrainPipelineProgress(sourceId, event);
+    });
 
-  return {
-    ...rawResult,
-    import_status: "ready",
-    clean_manifest: cleanManifest,
-  };
+    return {
+      ...rawResult,
+      import_status: "ready",
+      clean_manifest: cleanManifest,
+    };
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    if (sourceId && err.code !== "DUPLICATE_FILE") {
+      await abortTrainDataSource(sourceId);
+    }
+    throw e;
+  }
 }
 
 async function readImportBuffer(file: File): Promise<Buffer> {
@@ -150,6 +159,7 @@ async function readImportBuffer(file: File): Promise<Buffer> {
 export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
   .use(requireUser)
   .get("/", async () => {
+    await releaseStaleTrainImports();
     const rows = await db
       .select(sourceSelect)
       .from(trainDataSources)
@@ -342,11 +352,6 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         return { message: "Train data source not found" };
       }
 
-      if (row.importStatus === "importing" || row.importStatus === "cleaning") {
-        set.status = 400;
-        return { message: "Cannot delete while import or clean is in progress" };
-      }
-
       await db.delete(trainDataSources).where(eq(trainDataSources.id, params.id));
       return { deleted: true };
     },
@@ -443,13 +448,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
                 return;
               }
               await publishTrainImportError(sid, err.message ?? "Import failed");
-              await db
-                .update(trainDataSources)
-                .set({
-                  importStatus: "failed",
-                  errorMessage: err.message?.slice(0, 500) ?? "Import failed",
-                })
-                .where(eq(trainDataSources.id, sid));
+              await abortTrainDataSource(sid);
             }
           })();
         });
