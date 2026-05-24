@@ -86,10 +86,13 @@ export default function TrainingPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="pb-12">
         <PageHeader title="Model Training" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-40" />)}
+        <div className="px-8 mt-4 space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-40" />)}
+          </div>
+          <Skeleton className="h-80" />
         </div>
       </div>
     );
@@ -98,67 +101,69 @@ export default function TrainingPage() {
   const modelTypes = ["churn", "clv", "credit", "winback", "conversion"];
 
   return (
-    <div className="space-y-6">
+    <div className="pb-12">
       <PageHeader
         title="Model Training"
         actions={
           <button
             onClick={startTraining}
             disabled={training}
-            className="flex items-center gap-2 px-4 py-2 bg-[color:var(--moby-600)] text-white rounded-lg text-sm font-medium hover:bg-[color:var(--moby-700)] disabled:opacity-50"
+            className="h-9 px-3 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] inline-flex items-center gap-1.5 disabled:opacity-50"
           >
             {training ? <RefreshCw size={15} className="animate-spin" /> : <Play size={15} />}
             {training ? "Training..." : "Train New Models"}
           </button>
         }
       />
-      <p className="px-8 text-sm text-[color:var(--ink-4)] -mt-4 mb-2">Monitor model versions and trigger new training runs</p>
+      <div className="px-8 mt-4 space-y-5">
+        <p className="text-sm text-[color:var(--ink-4)]">
+          Monitor model versions and trigger new training runs
+        </p>
 
-      {loadError && (
-        <p className="px-8 text-sm text-[color:var(--danger)]">{loadError}</p>
-      )}
+        {loadError && (
+          <div className="rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
+            {loadError}
+          </div>
+        )}
 
-      {/* Active Versions Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        {modelTypes.map(type => {
-          const active = activeVersions[type];
-          return (
-            <SectionCard key={type} className="relative overflow-hidden">
-              <div className="text-xs font-medium text-[color:var(--ink-5)] uppercase tracking-wider mb-2">
-                {modelLabels[type] || type}
-              </div>
-              {active ? (
-                <>
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <CheckCircle2 size={14} className="text-[color:var(--ok)]" />
-                    <span className="text-sm font-semibold text-[color:var(--ink-1)]">Active</span>
-                  </div>
-                  <div className="text-xs text-[color:var(--ink-4)]">
-                    v {active.version}
-                  </div>
-                  <div className="text-xs text-[color:var(--ink-5)] mt-1">
-                    {new Date(active.trained_at).toLocaleDateString("th-TH")}
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center gap-1.5 text-[color:var(--ink-4)]">
-                  <AlertCircle size={14} />
-                  <span className="text-sm">Not trained</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          {modelTypes.map((type) => {
+            const active = activeVersions[type];
+            return (
+              <SectionCard key={type} className="relative overflow-hidden">
+                <div className="text-xs font-medium text-[color:var(--ink-5)] uppercase tracking-wider mb-2">
+                  {modelLabels[type] || type}
                 </div>
-              )}
-              <div className="absolute top-3 right-3">
-                <StatusPill tone={active ? "ok" : "neutral"}>
-                  {active ? "v1" : "—"}
-                </StatusPill>
-              </div>
-            </SectionCard>
-          );
-        })}
-      </div>
+                {active ? (
+                  <>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <CheckCircle2 size={14} className="text-[color:var(--ok)]" />
+                      <span className="text-sm font-semibold text-[color:var(--ink-1)]">Active</span>
+                    </div>
+                    <div className="text-xs text-[color:var(--ink-4)]">
+                      {active.version}
+                    </div>
+                    <div className="text-xs text-[color:var(--ink-5)] mt-1">
+                      {new Date(active.trained_at).toLocaleDateString("th-TH")}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-[color:var(--ink-4)]">
+                    <AlertCircle size={14} />
+                    <span className="text-sm">Not trained</span>
+                  </div>
+                )}
+                <div className="absolute top-3 right-3">
+                  <StatusPill tone={active ? "ok" : "neutral"}>
+                    {active ? active.version : "—"}
+                  </StatusPill>
+                </div>
+              </SectionCard>
+            );
+          })}
+        </div>
 
-      {/* All Versions */}
-      <SectionCard title="All Model Versions" hint="Historical model versions across all types">
-        <div className="space-y-3">
+        <SectionCard title="All Model Versions" hint="Historical model versions across all types">
           {versions.length === 0 ? (
             <EmptyState
               icon={Database}
@@ -178,7 +183,7 @@ export default function TrainingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {versions.map(v => (
+                  {versions.map((v) => (
                     <tr key={v.id} className="border-b border-[color:var(--line)] hover:bg-[color:var(--surface-1)]">
                       <td className="py-2.5 px-3 font-medium text-[color:var(--ink-1)]">
                         {modelLabels[v.model_type] || v.model_type}
@@ -207,8 +212,8 @@ export default function TrainingPage() {
               </table>
             </div>
           )}
-        </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
     </div>
   );
 }
