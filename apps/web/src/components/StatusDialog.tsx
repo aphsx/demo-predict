@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 
 export type StatusDialogTone = "success" | "error" | "warning";
@@ -49,7 +49,7 @@ export function StatusDialog({
   if (!open) return null;
 
   const style = TONE_STYLE[tone];
-  const Icon = tone === "success" ? CheckCircle2 : AlertCircle;
+  const Icon = tone === "success" ? CheckCircle2 : AlertTriangle;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 backdrop-blur-[2px]">
