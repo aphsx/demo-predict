@@ -80,7 +80,6 @@ export default function TrainingPage() {
     );
   const selectedSource =
     sortedSources.find((source) => source.id === selectedSourceId) ?? readySources[0] ?? null;
-  const selectedCleanCounts = getCleanCounts(selectedSource);
   const canTrain = Boolean(selectedSource && selectedSource.import_status === "ready");
 
   useEffect(() => {
@@ -304,7 +303,6 @@ export default function TrainingPage() {
         <ModelTrainingPanel
           sources={sortedSources}
           selectedSource={selectedSource}
-          selectedCounts={selectedCleanCounts}
           readyCount={readySources.length}
           training={training}
           deletingId={deletingId}
@@ -418,7 +416,6 @@ function FilePickerPanel({
 function ModelTrainingPanel({
   sources,
   selectedSource,
-  selectedCounts,
   readyCount,
   training,
   deletingId,
@@ -429,7 +426,6 @@ function ModelTrainingPanel({
 }: {
   sources: TrainDataSource[];
   selectedSource: TrainDataSource | null;
-  selectedCounts: CleanCounts | null;
   readyCount: number;
   training: boolean;
   deletingId: string | null;
@@ -466,40 +462,19 @@ function ModelTrainingPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <div className="border-b border-[color:var(--line-2)] bg-[color:var(--surface-2)] p-5 xl:border-b-0 xl:border-r">
-          <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-              Current dataset
-            </p>
-            <h3 className="mt-2 truncate text-[18px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
-              {selectedSource?.name || "No dataset selected"}
-            </h3>
-            <p className="mt-1 break-all text-[12px] leading-5 text-[color:var(--ink-4)]">
-              {selectedSource?.original_filename || "Choose a ready row from the dataset table."}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {selectedSource ? (
-                <StatusPill tone={statusTone(selectedSource.import_status)}>
-                  {statusLabel(selectedSource.import_status)}
-                </StatusPill>
-              ) : (
-                <StatusPill tone="neutral">No selection</StatusPill>
-              )}
-              <StatusPill tone="neutral" dot={false}>
-                {readyCount} ready
-              </StatusPill>
-            </div>
-          </div>
-
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <DatasetCount label="Customers" value={selectedCounts?.customers} />
-            <DatasetCount label="Payments" value={selectedCounts?.payments} />
-            <DatasetCount label="Usage" value={selectedCounts?.usage} />
-          </div>
+      <div className="p-5">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {selectedSource ? (
+            <StatusPill tone="neutral" dot={false}>
+              Selected: {selectedSource.name}
+            </StatusPill>
+          ) : (
+            <StatusPill tone="neutral">No dataset selected</StatusPill>
+          )}
+          <StatusPill tone="neutral" dot={false}>
+            {readyCount} ready
+          </StatusPill>
         </div>
-
-        <div className="p-5">
           {sources.length === 0 ? (
             <EmptyState
               icon={FileSpreadsheet}
@@ -535,7 +510,6 @@ function ModelTrainingPanel({
               </table>
             </div>
           )}
-        </div>
       </div>
     </section>
   );
@@ -738,19 +712,6 @@ function DatasetTableRow({
         </div>
       </td>
     </tr>
-  );
-}
-
-function DatasetCount({ label, value }: { label: string; value?: number }) {
-  return (
-    <div className="rounded-2xl bg-[color:var(--surface-2)] px-3 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
-        {label}
-      </p>
-      <p className="num mt-1 text-[15px] font-semibold text-[color:var(--ink-1)]">
-        {value == null ? "-" : value.toLocaleString()}
-      </p>
-    </div>
   );
 }
 
