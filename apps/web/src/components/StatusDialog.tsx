@@ -21,7 +21,7 @@ const TONE_STYLE: Record<StatusDialogTone, { color: string; background: string; 
   success: {
     color: "var(--ok)",
     background: "var(--ok-bg)",
-    button: MOBY_BRAND.orange,
+    button: MOBY_BRAND.blue,
   },
   error: {
     color: "var(--danger)",

@@ -26,6 +26,7 @@ import { getDisplayError } from "@/lib/ui-error";
 const IMPORT_ACCENT = MOBY_BRAND.orange;
 const IMPORT_ACCENT_BORDER = "rgba(252,76,2,0.24)";
 const IMPORT_PROGRESS_BG = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
+const BRAND_BLUE = MOBY_BRAND.blue;
 
 type CleanCounts = {
   customers: number;
@@ -272,7 +273,7 @@ export default function TrainingPage() {
 
                   <div className="mt-5 rounded-2xl bg-white p-3">
                     <div className="flex items-center gap-3 text-[12px] text-[color:var(--ink-4)]">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#fff4ed] text-[#fc4c02]">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color:var(--moby-50)] text-[color:var(--moby-700)]">
                         <Layers3 size={15} />
                       </span>
                       <span>
@@ -385,7 +386,7 @@ function FilePickerPanel({
       />
 
       <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#fff4ed] text-[#fc4c02]">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[color:var(--moby-50)] text-[color:var(--moby-700)]">
           <FileSpreadsheet size={20} />
         </span>
         <div className="min-w-0">
@@ -406,9 +407,9 @@ function FilePickerPanel({
         </div>
 
         {pendingFile ? (
-          <div className="bg-[#fff8f4] px-4 py-4">
+          <div className="bg-[color:var(--moby-50)] px-4 py-4">
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[#fc4c02] shadow-[var(--shadow-1)]">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[color:var(--moby-700)] shadow-[var(--shadow-1)]">
                 <FileSpreadsheet size={18} />
               </span>
               <div className="min-w-0 flex-1">
@@ -435,7 +436,8 @@ function FilePickerPanel({
         type="button"
         disabled={importing}
         onClick={() => fileInputRef.current?.click()}
-        className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--line)] bg-white px-4 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_12px_28px_rgba(0,107,255,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
+        style={{ background: BRAND_BLUE }}
       >
         <Upload size={15} />
         {pendingFile ? "Change file" : "Choose file"}
@@ -484,8 +486,8 @@ function ModelTrainingPanel({
             type="button"
             disabled={!canTrain || training}
             onClick={onTrain}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.14)] disabled:opacity-50 xl:min-w-[190px]"
-            style={{ background: IMPORT_ACCENT }}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(0,107,255,0.16)] disabled:opacity-50 xl:min-w-[190px]"
+            style={{ background: BRAND_BLUE }}
           >
             {training ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
             {training ? "Training..." : "Train selected"}
@@ -614,12 +616,12 @@ function DatasetTableRow({
   const selectable = source.import_status === "ready";
 
   return (
-    <tr className={selected ? "bg-[#fff8f4]" : undefined}>
+    <tr className={selected ? "bg-[color:var(--moby-50)]" : undefined}>
       <td>
         <div className="flex items-start gap-3">
           <span
             className={`mt-0.5 h-3 w-3 shrink-0 rounded-full border ${
-              selected ? "border-[#fc4c02] bg-[#fc4c02]" : "border-[color:var(--ink-6)] bg-white"
+              selected ? "border-[color:var(--moby-600)] bg-[color:var(--moby-600)]" : "border-[color:var(--ink-6)] bg-white"
             }`}
             aria-hidden
           />
@@ -668,7 +670,7 @@ function DatasetTableRow({
             onClick={onSelect}
             className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-[12px] font-semibold disabled:opacity-45 ${
               selected
-                ? "bg-[#fff4ed] text-[#fc4c02]"
+                ? "bg-[color:var(--moby-50)] text-[color:var(--moby-700)]"
                 : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]"
             }`}
           >
