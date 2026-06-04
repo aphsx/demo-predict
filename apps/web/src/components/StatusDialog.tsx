@@ -3,11 +3,11 @@
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 
-type DialogTone = "success" | "error" | "warning";
+export type StatusDialogTone = "success" | "error" | "warning";
 
 type StatusDialogProps = {
   open: boolean;
-  tone: DialogTone;
+  tone: StatusDialogTone;
   title: string;
   message?: string;
   confirmLabel?: string;
@@ -17,7 +17,7 @@ type StatusDialogProps = {
   onCancel?: () => void;
 };
 
-const TONE_STYLE: Record<DialogTone, { color: string; background: string; button: string }> = {
+const TONE_STYLE: Record<StatusDialogTone, { color: string; background: string; button: string }> = {
   success: {
     color: "var(--ok)",
     background: "var(--ok-bg)",

@@ -5,6 +5,7 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import AIChatWidget from "./AIChatWidget";
 import { MobyIntroSplash } from "./MobyIntroSplash";
+import { GlobalStatusDialogHost } from "./GlobalStatusDialogHost";
 
 const BARE_ROUTES = ["/login"];
 
@@ -17,6 +18,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <>
         <MobyIntroSplash />
         {children}
+        <GlobalStatusDialogHost />
       </>
     );
   }
@@ -26,6 +28,7 @@ export default function Shell({ children }: { children: ReactNode }) {
   return (
     <>
       <MobyIntroSplash />
+      <GlobalStatusDialogHost />
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">

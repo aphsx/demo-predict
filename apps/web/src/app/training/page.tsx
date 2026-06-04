@@ -10,6 +10,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { notifyStatusDialog } from "@/components/GlobalStatusDialogHost";
 import { StatusDialog } from "@/components/StatusDialog";
 import { EmptyState, PageHeader, Skeleton, StatusPill } from "@/components/ui";
 import {
@@ -114,18 +115,30 @@ export default function TrainingPage() {
       setPendingFile(null);
       setImportProgress(100);
       setImportStep("Import complete");
-      setImportSuccess("นำเข้าข้อมูลสำเร็จ");
       await wait(450);
       await load();
+      notifyStatusDialog({
+        tone: "success",
+        title: "นำเข้าข้อมูลสำเร็จ",
+        message: "ระบบ import และ clean data เสร็จเรียบร้อย",
+      });
     } catch (e) {
       setImportProgress(0);
       setImportStep("");
       setImportPhase(null);
       const err = e as Error & { code?: string; source_id?: string };
       if (err.code === "DUPLICATE_FILE" && err.source_id) {
-        setImportError("ไฟล์นี้ถูกนำเข้าแล้ว กรุณาเลือก dataset เดิมจากตารางด้านล่าง");
+        notifyStatusDialog({
+          tone: "error",
+          title: "นำเข้าข้อมูลไม่สำเร็จ",
+          message: "ไฟล์นี้ถูกนำเข้าแล้ว กรุณาเลือก dataset เดิมจากตารางด้านล่าง",
+        });
       } else {
-        setImportError(getDisplayError(e, "นำเข้าข้อมูลไม่สำเร็จ"));
+        notifyStatusDialog({
+          tone: "error",
+          title: "นำเข้าข้อมูลไม่สำเร็จ",
+          message: getDisplayError(e, "นำเข้าข้อมูลไม่สำเร็จ") ?? "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
+        });
       }
     } finally {
       setImporting(false);
