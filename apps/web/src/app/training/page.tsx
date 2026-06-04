@@ -214,7 +214,7 @@ export default function TrainingPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)]">
-              <div>
+              <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -229,29 +229,61 @@ export default function TrainingPage() {
                   }}
                 />
 
+                <div className="flex items-start gap-3">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#fff4ed] text-[#fc4c02]">
+                    <FileSpreadsheet size={20} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">
+                      Excel source file
+                    </p>
+                    <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
+                      เลือกไฟล์ .xlsx ตาม fixed schema 8 sheets เพื่อ import raw และ clean data
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className="mt-5 rounded-[20px] border px-4 py-4"
+                  style={{
+                    borderColor: pendingFile ? IMPORT_ACCENT_BORDER : "var(--line-2)",
+                    background: pendingFile ? "#fff8f4" : "var(--surface-2)",
+                  }}
+                >
+                  {pendingFile ? (
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[#fc4c02] shadow-[var(--shadow-1)]">
+                        <FileSpreadsheet size={18} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold text-[color:var(--ink-1)]">
+                          {pendingFile.name}
+                        </p>
+                        <p className="mt-1 text-[12px] text-[color:var(--ink-4)]">
+                          {formatFileSize(pendingFile.size)} selected
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-3 text-center">
+                      <p className="text-[13px] font-medium text-[color:var(--ink-2)]">
+                        No file selected
+                      </p>
+                      <p className="mt-1 text-[12px] text-[color:var(--ink-5)]">
+                        Upload one workbook per training dataset.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   disabled={importing}
                   onClick={() => fileInputRef.current?.click()}
-                  className="group flex min-h-[240px] w-full flex-col items-center justify-center rounded-[26px] border border-dashed bg-[#fff4ed] px-6 py-8 text-center transition hover:bg-[#fff8f4] disabled:cursor-not-allowed disabled:opacity-60"
-                  style={{
-                    borderColor: IMPORT_ACCENT_BORDER,
-                  }}
+                  className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--line)] bg-white px-4 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <span
-                    className="grid h-16 w-16 place-items-center rounded-3xl text-white shadow-[0_16px_34px_rgba(252,76,2,0.20)]"
-                    style={{ background: IMPORT_ACCENT }}
-                  >
-                    <Upload size={24} />
-                  </span>
-                  <span className="mt-5 text-[16px] font-semibold text-[color:var(--ink-1)]">
-                    {pendingFile ? pendingFile.name : "Choose Excel file"}
-                  </span>
-                  <span className="mt-2 max-w-xs text-[12.5px] leading-5 text-[color:var(--ink-4)]">
-                    {pendingFile
-                      ? `${formatFileSize(pendingFile.size)} selected. Click again to change file.`
-                      : "รองรับ .xlsx ตาม fixed schema 8 sheets ของระบบ"}
-                  </span>
+                  <Upload size={15} />
+                  {pendingFile ? "Change file" : "Choose file"}
                 </button>
               </div>
 
