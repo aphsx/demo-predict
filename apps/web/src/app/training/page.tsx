@@ -18,7 +18,6 @@ import {
   fetchTrainDataSources,
   trainModels,
   uploadTrainDataFileWithProgress,
-  type TrainCleanManifest,
   type TrainDataSource,
 } from "@/lib/api";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
@@ -44,11 +43,11 @@ export default function TrainingPage() {
   const [importPhase, setImportPhase] = useState<"raw" | "clean" | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
-  const [importResultCounts, setImportResultCounts] = useState<CleanCounts | null>(null);
   const [importName, setImportName] = useState("");
   const [importClient, setImportClient] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteSource, setPendingDeleteSource] = useState<TrainDataSource | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,7 +95,6 @@ export default function TrainingPage() {
     setImporting(true);
     setImportError(null);
     setImportSuccess(null);
-    setImportResultCounts(null);
     setImportProgress(1);
     setImportStep("Uploading Excel file...");
     setImportPhase(null);
@@ -117,7 +115,6 @@ export default function TrainingPage() {
       setPendingFile(null);
       setImportProgress(100);
       setImportStep("Import complete");
-      setImportResultCounts(getCleanCountsFromManifest(result.clean_manifest));
       setImportSuccess("นำเข้าข้อมูลสำเร็จ");
       await wait(450);
       await load();
@@ -125,7 +122,6 @@ export default function TrainingPage() {
       setImportProgress(0);
       setImportStep("");
       setImportPhase(null);
-      setImportResultCounts(null);
       const err = e as Error & { code?: string; source_id?: string };
       if (err.code === "DUPLICATE_FILE" && err.source_id) {
         setImportError("ไฟล์นี้ถูกนำเข้าแล้ว กรุณาเลือก dataset เดิมจากตารางด้านล่าง");
@@ -139,19 +135,14 @@ export default function TrainingPage() {
   };
 
   const deleteSource = async (source: TrainDataSource) => {
-    const stuck = source.import_status === "importing" || source.import_status === "cleaning";
-    const message = stuck
-      ? `งาน import อาจค้างอยู่ - ลบ dataset "${source.name}" และข้อมูล raw/clean ทั้งหมด?`
-      : `ลบ dataset "${source.name}"? ข้อมูล raw/clean ทั้งหมดจะถูกลบถาวร`;
-    if (!confirm(message)) return;
-
     setDeletingId(source.id);
     setImportError(null);
     setImportSuccess(null);
-    setImportResultCounts(null);
+    setPendingDeleteSource(null);
     try {
       await deleteTrainDataSource(source.id);
       setTrainSources((prev) => prev.filter((item) => item.id !== source.id));
+      setImportSuccess("ลบข้อมูลสำเร็จ");
     } catch (e) {
       setImportError(getDisplayError(e, "ลบ dataset ไม่สำเร็จ"));
     } finally {
@@ -167,7 +158,6 @@ export default function TrainingPage() {
     setTraining(true);
     setImportError(null);
     setImportSuccess(null);
-    setImportResultCounts(null);
 
     try {
       await trainModels();
@@ -314,9 +304,25 @@ export default function TrainingPage() {
           canTrain={canTrain}
           onTrain={() => void startTraining()}
           onSelect={(source) => setSelectedSourceId(source.id)}
-          onDelete={(source) => void deleteSource(source)}
+          onDelete={(source) => setPendingDeleteSource(source)}
         />
       </div>
+
+      {pendingDeleteSource && (
+        <ConfirmModal
+          title="ยืนยันการลบข้อมูล"
+          message={
+            pendingDeleteSource.import_status === "importing" ||
+            pendingDeleteSource.import_status === "cleaning"
+              ? "งาน import อาจยังทำงานอยู่ หากลบตอนนี้ข้อมูล raw และ clean ทั้งหมดของ dataset นี้จะถูกลบ"
+              : "ข้อมูล raw และ clean ทั้งหมดของ dataset นี้จะถูกลบถาวร"
+          }
+          confirmLabel="ลบข้อมูล"
+          loading={deletingId === pendingDeleteSource.id}
+          onCancel={() => setPendingDeleteSource(null)}
+          onConfirm={() => void deleteSource(pendingDeleteSource)}
+        />
+      )}
 
       {(importSuccess || importError) && !importing && (
         <ResultModal
@@ -327,11 +333,9 @@ export default function TrainingPage() {
               ? "ระบบ import และ clean data เสร็จเรียบร้อย"
               : importError ?? "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง"
           }
-          counts={importSuccess ? importResultCounts : null}
           onClose={() => {
             setImportSuccess(null);
             setImportError(null);
-            setImportResultCounts(null);
           }}
         />
       )}
@@ -530,13 +534,11 @@ function ResultModal({
   tone,
   title,
   message,
-  counts,
   onClose,
 }: {
   tone: "ok" | "danger";
   title: string;
   message: string;
-  counts?: CleanCounts | null;
   onClose: () => void;
 }) {
   const Icon = tone === "ok" ? CheckCircle2 : AlertCircle;
@@ -561,14 +563,6 @@ function ResultModal({
             {message}
           </p>
 
-          {counts && (
-            <div className="mt-6 grid w-full max-w-[420px] grid-cols-3 gap-2 rounded-[22px] bg-[color:var(--surface-2)] p-2">
-              <ResultMetric label="ลูกค้า" value={counts.customers} />
-              <ResultMetric label="ชำระเงิน" value={counts.payments} />
-              <ResultMetric label="การใช้งาน" value={counts.usage} />
-            </div>
-          )}
-
           <button
             type="button"
             onClick={onClose}
@@ -583,15 +577,57 @@ function ResultModal({
   );
 }
 
-function ResultMetric({ label, value }: { label: string; value: number }) {
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
   return (
-    <div className="rounded-2xl bg-white px-3 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
-        {label}
-      </p>
-      <p className="num mt-1 text-[14px] font-semibold text-[color:var(--ink-1)]">
-        {value.toLocaleString()}
-      </p>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-[560px] rounded-[28px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
+        <div className="flex flex-col items-center px-6 py-12 text-center">
+          <span className="grid h-[96px] w-[96px] place-items-center rounded-full bg-[color:var(--warn-bg)] text-[color:var(--warn)]">
+            <AlertCircle size={48} strokeWidth={1.8} />
+          </span>
+
+          <h3 className="mt-8 max-w-[400px] text-[20px] font-bold leading-7 text-[color:var(--ink-1)]">
+            {title}
+          </h3>
+          <p className="mt-3 max-w-[420px] text-[13px] leading-6 text-[color:var(--ink-4)]">
+            {message}
+          </p>
+
+          <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onCancel}
+              className="inline-flex h-[47px] min-w-[102px] items-center justify-center rounded-2xl border border-[color:var(--line)] bg-white px-5 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onConfirm}
+              className="inline-flex h-[47px] min-w-[102px] items-center justify-center rounded-2xl px-5 text-[13px] font-semibold text-white disabled:opacity-50"
+              style={{ background: "var(--danger)" }}
+            >
+              {loading ? "กำลังลบ..." : confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -776,15 +812,6 @@ function getCleanCounts(source: TrainDataSource | null): CleanCounts | null {
     customers: Number(counts.customers ?? 0),
     payments: Number(counts.payments ?? 0),
     usage: Number(counts.usage ?? 0),
-  };
-}
-
-function getCleanCountsFromManifest(cleanManifest: TrainCleanManifest | undefined): CleanCounts | null {
-  if (!cleanManifest) return null;
-  return {
-    customers: cleanManifest.clean.customers,
-    payments: cleanManifest.clean.payments,
-    usage: cleanManifest.clean.usage,
   };
 }
 
