@@ -338,6 +338,10 @@ ai_generated_at
 ai_model
 ai_status
 
+output_status
+output_notes
+model_eligibility_json
+
 model_versions_json
 created_at
 ```
@@ -395,6 +399,42 @@ ai_generated_at = 2026-06-04T15:30:00Z
 ```
 
 สำคัญ: GenAI ต้องไม่ถูกใช้แทน model prediction หลัก แต่ใช้เพื่ออธิบายและแปลงผล ML ให้เป็นภาษาคนอ่าน
+
+Output completeness rule:
+
+```text
+ทุก customer ใน predict_clean_customers ต้องมี row ใน ml_prediction_outputs
+```
+
+ถ้าบาง model predict ไม่ได้เพราะข้อมูลไม่พอ ให้ยังสร้าง row และเติม:
+
+```text
+output_status
+output_notes
+model_eligibility_json
+```
+
+ตัวอย่าง `model_eligibility_json`:
+
+```json
+{
+  "churn": {
+    "eligible": true,
+    "status": "predicted",
+    "reason": null
+  },
+  "clv": {
+    "eligible": false,
+    "status": "fallback",
+    "reason": "No purchase history"
+  },
+  "credit": {
+    "eligible": false,
+    "status": "insufficient_data",
+    "reason": "No usage or top-up history"
+  }
+}
+```
 
 ## Output Field Groups
 
@@ -654,6 +694,38 @@ Flow:
 ```
 
 ## Prediction Pipeline Plan
+
+Prediction pipeline ต้อง independent จาก training pipeline
+
+```text
+ผู้ใช้สามารถ upload predict dataset แล้ว run prediction ได้เลย
+ถ้ามี active model versions พร้อมอยู่แล้ว
+```
+
+Prediction run ไม่ควร trigger training/retraining อัตโนมัติ
+
+ก่อน prediction ต้อง validate:
+
+```text
+predict_source_id มี predict_clean_* พร้อม
+active churn model exists
+active clv model exists
+active credit model exists
+```
+
+ถ้าไม่มี active model:
+
+```text
+ml_prediction_runs.status = failed
+ml_prediction_runs.error_message = "No active <model_type> model version available"
+```
+
+Train import และ predict import จึงเป็นคนละ use case:
+
+```text
+train_data_sources + train_clean_*       -> train/retrain
+predict_data_sources + predict_clean_*   -> predict only
+```
 
 ### Step 1: Load Predict Clean Data
 
