@@ -201,6 +201,32 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         return { status: "not_found" as const, message: "Train data source not found" };
       }
 
+      // DB terminal state wins over Redis progress. Progress events are published
+      // fire-and-forget and can arrive after the final "done" stream entry.
+      if (row.importStatus === "ready") {
+        return {
+          status: "ready" as const,
+          progress: 100,
+          step: "Ready for model training",
+          phase: "clean" as const,
+          result: {
+            source_id: sourceId,
+            import_status: "ready",
+            sheet_manifest: (row.sheetManifest ?? {}) as Record<string, number>,
+            clean_manifest: row.cleanManifest ?? undefined,
+          },
+        };
+      }
+
+      if (row.importStatus === "failed") {
+        return {
+          status: "failed" as const,
+          progress: 0,
+          step: row.errorMessage ?? "Import failed",
+          message: row.errorMessage ?? "Import failed",
+        };
+      }
+
       const snap = await readLatestTrainImportStreamEntry(sourceId);
 
       if (snap.kind === "done") {
@@ -238,30 +264,6 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
           phase: snap.event.phase,
           sheet: snap.event.sheet,
           rows: snap.event.rows,
-        };
-      }
-
-      if (row.importStatus === "ready") {
-        return {
-          status: "ready" as const,
-          progress: 100,
-          step: "Ready for model training",
-          phase: "clean" as const,
-          result: {
-            source_id: sourceId,
-            import_status: "ready",
-            sheet_manifest: (row.sheetManifest ?? {}) as Record<string, number>,
-            clean_manifest: row.cleanManifest ?? undefined,
-          },
-        };
-      }
-
-      if (row.importStatus === "failed") {
-        return {
-          status: "failed" as const,
-          progress: 0,
-          step: row.errorMessage ?? "Import failed",
-          message: row.errorMessage ?? "Import failed",
         };
       }
 
