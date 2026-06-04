@@ -8,6 +8,8 @@ FastAPI exists here for:
   - Model training trigger from Elysia (POST /internal/train)
 """
 import os
+import asyncio
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,6 +22,10 @@ from sqlalchemy import text
 from api.database import get_db, engine
 
 MODEL_DIR = Path(os.getenv("MODEL_DIR", str(Path(__file__).parent.parent.parent / "models")))
+
+_TRAIN_LOCK = asyncio.Lock()
+_TRAIN_TASK: asyncio.Task[int] | None = None
+_TRAIN_JOB_ID: str | None = None
 
 ALLOWED_ORIGINS = [
     o.strip() for o in
@@ -102,7 +108,7 @@ async def internal_train(request: Request):
 
 
 async def _do_train(cutoff_date: str | None = None):
-    import asyncio, uuid
+    global _TRAIN_TASK, _TRAIN_JOB_ID
 
     train_script = Path(__file__).parent.parent / "train.py"
     if not train_script.exists():
@@ -114,26 +120,46 @@ async def _do_train(cutoff_date: str | None = None):
         raise HTTPException(400, "No .xlsx data file found in DATA_DIR — upload data first")
 
     data_file = str(sorted(xlsx_files)[-1])
-    job_id    = str(uuid.uuid4())
+    async with _TRAIN_LOCK:
+        if _TRAIN_TASK is not None and not _TRAIN_TASK.done():
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Training is already running",
+                    "job_id": _TRAIN_JOB_ID,
+                },
+            )
 
-    # Build the command — pass cutoff as second arg if provided
-    cmd = ["python", str(train_script), data_file]
-    if cutoff_date:
-        cmd.append(cutoff_date)
+        job_id = str(uuid.uuid4())
 
-    async def _run():
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        await proc.communicate()
+        # Build the command — pass cutoff as second arg if provided
+        cmd = ["python", str(train_script), data_file]
+        if cutoff_date:
+            cmd.append(cutoff_date)
 
-    asyncio.create_task(_run())
-    return {
-        "job_id":       job_id,
-        "status":       "started",
-        "data_file":    data_file,
-        "cutoff_date":  cutoff_date or os.getenv("TRAIN_CUTOFF_DATE", "2025-07-01"),
-        "message":      "Training started — check /training-log for progress",
-    }
+        async def _run() -> int:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            await proc.communicate()
+            return proc.returncode or 0
+
+        def _clear_finished_task(task: asyncio.Task[int]) -> None:
+            global _TRAIN_TASK, _TRAIN_JOB_ID
+            if _TRAIN_TASK is task:
+                _TRAIN_TASK = None
+                _TRAIN_JOB_ID = None
+
+        _TRAIN_JOB_ID = job_id
+        _TRAIN_TASK = asyncio.create_task(_run())
+        _TRAIN_TASK.add_done_callback(_clear_finished_task)
+
+        return {
+            "job_id":       job_id,
+            "status":       "started",
+            "data_file":    data_file,
+            "cutoff_date":  cutoff_date or os.getenv("TRAIN_CUTOFF_DATE", "2025-07-01"),
+            "message":      "Training started — check /training-log for progress",
+        }
