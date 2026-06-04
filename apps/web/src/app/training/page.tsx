@@ -486,8 +486,8 @@ function ModelTrainingPanel({
             type="button"
             disabled={!canTrain || training}
             onClick={onTrain}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(0,107,255,0.16)] disabled:opacity-50 xl:min-w-[190px]"
-            style={{ background: BRAND_BLUE }}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.14)] disabled:opacity-50 xl:min-w-[190px]"
+            style={{ background: IMPORT_ACCENT }}
           >
             {training ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
             {training ? "Training..." : "Train selected"}
