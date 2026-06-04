@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import { EmptyState, PageHeader, Skeleton, StatusPill } from "@/components/ui";
 import {
@@ -45,6 +44,7 @@ export default function TrainingPage() {
   const [importPhase, setImportPhase] = useState<"raw" | "clean" | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [importResultCounts, setImportResultCounts] = useState<CleanCounts | null>(null);
   const [importName, setImportName] = useState("");
   const [importClient, setImportClient] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
@@ -96,6 +96,7 @@ export default function TrainingPage() {
     setImporting(true);
     setImportError(null);
     setImportSuccess(null);
+    setImportResultCounts(null);
     setImportProgress(1);
     setImportStep("Uploading Excel file...");
     setImportPhase(null);
@@ -115,19 +116,21 @@ export default function TrainingPage() {
       setImportName("");
       setPendingFile(null);
       setImportProgress(100);
-      setImportStep("Dataset is ready for training");
-      setImportSuccess(buildImportSuccessMessage(result.source_id, result.clean_manifest));
+      setImportStep("Import complete");
+      setImportResultCounts(getCleanCountsFromManifest(result.clean_manifest));
+      setImportSuccess("นำเข้าข้อมูลสำเร็จ");
       await wait(450);
       await load();
     } catch (e) {
       setImportProgress(0);
       setImportStep("");
       setImportPhase(null);
+      setImportResultCounts(null);
       const err = e as Error & { code?: string; source_id?: string };
       if (err.code === "DUPLICATE_FILE" && err.source_id) {
-        setImportError(`${err.message} (existing source ${err.source_id.slice(0, 8)}...)`);
+        setImportError("ไฟล์นี้ถูกนำเข้าแล้ว กรุณาเลือก dataset เดิมจากตารางด้านล่าง");
       } else {
-        setImportError(getDisplayError(e, "Import failed"));
+        setImportError(getDisplayError(e, "นำเข้าข้อมูลไม่สำเร็จ"));
       }
     } finally {
       setImporting(false);
@@ -145,6 +148,7 @@ export default function TrainingPage() {
     setDeletingId(source.id);
     setImportError(null);
     setImportSuccess(null);
+    setImportResultCounts(null);
     try {
       await deleteTrainDataSource(source.id);
       setTrainSources((prev) => prev.filter((item) => item.id !== source.id));
@@ -157,19 +161,20 @@ export default function TrainingPage() {
 
   const startTraining = async () => {
     if (!canTrain) {
-      setImportError("Select a ready dataset before training.");
+      setImportError("กรุณาเลือก dataset ที่พร้อมใช้งานก่อนเริ่ม train");
       return;
     }
     setTraining(true);
     setImportError(null);
     setImportSuccess(null);
+    setImportResultCounts(null);
 
     try {
       await trainModels();
       await waitForTrainingHealth();
       await load();
     } catch (e) {
-      setImportError(getDisplayError(e, "Training failed"));
+      setImportError(getDisplayError(e, "เริ่ม train model ไม่สำเร็จ"));
     } finally {
       setTraining(false);
     }
@@ -316,11 +321,17 @@ export default function TrainingPage() {
       {(importSuccess || importError) && !importing && (
         <ResultModal
           tone={importSuccess ? "ok" : "danger"}
-          title={importSuccess ? "Dataset is ready" : "Action failed"}
-          message={importSuccess ?? importError ?? ""}
+          title={importSuccess ?? "ดำเนินการไม่สำเร็จ"}
+          message={
+            importSuccess
+              ? "ระบบ import และ clean data เสร็จเรียบร้อย"
+              : importError ?? "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง"
+          }
+          counts={importSuccess ? importResultCounts : null}
           onClose={() => {
             setImportSuccess(null);
             setImportError(null);
+            setImportResultCounts(null);
           }}
         />
       )}
@@ -519,11 +530,13 @@ function ResultModal({
   tone,
   title,
   message,
+  counts,
   onClose,
 }: {
   tone: "ok" | "danger";
   title: string;
   message: string;
+  counts?: CleanCounts | null;
   onClose: () => void;
 }) {
   const Icon = tone === "ok" ? CheckCircle2 : AlertCircle;
@@ -532,42 +545,53 @@ function ResultModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
-        <div className="flex items-start justify-between gap-4 px-5 py-5">
-          <div className="flex items-start gap-3">
-            <span
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
-              style={{ color, background: bg }}
-            >
-              <Icon size={22} />
-            </span>
-            <div>
-              <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
-                {title}
-              </h3>
-              <p className="mt-2 text-[13px] leading-6 text-[color:var(--ink-4)]">{message}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[color:var(--ink-5)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-2)]"
-            aria-label="Close"
+      <div className="w-full max-w-[560px] rounded-[28px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
+        <div className="flex flex-col items-center px-6 py-12 text-center">
+          <span
+            className="grid h-[96px] w-[96px] place-items-center rounded-full"
+            style={{ color, background: bg }}
           >
-            <X size={16} />
-          </button>
-        </div>
-        <div className="border-t border-[color:var(--line-2)] bg-[color:var(--surface-2)] px-5 py-4 text-right">
+            <Icon size={48} strokeWidth={1.8} />
+          </span>
+
+          <h3 className="mt-8 max-w-[400px] text-[20px] font-bold leading-7 text-[color:var(--ink-1)]">
+            {title}
+          </h3>
+          <p className="mt-3 max-w-[420px] text-[13px] leading-6 text-[color:var(--ink-4)]">
+            {message}
+          </p>
+
+          {counts && (
+            <div className="mt-6 grid w-full max-w-[420px] grid-cols-3 gap-2 rounded-[22px] bg-[color:var(--surface-2)] p-2">
+              <ResultMetric label="ลูกค้า" value={counts.customers} />
+              <ResultMetric label="ชำระเงิน" value={counts.payments} />
+              <ResultMetric label="การใช้งาน" value={counts.usage} />
+            </div>
+          )}
+
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 items-center justify-center rounded-2xl px-4 text-[13px] font-semibold text-white"
+            className="mt-10 inline-flex h-[47px] min-w-[102px] items-center justify-center rounded-2xl px-5 text-[13px] font-semibold text-white"
             style={{ background: tone === "ok" ? IMPORT_ACCENT : "var(--danger)" }}
           >
-            Done
+            ตกลง
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ResultMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl bg-white px-3 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
+        {label}
+      </p>
+      <p className="num mt-1 text-[14px] font-semibold text-[color:var(--ink-1)]">
+        {value.toLocaleString()}
+      </p>
     </div>
   );
 }
@@ -755,18 +779,13 @@ function getCleanCounts(source: TrainDataSource | null): CleanCounts | null {
   };
 }
 
-function buildImportSuccessMessage(sourceId: string, cleanManifest: TrainCleanManifest | undefined): string {
-  const counts = cleanManifest
-    ? {
-        customers: cleanManifest.clean.customers,
-        payments: cleanManifest.clean.payments,
-        usage: cleanManifest.clean.usage,
-      }
-    : null;
-  if (!counts) {
-    return `Dataset ${sourceId.slice(0, 8)}... is ready for training.`;
-  }
-  return `Dataset ${sourceId.slice(0, 8)}... is ready: ${counts.customers.toLocaleString()} customers, ${counts.payments.toLocaleString()} payments, ${counts.usage.toLocaleString()} usage rows.`;
+function getCleanCountsFromManifest(cleanManifest: TrainCleanManifest | undefined): CleanCounts | null {
+  if (!cleanManifest) return null;
+  return {
+    customers: cleanManifest.clean.customers,
+    payments: cleanManifest.clean.payments,
+    usage: cleanManifest.clean.usage,
+  };
 }
 
 function statusTone(status: string): "ok" | "danger" | "neutral" | "info" {
