@@ -1,9 +1,14 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
+  AlertCircle,
+  CheckCircle2,
+  Clock3,
+  Database,
   FileSpreadsheet,
+  Layers3,
   Play,
   RefreshCw,
   Trash2,
@@ -21,7 +26,10 @@ import {
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 import { getDisplayError } from "@/lib/ui-error";
 
-const IMPORT_BAR_GRADIENT = `linear-gradient(90deg, #3f98ff 0%, ${MOBY_BRAND.blueLight} 18%, ${MOBY_BRAND.blue} 38%, #3d7bff 56%, #6fa8ff 68%, ${MOBY_BRAND.orangeWarm} 84%, #ff8f1f 93%, ${MOBY_BRAND.orange} 100%)`;
+const IMPORT_ACCENT = MOBY_BRAND.orange;
+const IMPORT_ACCENT_WARM = MOBY_BRAND.orangeWarm;
+const IMPORT_ACCENT_BORDER = "rgba(252,76,2,0.24)";
+const IMPORT_PROGRESS_BG = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
 
 type CleanCounts = {
   customers: number;
@@ -67,6 +75,13 @@ export default function TrainingPage() {
   const latestCleanCounts = getCleanCounts(latestSource);
   const readySources = trainSources.filter((source) => source.import_status === "ready");
   const canTrain = readySources.length > 0;
+  const sortedSources = trainSources
+    .slice()
+    .sort(
+      (a, b) =>
+        getTimestamp(b.imported_at || b.created_at) -
+        getTimestamp(a.imported_at || a.created_at)
+    );
 
   const handleImportFile = async (file: File) => {
     const datasetName = importName.trim() || file.name.replace(/\.xlsx$/i, "");
@@ -151,13 +166,16 @@ export default function TrainingPage() {
   if (loading) {
     return (
       <div className="pb-12">
-        <PageHeader title="Model Training" />
+        <PageHeader eyebrow="Data pipeline" title="Training data workspace" />
         <div className="px-8 mt-4 space-y-5">
-          <Skeleton className="h-[280px]" />
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <Skeleton className="h-[220px]" />
-            <Skeleton className="h-[220px]" />
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_420px]">
+            <Skeleton className="h-[360px]" />
+            <div className="space-y-5">
+              <Skeleton className="h-[180px]" />
+              <Skeleton className="h-[210px]" />
+            </div>
           </div>
+          <Skeleton className="h-[260px]" />
         </div>
       </div>
     );
@@ -165,307 +183,429 @@ export default function TrainingPage() {
 
   return (
     <div className="pb-12">
-      <PageHeader title="Model Training" />
+      <PageHeader eyebrow="Data pipeline" title="Training data workspace" />
 
-      <div className="px-8 mt-4 space-y-5">
+      <div className="px-8 mt-4 space-y-6">
         {loadError && (
-          <div className="rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
+          <div className="rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
             {loadError}
           </div>
         )}
 
-        <section className="surface overflow-hidden">
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.1fr)_360px]">
-            <div className="p-6">
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_420px]">
+          <div className="surface-elev overflow-hidden">
+            <div className="border-b border-[color:var(--line-2)] px-5 py-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--ink-5)]">
-                    Training workspace
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
+                    New dataset
                   </p>
-                  <h2 className="mt-1 text-[24px] font-semibold tracking-[-0.03em] text-[color:var(--ink-1)]">
-                    Upload dataset and train models
+                  <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--ink-1)]">
+                    Import and clean training data
                   </h2>
-                  <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
-                    ใช้พื้นที่นี้สำหรับอัปโหลดไฟล์ Excel, รอระบบ prepare ข้อมูล, แล้วเริ่ม train โมเดลจาก dataset ที่พร้อมใช้งาน
+                  <p className="mt-1 text-[12.5px] leading-5 text-[color:var(--ink-4)]">
+                    เลือกไฟล์ .xlsx หนึ่งชุด ระบบจะ import raw rows และ clean ให้พร้อม train
                   </p>
                 </div>
                 <StatusPill tone={canTrain ? "ok" : "neutral"}>
-                  {canTrain ? `${readySources.length} dataset ready` : "Waiting for dataset"}
+                  {canTrain ? `${readySources.length} ready` : "No ready dataset"}
                 </StatusPill>
               </div>
+            </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="text-sm">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-                    Dataset name
-                  </span>
-                  <input
-                    type="text"
-                    value={importName}
-                    onChange={(e) => setImportName(e.target.value)}
-                    placeholder="e.g. Bangkok University Q1"
-                    className="mt-1 w-full h-10 rounded-xl border border-[color:var(--line)] bg-white px-3 text-[13px]"
-                  />
-                </label>
+            <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)]">
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setPendingFile(file);
+                    setImportError(null);
+                    setImportSuccess(null);
+                  }}
+                />
 
-                <label className="text-sm">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-                    Client label
-                  </span>
-                  <input
-                    type="text"
-                    value={importClient}
-                    onChange={(e) => setImportClient(e.target.value)}
-                    placeholder="optional"
-                    className="mt-1 w-full h-10 rounded-xl border border-[color:var(--line)] bg-white px-3 text-[13px]"
-                  />
-                </label>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  setPendingFile(file);
-                  setImportError(null);
-                  setImportSuccess(null);
-                }}
-              />
-
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <button
                   type="button"
                   disabled={importing}
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[color:var(--line)] bg-white px-4 text-[13px] font-medium text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-                >
-                  <Upload size={15} />
-                  Choose .xlsx
-                </button>
-
-                <button
-                  type="button"
-                  disabled={importing || !pendingFile}
-                  onClick={() => pendingFile && void handleImportFile(pendingFile)}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-[13px] font-semibold text-white disabled:opacity-50"
+                  className="group flex min-h-[240px] w-full flex-col items-center justify-center rounded-[26px] border border-dashed bg-[#fff4ed] px-6 py-8 text-center transition hover:bg-[#fff8f4] disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
-                    backgroundImage: IMPORT_BAR_GRADIENT,
-                    boxShadow: "0 14px 34px rgba(7, 29, 126, 0.18)",
+                    borderColor: IMPORT_ACCENT_BORDER,
                   }}
                 >
-                  <FileSpreadsheet size={15} />
-                  Upload and prepare
-                </button>
-
-                <button
-                  type="button"
-                  disabled={training || importing || !canTrain}
-                  onClick={() => void startTraining()}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[rgba(0,107,255,0.14)] bg-[color:var(--moby-50)] px-4 text-[13px] font-semibold text-[color:var(--moby-700)] hover:bg-[color:var(--moby-100)] disabled:opacity-50"
-                >
-                  {training ? <RefreshCw size={15} className="animate-spin" /> : <Play size={15} />}
-                  {training ? "Training models..." : "Train models"}
+                  <span
+                    className="grid h-16 w-16 place-items-center rounded-3xl text-white shadow-[0_16px_34px_rgba(252,76,2,0.20)]"
+                    style={{ background: IMPORT_ACCENT }}
+                  >
+                    <Upload size={24} />
+                  </span>
+                  <span className="mt-5 text-[16px] font-semibold text-[color:var(--ink-1)]">
+                    {pendingFile ? pendingFile.name : "Choose Excel file"}
+                  </span>
+                  <span className="mt-2 max-w-xs text-[12.5px] leading-5 text-[color:var(--ink-4)]">
+                    {pendingFile
+                      ? `${formatFileSize(pendingFile.size)} selected. Click again to change file.`
+                      : "รองรับ .xlsx ตาม fixed schema 8 sheets ของระบบ"}
+                  </span>
                 </button>
               </div>
 
-              {pendingFile && !importing && (
-                <div className="mt-4 rounded-xl border border-[color:var(--line-2)] bg-[color:var(--surface-2)] px-4 py-3 text-[13px] text-[color:var(--ink-3)]">
-                  Ready to upload:{" "}
-                  <span className="font-medium text-[color:var(--ink-1)]">{pendingFile.name}</span>
-                  {" · "}
-                  {(pendingFile.size / (1024 * 1024)).toFixed(2)} MB
-                </div>
-              )}
-
-              {(importing || training) && (
-                <div className="mt-4 rounded-2xl border border-[rgba(0,107,255,0.10)] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,251,253,0.98))] p-4">
-                  <div className="flex items-center gap-2 text-[13px] text-[color:var(--ink-2)]">
-                    <RefreshCw size={14} className="animate-spin shrink-0 text-[color:var(--moby-600)]" />
-                    <span className="font-medium">
-                      {training ? "Training models with the prepared dataset..." : "Preparing training dataset..."}
+              <div className="flex flex-col">
+                <div className="grid grid-cols-1 gap-4">
+                  <label className="block">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+                      Dataset name
                     </span>
-                    {!training && (
-                      <span className="ml-auto text-[11px] text-[color:var(--ink-5)]">
-                        {importPhase === "clean"
-                          ? "Step 2 of 2 - Clean"
-                          : importPhase === "raw"
-                            ? "Step 1 of 2 - Raw"
-                            : "Raw to Clean"}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-3">
-                    <GradientProgressBar
-                      value={training ? 100 : Math.max(importProgress > 0 ? 4 : 0, importProgress)}
-                      indeterminate={training}
+                    <input
+                      type="text"
+                      value={importName}
+                      onChange={(e) => setImportName(e.target.value)}
+                      placeholder="e.g. Bangkok University Q1"
+                      className="mt-1.5 h-11 w-full rounded-2xl border border-[color:var(--line)] bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
                     />
-                  </div>
+                  </label>
 
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <p className="text-[12px] text-[color:var(--ink-4)]">
-                      {training ? "We will refresh the active models as soon as training is complete." : importStep || "Processing..."}
-                    </p>
-                    {!training && (
-                      <p className="num text-[13px] font-semibold text-[color:var(--moby-700)]">
-                        {importProgress}%
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {importSuccess && !importing && !training && (
-                <div className="mt-4 rounded-xl border border-[color:var(--ok)] bg-[color:var(--ok-bg)] px-4 py-3 text-[13px] text-[color:var(--ok)]">
-                  {importSuccess}
-                </div>
-              )}
-
-              {importError && (
-                <div className="mt-4 rounded-xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
-                  {importError}
-                </div>
-              )}
-            </div>
-
-            <aside className="border-t border-[color:var(--line-2)] bg-[color:var(--surface-2)] p-6 xl:border-l xl:border-t-0">
-              <div className="space-y-5">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-                    Workspace summary
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <StatBlock label="Total datasets" value={trainSources.length.toString()} />
-                    <StatBlock label="Ready" value={readySources.length.toString()} tone="ok" />
-                  </div>
+                  <label className="block">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+                      Client label
+                    </span>
+                    <input
+                      type="text"
+                      value={importClient}
+                      onChange={(e) => setImportClient(e.target.value)}
+                      placeholder="optional"
+                      className="mt-1.5 h-11 w-full rounded-2xl border border-[color:var(--line)] bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
+                    />
+                  </label>
                 </div>
 
-                <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-                    Latest dataset
-                  </div>
-                  <div className="mt-2 text-[16px] font-semibold text-[color:var(--ink-1)]">
-                    {latestSource?.name || "No dataset yet"}
-                  </div>
-                  <div className="mt-2 text-[12px] text-[color:var(--ink-4)]">
-                    {latestSource
-                      ? `${latestSource.original_filename} · ${formatDate(latestSource.imported_at || latestSource.created_at)}`
-                      : "Upload one Excel file to get started."}
-                  </div>
-                  {latestSource && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <StatusPill tone={statusTone(latestSource.import_status)}>
-                        {statusLabel(latestSource.import_status)}
-                      </StatusPill>
-                      {latestSource.client_label && (
-                        <StatusPill tone="neutral" dot={false}>
-                          {latestSource.client_label}
-                        </StatusPill>
-                      )}
-                    </div>
-                  )}
+                <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    disabled={importing || !pendingFile}
+                    onClick={() => pendingFile && void handleImportFile(pendingFile)}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.18)] disabled:opacity-50"
+                    style={{ background: IMPORT_ACCENT }}
+                  >
+                    <FileSpreadsheet size={16} />
+                    Upload and clean
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={training || importing || !canTrain}
+                    onClick={() => void startTraining()}
+                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-[color:var(--line)] bg-white px-4 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
+                  >
+                    {training ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
+                    {training ? "Training..." : "Train model"}
+                  </button>
                 </div>
 
-                <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-                    Clean output
-                  </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <SmallMetric label="Customers" value={latestCleanCounts?.customers.toLocaleString() || "-"} />
-                    <SmallMetric label="Payments" value={latestCleanCounts?.payments.toLocaleString() || "-"} />
-                    <SmallMetric label="Usage" value={latestCleanCounts?.usage.toLocaleString() || "-"} />
-                  </div>
-                </div>
+                {(importing || training) && (
+                  <ProgressCard
+                    training={training}
+                    progress={importProgress}
+                    step={importStep}
+                    phase={importPhase}
+                  />
+                )}
+
+                {importSuccess && !importing && !training && (
+                  <InlineNotice tone="ok" icon={<CheckCircle2 size={15} />}>
+                    {importSuccess}
+                  </InlineNotice>
+                )}
+
+                {importError && (
+                  <InlineNotice tone="danger" icon={<AlertCircle size={15} />}>
+                    {importError}
+                  </InlineNotice>
+                )}
               </div>
-            </aside>
+            </div>
           </div>
+
+          <aside className="space-y-5">
+            <LatestDatasetPanel source={latestSource} />
+            <CleanOutputPanel counts={latestCleanCounts} />
+          </aside>
         </section>
 
-        <SectionCard
-          title="Dataset library"
-          hint="All uploaded training datasets in one place"
-        >
+        <SectionCard title="Dataset library" hint="Uploaded raw and clean training datasets">
           {trainSources.length === 0 ? (
             <EmptyState
               icon={FileSpreadsheet}
               title="No training dataset yet"
-              hint="Upload one Excel file above to prepare the raw and clean data automatically."
+              hint="Upload one Excel file above. The system will import raw data and clean it automatically."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[color:var(--line)]">
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">Dataset</th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">Status</th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">Imported</th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">By</th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">Clean rows</th>
-                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {trainSources
-                    .slice()
-                    .sort((a, b) => getTimestamp(b.imported_at || b.created_at) - getTimestamp(a.imported_at || a.created_at))
-                    .map((source) => {
-                      const counts = getCleanCounts(source);
-                      const isDeleting = deletingId === source.id;
-                      return (
-                        <tr key={source.id} className="border-b border-[color:var(--line-2)] align-top hover:bg-[color:var(--surface-2)]">
-                          <td className="px-3 py-3">
-                            <div className="font-medium text-[color:var(--ink-1)]">{source.name}</div>
-                            <div className="mt-1 text-[12px] text-[color:var(--ink-4)] break-all">{source.original_filename}</div>
-                            {source.client_label && (
-                              <div className="mt-2">
-                                <StatusPill tone="neutral" dot={false}>{source.client_label}</StatusPill>
-                              </div>
-                            )}
-                            {source.error_message && (
-                              <div className="mt-2 text-[12px] text-[color:var(--danger)]">{source.error_message}</div>
-                            )}
-                          </td>
-                          <td className="px-3 py-3">
-                            <StatusPill tone={statusTone(source.import_status)}>
-                              {statusLabel(source.import_status)}
-                            </StatusPill>
-                          </td>
-                          <td className="px-3 py-3 text-[13px] text-[color:var(--ink-4)]">
-                            {formatDate(source.imported_at || source.created_at)}
-                          </td>
-                          <td className="px-3 py-3 text-[13px] text-[color:var(--ink-4)]">
-                            {source.importer_name ?? source.importer_email ?? source.imported_by ?? "-"}
-                          </td>
-                          <td className="px-3 py-3 text-[13px] text-[color:var(--ink-4)]">
-                            {counts
-                              ? `${counts.customers.toLocaleString()} / ${counts.payments.toLocaleString()} / ${counts.usage.toLocaleString()}`
-                              : "-"}
-                          </td>
-                          <td className="px-3 py-3 text-right">
-                            <button
-                              type="button"
-                              disabled={isDeleting}
-                              onClick={() => void deleteSource(source)}
-                              className="inline-flex h-8 items-center gap-1 rounded-lg border border-[color:var(--line)] bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-50"
-                            >
-                              {isDeleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {sortedSources.map((source) => (
+                <DatasetLibraryCard
+                  key={source.id}
+                  source={source}
+                  deleting={deletingId === source.id}
+                  onDelete={() => void deleteSource(source)}
+                />
+              ))}
             </div>
           )}
         </SectionCard>
-
       </div>
+    </div>
+  );
+}
+
+function ProgressCard({
+  training,
+  progress,
+  step,
+  phase,
+}: {
+  training: boolean;
+  progress: number;
+  step: string;
+  phase: "raw" | "clean" | null;
+}) {
+  const label = training
+    ? "Training models"
+    : phase === "clean"
+      ? "Cleaning imported data"
+      : "Importing raw data";
+
+  return (
+    <div className="mt-5 rounded-[24px] border border-[rgba(252,76,2,0.14)] bg-white p-4 shadow-[var(--shadow-1)]">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-2xl bg-[#fff4ed] text-[#fc4c02]">
+          <RefreshCw size={15} className="animate-spin" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</p>
+            {!training && (
+              <span className="num text-[13px] font-semibold text-[#fc4c02]">
+                {progress}%
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 truncate text-[12px] text-[color:var(--ink-4)]">
+            {training
+              ? "Refreshing active models after training completes."
+              : step || "Processing..."}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <GradientProgressBar
+          value={training ? 100 : Math.max(progress > 0 ? 4 : 0, progress)}
+          indeterminate={training}
+        />
+      </div>
+    </div>
+  );
+}
+
+function InlineNotice({
+  tone,
+  icon,
+  children,
+}: {
+  tone: "ok" | "danger";
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  const toneClass =
+    tone === "ok"
+      ? "border-[color:var(--ok)] bg-[color:var(--ok-bg)] text-[color:var(--ok)]"
+      : "border-[color:var(--danger)] bg-[color:var(--danger-bg)] text-[color:var(--danger)]";
+
+  return (
+    <div className={`mt-4 flex items-start gap-2 rounded-2xl border px-4 py-3 text-[13px] ${toneClass}`}>
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function LatestDatasetPanel({ source }: { source: TrainDataSource | null }) {
+  return (
+    <div className="surface-elev overflow-hidden">
+      <div className="border-b border-[color:var(--line-2)] px-5 py-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
+          Latest dataset
+        </p>
+        <h3 className="mt-1 text-[18px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+          {source?.name || "No dataset yet"}
+        </h3>
+      </div>
+      <div className="p-5">
+        {source ? (
+          <>
+            <div className="rounded-2xl bg-[color:var(--surface-2)] p-4">
+              <div className="flex items-start gap-3">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[#fc4c02] shadow-[var(--shadow-1)]">
+                  <FileSpreadsheet size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p className="break-all text-[13px] font-medium text-[color:var(--ink-2)]">
+                    {source.original_filename}
+                  </p>
+                  <p className="mt-1 text-[12px] text-[color:var(--ink-4)]">
+                    {formatDate(source.imported_at || source.created_at)}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <StatusPill tone={statusTone(source.import_status)}>
+                {statusLabel(source.import_status)}
+              </StatusPill>
+              {source.client_label && (
+                <StatusPill tone="neutral" dot={false}>
+                  {source.client_label}
+                </StatusPill>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="text-[13px] leading-6 text-[color:var(--ink-4)]">
+            Upload a fixed-schema Excel file to create the first raw and clean dataset.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CleanOutputPanel({ counts }: { counts: CleanCounts | null }) {
+  return (
+    <div className="surface-elev overflow-hidden">
+      <div className="border-b border-[color:var(--line-2)] px-5 py-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
+          Clean output
+        </p>
+        <h3 className="mt-1 text-[18px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+          Ready rows after cleaning
+        </h3>
+      </div>
+      <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-3 xl:grid-cols-1">
+        <CleanMetric icon={<Database size={15} />} label="Customers" value={counts?.customers} />
+        <CleanMetric icon={<FileSpreadsheet size={15} />} label="Payments" value={counts?.payments} />
+        <CleanMetric icon={<Layers3 size={15} />} label="Usage" value={counts?.usage} />
+      </div>
+    </div>
+  );
+}
+
+function CleanMetric({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value?: number;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--line-2)] bg-[color:var(--surface-2)] px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-2xl bg-white text-[#fc4c02]">
+          {icon}
+        </span>
+        <span className="text-[12px] font-medium text-[color:var(--ink-4)]">{label}</span>
+      </div>
+      <span className="num text-[18px] font-semibold text-[color:var(--ink-1)]">
+        {value == null ? "-" : value.toLocaleString()}
+      </span>
+    </div>
+  );
+}
+
+function DatasetLibraryCard({
+  source,
+  deleting,
+  onDelete,
+}: {
+  source: TrainDataSource;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
+  const counts = getCleanCounts(source);
+  const importer = source.importer_name ?? source.importer_email ?? source.imported_by ?? "-";
+
+  return (
+    <article className="rounded-[22px] border border-[color:var(--line-2)] bg-white p-4 transition hover:border-[color:var(--line)] hover:shadow-[var(--shadow-2)]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-[15px] font-semibold text-[color:var(--ink-1)]">
+              {source.name}
+            </h3>
+            <StatusPill tone={statusTone(source.import_status)}>
+              {statusLabel(source.import_status)}
+            </StatusPill>
+          </div>
+          <p className="mt-1 break-all text-[12px] text-[color:var(--ink-4)]">
+            {source.original_filename}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={deleting}
+          onClick={onDelete}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[color:var(--line)] bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-50"
+        >
+          {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
+          Remove
+        </button>
+      </div>
+
+      {source.client_label && (
+        <div className="mt-3">
+          <StatusPill tone="neutral" dot={false}>
+            {source.client_label}
+          </StatusPill>
+        </div>
+      )}
+
+      <div className="mt-4 grid grid-cols-1 gap-2 text-[12px] text-[color:var(--ink-4)] sm:grid-cols-3">
+        <LibraryMeta icon={<Clock3 size={13} />} label="Imported" value={formatDate(source.imported_at || source.created_at)} />
+        <LibraryMeta icon={<Database size={13} />} label="Clean rows" value={formatCounts(counts)} />
+        <LibraryMeta icon={<CheckCircle2 size={13} />} label="By" value={importer} />
+      </div>
+
+      {source.error_message && (
+        <div className="mt-3 rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-3 py-2 text-[12px] text-[color:var(--danger)]">
+          {source.error_message}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function LibraryMeta({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-[color:var(--surface-2)] px-3 py-2">
+      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
+        {icon}
+        {label}
+      </div>
+      <div className="break-words text-[12px] text-[color:var(--ink-2)]">{value}</div>
     </div>
   );
 }
@@ -483,14 +623,14 @@ function GradientProgressBar({
         className={`h-full rounded-full transition-[width,opacity] duration-300 ease-out ${indeterminate ? "animate-pulse" : ""}`}
         style={{
           width: indeterminate ? "100%" : `${Math.max(0, Math.min(100, value))}%`,
-          backgroundImage: IMPORT_BAR_GRADIENT,
-          boxShadow: `0 0 22px ${MOBY_BRAND.radialGlow}`,
+          backgroundImage: IMPORT_PROGRESS_BG,
+          boxShadow: "0 0 18px rgba(252,76,2,0.18)",
         }}
       />
       <div
-        className="pointer-events-none absolute inset-0 opacity-30"
+        className="pointer-events-none absolute inset-0 opacity-20"
         style={{
-          backgroundImage: "linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.42) 45%, transparent 80%)",
+          backgroundImage: "linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.38) 50%, transparent 82%)",
         }}
       />
     </div>
@@ -529,9 +669,10 @@ function buildImportSuccessMessage(sourceId: string, cleanManifest: TrainCleanMa
   return `Dataset ${sourceId.slice(0, 8)}... is ready: ${counts.customers.toLocaleString()} customers, ${counts.payments.toLocaleString()} payments, ${counts.usage.toLocaleString()} usage rows.`;
 }
 
-function statusTone(status: string): "ok" | "danger" | "neutral" {
+function statusTone(status: string): "ok" | "danger" | "neutral" | "info" {
   if (status === "ready") return "ok";
   if (status === "failed") return "danger";
+  if (status === "cleaning" || status === "importing") return "info";
   return "neutral";
 }
 
@@ -543,55 +684,18 @@ function statusLabel(status: string): string {
   return "No dataset";
 }
 
-function StatBlock({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: "neutral" | "ok" | "brand";
-}) {
-  const toneClass = {
-    neutral: "bg-[color:var(--surface-2)] text-[color:var(--ink-1)]",
-    ok: "bg-[color:var(--ok-bg)] text-[color:var(--ok)]",
-    brand: "bg-[color:var(--moby-50)] text-[color:var(--moby-700)]",
-  }[tone];
-
-  return (
-    <div className="rounded-xl border border-[color:var(--line-2)] bg-[color:var(--surface)] px-4 py-3">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-        {label}
-      </div>
-      <div className={`mt-2 inline-flex rounded-lg px-2.5 py-1 text-[13px] font-semibold ${toneClass}`}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function SmallMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl bg-[color:var(--surface-2)] px-3 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-        {label}
-      </div>
-      <div className="mt-1 text-[13px] font-semibold text-[color:var(--ink-2)] break-words">
-        {value}
-      </div>
-    </div>
-  );
-}
-
 function formatDate(value?: string | null): string {
   if (!value) return "-";
   return new Date(value).toLocaleString("th-TH");
+}
+
+function formatFileSize(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatCounts(counts: CleanCounts | null): string {
+  if (!counts) return "-";
+  return `${counts.customers.toLocaleString()} / ${counts.payments.toLocaleString()} / ${counts.usage.toLocaleString()}`;
 }
 
 function getTimestamp(value?: string | null): number {

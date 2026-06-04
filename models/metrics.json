@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-22T14:11:00.126557",
+  "generated_at": "2026-06-04T08:41:07.202335",
   "cutoff_date": "2025-07-01",
   "data_summary": {
     "total_users": 25093,
@@ -10,12 +10,12 @@
     "n_features": 30
   },
   "churn": {
-    "auc": 0.9442,
-    "f1": 0.7772,
-    "precision": 0.7772,
-    "recall": 0.7772,
+    "auc": 0.9443,
+    "f1": 0.789,
+    "precision": 0.7956,
+    "recall": 0.7826,
     "auc_without_leak_suspects": 0.9368,
-    "auc_drop_leakage_test": 0.0057
+    "auc_drop_leakage_test": 0.0072
   },
   "churn_competition": {
     "Logistic Regression": {
@@ -46,43 +46,43 @@
   "churn_shap_top10": [
     {
       "feature": "days_until_sms_expire",
-      "shap": 0.8183232427167316
+      "shap": 0.9436895651922218
     },
     {
       "feature": "usage_recent_3m",
-      "shap": 0.5935276873302328
+      "shap": 0.6080931178920947
     },
     {
       "feature": "usage_months",
-      "shap": 0.49874875831954746
+      "shap": 0.5572404630704264
     },
     {
       "feature": "days_since_last_send",
-      "shap": 0.4693002287752986
+      "shap": 0.5010243398639119
     },
     {
       "feature": "usage_decay_ratio",
-      "shap": 0.3044103883890052
+      "shap": 0.35576507650538486
     },
     {
       "feature": "credit_sms_log",
-      "shap": 0.19457950782065742
+      "shap": 0.22230445023704956
     },
     {
       "feature": "days_until_email_expire",
-      "shap": 0.09787222594172729
+      "shap": 0.13121337528379462
+    },
+    {
+      "feature": "days_since_last_access",
+      "shap": 0.10754033890344644
     },
     {
       "feature": "pay_overdue_ratio",
-      "shap": 0.0903386067616748
+      "shap": 0.10630287358718417
     },
     {
       "feature": "pay_recency_days",
-      "shap": 0.07649152249922439
-    },
-    {
-      "feature": "pay_n_sms",
-      "shap": 0.07041832476947663
+      "shap": 0.09470276175885176
     }
   ],
   "clv": {
@@ -97,30 +97,30 @@
     "coverage_80": 0.7909
   },
   "credit": {
-    "p50_mae": 32.92,
-    "p50_medae": 9.68,
-    "p50_r2": 0.4118,
+    "p50_mae": 33.02,
+    "p50_medae": 9.96,
+    "p50_r2": 0.4094,
     "xgb_baseline_mae": 34.98,
-    "coverage_p10_p90_before": 0.7606,
-    "coverage_p10_p90_after": 0.804,
-    "coverage_p25_p75_before": 0.4744,
+    "coverage_p10_p90_before": 0.7554,
+    "coverage_p10_p90_after": 0.8057,
+    "coverage_p25_p75_before": 0.4796,
     "coverage_p25_p75_after": 0.5013,
-    "conformal_mult_80": 1.04,
-    "conformal_mult_50": 1.06
+    "conformal_mult_80": 1.05,
+    "conformal_mult_50": 1.05
   },
   "winback": {
-    "auc": 0.932,
-    "f1": 0.3667,
-    "precision": 0.55,
-    "recall": 0.275,
+    "auc": 0.9313,
+    "f1": 0.375,
+    "precision": 0.5,
+    "recall": 0.3,
     "n_churned": 4948,
     "n_comeback": 160
   },
   "conversion": {
-    "auc": 0.9715,
-    "f1": 0.7143,
-    "precision": 0.6818,
-    "recall": 0.75,
+    "auc": 0.9624,
+    "f1": 0.6364,
+    "precision": 0.5833,
+    "recall": 0.7,
     "n_free": 1912,
     "n_converted": 80
   }
