@@ -1,20 +1,19 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
-  Clock3,
-  Database,
   FileSpreadsheet,
   Layers3,
   Play,
   RefreshCw,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
-import { EmptyState, PageHeader, SectionCard, Skeleton, StatusPill } from "@/components/ui";
+import { EmptyState, PageHeader, Skeleton, StatusPill } from "@/components/ui";
 import {
   deleteTrainDataSource,
   fetchTrainDataSources,
@@ -27,7 +26,6 @@ import { MOBY_BRAND } from "@/lib/login-brand-colors";
 import { getDisplayError } from "@/lib/ui-error";
 
 const IMPORT_ACCENT = MOBY_BRAND.orange;
-const IMPORT_ACCENT_WARM = MOBY_BRAND.orangeWarm;
 const IMPORT_ACCENT_BORDER = "rgba(252,76,2,0.24)";
 const IMPORT_PROGRESS_BG = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
 
@@ -52,6 +50,7 @@ export default function TrainingPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -71,10 +70,7 @@ export default function TrainingPage() {
     void load();
   }, []);
 
-  const latestSource = getLatestTrainSource(trainSources);
-  const latestCleanCounts = getCleanCounts(latestSource);
   const readySources = trainSources.filter((source) => source.import_status === "ready");
-  const canTrain = readySources.length > 0;
   const sortedSources = trainSources
     .slice()
     .sort(
@@ -82,6 +78,19 @@ export default function TrainingPage() {
         getTimestamp(b.imported_at || b.created_at) -
         getTimestamp(a.imported_at || a.created_at)
     );
+  const selectedSource =
+    sortedSources.find((source) => source.id === selectedSourceId) ?? readySources[0] ?? null;
+  const selectedCleanCounts = getCleanCounts(selectedSource);
+  const canTrain = Boolean(selectedSource && selectedSource.import_status === "ready");
+
+  useEffect(() => {
+    if (sortedSources.length === 0) {
+      setSelectedSourceId(null);
+      return;
+    }
+    if (selectedSourceId && sortedSources.some((source) => source.id === selectedSourceId)) return;
+    setSelectedSourceId(readySources[0]?.id ?? sortedSources[0]?.id ?? null);
+  }, [readySources, selectedSourceId, sortedSources]);
 
   const handleImportFile = async (file: File) => {
     const datasetName = importName.trim() || file.name.replace(/\.xlsx$/i, "");
@@ -148,6 +157,10 @@ export default function TrainingPage() {
   };
 
   const startTraining = async () => {
+    if (!canTrain) {
+      setImportError("Select a ready dataset before training.");
+      return;
+    }
     setTraining(true);
     setImportError(null);
     setImportSuccess(null);
@@ -192,203 +205,395 @@ export default function TrainingPage() {
           </div>
         )}
 
-        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_420px]">
-          <div className="surface-elev overflow-hidden">
-            <div className="border-b border-[color:var(--line-2)] px-5 py-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <section className="surface-elev overflow-hidden">
+          <div className="p-5 sm:p-6">
+              <div className="flex flex-col gap-3 border-b border-[color:var(--line-2)] pb-5 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
                     New dataset
                   </p>
-                  <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.03em] text-[color:var(--ink-1)]">
-                    Import and clean training data
+                  <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+                    Import new workbook
                   </h2>
-                  <p className="mt-1 text-[12.5px] leading-5 text-[color:var(--ink-4)]">
-                    เลือกไฟล์ .xlsx หนึ่งชุด ระบบจะ import raw rows และ clean ให้พร้อม train
+                  <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
+                    ตั้งชื่อ dataset, เลือก Excel fixed-schema แล้วให้ระบบ import raw และ clean data อัตโนมัติ
                   </p>
                 </div>
                 <StatusPill tone={canTrain ? "ok" : "neutral"}>
                   {canTrain ? `${readySources.length} ready` : "No ready dataset"}
                 </StatusPill>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)]">
-              <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
+              <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <FilePickerPanel
+                  pendingFile={pendingFile}
+                  importing={importing}
+                  fileInputRef={fileInputRef}
+                  onFileChange={(file) => {
                     setPendingFile(file);
                     setImportError(null);
                     setImportSuccess(null);
                   }}
                 />
 
-                <div className="flex items-start gap-3">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#fff4ed] text-[#fc4c02]">
-                    <FileSpreadsheet size={20} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">
-                      Excel source file
-                    </p>
-                    <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
-                      เลือกไฟล์ .xlsx ตาม fixed schema 8 sheets เพื่อ import raw และ clean data
-                    </p>
+                <div className="flex flex-col rounded-[24px] border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
+                  <div className="grid grid-cols-1 gap-4">
+                    <label className="block">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+                        Dataset name
+                      </span>
+                      <input
+                        type="text"
+                        value={importName}
+                        onChange={(e) => setImportName(e.target.value)}
+                        placeholder="e.g. Bangkok University Q1"
+                        className="mt-1.5 h-11 w-full rounded-2xl border border-[color:var(--line)] bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+                        Client label
+                      </span>
+                      <input
+                        type="text"
+                        value={importClient}
+                        onChange={(e) => setImportClient(e.target.value)}
+                        placeholder="optional"
+                        className="mt-1.5 h-11 w-full rounded-2xl border border-[color:var(--line)] bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl bg-white p-3">
+                    <div className="flex items-center gap-3 text-[12px] text-[color:var(--ink-4)]">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#fff4ed] text-[#fc4c02]">
+                        <Layers3 size={15} />
+                      </span>
+                      <span>
+                        Import raw rows first, then clean customers, payments, and usage rows for training.
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                <div
-                  className="mt-5 rounded-[20px] border px-4 py-4"
-                  style={{
-                    borderColor: pendingFile ? IMPORT_ACCENT_BORDER : "var(--line-2)",
-                    background: pendingFile ? "#fff8f4" : "var(--surface-2)",
-                  }}
-                >
-                  {pendingFile ? (
-                    <div className="flex items-center gap-3">
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[#fc4c02] shadow-[var(--shadow-1)]">
-                        <FileSpreadsheet size={18} />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-semibold text-[color:var(--ink-1)]">
-                          {pendingFile.name}
-                        </p>
-                        <p className="mt-1 text-[12px] text-[color:var(--ink-4)]">
-                          {formatFileSize(pendingFile.size)} selected
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="py-3 text-center">
-                      <p className="text-[13px] font-medium text-[color:var(--ink-2)]">
-                        No file selected
-                      </p>
-                      <p className="mt-1 text-[12px] text-[color:var(--ink-5)]">
-                        Upload one workbook per training dataset.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  disabled={importing}
-                  onClick={() => fileInputRef.current?.click()}
-                  className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--line)] bg-white px-4 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Upload size={15} />
-                  {pendingFile ? "Change file" : "Choose file"}
-                </button>
               </div>
 
-              <div className="flex flex-col">
-                <div className="grid grid-cols-1 gap-4">
-                  <label className="block">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-                      Dataset name
-                    </span>
-                    <input
-                      type="text"
-                      value={importName}
-                      onChange={(e) => setImportName(e.target.value)}
-                      placeholder="e.g. Bangkok University Q1"
-                      className="mt-1.5 h-11 w-full rounded-2xl border border-[color:var(--line)] bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
-                    />
-                  </label>
+              {(importing || training) && (
+                <ProgressCard
+                  training={training}
+                  progress={importProgress}
+                  step={importStep}
+                  phase={importPhase}
+                />
+              )}
 
-                  <label className="block">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-                      Client label
-                    </span>
-                    <input
-                      type="text"
-                      value={importClient}
-                      onChange={(e) => setImportClient(e.target.value)}
-                      placeholder="optional"
-                      className="mt-1.5 h-11 w-full rounded-2xl border border-[color:var(--line)] bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
-                    />
-                  </label>
-                </div>
+              <div className="mt-5 flex flex-col gap-3 border-t border-[color:var(--line-2)] pt-5 sm:flex-row sm:items-center sm:justify-end">
+                <button
+                  type="button"
+                  disabled={importing || !pendingFile}
+                  onClick={() => pendingFile && void handleImportFile(pendingFile)}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.18)] disabled:opacity-50 sm:min-w-[170px]"
+                  style={{ background: IMPORT_ACCENT }}
+                >
+                  <FileSpreadsheet size={16} />
+                  Upload and clean
+                </button>
+              </div>
+          </div>
+        </section>
 
-                <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    disabled={importing || !pendingFile}
-                    onClick={() => pendingFile && void handleImportFile(pendingFile)}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.18)] disabled:opacity-50"
-                    style={{ background: IMPORT_ACCENT }}
-                  >
-                    <FileSpreadsheet size={16} />
-                    Upload and clean
-                  </button>
+        <ModelTrainingPanel
+          sources={sortedSources}
+          selectedSource={selectedSource}
+          selectedCounts={selectedCleanCounts}
+          readyCount={readySources.length}
+          training={training}
+          deletingId={deletingId}
+          canTrain={canTrain}
+          onTrain={() => void startTraining()}
+          onSelect={(source) => setSelectedSourceId(source.id)}
+          onDelete={(source) => void deleteSource(source)}
+        />
+      </div>
 
-                  <button
-                    type="button"
-                    disabled={training || importing || !canTrain}
-                    onClick={() => void startTraining()}
-                    className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-[color:var(--line)] bg-white px-4 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-                  >
-                    {training ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
-                    {training ? "Training..." : "Train model"}
-                  </button>
-                </div>
+      {(importSuccess || importError) && !importing && (
+        <ResultModal
+          tone={importSuccess ? "ok" : "danger"}
+          title={importSuccess ? "Dataset is ready" : "Action failed"}
+          message={importSuccess ?? importError ?? ""}
+          onClose={() => {
+            setImportSuccess(null);
+            setImportError(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
-                {(importing || training) && (
-                  <ProgressCard
-                    training={training}
-                    progress={importProgress}
-                    step={importStep}
-                    phase={importPhase}
-                  />
-                )}
+function FilePickerPanel({
+  pendingFile,
+  importing,
+  fileInputRef,
+  onFileChange,
+}: {
+  pendingFile: File | null;
+  importing: boolean;
+  fileInputRef: RefObject<HTMLInputElement>;
+  onFileChange: (file: File) => void;
+}) {
+  return (
+    <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          onFileChange(file);
+        }}
+      />
 
-                {importSuccess && !importing && !training && (
-                  <InlineNotice tone="ok" icon={<CheckCircle2 size={15} />}>
-                    {importSuccess}
-                  </InlineNotice>
-                )}
+      <div className="flex items-start gap-3">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#fff4ed] text-[#fc4c02]">
+          <FileSpreadsheet size={20} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">
+            Source workbook
+          </p>
+          <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
+            One `.xlsx` file with the required 8 sheets.
+          </p>
+        </div>
+      </div>
 
-                {importError && (
-                  <InlineNotice tone="danger" icon={<AlertCircle size={15} />}>
-                    {importError}
-                  </InlineNotice>
-                )}
+      <div className="mt-5 overflow-hidden rounded-[22px] border border-[color:var(--line-2)]">
+        <div className="border-b border-[color:var(--line-2)] bg-[color:var(--surface-2)] px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+            Selected file
+          </p>
+        </div>
+
+        {pendingFile ? (
+          <div className="bg-[#fff8f4] px-4 py-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[#fc4c02] shadow-[var(--shadow-1)]">
+                <FileSpreadsheet size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-semibold text-[color:var(--ink-1)]">
+                  {pendingFile.name}
+                </p>
+                <p className="mt-1 text-[12px] text-[color:var(--ink-4)]">
+                  {formatFileSize(pendingFile.size)}
+                </p>
               </div>
             </div>
           </div>
+        ) : (
+          <div className="px-4 py-7 text-center">
+            <p className="text-[13px] font-medium text-[color:var(--ink-2)]">No file selected</p>
+            <p className="mt-1 text-[12px] text-[color:var(--ink-5)]">
+              Choose a workbook before uploading.
+            </p>
+          </div>
+        )}
+      </div>
 
-          <aside className="space-y-5">
-            <LatestDatasetPanel source={latestSource} />
-            <CleanOutputPanel counts={latestCleanCounts} />
-          </aside>
-        </section>
+      <button
+        type="button"
+        disabled={importing}
+        onClick={() => fileInputRef.current?.click()}
+        className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-[color:var(--line)] bg-white px-4 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <Upload size={15} />
+        {pendingFile ? "Change file" : "Choose file"}
+      </button>
+    </div>
+  );
+}
 
-        <SectionCard title="Dataset library" hint="Uploaded raw and clean training datasets">
-          {trainSources.length === 0 ? (
+function ModelTrainingPanel({
+  sources,
+  selectedSource,
+  selectedCounts,
+  readyCount,
+  training,
+  deletingId,
+  canTrain,
+  onTrain,
+  onSelect,
+  onDelete,
+}: {
+  sources: TrainDataSource[];
+  selectedSource: TrainDataSource | null;
+  selectedCounts: CleanCounts | null;
+  readyCount: number;
+  training: boolean;
+  deletingId: string | null;
+  canTrain: boolean;
+  onTrain: () => void;
+  onSelect: (source: TrainDataSource) => void;
+  onDelete: (source: TrainDataSource) => void;
+}) {
+  return (
+    <section className="surface-elev overflow-hidden">
+      <div className="border-b border-[color:var(--line-2)] px-5 py-4 sm:px-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
+              Model training
+            </p>
+            <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+              Select dataset and train
+            </h2>
+            <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
+              เลือก clean dataset ที่ import ไว้ใน DB แล้วกด train จากพื้นที่นี้ ไม่ใช้ card เลือก dataset แล้ว
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!canTrain || training}
+            onClick={onTrain}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.14)] disabled:opacity-50 xl:min-w-[190px]"
+            style={{ background: IMPORT_ACCENT }}
+          >
+            {training ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
+            {training ? "Training..." : "Train selected"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="border-b border-[color:var(--line-2)] bg-[color:var(--surface-2)] p-5 xl:border-b-0 xl:border-r">
+          <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+              Current dataset
+            </p>
+            <h3 className="mt-2 truncate text-[18px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+              {selectedSource?.name || "No dataset selected"}
+            </h3>
+            <p className="mt-1 break-all text-[12px] leading-5 text-[color:var(--ink-4)]">
+              {selectedSource?.original_filename || "Choose a ready row from the dataset table."}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {selectedSource ? (
+                <StatusPill tone={statusTone(selectedSource.import_status)}>
+                  {statusLabel(selectedSource.import_status)}
+                </StatusPill>
+              ) : (
+                <StatusPill tone="neutral">No selection</StatusPill>
+              )}
+              <StatusPill tone="neutral" dot={false}>
+                {readyCount} ready
+              </StatusPill>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <DatasetCount label="Customers" value={selectedCounts?.customers} />
+            <DatasetCount label="Payments" value={selectedCounts?.payments} />
+            <DatasetCount label="Usage" value={selectedCounts?.usage} />
+          </div>
+        </div>
+
+        <div className="p-5">
+          {sources.length === 0 ? (
             <EmptyState
               icon={FileSpreadsheet}
               title="No training dataset yet"
               hint="Upload one Excel file above. The system will import raw data and clean it automatically."
             />
           ) : (
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-              {sortedSources.map((source) => (
-                <DatasetLibraryCard
-                  key={source.id}
-                  source={source}
-                  deleting={deletingId === source.id}
-                  onDelete={() => void deleteSource(source)}
-                />
-              ))}
+            <div className="overflow-x-auto rounded-[22px] border border-[color:var(--line)]">
+              <table className="table-base">
+                <thead>
+                  <tr>
+                    <th>Dataset</th>
+                    <th>Status</th>
+                    <th className="text-right">Customers</th>
+                    <th className="text-right">Payments</th>
+                    <th className="text-right">Usage</th>
+                    <th>Imported</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.map((source) => (
+                    <DatasetTableRow
+                      key={source.id}
+                      source={source}
+                      selected={selectedSource?.id === source.id}
+                      deleting={deletingId === source.id}
+                      onSelect={() => onSelect(source)}
+                      onDelete={() => onDelete(source)}
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
-        </SectionCard>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ResultModal({
+  tone,
+  title,
+  message,
+  onClose,
+}: {
+  tone: "ok" | "danger";
+  title: string;
+  message: string;
+  onClose: () => void;
+}) {
+  const Icon = tone === "ok" ? CheckCircle2 : AlertCircle;
+  const color = tone === "ok" ? "var(--ok)" : "var(--danger)";
+  const bg = tone === "ok" ? "var(--ok-bg)" : "var(--danger-bg)";
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
+        <div className="flex items-start justify-between gap-4 px-5 py-5">
+          <div className="flex items-start gap-3">
+            <span
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
+              style={{ color, background: bg }}
+            >
+              <Icon size={22} />
+            </span>
+            <div>
+              <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+                {title}
+              </h3>
+              <p className="mt-2 text-[13px] leading-6 text-[color:var(--ink-4)]">{message}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-[color:var(--ink-5)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-2)]"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="border-t border-[color:var(--line-2)] bg-[color:var(--surface-2)] px-5 py-4 text-right">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 items-center justify-center rounded-2xl px-4 text-[13px] font-semibold text-white"
+            style={{ background: tone === "ok" ? IMPORT_ACCENT : "var(--danger)" }}
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -444,200 +649,108 @@ function ProgressCard({
   );
 }
 
-function InlineNotice({
-  tone,
-  icon,
-  children,
+function DatasetTableRow({
+  source,
+  selected,
+  deleting,
+  onSelect,
+  onDelete,
 }: {
-  tone: "ok" | "danger";
-  icon: ReactNode;
-  children: ReactNode;
+  source: TrainDataSource;
+  selected: boolean;
+  deleting: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
 }) {
-  const toneClass =
-    tone === "ok"
-      ? "border-[color:var(--ok)] bg-[color:var(--ok-bg)] text-[color:var(--ok)]"
-      : "border-[color:var(--danger)] bg-[color:var(--danger-bg)] text-[color:var(--danger)]";
+  const counts = getCleanCounts(source);
+  const importer = source.importer_name ?? source.importer_email ?? source.imported_by ?? "-";
+  const selectable = source.import_status === "ready";
 
   return (
-    <div className={`mt-4 flex items-start gap-2 rounded-2xl border px-4 py-3 text-[13px] ${toneClass}`}>
-      <span className="mt-0.5 shrink-0">{icon}</span>
-      <span>{children}</span>
-    </div>
-  );
-}
-
-function LatestDatasetPanel({ source }: { source: TrainDataSource | null }) {
-  return (
-    <div className="surface-elev overflow-hidden">
-      <div className="border-b border-[color:var(--line-2)] px-5 py-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-          Latest dataset
-        </p>
-        <h3 className="mt-1 text-[18px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
-          {source?.name || "No dataset yet"}
-        </h3>
-      </div>
-      <div className="p-5">
-        {source ? (
-          <>
-            <div className="rounded-2xl bg-[color:var(--surface-2)] p-4">
-              <div className="flex items-start gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[#fc4c02] shadow-[var(--shadow-1)]">
-                  <FileSpreadsheet size={18} />
-                </div>
-                <div className="min-w-0">
-                  <p className="break-all text-[13px] font-medium text-[color:var(--ink-2)]">
-                    {source.original_filename}
-                  </p>
-                  <p className="mt-1 text-[12px] text-[color:var(--ink-4)]">
-                    {formatDate(source.imported_at || source.created_at)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <StatusPill tone={statusTone(source.import_status)}>
-                {statusLabel(source.import_status)}
-              </StatusPill>
+    <tr className={selected ? "bg-[#fff8f4]" : undefined}>
+      <td>
+        <div className="flex items-start gap-3">
+          <span
+            className={`mt-0.5 h-3 w-3 shrink-0 rounded-full border ${
+              selected ? "border-[#fc4c02] bg-[#fc4c02]" : "border-[color:var(--ink-6)] bg-white"
+            }`}
+            aria-hidden
+          />
+          <div className="min-w-[220px]">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-[color:var(--ink-1)]">{source.name}</span>
+              {selected && (
+                <StatusPill tone="neutral" dot={false}>
+                  Selected
+                </StatusPill>
+              )}
               {source.client_label && (
                 <StatusPill tone="neutral" dot={false}>
                   {source.client_label}
                 </StatusPill>
               )}
             </div>
-          </>
-        ) : (
-          <p className="text-[13px] leading-6 text-[color:var(--ink-4)]">
-            Upload a fixed-schema Excel file to create the first raw and clean dataset.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CleanOutputPanel({ counts }: { counts: CleanCounts | null }) {
-  return (
-    <div className="surface-elev overflow-hidden">
-      <div className="border-b border-[color:var(--line-2)] px-5 py-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-          Clean output
-        </p>
-        <h3 className="mt-1 text-[18px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
-          Ready rows after cleaning
-        </h3>
-      </div>
-      <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-3 xl:grid-cols-1">
-        <CleanMetric icon={<Database size={15} />} label="Customers" value={counts?.customers} />
-        <CleanMetric icon={<FileSpreadsheet size={15} />} label="Payments" value={counts?.payments} />
-        <CleanMetric icon={<Layers3 size={15} />} label="Usage" value={counts?.usage} />
-      </div>
-    </div>
-  );
-}
-
-function CleanMetric({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode;
-  label: string;
-  value?: number;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--line-2)] bg-[color:var(--surface-2)] px-4 py-3">
-      <div className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-2xl bg-white text-[#fc4c02]">
-          {icon}
-        </span>
-        <span className="text-[12px] font-medium text-[color:var(--ink-4)]">{label}</span>
-      </div>
-      <span className="num text-[18px] font-semibold text-[color:var(--ink-1)]">
-        {value == null ? "-" : value.toLocaleString()}
-      </span>
-    </div>
-  );
-}
-
-function DatasetLibraryCard({
-  source,
-  deleting,
-  onDelete,
-}: {
-  source: TrainDataSource;
-  deleting: boolean;
-  onDelete: () => void;
-}) {
-  const counts = getCleanCounts(source);
-  const importer = source.importer_name ?? source.importer_email ?? source.imported_by ?? "-";
-
-  return (
-    <article className="rounded-[22px] border border-[color:var(--line-2)] bg-white p-4 transition hover:border-[color:var(--line)] hover:shadow-[var(--shadow-2)]">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-[15px] font-semibold text-[color:var(--ink-1)]">
-              {source.name}
-            </h3>
-            <StatusPill tone={statusTone(source.import_status)}>
-              {statusLabel(source.import_status)}
-            </StatusPill>
+            <div className="mt-1 max-w-[360px] break-all text-[12px] text-[color:var(--ink-4)]">
+              {source.original_filename}
+            </div>
+            {source.error_message && (
+              <div className="mt-1 text-[12px] text-[color:var(--danger)]">{source.error_message}</div>
+            )}
           </div>
-          <p className="mt-1 break-all text-[12px] text-[color:var(--ink-4)]">
-            {source.original_filename}
-          </p>
         </div>
-        <button
-          type="button"
-          disabled={deleting}
-          onClick={onDelete}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[color:var(--line)] bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-50"
-        >
-          {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
-          Remove
-        </button>
-      </div>
-
-      {source.client_label && (
-        <div className="mt-3">
-          <StatusPill tone="neutral" dot={false}>
-            {source.client_label}
-          </StatusPill>
+      </td>
+      <td>
+        <StatusPill tone={statusTone(source.import_status)}>
+          {statusLabel(source.import_status)}
+        </StatusPill>
+      </td>
+      <td className="num text-right">{counts?.customers.toLocaleString() ?? "-"}</td>
+      <td className="num text-right">{counts?.payments.toLocaleString() ?? "-"}</td>
+      <td className="num text-right">{counts?.usage.toLocaleString() ?? "-"}</td>
+      <td>
+        <div className="text-[12px] text-[color:var(--ink-4)]">
+          {formatDate(source.imported_at || source.created_at)}
         </div>
-      )}
-
-      <div className="mt-4 grid grid-cols-1 gap-2 text-[12px] text-[color:var(--ink-4)] sm:grid-cols-3">
-        <LibraryMeta icon={<Clock3 size={13} />} label="Imported" value={formatDate(source.imported_at || source.created_at)} />
-        <LibraryMeta icon={<Database size={13} />} label="Clean rows" value={formatCounts(counts)} />
-        <LibraryMeta icon={<CheckCircle2 size={13} />} label="By" value={importer} />
-      </div>
-
-      {source.error_message && (
-        <div className="mt-3 rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-3 py-2 text-[12px] text-[color:var(--danger)]">
-          {source.error_message}
+        <div className="mt-0.5 text-[11px] text-[color:var(--ink-5)]">{importer}</div>
+      </td>
+      <td>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={!selectable}
+            onClick={onSelect}
+            className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-[12px] font-semibold disabled:opacity-45 ${
+              selected
+                ? "bg-[#fff4ed] text-[#fc4c02]"
+                : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]"
+            }`}
+          >
+            {selected ? "Selected" : selectable ? "Select" : "Not ready"}
+          </button>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={onDelete}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[color:var(--line)] bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-50"
+          >
+            {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
+            Remove
+          </button>
         </div>
-      )}
-    </article>
+      </td>
+    </tr>
   );
 }
 
-function LibraryMeta({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-}) {
+function DatasetCount({ label, value }: { label: string; value?: number }) {
   return (
-    <div className="rounded-2xl bg-[color:var(--surface-2)] px-3 py-2">
-      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
-        {icon}
+    <div className="rounded-2xl bg-[color:var(--surface-2)] px-3 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
         {label}
-      </div>
-      <div className="break-words text-[12px] text-[color:var(--ink-2)]">{value}</div>
+      </p>
+      <p className="num mt-1 text-[15px] font-semibold text-[color:var(--ink-1)]">
+        {value == null ? "-" : value.toLocaleString()}
+      </p>
     </div>
   );
 }
@@ -667,11 +780,6 @@ function GradientProgressBar({
       />
     </div>
   );
-}
-
-function getLatestTrainSource(sources: TrainDataSource[]): TrainDataSource | null {
-  if (sources.length === 0) return null;
-  return [...sources].sort((a, b) => getTimestamp(b.imported_at || b.created_at) - getTimestamp(a.imported_at || a.created_at))[0] || null;
 }
 
 function getCleanCounts(source: TrainDataSource | null): CleanCounts | null {
@@ -723,11 +831,6 @@ function formatDate(value?: string | null): string {
 
 function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function formatCounts(counts: CleanCounts | null): string {
-  if (!counts) return "-";
-  return `${counts.customers.toLocaleString()} / ${counts.payments.toLocaleString()} / ${counts.usage.toLocaleString()}`;
 }
 
 function getTimestamp(value?: string | null): number {
