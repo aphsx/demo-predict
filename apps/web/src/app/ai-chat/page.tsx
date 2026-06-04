@@ -216,7 +216,7 @@ export default function AIChatPage() {
                   key={label}
                   onClick={() => send(label)}
                   className="flex items-center gap-3 p-3.5 rounded-xl border border-[color:var(--line)]
-                    bg-white hover:bg-[color:var(--moby-50)] hover:border-[color:var(--moby-200)]
+                    bg-white hover:bg-[color:var(--surface-2)] hover:border-[color:var(--line)]
                     text-left group transition-all shadow-sm"
                 >
                   <div className="flex items-center justify-center shrink-0">

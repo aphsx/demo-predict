@@ -343,10 +343,10 @@ export default function AIChatWidget() {
                   key={chip}
                   onClick={() => send(chip)}
                   className="shrink-0 px-2.5 py-1.5 rounded-full
-                    border border-[color:var(--moby-200)]
-                    bg-[color:var(--moby-50)] text-[color:var(--moby-700)]
+                    border border-[color:var(--line)]
+                    bg-white text-[color:var(--moby-700)]
                     text-[11px] font-medium whitespace-nowrap
-                    hover:bg-[color:var(--moby-100)] transition-colors"
+                    hover:bg-[color:var(--surface-2)] transition-colors"
                 >
                   {chip}
                 </button>
