@@ -273,7 +273,7 @@ export default function TrainingPage() {
 
                   <div className="mt-5 rounded-2xl bg-white p-3">
                     <div className="flex items-center gap-3 text-[12px] text-[color:var(--ink-4)]">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color:var(--moby-50)] text-[color:var(--moby-700)]">
+                      <span className="shrink-0 text-[color:var(--moby-700)]">
                         <Layers3 size={15} />
                       </span>
                       <span>
@@ -386,7 +386,7 @@ function FilePickerPanel({
       />
 
       <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[color:var(--moby-50)] text-[color:var(--moby-700)]">
+        <span className="mt-0.5 shrink-0 text-[color:var(--moby-700)]">
           <FileSpreadsheet size={20} />
         </span>
         <div className="min-w-0">
@@ -407,9 +407,9 @@ function FilePickerPanel({
         </div>
 
         {pendingFile ? (
-          <div className="bg-[color:var(--moby-50)] px-4 py-4">
+          <div className="bg-white px-4 py-4">
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white text-[color:var(--moby-700)] shadow-[var(--shadow-1)]">
+              <span className="shrink-0 text-[color:var(--moby-700)]">
                 <FileSpreadsheet size={18} />
               </span>
               <div className="min-w-0 flex-1">
@@ -568,7 +568,7 @@ function ProgressCard({
   return (
     <div className="mt-5 rounded-[24px] border border-[rgba(252,76,2,0.14)] bg-white p-4 shadow-[var(--shadow-1)]">
       <div className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-2xl bg-[#fff4ed] text-[#fc4c02]">
+        <span className="shrink-0 text-[#fc4c02]">
           <RefreshCw size={15} className="animate-spin" />
         </span>
         <div className="min-w-0 flex-1">

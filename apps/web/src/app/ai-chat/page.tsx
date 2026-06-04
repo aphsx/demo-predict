@@ -167,8 +167,7 @@ export default function AIChatPage() {
                     <Sparkles size={15} className="text-white" />
                   </div>
                 ) : (
-                  <div className="w-9 h-9 rounded-xl bg-[color:var(--surface-2)] border border-[color:var(--line)]
-                    flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="flex items-center justify-center shrink-0 mt-0.5">
                     <User size={15} className="text-[color:var(--ink-3)]" />
                   </div>
                 )}
@@ -220,8 +219,7 @@ export default function AIChatPage() {
                     bg-white hover:bg-[color:var(--moby-50)] hover:border-[color:var(--moby-200)]
                     text-left group transition-all shadow-sm"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-[color:var(--moby-50)] border border-[color:var(--moby-100)]
-                    flex items-center justify-center shrink-0 group-hover:bg-[color:var(--moby-100)] transition-colors">
+                  <div className="flex items-center justify-center shrink-0">
                     <Icon size={14} className="text-[color:var(--moby-600)]" />
                   </div>
                   <span className="text-[12.5px] font-medium text-[color:var(--ink-2)] group-hover:text-[color:var(--moby-700)]">
@@ -309,7 +307,7 @@ export default function AIChatPage() {
           </div>
 
           <div className="border-t border-[color:var(--line)] pt-4 mt-auto">
-            <div className="rounded-lg bg-[color:var(--moby-50)] border border-[color:var(--moby-100)] p-3">
+            <div className="rounded-lg border border-[color:var(--line)] bg-white p-3">
               <p className="text-[11px] font-semibold text-[color:var(--moby-700)] mb-1">Gemini AI</p>
               <p className="text-[10.5px] text-[color:var(--ink-4)] leading-relaxed">
                 วิเคราะห์จากข้อมูลจริงในรอบที่เลือก ข้อมูลไม่ถูกส่งออกนอกระบบ

@@ -260,7 +260,7 @@ export function EmptyState({
 }: { title: string; hint?: string; icon?: any; action?: ReactNode }) {
   return (
     <div className="surface-soft py-10 px-6 text-center">
-      <div className="inline-flex w-10 h-10 rounded-full bg-white border border-[color:var(--line)] items-center justify-center text-[color:var(--ink-4)] mb-3">
+      <div className="inline-flex items-center justify-center text-[color:var(--ink-4)] mb-3">
         <Icon size={18} />
       </div>
       <div className="text-[13.5px] font-medium text-[color:var(--ink-2)]">{title}</div>
@@ -304,16 +304,9 @@ export function AlertItem({
     info:   <Activity size={14} className="text-[color:var(--info)]" />,
     ok:     <CheckCircle2 size={14} className="text-[color:var(--ok)]" />,
   };
-  const bgMap = {
-    danger: "var(--danger-bg)", warn: "var(--warn-bg)",
-    info: "var(--info-bg)",     ok: "var(--ok-bg)",
-  } as const;
   return (
     <div className="flex gap-3 px-4 py-3 border-b border-[color:var(--line-2)] last:border-0">
-      <div
-        className="shrink-0 w-7 h-7 rounded-full grid place-items-center"
-        style={{ background: bgMap[severity] }}
-      >
+      <div className="shrink-0 pt-0.5">
         {iconMap[severity]}
       </div>
       <div className="flex-1 min-w-0">

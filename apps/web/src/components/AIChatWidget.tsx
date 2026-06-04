@@ -261,7 +261,7 @@ export default function AIChatWidget() {
         {/* ── HEADER (flex-shrink-0) ─────────────────────── */}
         <header className="flex-shrink-0 flex items-center gap-3 px-4 py-3
           bg-gradient-to-r from-[color:var(--moby-600)] to-[color:var(--moby-800)]">
-          <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+          <div className="flex items-center justify-center shrink-0">
             <Sparkles size={14} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
