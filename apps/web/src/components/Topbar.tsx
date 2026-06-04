@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search, Calendar, ChevronDown, BellDot, LogOut } from "lucide-react";
+import Image from "next/image";
+import { Calendar, ChevronDown, BellDot, LogOut } from "lucide-react";
 import { fetchRuns, Run } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
 import { useSession, signOut } from "@/lib/auth-client";
@@ -63,7 +64,7 @@ export default function Topbar() {
 
       {/* Search */}
       <div className="hidden md:flex items-center h-9 px-3 gap-2 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] w-[260px]">
-        <Search size={14} className="text-[color:var(--ink-5)]" />
+        <Image src="/icons/search.svg" alt="" width={14} height={14} aria-hidden />
         <input
           placeholder="Search account id, segment…"
           className="bg-transparent outline-none text-[13px] flex-1 placeholder:text-[color:var(--ink-5)]"

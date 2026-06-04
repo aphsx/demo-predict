@@ -6,6 +6,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 
 function UploadButton({ runId, uploading, onUpload }: {
   runId: string;
@@ -20,7 +21,7 @@ function UploadButton({ runId, uploading, onUpload }: {
         disabled={uploading}
         className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1 disabled:opacity-40"
       >
-        {uploading ? <RefreshCw size={11} className="animate-spin" /> : <Upload size={11} />}
+        {uploading ? <RefreshCw size={11} className="animate-spin" /> : <Image src="/icons/upload-icon.svg" alt="" width={14} height={14} aria-hidden />}
         Upload
       </button>
       <input
@@ -34,7 +35,7 @@ function UploadButton({ runId, uploading, onUpload }: {
   );
 }
 import {
-  Plus, Upload, Trash2, RefreshCw, CheckCircle2,
+  Plus, Trash2, RefreshCw, CheckCircle2,
   Clock3, AlertCircle, FileSpreadsheet, ChevronRight,
 } from "lucide-react";
 import {

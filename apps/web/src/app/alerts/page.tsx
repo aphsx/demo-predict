@@ -1,8 +1,9 @@
 "use client";
 export const dynamic = "force-dynamic";
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
-  AlertTriangle, ShieldCheck, Activity, Bell, Filter, X,
+  AlertTriangle, ShieldCheck, Activity, Bell, Filter,
   ChevronRight,
 } from "lucide-react";
 import {
@@ -78,7 +79,7 @@ export default function AlertsPage() {
           right={
             <div className="flex items-center gap-2">
               {(filterSev || filterCat) && (
-                <button onClick={() => { setFilterSev(""); setFilterCat(""); }} className="text-[12px] text-[color:var(--ink-4)] hover:text-[color:var(--danger)] inline-flex items-center gap-1"><X size={11} /> clear</button>
+                <button onClick={() => { setFilterSev(""); setFilterCat(""); }} className="text-[12px] text-[color:var(--ink-4)] hover:text-[color:var(--danger)] inline-flex items-center gap-1"><Image src="/icons/clear.svg" alt="" width={12} height={13} aria-hidden /> clear</button>
               )}
               <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
                 className="h-8 px-3 rounded-md border border-[color:var(--line)] bg-white text-[12px] text-[color:var(--ink-2)]">

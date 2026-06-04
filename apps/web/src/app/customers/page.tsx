@@ -5,7 +5,8 @@ export const dynamic = "force-dynamic";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, Download, ChevronLeft, ChevronRight, Filter, X, Activity } from "lucide-react";
+import Image from "next/image";
+import { ChevronLeft, ChevronRight, Filter, Activity } from "lucide-react";
 import {
   PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
   lifecycleTone,
@@ -56,7 +57,7 @@ function Inner() {
             href={exportUrl(runId, Object.fromEntries(Object.entries(filters).filter(([,v]) => v)))}
             className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1.5"
           >
-            <Download size={14} /> Export CSV
+            <Image src="/icons/download.svg" alt="" width={16} height={17} aria-hidden /> Export CSV
           </a>
         }
       />
@@ -67,7 +68,7 @@ function Inner() {
           title="Filters"
           hint={activeFilters > 0 ? `${activeFilters} filters active` : "ทุกลูกค้าในรอบนี้"}
           right={activeFilters > 0
-            ? <button onClick={clearAll} className="text-[12px] text-[color:var(--ink-4)] hover:text-[color:var(--danger)] inline-flex items-center gap-1"><X size={12} /> Clear all</button>
+            ? <button onClick={clearAll} className="text-[12px] text-[color:var(--ink-4)] hover:text-[color:var(--danger)] inline-flex items-center gap-1"><Image src="/icons/clear.svg" alt="" width={12} height={13} aria-hidden /> Clear all</button>
             : <Filter size={14} className="text-[color:var(--ink-5)]" />
           }
         >
@@ -77,7 +78,7 @@ function Inner() {
             <div>
               <label className="text-[11px] font-medium text-[color:var(--ink-4)] block mb-1">Account ID</label>
               <div className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white flex items-center gap-2 focus-within:border-[color:var(--moby-300)]">
-                <Search size={13} className="text-[color:var(--ink-5)]" />
+                <Image src="/icons/search.svg" alt="" width={14} height={14} aria-hidden />
                 <input
                   value={filters.search}
                   onChange={e => setFilter("search", e.target.value)}

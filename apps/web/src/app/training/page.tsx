@@ -2,13 +2,13 @@
 export const dynamic = "force-dynamic";
 
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import {
   FileSpreadsheet,
   Layers3,
   Play,
   RefreshCw,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { notifyStatusDialog } from "@/components/GlobalStatusDialogHost";
 import { StatusDialog } from "@/components/StatusDialog";
@@ -301,7 +301,7 @@ export default function TrainingPage() {
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.18)] disabled:opacity-50 sm:min-w-[170px]"
                   style={{ background: IMPORT_ACCENT }}
                 >
-                  <FileSpreadsheet size={16} />
+                  <Image src="/icons/import.svg" alt="" width={16} height={17} aria-hidden />
                   Upload and clean
                 </button>
               </div>
@@ -439,7 +439,7 @@ function FilePickerPanel({
         className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_12px_28px_rgba(0,107,255,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: BRAND_BLUE }}
       >
-        <Upload size={15} />
+        <Image src="/icons/upload-icon.svg" alt="" width={14} height={14} aria-hidden />
         {pendingFile ? "Change file" : "Choose file"}
       </button>
     </div>
