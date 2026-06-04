@@ -3,8 +3,6 @@ export const dynamic = "force-dynamic";
 
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import {
-  AlertCircle,
-  CheckCircle2,
   FileSpreadsheet,
   Layers3,
   Play,
@@ -12,6 +10,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { StatusDialog } from "@/components/StatusDialog";
 import { EmptyState, PageHeader, Skeleton, StatusPill } from "@/components/ui";
 import {
   deleteTrainDataSource,
@@ -309,7 +308,9 @@ export default function TrainingPage() {
       </div>
 
       {pendingDeleteSource && (
-        <ConfirmModal
+        <StatusDialog
+          open
+          tone="warning"
           title="ยืนยันการลบข้อมูล"
           message={
             pendingDeleteSource.import_status === "importing" ||
@@ -318,6 +319,7 @@ export default function TrainingPage() {
               : "ข้อมูล raw และ clean ทั้งหมดของ dataset นี้จะถูกลบถาวร"
           }
           confirmLabel="ลบข้อมูล"
+          cancelLabel="ยกเลิก"
           loading={deletingId === pendingDeleteSource.id}
           onCancel={() => setPendingDeleteSource(null)}
           onConfirm={() => void deleteSource(pendingDeleteSource)}
@@ -325,15 +327,16 @@ export default function TrainingPage() {
       )}
 
       {(importSuccess || importError) && !importing && (
-        <ResultModal
-          tone={importSuccess ? "ok" : "danger"}
+        <StatusDialog
+          open
+          tone={importSuccess ? "success" : "error"}
           title={importSuccess ?? "ดำเนินการไม่สำเร็จ"}
           message={
             importSuccess
               ? "ระบบ import และ clean data เสร็จเรียบร้อย"
               : importError ?? "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง"
           }
-          onClose={() => {
+          onConfirm={() => {
             setImportSuccess(null);
             setImportError(null);
           }}
@@ -527,108 +530,6 @@ function ModelTrainingPanel({
           )}
       </div>
     </section>
-  );
-}
-
-function ResultModal({
-  tone,
-  title,
-  message,
-  onClose,
-}: {
-  tone: "ok" | "danger";
-  title: string;
-  message: string;
-  onClose: () => void;
-}) {
-  const Icon = tone === "ok" ? CheckCircle2 : AlertCircle;
-  const color = tone === "ok" ? "var(--ok)" : "var(--danger)";
-  const bg = tone === "ok" ? "var(--ok-bg)" : "var(--danger-bg)";
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-[560px] rounded-[28px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
-        <div className="flex flex-col items-center px-6 py-12 text-center">
-          <span
-            className="grid h-[96px] w-[96px] place-items-center rounded-full"
-            style={{ color, background: bg }}
-          >
-            <Icon size={48} strokeWidth={1.8} />
-          </span>
-
-          <h3 className="mt-8 max-w-[400px] text-[20px] font-bold leading-7 text-[color:var(--ink-1)]">
-            {title}
-          </h3>
-          <p className="mt-3 max-w-[420px] text-[13px] leading-6 text-[color:var(--ink-4)]">
-            {message}
-          </p>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-10 inline-flex h-[47px] min-w-[102px] items-center justify-center rounded-2xl px-5 text-[13px] font-semibold text-white"
-            style={{ background: tone === "ok" ? IMPORT_ACCENT : "var(--danger)" }}
-          >
-            ตกลง
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ConfirmModal({
-  title,
-  message,
-  confirmLabel,
-  loading,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  loading: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-[560px] rounded-[28px] border border-white/70 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.22)]">
-        <div className="flex flex-col items-center px-6 py-12 text-center">
-          <span className="grid h-[96px] w-[96px] place-items-center rounded-full bg-[color:var(--warn-bg)] text-[color:var(--warn)]">
-            <AlertCircle size={48} strokeWidth={1.8} />
-          </span>
-
-          <h3 className="mt-8 max-w-[400px] text-[20px] font-bold leading-7 text-[color:var(--ink-1)]">
-            {title}
-          </h3>
-          <p className="mt-3 max-w-[420px] text-[13px] leading-6 text-[color:var(--ink-4)]">
-            {message}
-          </p>
-
-          <div className="mt-10 flex flex-col-reverse gap-3 sm:flex-row">
-            <button
-              type="button"
-              disabled={loading}
-              onClick={onCancel}
-              className="inline-flex h-[47px] min-w-[102px] items-center justify-center rounded-2xl border border-[color:var(--line)] bg-white px-5 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-            >
-              ยกเลิก
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={onConfirm}
-              className="inline-flex h-[47px] min-w-[102px] items-center justify-center rounded-2xl px-5 text-[13px] font-semibold text-white disabled:opacity-50"
-              style={{ background: "var(--danger)" }}
-            >
-              {loading ? "กำลังลบ..." : confirmLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
