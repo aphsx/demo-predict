@@ -196,7 +196,6 @@ export default function TrainingPage() {
 
   return (
     <div className="pb-12">
-      <PageHeader eyebrow="Data pipeline" title="Training data workspace" />
 
       <div className="px-8 mt-4 space-y-6">
         {loadError && (
