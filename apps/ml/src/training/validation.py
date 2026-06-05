@@ -37,6 +37,9 @@ CUSTOMER_REQUIRED_COLUMNS = [
 ]
 PAYMENT_REQUIRED_COLUMNS = ["acc_id", "payment_date", "amount", "credit_add", "credit_type"]
 USAGE_REQUIRED_COLUMNS = ["acc_id", "year", "month", "usage", "channel", "usage_source"]
+CUSTOMER_DB_REQUIRED_COLUMNS = ["source_id", *CUSTOMER_REQUIRED_COLUMNS]
+PAYMENT_DB_REQUIRED_COLUMNS = ["source_id", *PAYMENT_REQUIRED_COLUMNS]
+USAGE_DB_REQUIRED_COLUMNS = ["source_id", *USAGE_REQUIRED_COLUMNS]
 
 ALLOWED_STATUS_VALUES = {"paid", "free", "active", "inactive", "trial", "suspended", ""}
 ALLOWED_CREDIT_TYPES = {"sms", "email", ""}
@@ -112,15 +115,20 @@ def check_predict_schema_quality(source_id: str) -> ValidationReport:
 
 def _check_source_readiness(source_id: str, tables: CleanTableSet) -> ValidationReport:
     with create_engine(database_url()).connect() as conn:
-        source = _load_source(conn, tables.source_table, source_id)
-        row_counts = _load_clean_row_counts(conn, tables, source_id)
+        table_checks = _readiness_table_checks(conn, tables)
+        source = _load_source(conn, tables.source_table, source_id) if _table_exists(conn, tables.source_table) else None
+        row_counts = (
+            _load_clean_row_counts(conn, tables, source_id)
+            if _clean_tables_exist(conn, tables)
+            else {"customers": 0, "payments": 0, "usage": 0}
+        )
 
-    checks = _common_readiness_checks(
-        source=source,
-        row_counts=row_counts,
-        source_id=source_id,
-        source_table=tables.source_table,
-    )
+    checks = table_checks + _common_readiness_checks(
+            source=source,
+            row_counts=row_counts,
+            source_id=source_id,
+            source_table=tables.source_table,
+        )
     if tables.source_kind == "train":
         checks.extend(_train_readiness_checks(row_counts))
     else:
@@ -139,8 +147,23 @@ def _check_source_readiness(source_id: str, tables: CleanTableSet) -> Validation
 
 
 def _check_schema_quality(source_id: str, tables: CleanTableSet) -> ValidationReport:
+    with create_engine(database_url()).connect() as conn:
+        structure_checks = _schema_structure_checks(conn, tables)
+
+    if any(check.severity == "blocker" and not check.passed for check in structure_checks):
+        return ValidationReport(
+            source_id=source_id,
+            source_kind=tables.source_kind,
+            validation_type="schema",
+            status="failed",
+            row_count=0,
+            stats={"table_structure": _table_structure_stats(structure_checks)},
+            anomalies=_anomalies_from_checks(structure_checks),
+            checks=structure_checks,
+        )
+
     dataset = load_clean_dataset(source_id=source_id, tables=tables)
-    checks = _schema_quality_checks(dataset)
+    checks = structure_checks + _schema_quality_checks(dataset)
 
     return ValidationReport(
         source_id=source_id,
@@ -419,6 +442,100 @@ def _rate(count: int, total: int) -> float:
     if total == 0:
         return 0.0
     return float(count / total)
+
+
+def _readiness_table_checks(conn: Connection, tables: CleanTableSet) -> list[ValidationCheck]:
+    return [
+        _table_exists_check(conn, tables.source_table),
+        _table_exists_check(conn, tables.customers_table),
+        _table_exists_check(conn, tables.payments_table),
+        _table_exists_check(conn, tables.usage_table),
+    ]
+
+
+def _schema_structure_checks(conn: Connection, tables: CleanTableSet) -> list[ValidationCheck]:
+    checks = _readiness_table_checks(conn, tables)
+    if any(check.severity == "blocker" and not check.passed for check in checks):
+        return checks
+
+    checks.extend(
+        _table_column_checks(conn, tables.customers_table, CUSTOMER_DB_REQUIRED_COLUMNS)
+    )
+    checks.extend(
+        _table_column_checks(conn, tables.payments_table, PAYMENT_DB_REQUIRED_COLUMNS)
+    )
+    checks.extend(_table_column_checks(conn, tables.usage_table, USAGE_DB_REQUIRED_COLUMNS))
+    return checks
+
+
+def _table_exists_check(conn: Connection, table_name: str) -> ValidationCheck:
+    exists = _table_exists(conn, table_name)
+    return ValidationCheck(
+        name=f"{table_name}_exists",
+        severity="blocker",
+        passed=exists,
+        message=f"{table_name} exists." if exists else f"{table_name} is missing.",
+    )
+
+
+def _table_column_checks(
+    conn: Connection,
+    table_name: str,
+    required_columns: list[str],
+) -> list[ValidationCheck]:
+    columns = _table_columns(conn, table_name)
+    return [
+        ValidationCheck(
+            name=f"{table_name}_{column}_column_exists",
+            severity="blocker",
+            passed=column in columns,
+            message=(
+                f"{table_name}.{column} column exists."
+                if column in columns
+                else f"{table_name}.{column} column is missing."
+            ),
+        )
+        for column in required_columns
+    ]
+
+
+def _table_structure_stats(checks: list[ValidationCheck]) -> dict[str, Any]:
+    return {
+        "missing": [
+            {"name": check.name, "message": check.message}
+            for check in checks
+            if not check.passed
+        ]
+    }
+
+
+def _clean_tables_exist(conn: Connection, tables: CleanTableSet) -> bool:
+    return all(
+        _table_exists(conn, table_name)
+        for table_name in (tables.customers_table, tables.payments_table, tables.usage_table)
+    )
+
+
+def _table_exists(conn: Connection, table_name: str) -> bool:
+    return conn.execute(
+        text("SELECT to_regclass(:table_name) IS NOT NULL"),
+        {"table_name": f"public.{table_name}"},
+    ).scalar_one()
+
+
+def _table_columns(conn: Connection, table_name: str) -> set[str]:
+    rows = conn.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = :table_name
+            """
+        ),
+        {"table_name": table_name},
+    ).scalars()
+    return {str(row) for row in rows}
 
 
 def _load_source(conn: Connection, source_table: str, source_id: str) -> dict[str, Any] | None:
