@@ -1,6 +1,6 @@
 -- [NEW] Predict raw layer: one PostgreSQL table per Excel sheet (8) + catalog.
 -- Separate from train_* and [LEGACY] raw_customers/payments/usage.
--- prediction_run_id links to [LEGACY] prediction_runs until that table is removed.
+-- Independent predict upload source. Prediction runs now live in ml_prediction_runs.
 
 CREATE TABLE predict_data_sources (
     id                   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -16,14 +16,12 @@ CREATE TABLE predict_data_sources (
     notes                TEXT,
     error_message        TEXT,
     imported_by          TEXT,
-    prediction_run_id    UUID,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_predict_data_sources_status ON predict_data_sources (import_status);
 CREATE INDEX idx_predict_data_sources_client ON predict_data_sources (client_label);
 CREATE INDEX idx_predict_data_sources_imported_by ON predict_data_sources (imported_by);
-CREATE INDEX idx_predict_data_sources_run ON predict_data_sources (prediction_run_id);
 
 CREATE TABLE predict_raw_sheet_users_user_profile (
     id           BIGSERIAL PRIMARY KEY,

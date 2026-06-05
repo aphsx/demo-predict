@@ -1,7 +1,7 @@
 """
 Run Alembic migrations, repairing partial-schema Docker volumes.
 
-If ML tables exist but alembic_version is missing (failed mid-baseline),
+If schema tables exist but alembic_version is missing (failed mid-baseline),
 reset the public schema when DOCKER_BUILD=1 and re-run from scratch.
 
 After Alembic: apply [NEW] moby-data-prep SQL (train + predict raw) from
@@ -19,7 +19,7 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-ML_MARKERS = ("model_versions", "prediction_runs", "predictions")
+SCHEMA_MARKERS = ("ml_training_runs", "ml_model_versions", "ml_prediction_outputs")
 AUTH_MARKER = "user"
 TRAIN_RAW_MARKER = "train_data_sources"
 PREDICT_RAW_MARKER = "predict_data_sources"
@@ -57,15 +57,15 @@ async def schema_state(database_url: str) -> str:
     async with engine.connect() as conn:
         has_alembic = await exists(conn, "alembic_version")
         has_auth = await exists(conn, AUTH_MARKER)
-        has_ml = await exists(conn, ML_MARKERS[0])
+        has_schema = await exists(conn, SCHEMA_MARKERS[0])
 
     await engine.dispose()
 
     if has_alembic:
         return "tracked"
-    if has_ml and not has_auth:
+    if has_schema and not has_auth:
         return "partial_baseline"
-    if has_ml and has_auth:
+    if has_schema and has_auth:
         return "untracked_complete"
     return "empty"
 

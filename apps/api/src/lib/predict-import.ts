@@ -42,7 +42,6 @@ const PREDICT_RAW_TABLE_BY_NAME: Record<string, RawInsertTable> = {
 
 export interface PredictImportResult {
   source_id: string;
-  prediction_run_id: string | null;
   import_status: string;
   sheet_manifest: Record<string, number>;
   file_checksum_sha256: string;
@@ -159,7 +158,6 @@ export async function importPredictExcel(params: {
   filename: string;
   name: string;
   imported_by: string;
-  prediction_run_id?: string | null;
   client_label?: string | null;
   notes?: string | null;
   /** When true, leave status `importing` after raw (clean step sets `ready`). */
@@ -184,7 +182,6 @@ export async function importPredictExcel(params: {
       fileSizeBytes: params.buffer.length,
       importStatus: "importing",
       importedBy: params.imported_by,
-      predictionRunId: params.prediction_run_id ?? null,
       notes: params.notes ?? null,
     })
     .returning({ id: predictDataSources.id });
@@ -227,7 +224,6 @@ export async function importPredictExcel(params: {
 
     return {
       source_id: sourceId,
-      prediction_run_id: params.prediction_run_id ?? null,
       import_status: params.deferReadyCatalog ? "importing" : "ready",
       sheet_manifest: manifest,
       file_checksum_sha256: checksum,
