@@ -23,9 +23,6 @@ import pandas as pd
 from sqlalchemy import create_engine
 
 
-DEFAULT_DATABASE_URL = "postgresql://moby:moby1234@localhost:5433/moby"
-
-
 @dataclass(frozen=True)
 class ProfileConfig:
     source_id: str | None
@@ -69,7 +66,10 @@ def parse_args() -> ProfileConfig:
 
 
 def db_url() -> str:
-    return os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise RuntimeError("DATABASE_URL environment variable is required.")
+    return url
 
 
 def connect():

@@ -156,9 +156,11 @@ async def apply_moby_data_prep_migrations(database_url: str) -> None:
 
 
 async def main() -> None:
-    database_url = os.environ.get(
-        "DATABASE_URL", "postgresql://moby:moby1234@db:5432/moby"
-    )
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        print("ERROR: DATABASE_URL environment variable is required.", file=sys.stderr)
+        sys.exit(1)
+
     state = await schema_state(database_url)
 
     if state == "partial_baseline":
