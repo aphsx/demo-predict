@@ -16,6 +16,14 @@ Scope ของเอกสารนี้:
 
 ยังไม่รวม Web/UI implementation
 
+Related documents:
+
+```text
+docs/ML-FEATURE-SPEC.md
+docs/ML-DB-REBUILD-PLAN.md
+docs/ML-TRAINING-QUALITY-GATES.md
+```
+
 ## 1. Objective
 
 ระบบต้อง train model จาก clean training dataset แล้วสร้าง model artifacts ที่นำไป predict ลูกค้ารายคนได้
@@ -294,6 +302,108 @@ activate
 rollback
 deactivate
 ```
+
+### 7.3.1 `ml_model_aliases`
+
+เก็บ named pointer ไปยัง model version เพื่อให้ prediction code ไม่ต้อง hardcode version id
+
+Required fields:
+
+```text
+id
+model_type
+alias
+model_version_id
+created_by
+created_at
+updated_at
+```
+
+Allowed `alias`:
+
+```text
+champion
+challenger
+rollback_candidate
+```
+
+Rules:
+
+```text
+prediction pipeline loads only alias = champion
+retrain result can be assigned challenger first
+activation means moving champion alias to new version
+rollback means moving champion alias back to previous version
+```
+
+### 7.3.2 `ml_feature_sets`
+
+เก็บ feature contract ที่ผูกกับ model version
+
+Required fields:
+
+```text
+id
+name
+version
+model_type
+feature_names_json
+feature_schema_json
+transform_config_json
+feature_code_hash
+status
+created_at
+```
+
+Purpose:
+
+```text
+บอกว่า model version นี้ train ด้วย feature columns ไหน
+บอก dtype/null/default ของแต่ละ feature
+บอก preprocessing/imputation/scaling/encoding config
+ใช้ validate ว่า prediction features ตรงกับ training features
+```
+
+### 7.3.3 `ml_data_validation_reports`
+
+เก็บ data quality, schema, drift, skew, และ label viability reports
+
+Required fields:
+
+```text
+id
+source_id
+source_kind
+training_run_id
+prediction_run_id
+validation_type
+status
+row_count
+stats_json
+anomalies_json
+drift_json
+created_at
+```
+
+Allowed `validation_type`:
+
+```text
+schema
+profile
+drift
+train_predict_skew
+label_viability
+```
+
+Allowed `status`:
+
+```text
+passed
+warning
+failed
+```
+
+Training/prediction must be blocked if required schema validation fails.
 
 ### 7.4 `ml_prediction_runs`
 
@@ -1121,6 +1231,27 @@ recommended_followup_date
 
 Validation must be temporal, not random-only
 
+Training and prediction must follow:
+
+```text
+docs/ML-TRAINING-QUALITY-GATES.md
+```
+
+This gate document is the source of truth for:
+
+```text
+data readiness checks
+schema/data quality checks
+label viability checks
+leakage checks
+feature contract checks
+preprocessing safety checks
+baseline comparison
+promotion gate
+prediction readiness checks
+post-prediction monitoring
+```
+
 Recommended approach:
 
 ```text
@@ -1146,6 +1277,92 @@ calibration acceptable
 feature importance makes business sense
 ```
 
+### 12.1 Data Quality Validation
+
+Before training:
+
+```text
+validate train_clean_customers schema
+validate train_clean_payments schema
+validate train_clean_usage schema
+validate row counts are non-zero
+validate required columns have acceptable null rates
+validate date ranges support cutoff + horizon
+validate label viability
+```
+
+Before prediction:
+
+```text
+validate predict_clean_customers schema
+validate predict_clean_payments schema
+validate predict_clean_usage schema
+validate predict source has at least customers
+validate active champion models exist
+validate prediction feature columns match model feature set
+```
+
+Validation output must be saved to:
+
+```text
+ml_data_validation_reports
+```
+
+### 12.2 Feature Schema Validation
+
+Each feature set must define:
+
+```text
+feature name
+dtype
+nullable
+default/fallback value
+allowed categorical values
+min/max sanity bounds for numeric features
+source group
+PIT risk tier
+```
+
+Prediction must fail before scoring if:
+
+```text
+required feature missing
+feature dtype cannot be coerced
+feature order cannot be aligned to model feature_names_json
+categorical value is unsupported and no fallback exists
+```
+
+### 12.3 Train/Predict Skew And Drift
+
+For every prediction run, compare prediction feature statistics to the champion model's training feature statistics
+
+Required checks:
+
+```text
+numeric feature distribution shift
+categorical value distribution shift
+missing rate change
+new unseen category values
+row count and coverage changes
+```
+
+Initial metrics:
+
+```text
+PSI for numeric features
+Jensen-Shannon divergence for numeric/categorical distributions
+L-infinity distance for categorical shares
+missing-rate delta
+```
+
+Behavior:
+
+```text
+severe schema issue -> fail prediction before scoring
+moderate drift/skew -> allow prediction but write warning report
+severe drift/skew -> allow only if explicitly configured, otherwise block
+```
+
 ## 13. Retrain Requirements
 
 Retrain must be supported from the beginning
@@ -1156,10 +1373,11 @@ Retrain behavior:
 1. create new ml_training_runs row
 2. build training data from selected source_id/cutoff/config
 3. train new candidate model versions
-4. evaluate against active model
+4. evaluate against champion active model
 5. save artifacts without overwriting old files
-6. activate only if metrics pass threshold
-7. keep previous version for rollback
+6. assign challenger alias if metrics are acceptable
+7. move champion alias only after activation approval/rule passes
+8. keep previous champion as rollback_candidate
 ```
 
 Do not overwrite:
@@ -1464,9 +1682,9 @@ Flow:
 2. load clean predict data
 3. build point-in-time features
 4. assign lifecycle
-5. load active churn model
-6. load active clv model
-7. load active credit model
+5. load champion churn model alias
+6. load champion clv model alias
+7. load champion credit model alias
 8. predict model outputs
 9. calculate derived business outputs
 10. insert ml_prediction_outputs
@@ -1542,6 +1760,7 @@ block prediction run
 2. keep ML-DB-REBUILD-PLAN.md updated
 3. run profile_training_dataset.py
 4. lock first cutoff/horizon
+5. implement ML-TRAINING-QUALITY-GATES.md reports
 ```
 
 Status:
@@ -1633,16 +1852,19 @@ new ML tables exist
 auth tables untouched
 train/predict clean tables untouched
 old prediction tables not dropped until new flow works
+model aliases exist for champion/challenger
+feature sets and data validation reports are persisted
 ```
 
 ### Training Acceptance
 
 ```text
 can create ml_training_runs row
+can create ml_data_validation_reports before training
 can train churn model from train_clean_*
 can save model artifact
 can insert ml_model_versions row
-can mark model active
+can assign challenger/champion aliases
 can retrain without overwriting old model
 ```
 
@@ -1650,7 +1872,8 @@ can retrain without overwriting old model
 
 ```text
 can create ml_prediction_runs row
-can load active models
+can load champion models by alias
+can validate predict data and feature schema before scoring
 can generate output per customer
 output row count equals predict_clean_customers count
 customers with insufficient data still get output rows
@@ -1708,4 +1931,157 @@ After this works, proceed to:
 
 ```text
 train_churn_baseline.py
+```
+
+## 21. Design References And Rationale
+
+เอกสารนี้ไม่ได้ออกแบบจากศูนย์ทั้งหมด แต่ดึง pattern จาก ML/open-source practices ที่ใช้กันทั่วไป
+
+### 21.1 RFM For Churn And Customer Behavior
+
+Rationale:
+
+```text
+Recency, Frequency, Monetary features are standard customer behavior signals.
+They explain how recently, how often, and how much a customer engages/spends.
+```
+
+ใช้ในระบบนี้:
+
+```text
+payment recency
+payment frequency
+payment monetary value
+usage recency
+usage frequency/volume
+usage trend
+```
+
+Why:
+
+```text
+churn มักเกิดหลัง recency ยาวขึ้น, frequency ลดลง, usage/revenue ลดลง
+```
+
+### 21.2 CLV Modeling
+
+Rationale:
+
+```text
+CLV commonly uses purchase frequency, recency, customer age/tenure, and monetary value.
+BG/NBD + Gamma-Gamma style models use these concepts directly.
+```
+
+ใช้ในระบบนี้:
+
+```text
+future_revenue_6m
+payment_count
+payment_tenure_days
+days_since_last_payment
+avg_transaction_value
+total_revenue
+```
+
+Why:
+
+```text
+CLV ไม่ควรวัดจาก total revenue อย่างเดียว ต้องดูว่าลูกค้ายัง active และมี repeat behavior หรือไม่
+```
+
+### 21.3 Feature Store Pattern
+
+Rationale:
+
+```text
+Feast-style feature stores emphasize point-in-time joins and consistent feature definitions between training and serving.
+```
+
+ใช้ในระบบนี้:
+
+```text
+cutoff_date as event timestamp
+shared build_all_features(...)
+ml_feature_sets
+feature_schema_json
+feature_code_hash
+```
+
+Why:
+
+```text
+กัน train/predict feature ไม่ตรงกัน และกัน future leakage
+```
+
+### 21.4 Preprocessing Pipeline Pattern
+
+Rationale:
+
+```text
+scikit-learn Pipeline/ColumnTransformer pattern prevents preprocessing leakage and train/predict mismatch.
+```
+
+ใช้ในระบบนี้:
+
+```text
+fit preprocessing on train split only
+transform validation/test/predict only
+save preprocessing config with artifact
+```
+
+Why:
+
+```text
+imputer/scaler/category vocabulary ต้องมาจาก training data ไม่ใช่ refit จาก predict data
+```
+
+### 21.5 Model Registry Pattern
+
+Rationale:
+
+```text
+MLflow-style model aliases decouple serving code from exact model version ids.
+```
+
+ใช้ในระบบนี้:
+
+```text
+ml_model_versions
+ml_model_aliases
+champion
+challenger
+rollback_candidate
+ml_model_activation_history
+```
+
+Why:
+
+```text
+prediction pipeline โหลด champion เสมอ
+retrain สร้าง challenger ก่อน
+promotion/rollback เปลี่ยน alias ไม่ต้องแก้ prediction code
+```
+
+### 21.6 Data Validation Pattern
+
+Rationale:
+
+```text
+TFDV-style validation checks schema, anomalies, drift, and train/predict skew.
+```
+
+ใช้ในระบบนี้:
+
+```text
+ml_data_validation_reports
+schema validation
+missing-rate validation
+drift/skew validation
+label viability validation
+```
+
+Why:
+
+```text
+โมเดลที่ดีจะพังได้ถ้า predict dataset distribution เปลี่ยนหรือ schema ผิด
 ```

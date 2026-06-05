@@ -130,6 +130,151 @@ last_send
 
 ให้คำนวณใหม่จาก `train_clean_usage.period` และ `train_clean_payments.payment_date` แทน
 
+## 2.1 Feature Rationale Summary
+
+Feature design นี้อ้างอิงจาก pattern ที่ใช้กันทั่วไปใน churn/CLV/feature-store systems:
+
+```text
+RFM / customer behavior forecasting:
+  Recency, Frequency, Monetary are standard behavioral signals for churn, CLV, segmentation
+
+Time-varying behavior:
+  rolling windows and trend features capture behavior change before churn
+
+BG/NBD + Gamma-Gamma / CLV:
+  frequency, recency, customer age (T), monetary value are standard CLV inputs
+
+Feature store pattern:
+  feature definitions should be reusable and point-in-time correct between training and serving
+
+Model registry pattern:
+  model versions should be selected through aliases such as champion/challenger
+
+Data validation pattern:
+  schema, missing rate, drift, and train/predict skew should be checked before training/scoring
+```
+
+References:
+
+```text
+RFM/churn:
+  - RFM measures are widely used as churn/customer behavior features.
+  - Time-varying RFM captures recent behavior changes before churn.
+
+CLV:
+  - BG/NBD uses frequency, recency, and customer age/T.
+  - Gamma-Gamma uses monetary value and requires checking monetary/frequency relationship.
+
+Feature consistency:
+  - Feast uses entity + event_timestamp to create point-in-time correct feature sets.
+  - scikit-learn Pipeline/ColumnTransformer prevents train/test/predict preprocessing mismatch.
+
+Model lifecycle:
+  - MLflow aliases decouple prediction code from exact model version ids.
+```
+
+### 1.5 Feature Set Contract
+
+ทุก model ต้องผูกกับ feature set version ที่ชัดเจน
+
+Feature set ต้องระบุ:
+
+```text
+feature_set_name
+feature_set_version
+model_type
+feature_names
+feature_dtypes
+nullable rules
+default/fallback values
+categorical allowed values
+numeric sanity bounds
+transform config
+feature code hash
+```
+
+เหตุผล:
+
+- train และ predict ต้องได้ feature columns เหมือนกัน
+- retrain ต้องรู้ว่าใช้ feature code/version ไหน
+- prediction ต้อง validate feature schema ก่อน scoring
+- ถ้า feature เปลี่ยน ต้องสร้าง feature set version ใหม่ ไม่แก้เงียบ ๆ
+
+### 1.6 Preprocessing Pipeline Contract
+
+Preprocessing ที่เรียนรู้จาก training data ต้องถูก save ไปกับ model artifact
+
+Examples:
+
+```text
+imputation values
+category vocabulary
+scaler parameters
+feature order
+selected feature list
+target transform
+```
+
+Rules:
+
+```text
+fit preprocessing only on training split
+transform validation/test/predict using fitted preprocessing only
+never refit preprocessing on predict data
+save preprocessing object/config with model artifact
+```
+
+Recommended implementation:
+
+```text
+use sklearn Pipeline/ColumnTransformer when practical
+or implement equivalent fit/transform object with serialized config
+```
+
+This prevents train/predict mismatch and leakage from validation/test/predict data.
+
+### 1.7 Data Quality And Drift Contract
+
+Before training or prediction, generate and store feature/data statistics
+
+Required statistics:
+
+```text
+row count
+distinct acc_id count
+missing rate per feature
+zero rate per feature
+min/max/mean/std for numeric features
+p01/p05/p25/p50/p75/p95/p99 for numeric features
+category counts for categorical features
+date range coverage
+eligibility counts per model
+```
+
+Drift/skew checks:
+
+```text
+prediction features vs champion training features
+new training source vs previous training source
+new retrain candidate vs champion model training data
+```
+
+Suggested metrics:
+
+```text
+PSI
+Jensen-Shannon divergence
+L-infinity distance for categorical shares
+missing-rate delta
+new category count
+```
+
+Store report in:
+
+```text
+ml_data_validation_reports
+```
+
 ## 3. Common Feature Windows
 
 Default windows:
@@ -221,6 +366,17 @@ Source:
 ```text
 train_clean_customers
 predict_clean_customers
+```
+
+Rationale:
+
+```text
+Customer profile features capture static/customer-state context:
+  - account age tells whether behavior is mature or still onboarding
+  - status/credit/expiry can explain operational risk
+  - credit balance and expiry are especially relevant for credit urgency
+
+Use with caution in historical training because this table is a snapshot, not a full history.
 ```
 
 ### 5.1 Customer Age
@@ -341,6 +497,18 @@ Filter:
 payment_date < cutoff_date
 ```
 
+Rationale:
+
+```text
+Payment features are the Monetary and Frequency backbone of RFM:
+  - recency tells how long since the customer last paid
+  - frequency tells purchase habit and loyalty
+  - monetary value separates high-value customers from low-value customers
+  - intervals help predict top-up timing and overdue behavior
+
+These are core features for churn, CLV, and credit forecast.
+```
+
 ### 6.1 Payment Recency
 
 ```text
@@ -360,6 +528,13 @@ credit
 lifecycle
 ```
 
+Why important:
+
+```text
+Long payment recency is often a churn warning sign.
+Recent payment usually means stronger engagement and lower immediate churn risk.
+```
+
 ### 6.2 Payment Frequency
 
 ```text
@@ -377,6 +552,13 @@ Models:
 churn
 clv
 credit
+```
+
+Why important:
+
+```text
+Frequent repeat purchase behavior is a strong CLV and retention signal.
+Low or declining frequency can indicate churn risk.
 ```
 
 ### 6.3 Payment Monetary
@@ -401,6 +583,13 @@ Models:
 churn
 clv
 priority
+```
+
+Why important:
+
+```text
+Monetary value is needed to prioritize churn risk.
+High churn probability matters more when predicted/customer revenue is high.
 ```
 
 ### 6.4 Payment Tenure
@@ -441,6 +630,13 @@ churn
 credit
 ```
 
+Why important:
+
+```text
+Payment intervals describe customer top-up cadence.
+They are essential for estimated_days_until_topup and credit urgency.
+```
+
 Null handling:
 
 ```text
@@ -467,6 +663,13 @@ Models:
 churn
 clv
 priority
+```
+
+Why important:
+
+```text
+Recent revenue decline is a stronger churn signal than lifetime revenue alone.
+Trend features detect behavior change before the customer fully disappears.
 ```
 
 ### 6.7 Credit Type Payment Mix
@@ -530,6 +733,18 @@ period < cutoff_date
 usage > 0 for active-month counts
 ```
 
+Rationale:
+
+```text
+Usage features capture engagement with the product:
+  - volume shows current consumption
+  - recency shows whether the customer is still active
+  - trend shows whether engagement is growing or shrinking
+  - volatility helps separate stable usage from irregular usage
+
+For messaging SaaS, usage is often the clearest leading indicator before churn or top-up.
+```
+
 ### 7.1 Usage Recency
 
 ```text
@@ -547,6 +762,13 @@ churn
 credit
 lifecycle
 priority
+```
+
+Why important:
+
+```text
+If the customer has not sent/used recently, churn risk usually increases.
+This is safer than using snapshot last_send because it is derived point-in-time from usage history.
 ```
 
 ### 7.2 Usage Volume
@@ -610,6 +832,13 @@ credit
 priority
 ```
 
+Why important:
+
+```text
+Declining usage can appear before payment stops.
+Growing usage can signal expansion/upsell or upcoming top-up need.
+```
+
 ### 7.5 Usage Volatility
 
 ```text
@@ -659,6 +888,13 @@ Allowed values:
 ```text
 sms
 email
+```
+
+Rationale:
+
+```text
+SMS and Email can have different behavior patterns, margins, cadence, and churn risk.
+Channel split prevents the model from treating all usage as identical.
 ```
 
 ### 8.1 Channel Volume
@@ -729,6 +965,17 @@ api
 otp
 ```
 
+Rationale:
+
+```text
+BC/API/OTP usage sources represent different product use cases:
+  - BC can represent campaign/broadcast behavior
+  - API can represent integrated/system usage
+  - OTP can represent transactional/authentication usage
+
+Customers using API/OTP may have stickier operational dependency than campaign-only users.
+```
+
 ### 9.1 Source Volume
 
 ```text
@@ -790,6 +1037,13 @@ credit
 
 Combine payment and usage events
 
+Rationale:
+
+```text
+Activity features combine all observable customer interactions into one behavioral timeline.
+This supports lifecycle assignment and ensures every customer can be classified even if only payment or only usage exists.
+```
+
 ### 10.1 Last Activity
 
 ```text
@@ -842,6 +1096,15 @@ credit
 ## 11. Ratio And Interaction Features
 
 These features combine payment, usage, and credit behavior
+
+Rationale:
+
+```text
+Interaction features capture business conditions that single features miss:
+  - high usage but no recent payment can imply top-up risk
+  - high revenue plus declining usage can imply high-value churn risk
+  - credit added per usage helps estimate consumption efficiency
+```
 
 ### 11.1 Revenue Per Usage
 
@@ -908,6 +1171,13 @@ recommended_action
 
 Lifecycle should be rule-based
 
+Rationale:
+
+```text
+Lifecycle is not a model score. It is a business interpretation layer.
+It guarantees every customer gets a meaningful state even when ML models are not eligible.
+```
+
 ### 12.1 Lifecycle Inputs
 
 ```text
@@ -967,6 +1237,19 @@ Target:
 churn_label
 ```
 
+Rationale:
+
+```text
+Churn feature set prioritizes behavioral change:
+  - recency detects inactivity
+  - frequency detects habit
+  - monetary value detects customer importance
+  - usage trend detects early decline
+  - channel/source mix captures product dependency
+
+This follows the common RFM + usage behavior pattern used in churn modeling.
+```
+
 Population:
 
 ```text
@@ -1020,6 +1303,18 @@ Target:
 
 ```text
 future_revenue_6m
+```
+
+Rationale:
+
+```text
+CLV feature set prioritizes future purchasing power:
+  - frequency and tenure indicate repeat behavior
+  - recency indicates whether value is still alive
+  - monetary features estimate spend level
+  - usage features add product engagement signal beyond payments
+
+This aligns with RFM and BG/NBD/Gamma-Gamma style CLV modeling.
 ```
 
 Recommended modeling:
@@ -1088,6 +1383,16 @@ future_credit_usage_90d
 days_until_next_topup
 ```
 
+Rationale:
+
+```text
+Credit forecast needs both consumption and purchase cadence:
+  - usage windows predict future consumption
+  - payment intervals predict top-up timing
+  - credit-added history estimates package size
+  - channel/source split captures different consumption rhythms
+```
+
 Primary features for usage forecast:
 
 ```text
@@ -1153,6 +1458,13 @@ recommended_followup_date
 ## 16. Business Output Features
 
 These are not necessarily model inputs. They are computed after model prediction.
+
+Rationale:
+
+```text
+Business output features translate model scores into action.
+They exist because internal users need priority, reason, and recommendation, not only raw probabilities.
+```
 
 ### 16.1 Churn Risk Level
 
@@ -1384,6 +1696,46 @@ build_activity_features(payments, usage, cutoff)
 build_interaction_features(feature_df)
 build_all_features(customers, payments, usage, cutoff)
 ```
+
+Feature builder output must include:
+
+```text
+feature_df
+feature_names
+feature_schema
+feature_stats
+eligibility_df
+```
+
+`feature_schema` must be stable and saved as part of `ml_feature_sets`.
+
+### Step 2.1: Build Preprocessing Pipeline
+
+File:
+
+```text
+apps/ml/src/training/preprocessing.py
+```
+
+Functions/classes:
+
+```text
+build_preprocessor(feature_schema)
+fit_preprocessor(feature_df_train)
+transform_features(feature_df)
+save_preprocessor(path)
+load_preprocessor(path)
+```
+
+Requirements:
+
+```text
+train split: fit_transform
+validation/test split: transform only
+prediction: transform only
+```
+
+Preprocessing config must be saved with each model artifact.
 
 ### Step 3: Build Label Builder
 

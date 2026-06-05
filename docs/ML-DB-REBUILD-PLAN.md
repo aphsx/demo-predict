@@ -2,6 +2,14 @@
 
 แผนนี้เป็นแนวทางการล้าง DB ฝั่ง ML/output เก่า และสร้าง schema ใหม่สำหรับ training + prediction output โดยยังเก็บ pipeline data import/clean ชุดใหม่ที่ทำไปแล้ว
 
+Related documents:
+
+```text
+docs/ML-TRAINING-SRS.md
+docs/ML-FEATURE-SPEC.md
+docs/ML-TRAINING-QUALITY-GATES.md
+```
+
 ## Goal
 
 สร้างฐานข้อมูลฝั่ง ML ใหม่ให้รองรับ flow นี้:
@@ -270,6 +278,113 @@ deactivate
 ```
 
 ใช้ตอบคำถามว่า model version ไหนถูกใช้จริงเมื่อไร และใครเป็นคนเปลี่ยน
+
+### 2.2 `ml_model_aliases`
+
+เพิ่ม alias layer แบบ model registry สมัยใหม่ เพื่อไม่ให้ prediction code ผูกกับ version id ตรง ๆ
+
+```text
+id
+model_type
+alias
+model_version_id
+created_by
+created_at
+updated_at
+```
+
+Allowed aliases:
+
+```text
+champion
+challenger
+rollback_candidate
+```
+
+ความหมาย:
+
+```text
+champion            model version ที่ prediction pipeline ใช้จริง
+challenger          candidate ที่ผ่าน train แล้วแต่ยังไม่ใช้ production prediction
+rollback_candidate  version เก่าที่ rollback ได้เร็ว
+```
+
+Rule:
+
+```text
+แต่ละ model_type มี alias เดียวกันได้แค่ 1 row
+prediction pipeline ต้องโหลด model ผ่าน alias = champion
+ห้าม hardcode model_version_id ใน prediction code
+```
+
+### 2.3 `ml_feature_sets`
+
+เก็บ contract ของ feature set ที่ model version ใช้
+
+```text
+id
+name
+version
+model_type
+feature_names_json
+feature_schema_json
+transform_config_json
+feature_code_hash
+status
+created_at
+```
+
+เหตุผล:
+
+- model ต้องรู้ว่า train ด้วย feature list ไหน
+- predict ต้องสร้าง feature columns ให้ตรงกับตอน train
+- ถ้า feature code เปลี่ยน ต้อง trace ได้ว่า model version ไหนใช้ feature code version ไหน
+
+### 2.4 `ml_data_validation_reports`
+
+เก็บ report ของ data quality, schema check, drift, และ train/predict skew
+
+```text
+id
+source_id
+source_kind
+training_run_id
+prediction_run_id
+validation_type
+status
+row_count
+stats_json
+anomalies_json
+drift_json
+created_at
+```
+
+Allowed `source_kind`:
+
+```text
+train
+predict
+```
+
+Allowed `validation_type`:
+
+```text
+schema
+profile
+drift
+train_predict_skew
+label_viability
+```
+
+Allowed `status`:
+
+```text
+passed
+warning
+failed
+```
+
+ใช้สำหรับ block training/prediction ถ้า schema หรือ feature quality ผิดรุนแรง
 
 ### 3. `ml_prediction_runs`
 
@@ -841,15 +956,19 @@ ai_status = failed
 ```text
 1. Create new ml_training_runs
 2. Create new ml_model_versions
-3. Create new ml_model_activation_history
-4. Create new ml_prediction_runs
-5. Create new ml_prediction_outputs
-6. Wire Python training to new tables
-7. Verify first training output
-8. Verify retrain creates new versions without overwriting old versions
-9. Wire prediction to active model versions
-10. Verify prediction output
-11. Drop old prediction/model tables
+3. Create new ml_model_aliases
+4. Create new ml_model_activation_history
+5. Create new ml_feature_sets
+6. Create new ml_data_validation_reports
+7. Create new ml_prediction_runs
+8. Create new ml_prediction_outputs
+9. Wire Python training to new tables
+10. Implement required quality gate reports
+11. Verify first training output
+12. Verify retrain creates new versions without overwriting old versions
+13. Wire prediction to champion model aliases
+14. Verify prediction output
+15. Drop old prediction/model tables
 ```
 
 คำแนะนำ: อย่า drop old tables ก่อน verify new training + prediction pipeline ได้ผลครบ
@@ -861,17 +980,21 @@ Auth/login tables must not be dropped in this migration sequence.
 ```text
 1. Lock output fields ของ ml_prediction_outputs
 2. Lock label definitions ของ churn, CLV, credit
-3. เขียน Alembic migration สำหรับ new ML tables
-4. เขียน Python DB loader จาก train_clean_*
-5. เขียน feature builder + label builder
-6. Train baseline churn model ก่อน
-7. Train baseline CLV model
-8. Train baseline credit model
-9. Insert model metadata ลง ml_model_versions
-10. ทำ prediction run แล้ว insert ml_prediction_outputs
-11. เพิ่ม optional per-customer AI explanation fields
-12. เพิ่ม retrain flow ที่สร้าง model version ใหม่และ compare metrics
-13. เพิ่ม activate/rollback model version
+3. Lock feature set contract + feature schema
+4. เขียน Alembic migration สำหรับ new ML tables
+5. เขียน Python DB loader จาก train_clean_*
+6. เขียน feature builder + label builder
+7. เพิ่ม data validation/profile report ก่อน train
+8. เพิ่ม leakage check + feature contract validation
+9. Train baseline churn model ก่อน
+10. Train baseline CLV model
+11. Train baseline credit model
+12. Insert model metadata ลง ml_model_versions
+13. assign champion/challenger aliases
+14. ทำ prediction run แล้ว insert ml_prediction_outputs
+15. เพิ่ม optional per-customer AI explanation fields
+16. เพิ่ม retrain flow ที่สร้าง model version ใหม่และ compare metrics
+17. เพิ่ม activate/rollback model version
 ```
 
 ## Current Decision
@@ -899,7 +1022,10 @@ Remove from model scope:
 Build new:
   ml_training_runs
   ml_model_versions
+  ml_model_aliases
   ml_model_activation_history
+  ml_feature_sets
+  ml_data_validation_reports
   ml_prediction_runs
   ml_prediction_outputs
 
