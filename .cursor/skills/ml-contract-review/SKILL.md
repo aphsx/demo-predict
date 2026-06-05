@@ -93,28 +93,30 @@ For ML data tasks, prefer a read-only verification script that can run repeatedl
 
 ## Review Output
 
+Respond to the user in Thai. Keep code identifiers, file paths, function names, metric names, and exact enum/status values in English.
+
 When asked whether a task is good enough, answer in this shape:
 
 ```text
 Verdict: ready / fix-before-next / not ready
 
-What is solid:
+สิ่งที่แข็งแรงแล้ว:
 - ...
 
-Missing contract functions:
+Contract functions ที่ยังขาด:
 - ...
 
-Risks or caveats:
+ความเสี่ยงหรือ caveats:
 - ...
 
-Fixes applied or required:
+สิ่งที่แก้แล้วหรือควรแก้:
 - ...
 
-Next correct task:
+Task ถัดไปที่ถูกต้อง:
 - ...
 ```
 
-Keep the answer concise, but be strict. If something should exist for real ML readiness, call it out even if the docs only imply it.
+Keep the answer concise, but be strict. If something should exist for real ML readiness, call it out in Thai even if the docs only imply it.
 
 ## Project-Specific Invariants
 
