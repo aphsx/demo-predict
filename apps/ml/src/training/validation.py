@@ -18,6 +18,7 @@ from src.training.data import (
     database_url,
     load_clean_dataset,
 )
+from src.training.labels import LabelConfig, build_label_set
 
 
 CheckSeverity = Literal["blocker", "warning", "info"]
@@ -49,6 +50,15 @@ ALLOWED_USAGE_SOURCES = {"bc", "api", "otp"}
 INVALID_DATE_RATE_THRESHOLD = 0.005
 ORPHAN_ACTIVITY_RATE_WARNING_THRESHOLD = 0.01
 HIGH_NULL_RATE_WARNING_THRESHOLD = 0.50
+CHURN_ELIGIBLE_MIN = 500
+CHURN_POSITIVE_MIN = 100
+CHURN_NEGATIVE_MIN = 100
+CHURN_POSITIVE_RATE_MIN = 0.05
+CHURN_POSITIVE_RATE_MAX = 0.80
+CLV_ELIGIBLE_MIN = 500
+CLV_NONZERO_MIN = 100
+CREDIT_USAGE_NONZERO_MIN = 500
+TOPUP_OBSERVED_MIN = 500
 
 
 @dataclass(frozen=True)
@@ -64,7 +74,7 @@ class ValidationCheck:
 class ValidationReport:
     source_id: str
     source_kind: SourceKind
-    validation_type: Literal["profile", "schema"]
+    validation_type: Literal["profile", "schema", "label_viability"]
     status: ReportStatus
     row_count: int
     stats: dict[str, Any]
@@ -113,10 +123,41 @@ def check_predict_schema_quality(source_id: str) -> ValidationReport:
     return _check_schema_quality(source_id=source_id, tables=PREDICT_TABLES)
 
 
+def check_train_label_viability(
+    source_id: str,
+    config: LabelConfig,
+) -> ValidationReport:
+    """Gate 4 label viability checks for train labels."""
+
+    dataset = load_clean_dataset(source_id=source_id, tables=TRAIN_TABLES)
+    label_set = build_label_set(
+        dataset.customers,
+        dataset.payments,
+        dataset.usage,
+        config,
+    )
+    checks = _label_viability_checks(label_set)
+
+    return ValidationReport(
+        source_id=source_id,
+        source_kind="train",
+        validation_type="label_viability",
+        status=_report_status(checks),
+        row_count=len(dataset.customers),
+        stats=_label_viability_stats(label_set),
+        anomalies=_anomalies_from_checks(checks),
+        checks=checks,
+    )
+
+
 def _check_source_readiness(source_id: str, tables: CleanTableSet) -> ValidationReport:
     with create_engine(database_url()).connect() as conn:
         table_checks = _readiness_table_checks(conn, tables)
-        source = _load_source(conn, tables.source_table, source_id) if _table_exists(conn, tables.source_table) else None
+        source = (
+            _load_source(conn, tables.source_table, source_id)
+            if _table_exists(conn, tables.source_table)
+            else None
+        )
         row_counts = (
             _load_clean_row_counts(conn, tables, source_id)
             if _clean_tables_exist(conn, tables)
@@ -124,11 +165,11 @@ def _check_source_readiness(source_id: str, tables: CleanTableSet) -> Validation
         )
 
     checks = table_checks + _common_readiness_checks(
-            source=source,
-            row_counts=row_counts,
-            source_id=source_id,
-            source_table=tables.source_table,
-        )
+        source=source,
+        row_counts=row_counts,
+        source_id=source_id,
+        source_table=tables.source_table,
+    )
     if tables.source_kind == "train":
         checks.extend(_train_readiness_checks(row_counts))
     else:
@@ -259,6 +300,137 @@ def _schema_quality_stats(dataset: CleanDataset) -> dict[str, Any]:
     }
 
 
+def _label_viability_checks(label_set: dict[str, pd.DataFrame]) -> list[ValidationCheck]:
+    churn = label_set["churn"]
+    clv = label_set["clv"]
+    credit_usage = label_set["credit_usage"]
+    topup_timing = label_set["topup_timing"]
+
+    churn_positive = int((churn["churn_label"] == 1).sum()) if len(churn) else 0
+    churn_negative = int((churn["churn_label"] == 0).sum()) if len(churn) else 0
+    churn_rate = _rate(churn_positive, len(churn))
+
+    clv_nonzero = int((clv["future_revenue_6m"] > 0).sum()) if len(clv) else 0
+    credit_30_nonzero = int((credit_usage["future_credit_usage_30d"] > 0).sum())
+    credit_90_nonzero = int((credit_usage["future_credit_usage_90d"] > 0).sum())
+    topup_observed = int(topup_timing["topup_observed"].sum())
+
+    return [
+        _minimum_count_check(
+            "churn_eligible_count",
+            len(churn),
+            CHURN_ELIGIBLE_MIN,
+            severity="blocker",
+        ),
+        _minimum_count_check(
+            "churn_positive_count",
+            churn_positive,
+            CHURN_POSITIVE_MIN,
+            severity="blocker",
+        ),
+        _minimum_count_check(
+            "churn_negative_count",
+            churn_negative,
+            CHURN_NEGATIVE_MIN,
+            severity="blocker",
+        ),
+        ValidationCheck(
+            name="churn_positive_rate",
+            severity="blocker",
+            passed=CHURN_POSITIVE_RATE_MIN <= churn_rate <= CHURN_POSITIVE_RATE_MAX,
+            message=(
+                "Churn positive rate is within viability range."
+                if CHURN_POSITIVE_RATE_MIN <= churn_rate <= CHURN_POSITIVE_RATE_MAX
+                else "Churn positive rate is outside viability range."
+            ),
+            details={
+                "positive_rate": churn_rate,
+                "min": CHURN_POSITIVE_RATE_MIN,
+                "max": CHURN_POSITIVE_RATE_MAX,
+            },
+        ),
+        _minimum_count_check("clv_eligible_count", len(clv), CLV_ELIGIBLE_MIN, "blocker"),
+        _minimum_count_check("clv_future_revenue_nonzero", clv_nonzero, CLV_NONZERO_MIN, "blocker"),
+        _minimum_count_check(
+            "credit_future_usage_30d_nonzero",
+            credit_30_nonzero,
+            CREDIT_USAGE_NONZERO_MIN,
+            "blocker",
+        ),
+        _minimum_count_check(
+            "credit_future_usage_90d_nonzero",
+            credit_90_nonzero,
+            CREDIT_USAGE_NONZERO_MIN,
+            "blocker",
+        ),
+        _minimum_count_check(
+            "topup_timing_observed",
+            topup_observed,
+            TOPUP_OBSERVED_MIN,
+            "warning",
+        ),
+    ]
+
+
+def _label_viability_stats(label_set: dict[str, pd.DataFrame]) -> dict[str, Any]:
+    churn = label_set["churn"]
+    clv = label_set["clv"]
+    credit_usage = label_set["credit_usage"]
+    topup_timing = label_set["topup_timing"]
+
+    churn_positive = int((churn["churn_label"] == 1).sum()) if len(churn) else 0
+    churn_negative = int((churn["churn_label"] == 0).sum()) if len(churn) else 0
+
+    return {
+        "churn": {
+            "eligible_count": int(len(churn)),
+            "positive_count": churn_positive,
+            "negative_count": churn_negative,
+            "positive_rate": _rate(churn_positive, len(churn)),
+        },
+        "clv": {
+            "eligible_count": int(len(clv)),
+            "future_revenue_nonzero_count": int((clv["future_revenue_6m"] > 0).sum())
+            if len(clv)
+            else 0,
+            "future_revenue_total": float(clv["future_revenue_6m"].sum()) if len(clv) else 0.0,
+        },
+        "credit": {
+            "customers": int(len(credit_usage)),
+            "future_usage_30d_nonzero_count": int(
+                (credit_usage["future_credit_usage_30d"] > 0).sum()
+            ),
+            "future_usage_90d_nonzero_count": int(
+                (credit_usage["future_credit_usage_90d"] > 0).sum()
+            ),
+        },
+        "topup_timing": {
+            "customers": int(len(topup_timing)),
+            "observed_count": int(topup_timing["topup_observed"].sum()),
+            "observed_rate": _rate(int(topup_timing["topup_observed"].sum()), len(topup_timing)),
+        },
+    }
+
+
+def _minimum_count_check(
+    name: str,
+    count: int,
+    threshold: int,
+    severity: CheckSeverity,
+) -> ValidationCheck:
+    return ValidationCheck(
+        name=name,
+        severity=severity,
+        passed=count >= threshold,
+        message=(
+            "Count meets viability threshold."
+            if count >= threshold
+            else "Count is below viability threshold."
+        ),
+        details={"count": int(count), "threshold": threshold},
+    )
+
+
 def _required_column_checks(
     frame_name: str,
     frame: pd.DataFrame,
@@ -370,7 +542,7 @@ def _duplicate_customer_check(customers: pd.DataFrame) -> ValidationCheck:
     duplicate_count = int(duplicated.sum())
     return ValidationCheck(
         name="duplicate_customer_acc_id",
-        severity="warning",
+        severity="blocker",
         passed=duplicate_count == 0,
         message=(
             "Customer acc_id values are unique."

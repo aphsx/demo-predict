@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify clean data loaders and Gate 1 readiness checks.
+"""Verify clean data loaders, Gate 1 readiness, and Gate 2 schema checks.
 
 This script is read-only. It does not train, score, or write database rows.
 """
@@ -24,9 +24,11 @@ from src.training.data import (  # noqa: E402
     load_predict_clean,
     load_train_clean,
 )
+from src.training.labels import LabelConfig  # noqa: E402
 from src.training.validation import (  # noqa: E402
     check_predict_source_readiness,
     check_predict_schema_quality,
+    check_train_label_viability,
     check_train_schema_quality,
     check_train_source_readiness,
 )
@@ -39,6 +41,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Verify clean data access layer.")
     parser.add_argument("--source-kind", choices=["train", "predict"], default="train")
     parser.add_argument("--source-id", help="Source id to verify. Defaults to latest ready source.")
+    parser.add_argument("--cutoff-date", default="2025-07-01", help="Cutoff for train label viability.")
+    parser.add_argument("--horizon-days", type=int, default=180)
+    parser.add_argument("--active-window-days", type=int, default=180)
     parser.add_argument("--output-json", type=Path, help="Optional path for a JSON report.")
     return parser.parse_args()
 
@@ -63,15 +68,44 @@ def latest_ready_source(source_kind: SourceKind) -> str:
     return str(row[0])
 
 
-def verify_source(source_kind: SourceKind, source_id: str) -> dict[str, Any]:
+def verify_source(
+    source_kind: SourceKind,
+    source_id: str,
+    label_config: LabelConfig,
+) -> dict[str, Any]:
     if source_kind == "train":
         readiness = check_train_source_readiness(source_id)
         schema_quality = check_train_schema_quality(source_id)
-        customers, payments, usage = load_train_clean(source_id)
+        label_viability = (
+            check_train_label_viability(source_id, label_config)
+            if schema_quality.status != "failed"
+            else None
+        )
+        loader = load_train_clean
     else:
         readiness = check_predict_source_readiness(source_id)
         schema_quality = check_predict_schema_quality(source_id)
-        customers, payments, usage = load_predict_clean(source_id)
+        label_viability = None
+        loader = load_predict_clean
+
+    if (
+        readiness.status == "failed"
+        or schema_quality.status == "failed"
+        or (label_viability is not None and label_viability.status == "failed")
+    ):
+        return {
+            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "source_kind": source_kind,
+            "source_id": source_id,
+            "status": "failed",
+            "readiness": readiness.to_dict(),
+            "schema_quality": schema_quality.to_dict(),
+            "label_viability": label_viability.to_dict() if label_viability else None,
+            "loader_checks": [],
+            "dataframe_summary": None,
+        }
+
+    customers, payments, usage = loader(source_id)
 
     loader_checks = _loader_checks(
         source_kind=source_kind,
@@ -83,6 +117,7 @@ def verify_source(source_kind: SourceKind, source_id: str) -> dict[str, Any]:
         "passed"
         if readiness.status != "failed"
         and schema_quality.status != "failed"
+        and (label_viability is None or label_viability.status != "failed")
         and all(c["passed"] for c in loader_checks)
         else "failed"
     )
@@ -94,6 +129,7 @@ def verify_source(source_kind: SourceKind, source_id: str) -> dict[str, Any]:
         "status": status,
         "readiness": readiness.to_dict(),
         "schema_quality": schema_quality.to_dict(),
+        "label_viability": label_viability.to_dict() if label_viability else None,
         "loader_checks": loader_checks,
         "dataframe_summary": {
             "customers": _frame_summary(customers),
@@ -159,6 +195,8 @@ def _frame_summary(frame: pd.DataFrame) -> dict[str, Any]:
 
 
 def to_jsonable(value: Any) -> Any:
+    if value is pd.NA:
+        return None
     if isinstance(value, (np.integer,)):
         return int(value)
     if isinstance(value, (np.floating,)):
@@ -169,6 +207,8 @@ def to_jsonable(value: Any) -> Any:
         return {str(k): to_jsonable(v) for k, v in value.items()}
     if isinstance(value, list):
         return [to_jsonable(v) for v in value]
+    if isinstance(value, (set, tuple)):
+        return [to_jsonable(v) for v in value]
     return value
 
 
@@ -176,7 +216,12 @@ def main() -> None:
     args = parse_args()
     source_kind: SourceKind = args.source_kind
     source_id = args.source_id or latest_ready_source(source_kind)
-    report = verify_source(source_kind, source_id)
+    label_config = LabelConfig(
+        cutoff_date=pd.Timestamp(args.cutoff_date),
+        horizon_days=args.horizon_days,
+        active_window_days=args.active_window_days,
+    )
+    report = verify_source(source_kind, source_id, label_config)
 
     print("=" * 80)
     print("Clean Data Access Verification")
@@ -186,6 +231,8 @@ def main() -> None:
     print(f"status:      {report['status']}")
     print(f"readiness:   {report['readiness']['status']}")
     print(f"schema:      {report['schema_quality']['status']}")
+    if report["label_viability"] is not None:
+        print(f"labels:      {report['label_viability']['status']}")
     print(f"rows:        {report['readiness']['stats']['row_counts']}")
     print("=" * 80)
 
