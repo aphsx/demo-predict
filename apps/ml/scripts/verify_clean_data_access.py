@@ -26,6 +26,8 @@ from src.training.data import (  # noqa: E402
 )
 from src.training.validation import (  # noqa: E402
     check_predict_source_readiness,
+    check_predict_schema_quality,
+    check_train_schema_quality,
     check_train_source_readiness,
 )
 
@@ -64,9 +66,11 @@ def latest_ready_source(source_kind: SourceKind) -> str:
 def verify_source(source_kind: SourceKind, source_id: str) -> dict[str, Any]:
     if source_kind == "train":
         readiness = check_train_source_readiness(source_id)
+        schema_quality = check_train_schema_quality(source_id)
         customers, payments, usage = load_train_clean(source_id)
     else:
         readiness = check_predict_source_readiness(source_id)
+        schema_quality = check_predict_schema_quality(source_id)
         customers, payments, usage = load_predict_clean(source_id)
 
     loader_checks = _loader_checks(
@@ -75,7 +79,13 @@ def verify_source(source_kind: SourceKind, source_id: str) -> dict[str, Any]:
         payments=payments,
         usage=usage,
     )
-    status = "passed" if readiness.status != "failed" and all(c["passed"] for c in loader_checks) else "failed"
+    status = (
+        "passed"
+        if readiness.status != "failed"
+        and schema_quality.status != "failed"
+        and all(c["passed"] for c in loader_checks)
+        else "failed"
+    )
 
     return {
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -83,6 +93,7 @@ def verify_source(source_kind: SourceKind, source_id: str) -> dict[str, Any]:
         "source_id": source_id,
         "status": status,
         "readiness": readiness.to_dict(),
+        "schema_quality": schema_quality.to_dict(),
         "loader_checks": loader_checks,
         "dataframe_summary": {
             "customers": _frame_summary(customers),
@@ -174,6 +185,7 @@ def main() -> None:
     print(f"source_id:   {report['source_id']}")
     print(f"status:      {report['status']}")
     print(f"readiness:   {report['readiness']['status']}")
+    print(f"schema:      {report['schema_quality']['status']}")
     print(f"rows:        {report['readiness']['stats']['row_counts']}")
     print("=" * 80)
 
