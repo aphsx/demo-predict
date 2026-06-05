@@ -441,6 +441,272 @@ export const predictCleanUsage = pgTable(
   ]
 );
 
+// ── [NEW] ML v2 — training, model registry, evaluation, prediction outputs ──
+
+export const mlTrainingRuns = pgTable(
+  "ml_training_runs",
+  {
+    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    sourceId: uuid("source_id").notNull(),
+    runType: text("run_type").notNull().default("initial_train"),
+    status: text("status").notNull().default("pending"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    cutoffDate: date("cutoff_date").notNull(),
+    horizonDays: integer("horizon_days").notNull(),
+    trainingConfigJson: jsonb("training_config_json"),
+    parentTrainingRunId: uuid("parent_training_run_id"),
+    notes: text("notes"),
+    errorMessage: text("error_message"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    index("idx_ml_training_runs_source").on(t.sourceId),
+    index("idx_ml_training_runs_status").on(t.status),
+    index("idx_ml_training_runs_created_by").on(t.createdBy),
+  ]
+);
+
+export const mlFeatureSets = pgTable(
+  "ml_feature_sets",
+  {
+    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    name: text("name").notNull(),
+    version: text("version").notNull(),
+    modelType: text("model_type").notNull(),
+    featureNamesJson: jsonb("feature_names_json").notNull(),
+    featureSchemaJson: jsonb("feature_schema_json").notNull(),
+    transformConfigJson: jsonb("transform_config_json"),
+    featureCodeHash: text("feature_code_hash"),
+    status: text("status").notNull().default("candidate"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    uniqueIndex("uq_ml_feature_sets_name_version_type").on(t.name, t.version, t.modelType),
+    index("idx_ml_feature_sets_model_type").on(t.modelType),
+    index("idx_ml_feature_sets_status").on(t.status),
+  ]
+);
+
+export const mlModelVersions = pgTable(
+  "ml_model_versions",
+  {
+    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    trainingRunId: uuid("training_run_id").notNull().references(() => mlTrainingRuns.id, {
+      onDelete: "cascade",
+    }),
+    featureSetId: uuid("feature_set_id").references(() => mlFeatureSets.id, {
+      onDelete: "set null",
+    }),
+    modelType: text("model_type").notNull(),
+    version: text("version").notNull(),
+    status: text("status").notNull().default("candidate"),
+    artifactPath: text("artifact_path"),
+    artifactChecksum: text("artifact_checksum"),
+    metricsJson: jsonb("metrics_json"),
+    validationMetricsJson: jsonb("validation_metrics_json"),
+    testMetricsJson: jsonb("test_metrics_json"),
+    featureNamesJson: jsonb("feature_names_json"),
+    labelDefinitionJson: jsonb("label_definition_json"),
+    trainingDataSnapshotJson: jsonb("training_data_snapshot_json"),
+    modelCardJson: jsonb("model_card_json"),
+    modelCardPath: text("model_card_path"),
+    isActive: boolean("is_active").notNull().default(false),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+    trainedAt: timestamp("trained_at", { withTimezone: true }).default(sql`NOW()`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    uniqueIndex("uq_ml_model_versions_type_version").on(t.modelType, t.version),
+    index("idx_ml_model_versions_training_run").on(t.trainingRunId),
+    index("idx_ml_model_versions_feature_set").on(t.featureSetId),
+    index("idx_ml_model_versions_type_status").on(t.modelType, t.status),
+    index("idx_ml_model_versions_active").on(t.modelType, t.isActive),
+    uniqueIndex("uq_ml_model_versions_one_active_per_type")
+      .on(t.modelType)
+      .where(sql`${t.isActive} = TRUE`),
+  ]
+);
+
+export const mlModelAliases = pgTable(
+  "ml_model_aliases",
+  {
+    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    modelType: text("model_type").notNull(),
+    alias: text("alias").notNull(),
+    modelVersionId: uuid("model_version_id").notNull().references(() => mlModelVersions.id, {
+      onDelete: "cascade",
+    }),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    uniqueIndex("uq_ml_model_aliases_type_alias").on(t.modelType, t.alias),
+    index("idx_ml_model_aliases_version").on(t.modelVersionId),
+  ]
+);
+
+export const mlModelActivationHistory = pgTable(
+  "ml_model_activation_history",
+  {
+    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    modelType: text("model_type").notNull(),
+    previousModelVersionId: uuid("previous_model_version_id").references(() => mlModelVersions.id, {
+      onDelete: "set null",
+    }),
+    newModelVersionId: uuid("new_model_version_id").references(() => mlModelVersions.id, {
+      onDelete: "set null",
+    }),
+    action: text("action").notNull(),
+    reason: text("reason"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    index("idx_ml_activation_history_type").on(t.modelType),
+    index("idx_ml_activation_history_new_version").on(t.newModelVersionId),
+  ]
+);
+
+export const mlPredictionRuns = pgTable(
+  "ml_prediction_runs",
+  {
+    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    predictSourceId: uuid("predict_source_id").notNull(),
+    status: text("status").notNull().default("pending"),
+    cutoffDate: date("cutoff_date").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    totalCustomers: integer("total_customers"),
+    errorMessage: text("error_message"),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    index("idx_ml_prediction_runs_source").on(t.predictSourceId),
+    index("idx_ml_prediction_runs_status").on(t.status),
+    index("idx_ml_prediction_runs_created_by").on(t.createdBy),
+  ]
+);
+
+export const mlDataValidationReports = pgTable(
+  "ml_data_validation_reports",
+  {
+    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    sourceId: uuid("source_id"),
+    sourceKind: text("source_kind").notNull(),
+    trainingRunId: uuid("training_run_id").references(() => mlTrainingRuns.id, {
+      onDelete: "cascade",
+    }),
+    predictionRunId: uuid("prediction_run_id").references(() => mlPredictionRuns.id, {
+      onDelete: "cascade",
+    }),
+    validationType: text("validation_type").notNull(),
+    status: text("status").notNull(),
+    rowCount: integer("row_count"),
+    statsJson: jsonb("stats_json"),
+    anomaliesJson: jsonb("anomalies_json"),
+    driftJson: jsonb("drift_json"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    index("idx_ml_validation_reports_source").on(t.sourceKind, t.sourceId),
+    index("idx_ml_validation_reports_training").on(t.trainingRunId),
+    index("idx_ml_validation_reports_prediction").on(t.predictionRunId),
+    index("idx_ml_validation_reports_status").on(t.status),
+  ]
+);
+
+export const mlModelEvaluations = pgTable(
+  "ml_model_evaluations",
+  {
+    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
+    modelVersionId: uuid("model_version_id").notNull().references(() => mlModelVersions.id, {
+      onDelete: "cascade",
+    }),
+    trainingRunId: uuid("training_run_id").notNull().references(() => mlTrainingRuns.id, {
+      onDelete: "cascade",
+    }),
+    modelType: text("model_type").notNull(),
+    evaluationType: text("evaluation_type").notNull(),
+    datasetSplit: text("dataset_split").notNull(),
+    cutoffDate: date("cutoff_date"),
+    horizonDays: integer("horizon_days"),
+    baselineName: text("baseline_name"),
+    featureSetId: uuid("feature_set_id").references(() => mlFeatureSets.id, {
+      onDelete: "set null",
+    }),
+    metricsJson: jsonb("metrics_json"),
+    confusionMatrixJson: jsonb("confusion_matrix_json"),
+    calibrationJson: jsonb("calibration_json"),
+    liftTableJson: jsonb("lift_table_json"),
+    featureImportanceJson: jsonb("feature_importance_json"),
+    errorAnalysisJson: jsonb("error_analysis_json"),
+    businessMetricsJson: jsonb("business_metrics_json"),
+    artifactPath: text("artifact_path"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    index("idx_ml_evaluations_model_version").on(t.modelVersionId),
+    index("idx_ml_evaluations_training_run").on(t.trainingRunId),
+    index("idx_ml_evaluations_type_split").on(t.modelType, t.evaluationType, t.datasetSplit),
+  ]
+);
+
+export const mlPredictionOutputs = pgTable(
+  "ml_prediction_outputs",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    predictionRunId: uuid("prediction_run_id").notNull().references(() => mlPredictionRuns.id, {
+      onDelete: "cascade",
+    }),
+    accId: integer("acc_id").notNull(),
+    lifecycleStage: text("lifecycle_stage"),
+    subStage: text("sub_stage"),
+    churnProbability: numeric("churn_probability", { precision: 5, scale: 4 }),
+    churnRiskLevel: text("churn_risk_level"),
+    predictedClv6m: numeric("predicted_clv_6m", { precision: 14, scale: 2 }),
+    customerValueTier: text("customer_value_tier"),
+    revenueAtRisk: numeric("revenue_at_risk", { precision: 14, scale: 2 }),
+    predictedCreditUsage30d: numeric("predicted_credit_usage_30d", { precision: 14, scale: 2 }),
+    predictedCreditUsage90d: numeric("predicted_credit_usage_90d", { precision: 14, scale: 2 }),
+    estimatedDaysUntilTopup: integer("estimated_days_until_topup"),
+    creditUrgencyLevel: text("credit_urgency_level"),
+    recommendedFollowupDate: date("recommended_followup_date"),
+    usageTrend: text("usage_trend"),
+    daysSinceLastActivity: integer("days_since_last_activity"),
+    nPurchases: integer("n_purchases"),
+    totalRevenue: numeric("total_revenue", { precision: 14, scale: 2 }),
+    avgTransactionValue: numeric("avg_transaction_value", { precision: 14, scale: 2 }),
+    everPaid: boolean("ever_paid").notNull().default(false),
+    priorityScore: numeric("priority_score", { precision: 5, scale: 2 }),
+    priorityReason: text("priority_reason"),
+    recommendedAction: text("recommended_action"),
+    aiExplanation: text("ai_explanation"),
+    aiReasoningJson: jsonb("ai_reasoning_json"),
+    aiRecommendedMessage: text("ai_recommended_message"),
+    aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
+    aiModel: text("ai_model"),
+    aiStatus: text("ai_status").notNull().default("not_requested"),
+    outputStatus: text("output_status").notNull().default("predicted"),
+    outputNotes: text("output_notes"),
+    modelEligibilityJson: jsonb("model_eligibility_json"),
+    modelVersionsJson: jsonb("model_versions_json"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
+  },
+  (t) => [
+    uniqueIndex("uq_ml_prediction_outputs_run_acc").on(t.predictionRunId, t.accId),
+    index("idx_ml_prediction_outputs_run").on(t.predictionRunId),
+    index("idx_ml_prediction_outputs_acc").on(t.accId),
+    index("idx_ml_prediction_outputs_lifecycle").on(t.lifecycleStage),
+    index("idx_ml_prediction_outputs_churn").on(t.churnRiskLevel),
+    index("idx_ml_prediction_outputs_priority").on(t.priorityScore),
+  ]
+);
+
 // ── Convenience type exports ───────────────────────────────────────────────────
 
 export type User         = typeof user.$inferSelect;
@@ -449,3 +715,7 @@ export type ModelVersion = typeof modelVersions.$inferSelect;
 export type PredictionRun = typeof predictionRuns.$inferSelect;
 export type Prediction   = typeof predictions.$inferSelect;
 export type Explanation  = typeof explanations.$inferSelect;
+export type MlTrainingRun = typeof mlTrainingRuns.$inferSelect;
+export type MlModelVersion = typeof mlModelVersions.$inferSelect;
+export type MlPredictionRun = typeof mlPredictionRuns.$inferSelect;
+export type MlPredictionOutput = typeof mlPredictionOutputs.$inferSelect;

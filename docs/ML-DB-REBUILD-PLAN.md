@@ -386,6 +386,97 @@ failed
 
 ใช้สำหรับ block training/prediction ถ้า schema หรือ feature quality ผิดรุนแรง
 
+### 2.5 `ml_model_evaluations`
+
+เก็บผลการประเมินโมเดลแบบละเอียด แยกจาก `ml_model_versions`
+
+เหตุผล:
+
+```text
+model version หนึ่งตัวต้องมี evaluation ได้หลายชุด:
+  train split
+  validation split
+  test split
+  temporal backtest แต่ละ cutoff
+  baseline comparison
+  calibration report
+  ablation report
+```
+
+ถ้าเก็บทั้งหมดใน `ml_model_versions.metrics_json` อย่างเดียว จะ query/compare ยาก
+
+```text
+id
+model_version_id
+training_run_id
+model_type
+evaluation_type
+dataset_split
+cutoff_date
+horizon_days
+baseline_name
+feature_set_id
+metrics_json
+confusion_matrix_json
+calibration_json
+lift_table_json
+feature_importance_json
+error_analysis_json
+business_metrics_json
+artifact_path
+created_at
+```
+
+Allowed `evaluation_type`:
+
+```text
+train
+validation
+test
+backtest
+baseline_comparison
+calibration
+ablation
+robustness
+```
+
+Allowed `dataset_split`:
+
+```text
+train
+validation
+test
+backtest_<cutoff_date>
+calibration
+```
+
+ตัวอย่าง metrics ต่อ model:
+
+```text
+churn:
+  metrics_json: ROC-AUC, PR-AUC, precision, recall, F1, Brier, log loss
+  confusion_matrix_json: TP, FP, TN, FN by threshold
+  calibration_json: bins, predicted probability, observed rate
+  lift_table_json: decile lift, recall@top-k
+  business_metrics_json: revenue_at_risk captured@top-k
+
+clv:
+  metrics_json: MAE, RMSE, SMAPE, Spearman
+  error_analysis_json: error by value tier, outlier impact
+  business_metrics_json: top-decile revenue capture
+
+credit:
+  metrics_json: MAE, RMSE, SMAPE
+  error_analysis_json: error by usage tier/channel
+  business_metrics_json: urgency bucket quality, followup date error
+```
+
+Promotion rule:
+
+```text
+champion alias cannot be assigned if required ml_model_evaluations rows are missing
+```
+
 ### 3. `ml_prediction_runs`
 
 เก็บ 1 record ต่อการ run prediction บน predict dataset หนึ่งชุด
@@ -960,15 +1051,16 @@ ai_status = failed
 4. Create new ml_model_activation_history
 5. Create new ml_feature_sets
 6. Create new ml_data_validation_reports
-7. Create new ml_prediction_runs
-8. Create new ml_prediction_outputs
-9. Wire Python training to new tables
-10. Implement required quality gate reports
-11. Verify first training output
-12. Verify retrain creates new versions without overwriting old versions
-13. Wire prediction to champion model aliases
-14. Verify prediction output
-15. Drop old prediction/model tables
+7. Create new ml_model_evaluations
+8. Create new ml_prediction_runs
+9. Create new ml_prediction_outputs
+10. Wire Python training to new tables
+11. Implement required quality gate reports
+12. Verify first training output
+13. Verify retrain creates new versions without overwriting old versions
+14. Wire prediction to champion model aliases
+15. Verify prediction output
+16. Drop old prediction/model tables
 ```
 
 คำแนะนำ: อย่า drop old tables ก่อน verify new training + prediction pipeline ได้ผลครบ
@@ -1026,6 +1118,7 @@ Build new:
   ml_model_activation_history
   ml_feature_sets
   ml_data_validation_reports
+  ml_model_evaluations
   ml_prediction_runs
   ml_prediction_outputs
 

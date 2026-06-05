@@ -619,7 +619,10 @@ metrics_json
 validation_metrics_json
 test_metrics_json
 training_data_snapshot_json
+ml_model_evaluations rows
 ```
+
+Every evaluation must be persisted to `ml_model_evaluations`, not only embedded in `ml_model_versions.metrics_json`.
 
 ## 13. Gate 11: Model Robustness
 
@@ -672,6 +675,8 @@ test_metrics_json
 training_data_snapshot_json
 artifact checksum
 code version/hash
+model_card.json
+model_card.md
 created_at
 training_run_id
 ```
@@ -683,6 +688,7 @@ artifact missing
 feature list missing
 metrics missing
 label definition missing
+model card missing for champion promotion
 cannot load artifact after save
 ```
 
@@ -702,6 +708,8 @@ data validation status not failed
 leakage check passed
 artifact load test passed
 feature schema saved
+model card generated
+required ml_model_evaluations rows exist
 activation history will be recorded
 ```
 
@@ -848,6 +856,19 @@ baseline_comparison_report.json
 artifact_manifest.json
 ```
 
+Each model version should insert `ml_model_evaluations` rows for:
+
+```text
+train
+validation
+test
+backtest
+baseline_comparison
+calibration if classifier
+ablation if feature-set comparison was run
+robustness if segment/cutoff stability was run
+```
+
 Each prediction run should produce:
 
 ```text
@@ -910,6 +931,7 @@ A model can become champion only if:
 ```text
 all blocker gates pass
 required reports are saved
+required ml_model_evaluations rows are saved
 candidate beats baseline
 candidate passes temporal test cutoff
 artifact can be loaded and used for prediction

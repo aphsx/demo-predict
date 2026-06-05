@@ -22,6 +22,7 @@ Related documents:
 docs/ML-FEATURE-SPEC.md
 docs/ML-DB-REBUILD-PLAN.md
 docs/ML-TRAINING-QUALITY-GATES.md
+docs/ML-EXPERIMENT-PLAN.md
 ```
 
 ## 1. Objective
@@ -404,6 +405,62 @@ failed
 ```
 
 Training/prediction must be blocked if required schema validation fails.
+
+### 7.3.4 `ml_model_evaluations`
+
+เก็บผลการประเมินโมเดลราย split, ราย cutoff, ราย baseline, และราย experiment
+
+Required fields:
+
+```text
+id
+model_version_id
+training_run_id
+model_type
+evaluation_type
+dataset_split
+cutoff_date
+horizon_days
+baseline_name
+feature_set_id
+metrics_json
+confusion_matrix_json
+calibration_json
+lift_table_json
+feature_importance_json
+error_analysis_json
+business_metrics_json
+artifact_path
+created_at
+```
+
+Allowed `evaluation_type`:
+
+```text
+train
+validation
+test
+backtest
+baseline_comparison
+calibration
+ablation
+robustness
+```
+
+Purpose:
+
+```text
+เก็บ F1/precision/recall/AUC/MAE/RMSE และ metric อื่น ๆ แบบ query ได้
+เก็บหลาย cutoff/backtest ต่อ model version
+เก็บ baseline comparison เพื่อพิสูจน์ว่า candidate ดีกว่า baseline
+เก็บ calibration/lift/error analysis แยกจาก metrics summary
+```
+
+Promotion blocker:
+
+```text
+ห้าม assign champion alias ถ้า required ml_model_evaluations rows ยังไม่ครบ
+```
 
 ### 7.4 `ml_prediction_runs`
 
@@ -1101,6 +1158,24 @@ Notes:
 
 ## 11. Model Training Requirements
 
+All model experiments must follow:
+
+```text
+docs/ML-EXPERIMENT-PLAN.md
+```
+
+This experiment plan is the source of truth for:
+
+```text
+baseline models
+candidate models
+feature-set ablations
+calibration experiments
+business metrics
+champion selection
+model card requirements
+```
+
 ### 11.1 Churn Model
 
 Type:
@@ -1144,6 +1219,17 @@ churn_probability
 churn_risk_level
 ```
 
+Required evaluation rows:
+
+```text
+train
+validation
+test
+backtest
+baseline_comparison
+calibration
+```
+
 ### 11.2 CLV Model
 
 Type:
@@ -1182,6 +1268,17 @@ Required output:
 ```text
 predicted_clv_6m
 customer_value_tier
+```
+
+Required evaluation rows:
+
+```text
+train
+validation
+test
+backtest
+baseline_comparison
+ablation
 ```
 
 ### 11.3 Credit Forecast Model
@@ -1225,6 +1322,17 @@ predicted_credit_usage_90d
 estimated_days_until_topup
 credit_urgency_level
 recommended_followup_date
+```
+
+Required evaluation rows:
+
+```text
+train
+validation
+test
+backtest
+baseline_comparison
+ablation
 ```
 
 ## 12. Validation Requirements
@@ -1864,6 +1972,7 @@ can create ml_data_validation_reports before training
 can train churn model from train_clean_*
 can save model artifact
 can insert ml_model_versions row
+can insert ml_model_evaluations rows for required splits/reports
 can assign challenger/champion aliases
 can retrain without overwriting old model
 ```
@@ -1889,6 +1998,7 @@ churn model beats baseline
 CLV model provides useful rank ordering
 credit model gives usable 30d/90d forecasts
 metrics are saved
+evaluation rows are saved in ml_model_evaluations
 feature names are saved
 label definitions are saved
 ```
