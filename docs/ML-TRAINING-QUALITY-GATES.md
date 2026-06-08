@@ -658,6 +658,14 @@ ml_model_evaluations rows
 
 Every evaluation must be persisted to `ml_model_evaluations`, not only embedded in `ml_model_versions.metrics_json`.
 
+The Model Health dashboard must read from the same evaluation contract described in:
+
+```text
+docs/MODEL-HEALTH-DASHBOARD.md
+```
+
+It must surface blocker status before detailed metric tables. A model with missing required evaluation rows, missing calibration report for churn, failed artifact load test, feature schema mismatch, or missing model card cannot be shown as healthy.
+
 ## 13. Gate 11: Model Robustness
 
 Purpose:

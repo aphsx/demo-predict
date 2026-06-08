@@ -759,6 +759,47 @@ AI cannot change model scores
 ai_status = generated or failed
 ```
 
+## Phase 10.5: Model Health UI
+
+### Task 10.5.1: Build Model Health Dashboard
+
+Goal:
+
+```text
+show whether churn / CLV / credit champion models are healthy enough for prediction and promotion
+```
+
+Read first:
+
+```text
+docs/MODEL-HEALTH-DASHBOARD.md
+docs/ML-EXPERIMENT-PLAN.md
+docs/ML-TRAINING-QUALITY-GATES.md
+```
+
+Files to touch:
+
+```text
+apps/web/src/app/model-performance/page.tsx
+apps/web/src/lib/api.ts
+apps/api/src/routes/model-health.ts
+```
+
+Acceptance:
+
+```text
+portfolio health summary is shown
+champion cards exist for churn / CLV / credit
+required evaluation rows matrix is shown
+split-aware metrics are shown for validation/test/backtest
+churn calibration and selected threshold are shown
+baseline and champion comparison are shown
+backtest stability and segment robustness are shown
+artifact/model-card checklist is shown
+promotion blockers are visible above detailed metric tables
+mock UI is clearly labeled until real /model-health API exists
+```
+
 ## Phase 11: Remove Old ML Output Schema
 
 ### Task 11.1: Verify New Flow End-To-End

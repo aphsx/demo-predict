@@ -9,6 +9,7 @@ docs/ML-TRAINING-SRS.md
 docs/ML-FEATURE-SPEC.md
 docs/ML-TRAINING-QUALITY-GATES.md
 docs/ML-DB-REBUILD-PLAN.md
+docs/MODEL-HEALTH-DASHBOARD.md
 ```
 
 ## 1. Goal
@@ -560,6 +561,14 @@ ml_model_evaluations
 ```
 
 `ml_model_evaluations` is the required queryable store for model assessment.
+
+The Model Health UI contract is defined in:
+
+```text
+docs/MODEL-HEALTH-DASHBOARD.md
+```
+
+The UI must show split-aware metrics, baseline/champion comparison, calibration/threshold details, backtest stability, segment robustness, artifact completeness, and promotion blockers. It must not show a single unqualified score as proof that a model is production-ready.
 
 Required rows:
 
