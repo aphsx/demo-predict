@@ -243,28 +243,31 @@ export default function Dashboard() {
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-        <div className="surface-elev overflow-hidden">
-          <PanelHeader
-            eyebrow="Portfolio"
-            title="Lifecycle mix"
-            hint="ดูฐานลูกค้าก่อนว่า active, churned และ ghost มีสัดส่วนเท่าไร"
-          />
-          <div className="border-t border-[color:var(--line-2)] p-5">
-            <StackBar data={overview.lifecycle} palette={LIFECYCLE_PALETTE} height={12} />
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {Object.entries(overview.lifecycle).map(([stage, count]) => (
-                <LifecycleCard
-                  key={stage}
-                  label={stage}
-                  value={count}
-                  total={overview.totals.customers}
-                  hint={lifecycleHint(stage)}
-                  color={LIFECYCLE_PALETTE[stage as keyof typeof LIFECYCLE_PALETTE]}
-                />
-              ))}
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="space-y-5">
+          <div className="surface-elev overflow-hidden">
+            <PanelHeader
+              eyebrow="Portfolio"
+              title="Lifecycle mix"
+              hint="สัดส่วนลูกค้า active, churned และ ghost"
+            />
+            <div className="border-t border-[color:var(--line-2)] p-4">
+              <StackBar data={overview.lifecycle} palette={LIFECYCLE_PALETTE} height={10} />
+              <div className="mt-4 divide-y divide-[color:var(--line-2)] rounded-2xl border border-[color:var(--line)] bg-white">
+                {Object.entries(overview.lifecycle).map(([stage, count]) => (
+                  <LifecycleRow
+                    key={stage}
+                    label={stage}
+                    value={count}
+                    total={overview.totals.customers}
+                    hint={lifecycleHint(stage)}
+                    color={LIFECYCLE_PALETTE[stage as keyof typeof LIFECYCLE_PALETTE]}
+                  />
+                ))}
+              </div>
             </div>
           </div>
+          <ValueCard overview={overview} />
         </div>
 
         <div className="space-y-5">
@@ -285,19 +288,16 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <ValueCard overview={overview} />
-        <div className="surface-elev overflow-hidden">
-          <PanelHeader
-            eyebrow="Action queue"
-            title="เรื่องที่ทีมควรทำก่อน"
-            hint="สรุปจาก priority_score, lifecycle, churn, credit forecast และ recommended_action"
-          />
-          <div className="grid grid-cols-1 gap-4 border-t border-[color:var(--line-2)] p-5 md:grid-cols-3">
-            {overview.action_queue.map((item) => (
-              <ActionSummaryCard key={item.label} {...item} />
-            ))}
-          </div>
+      <section className="surface-elev overflow-hidden">
+        <PanelHeader
+          eyebrow="Action queue"
+          title="เรื่องที่ทีมควรทำก่อน"
+          hint="สรุปจาก priority_score, lifecycle, churn, credit forecast และ recommended_action"
+        />
+        <div className="grid grid-cols-1 gap-4 border-t border-[color:var(--line-2)] p-5 md:grid-cols-3">
+          {overview.action_queue.map((item) => (
+            <ActionSummaryCard key={item.label} {...item} />
+          ))}
         </div>
       </section>
 
@@ -354,7 +354,7 @@ function MetricCard({
   );
 }
 
-function LifecycleCard({
+function LifecycleRow({
   label,
   hint,
   color,
@@ -370,24 +370,17 @@ function LifecycleCard({
   const pct = total > 0 ? (value / total) * 100 : 0;
 
   return (
-    <div className="rounded-[20px] border border-[color:var(--line)] bg-white p-4">
-      <div className="flex items-start gap-3">
-        <span className="mt-1 h-9 w-1 rounded-full" style={{ background: color }} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</div>
-              <div className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">{hint}</div>
-            </div>
-            <div className="text-right">
-              <div className="num text-[22px] font-semibold text-[color:var(--ink-1)]">{formatNumber(value)}</div>
-              <div className="num text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}%</div>
-            </div>
-          </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
-            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
-          </div>
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <div className="min-w-0 flex items-center gap-3">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</div>
+          <div className="mt-0.5 truncate text-[11.5px] text-[color:var(--ink-5)]">{hint}</div>
         </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className="num text-[17px] font-semibold text-[color:var(--ink-1)]">{formatNumber(value)}</div>
+        <div className="num text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}%</div>
       </div>
     </div>
   );
