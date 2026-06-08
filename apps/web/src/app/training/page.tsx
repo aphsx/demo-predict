@@ -13,7 +13,15 @@ import {
 import { notifyStatusDialog } from "@/components/GlobalStatusDialogHost";
 import { StatusDialog } from "@/components/StatusDialog";
 import { EmptyState, PageHeader, Skeleton, StatusPill } from "@/components/ui";
+import {
+  deleteTrainDataSource,
+  fetchTrainDataSources,
+  trainModels,
+  uploadTrainDataFileWithProgress,
+  type TrainDataSource,
+} from "@/lib/api";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
+import { getDisplayError } from "@/lib/ui-error";
 
 const IMPORT_ACCENT = MOBY_BRAND.orange;
 const IMPORT_ACCENT_BORDER = "rgba(252,76,2,0.24)";
@@ -24,21 +32,6 @@ type CleanCounts = {
   customers: number;
   payments: number;
   usage: number;
-};
-
-type TrainDataSource = {
-  id: string;
-  name: string;
-  client_label: string | null;
-  original_filename: string;
-  import_status: string;
-  imported_at: string | null;
-  created_at: string;
-  imported_by: string | null;
-  importer_name: string | null;
-  importer_email: string | null;
-  error_message: string | null;
-  clean_manifest: Record<string, unknown> | null;
 };
 
 export default function TrainingPage() {
@@ -62,8 +55,15 @@ export default function TrainingPage() {
 
   const load = async () => {
     setLoadError(null);
-    setTrainSources([]);
-    setLoading(false);
+    try {
+      const sources = await fetchTrainDataSources().catch(() => [] as TrainDataSource[]);
+      setTrainSources(Array.isArray(sources) ? sources : []);
+    } catch (e) {
+      setTrainSources([]);
+      setLoadError(getDisplayError(e, "Failed to load training workspace"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -101,20 +101,46 @@ export default function TrainingPage() {
     setImportPhase(null);
 
     try {
+      await uploadTrainDataFileWithProgress(
+        file,
+        datasetName,
+        (event) => {
+          setImportProgress(event.progress);
+          setImportStep(event.step);
+          if (event.phase) setImportPhase(event.phase);
+        },
+        importClient.trim() || undefined
+      );
+
       setImportName("");
       setPendingFile(null);
-      setImportProgress(0);
-      setImportStep("");
+      setImportProgress(100);
+      setImportStep("Import complete");
+      await wait(450);
       await load();
       notifyStatusDialog({
         tone: "success",
-        title: "UI พร้อมสำหรับการนำเข้า",
-        message: "ยังไม่เชื่อมต่อ API จริงในรอบนี้",
+        title: "นำเข้าข้อมูลสำเร็จ",
+        message: "ระบบ import และ clean data เสร็จเรียบร้อย",
       });
     } catch (e) {
       setImportProgress(0);
       setImportStep("");
       setImportPhase(null);
+      const err = e as Error & { code?: string; source_id?: string };
+      if (err.code === "DUPLICATE_FILE" && err.source_id) {
+        notifyStatusDialog({
+          tone: "error",
+          title: "นำเข้าข้อมูลไม่สำเร็จ",
+          message: "ไฟล์นี้ถูกนำเข้าแล้ว กรุณาเลือก dataset เดิมจากตารางด้านล่าง",
+        });
+      } else {
+        notifyStatusDialog({
+          tone: "error",
+          title: "นำเข้าข้อมูลไม่สำเร็จ",
+          message: getDisplayError(e, "นำเข้าข้อมูลไม่สำเร็จ") ?? "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
+        });
+      }
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -127,10 +153,11 @@ export default function TrainingPage() {
     setImportSuccess(null);
     setPendingDeleteSource(null);
     try {
+      await deleteTrainDataSource(source.id);
       setTrainSources((prev) => prev.filter((item) => item.id !== source.id));
       setImportSuccess("ลบข้อมูลสำเร็จ");
     } catch (e) {
-      setImportError("ลบ dataset ไม่สำเร็จ");
+      setImportError(getDisplayError(e, "ลบ dataset ไม่สำเร็จ"));
     } finally {
       setDeletingId(null);
     }
@@ -146,9 +173,11 @@ export default function TrainingPage() {
     setImportSuccess(null);
 
     try {
+      await trainModels();
+      await waitForTrainingHealth();
       await load();
     } catch (e) {
-      setImportError("เริ่ม train model ไม่สำเร็จ");
+      setImportError(getDisplayError(e, "เริ่ม train model ไม่สำเร็จ"));
     } finally {
       setTraining(false);
     }
@@ -479,6 +508,13 @@ function ModelTrainingPanel({
             {readyCount} ready
           </StatusPill>
         </div>
+        {sources.length === 0 ? (
+          <EmptyState
+            icon={FileSpreadsheet}
+            title="No training dataset yet"
+            hint="Upload one Excel file above. The system will import raw data and clean it automatically."
+          />
+        ) : (
           <div className="overflow-x-auto rounded-[22px] border border-[color:var(--line)]">
             <table className="table-base">
               <thead>
@@ -493,17 +529,6 @@ function ModelTrainingPanel({
                 </tr>
               </thead>
               <tbody>
-                {sources.length === 0 && Array.from({ length: 4 }).map((_, index) => (
-                  <tr key={index}>
-                    <td><Skeleton className="h-8 w-64" /></td>
-                    <td><Skeleton className="h-6 w-20 rounded-full" /></td>
-                    <td className="text-right"><Skeleton className="ml-auto h-4 w-14" /></td>
-                    <td className="text-right"><Skeleton className="ml-auto h-4 w-14" /></td>
-                    <td className="text-right"><Skeleton className="ml-auto h-4 w-14" /></td>
-                    <td><Skeleton className="h-4 w-32" /></td>
-                    <td><Skeleton className="ml-auto h-8 w-24" /></td>
-                  </tr>
-                ))}
                 {sources.map((source) => (
                   <DatasetTableRow
                     key={source.id}
@@ -517,6 +542,7 @@ function ModelTrainingPanel({
               </tbody>
             </table>
           </div>
+        )}
       </div>
     </section>
   );
