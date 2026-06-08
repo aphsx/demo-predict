@@ -25,16 +25,61 @@ docs/ML-DB-REBUILD-PLAN.md
 7. ค่า metric แต่ละตัวอยู่ที่เท่าไร โดยไม่ปนกับ release status หรือคำอธิบายที่ไม่ใช่ค่าวัด
 ```
 
+## 1.1 Model Method Rationale
+
+หน้า UI ต้องบอกสั้น ๆ ว่าแต่ละ output ใช้วิธีอะไร และเอกสารนี้ต้องเก็บเหตุผลไว้เพื่อไม่ให้ทีมเอา metric ผิดประเภทไปใช้กับ model ผิดประเภท
+
+```text
+Lifecycle Engine:
+  method: rule-based classification
+  model: deterministic rules
+  why: lifecycle stage เป็นนิยาม business จากประวัติ activity/payment ไม่ใช่สิ่งที่ต้องเรียนรู้จาก label
+  output: Ghost / Churned / Active Free / Active Paid
+  metrics: rule coverage, unknown rate, rule conflicts
+
+Churn:
+  method: ML classification
+  model: calibrated LightGBM as target champion candidate
+  compare against: recency baseline, RFM baseline, logistic regression, XGBoost
+  why: label เป็นเหตุการณ์ yes/no ว่าลูกค้าจะ churn ภายใน horizon หรือไม่
+  output: churn_probability, churn tier, ranking of at-risk customers
+  metrics: F1, precision, recall, PR-AUC, lift@top10%
+
+CLV:
+  method: regression + ranking
+  model: BG-NBD + Gamma-Gamma baseline plus ML regressors
+  compare against: historical average, RFM segment average, LightGBM Regressor, XGBoost Regressor, Tweedie/two-stage regressors
+  why: target เป็นมูลค่าอนาคตต่อ customer ไม่ใช่ class label
+  output: predicted_clv_6m, value ranking
+  metrics: MAE, SMAPE, Spearman, top-decile revenue capture
+
+Credit Forecast:
+  method: forecasting regression
+  model: LightGBM quantile regressor as target champion candidate
+  compare against: last-30d usage, 90d moving average, XGBoost Regressor, two-stage top-up model
+  why: target เป็นจำนวน credit usage ในอนาคตตาม horizon 30/90 วัน
+  output: credit forecast and urgency signals
+  metrics: SMAPE 30d/90d, MAE 90d, coverage, urgent recall
+```
+
+ห้ามใช้ metric แบบ classification เช่น F1 กับ CLV หรือ Credit เป็น primary metric เพราะ output ไม่ใช่ yes/no class label
+
+หน้า UI สามารถแสดง `model` เป็น target/current champion ได้ แต่ต้องไม่สื่อว่า champion ถูกเลือกแล้วถ้า `ml_model_aliases` ยังไม่มี champion จริง หลัง backend พร้อม ค่า model name ควรมาจาก model registry ไม่ใช่ hardcode
+
 ## 2. Metric-Only UI Rule
 
-หน้าแรกของ `Model Metrics` ต้องแสดงเฉพาะ:
+หน้าแรกของ `Model Metrics` ต้องแสดงเฉพาะข้อมูลที่ช่วยอ่านคุณภาพ model ได้เร็ว:
 
 ```text
 model name
-split name
+model method
+model algorithm/family
 metric name
 metric value
+short helper text
 ```
+
+สำหรับ `Lifecycle Engine` ซึ่งเป็น rule-based ต้องแสดง rule summary สั้น ๆ ด้วย เพราะความถูกต้องไม่ได้มาจาก F1/MAE แต่จากนิยาม rule ว่าแต่ละ stage ถูกจัดอย่างไร
 
 ไม่ควรแสดงในหน้าแรก:
 
