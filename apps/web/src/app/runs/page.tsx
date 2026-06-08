@@ -41,8 +41,17 @@ import {
 import {
   PageHeader, SectionCard, StatusPill, Skeleton,
 } from "@/components/ui";
-import { api, retryRun, Run } from "@/lib/api";
-import { getDisplayError } from "@/lib/ui-error";
+
+type Run = {
+  id: string;
+  name?: string;
+  status: string;
+  cutoff_date: string;
+  total_customers?: number | null;
+  active_customers?: number | null;
+  created_at: string;
+  error_message?: string | null;
+};
 
 const statusToTone: Record<string, "ok" | "warn" | "danger" | "info" | "neutral"> = {
   done: "ok",
@@ -74,33 +83,10 @@ export default function RunsPage() {
   const [retrying, setRetrying] = useState<string | null>(null);
 
   const load = async () => {
-    setError(null);
-    try {
-      const d = await api.listRuns();
-      setRuns(Array.isArray(d) ? d : []);
-    } catch (e) {
-      setRuns([]);
-      setError(getDisplayError(e, "โหลดรายการ run ไม่สำเร็จ"));
-    } finally {
-      setLoading(false);
-    }
+    setRuns([]);
+    setLoading(true);
   };
   useEffect(() => { void load(); }, []);
-
-  // SSE subscription for active runs
-  useEffect(() => {
-    const activeRun = runs.find(r => ["pending", "validating", "processing"].includes(r.status));
-    if (!activeRun || streamingRun === activeRun.id) return;
-
-    setStreamingRun(activeRun.id);
-    const unsub = api.subscribeRunStatus(activeRun.id, (update) => {
-      if (update.status === "done" || update.status === "failed") {
-        setStreamingRun(null);
-        load();
-      }
-    });
-    return unsub;
-  }, [runs, streamingRun]);
 
   const createRun = async () => {
     const trimmed = name.trim();
@@ -110,53 +96,24 @@ export default function RunsPage() {
     }
     setSaving(true);
     setError(null);
-    try {
-      const created = await api.createRun({ name: trimmed, cutoff_date: cutoff });
-      setRuns((prev) => [created, ...prev.filter((r) => r.id !== created.id)]);
-      setCreating(false);
-      setName("");
-      await load();
-    } catch (e) {
-      setError(getDisplayError(e, "สร้าง run ไม่สำเร็จ"));
-    } finally {
-      setSaving(false);
-    }
+    setCreating(false);
+    setName("");
+    setSaving(false);
   };
   const deleteRun = async (id: string) => {
     if (!confirm("ลบ Run นี้?")) return;
     setError(null);
-    try {
-      await api.deleteRun(id);
-      setRuns((prev) => prev.filter((r) => r.id !== id));
-      await load();
-    } catch (e) {
-      setError(getDisplayError(e, "ลบ run ไม่สำเร็จ"));
-    }
   };
   const retryPipeline = async (runId: string) => {
     setRetrying(runId);
     setError(null);
-    try {
-      await retryRun(runId);
-      await load();
-    } catch (e) {
-      setError(getDisplayError(e, "Retry ไม่สำเร็จ"));
-    } finally {
-      setRetrying(null);
-    }
+    setRetrying(null);
   };
 
   const uploadRunExcel = async (runId: string, file: File) => {
     setUploading(runId);
     setError(null);
-    try {
-      await api.uploadPredictDataForRun(runId, file);
-      await load();
-    } catch (e) {
-      setError(getDisplayError(e, "อัปโหลดไฟล์ไม่สำเร็จ"));
-    } finally {
-      setUploading(null);
-    }
+    setUploading(null);
   };
 
   const stats = {
@@ -191,11 +148,12 @@ export default function RunsPage() {
 
         {/* Status strip */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <MiniStat label="Total runs" value={stats.total} tone="slate" />
-          <MiniStat label="In progress" value={stats.active} tone="blue" />
-          <MiniStat label="Raw imported" value={stats.imported} tone="emerald" />
-          <MiniStat label="Completed" value={stats.done} tone="emerald" />
-          <MiniStat label="Failed" value={stats.failed} tone="rose" />
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="surface p-4">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="mt-3 h-7 w-16" />
+            </div>
+          ))}
         </div>
 
         {/* Create panel */}

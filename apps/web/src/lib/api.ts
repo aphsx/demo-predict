@@ -86,6 +86,132 @@ export interface PaginatedPredictions {
   data: PredictionOutput[];
 }
 
+export interface PredictionSummary {
+  total_customers?: number;
+  lifecycle?: Record<string, { total?: number; avg_churn?: number | null; avg_clv?: number | null }>;
+  active_paid?: { total?: number; avg_churn?: number | null; avg_clv?: number | null };
+}
+
+export interface Run {
+  id: string;
+  name?: string;
+  status: string;
+  cutoff_date: string;
+  total_customers?: number | null;
+  active_customers?: number | null;
+  created_at: string;
+  error_message?: string | null;
+}
+
+export interface RunStatusUpdate {
+  status: string;
+  progress?: number;
+  step?: string;
+  total_customers?: number;
+  active_customers?: number;
+  error_message?: string;
+  updated_at?: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+const EMPTY_PAGE: PaginatedPredictions = {
+  total: 0,
+  page: 1,
+  page_size: 50,
+  data: [],
+};
+
+// UI compatibility layer while ML v2 read routes are not mounted yet.
+// These shims do not call removed legacy endpoints and do not synthesize prediction rows.
+export async function fetchRuns(): Promise<Run[]> {
+  return [];
+}
+
+export async function createRun(name: string, cutoff_date: string): Promise<Run> {
+  return {
+    id: "",
+    name,
+    status: "pending",
+    cutoff_date,
+    total_customers: null,
+    active_customers: null,
+    created_at: new Date().toISOString(),
+  };
+}
+
+export async function deleteRun(_id: string): Promise<void> {}
+
+export async function fetchSummary(_runId: string): Promise<PredictionSummary> {
+  return {};
+}
+
+export async function fetchPredictions(
+  _runId: string,
+  params: Record<string, string>
+): Promise<PaginatedPredictions> {
+  return {
+    ...EMPTY_PAGE,
+    page: Number(params.page ?? EMPTY_PAGE.page),
+    page_size: Number(params.page_size ?? EMPTY_PAGE.page_size),
+  };
+}
+
+export async function fetchCustomer(
+  _runId: string,
+  _accId: string
+): Promise<PredictionOutput> {
+  throw new Error("Prediction output is not ready");
+}
+
+export async function fetchModelMetrics(): Promise<Record<string, unknown>> {
+  return {};
+}
+
+export async function fetchTrainingLog(): Promise<{ log: string }> {
+  return { log: "" };
+}
+
+export async function trainModels(_cutoff_date?: string): Promise<Record<string, unknown>> {
+  return {};
+}
+
+export async function retryRun(runId: string): Promise<{ run_id: string; status: string; message: string }> {
+  return { run_id: runId, status: "pending", message: "Prediction runner is not mounted yet" };
+}
+
+export async function uploadPredictDataForRun(
+  _runId: string,
+  file: File
+): Promise<PredictImportDone> {
+  return uploadPredictDataFile(file);
+}
+
+export function exportUrl(_runId: string, _params: Record<string, string>) {
+  return "#";
+}
+
+export function subscribeRunStatus(
+  _runId: string,
+  _onUpdate: (data: RunStatusUpdate) => void
+): () => void {
+  return () => {};
+}
+
+export function streamChat(
+  _runId: string,
+  _messages: ChatMessage[],
+  _onChunk: (text: string) => void,
+  _onDone: () => void,
+  onError: (msg: string) => void,
+): () => void {
+  onError("Insight API is not ready");
+  return () => {};
+}
+
 // Train raw data import
 // train_data_sources + train_raw_sheet_*. NOT uploadFile (/runs).
 // See docs/DATA-PIPELINE-MIGRATION.md
@@ -471,6 +597,15 @@ export async function uploadPredictDataFile(
 // Convenience object for currently mounted API routes
 
 export const api = {
+  listRuns: fetchRuns,
+  createRun: (arg: { name: string; cutoff_date: string }) => createRun(arg.name, arg.cutoff_date),
+  deleteRun,
+  uploadPredictDataForRun,
+  fetchSummary,
+  fetchPredictions,
+  fetchCustomer,
+  fetchModelMetrics,
+  subscribeRunStatus,
   fetchTrainDataSources,
   deleteTrainDataSource,
   uploadTrainDataFile,

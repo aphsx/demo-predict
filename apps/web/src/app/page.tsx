@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode } from "react";
 import Link from "next/link";
 import {
   Users, Zap, ArrowUpRight, ChevronRight, Orbit, Radar, Gem, UsersRound,
@@ -11,9 +11,6 @@ import {
   StackBar,
   lifecycleTone,
 } from "@/components/ui";
-import { fetchPredictions, fetchSummary, type PredictionOutput, type PredictionSummary } from "@/lib/api";
-import { getDisplayError } from "@/lib/ui-error";
-import { useRunStore } from "@/lib/runStore";
 
 const LIFECYCLE_COLOR: Record<string, string> = {
   "Active Paid": "var(--c-paid)",
@@ -22,49 +19,19 @@ const LIFECYCLE_COLOR: Record<string, string> = {
   "Ghost":       "var(--c-ghost)",
 };
 
+type PredictionOutput = {
+  acc_id: number;
+  lifecycle_stage: string | null;
+  churn_probability: number | null;
+  predicted_clv_6m: number | null;
+  priority_score: number | null;
+};
+
 export default function Dashboard() {
-  const { runId } = useRunStore();
-  const [summary, setSummary] = useState<PredictionSummary | null>(null);
-  const [previewCustomers, setPreviewCustomers] = useState<PredictionOutput[]>([]);
-  const [loading, setLoading] = useState(Boolean(runId));
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!runId) {
-      setSummary(null);
-      setPreviewCustomers([]);
-      setLoadError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setLoadError(null);
-    Promise.all([
-      fetchSummary(runId),
-      fetchPredictions(runId, { page: "1", page_size: "16" }),
-    ])
-      .then(([s, predictionPage]) => {
-        setSummary(s as PredictionSummary);
-        setPreviewCustomers(pickCustomerPreview(predictionPage.data, 6));
-        setLoading(false);
-      })
-      .catch((e) => {
-        setSummary(null);
-        setPreviewCustomers([]);
-        setLoadError(getDisplayError(e, "โหลดข้อมูลไม่สำเร็จ"));
-        setLoading(false);
-      });
-  }, [runId]);
-
-  const ap = summary?.active_paid || {};
-  const lc = summary?.lifecycle || {};
-
-  const totalCustomers = summary?.total_customers || 0;
-  const activePaidCount = lc["Active Paid"]?.total || 0;
-  const activeFreeCount = lc["Active Free"]?.total || 0;
-  const churnedCount = lc["Churned"]?.total || 0;
-  const ghostCount = lc["Ghost"]?.total || 0;
-  const pendingData = loading || Boolean(loadError) || !runId || totalCustomers === 0;
+  const pendingData = true;
+  const totalCustomers = 0;
+  const activePaidCount = 0;
+  const ap: { avg_churn?: number; avg_clv?: number } = {};
 
   return (
     <div className="px-8 py-6 pb-12 space-y-6">
@@ -123,12 +90,6 @@ export default function Dashboard() {
           </div>
         </div>
       </section>
-
-      {!pendingData && activePaidCount === 0 && (
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[linear-gradient(180deg,#ffffff,rgba(250,251,253,0.96))] px-4 py-3 text-[13px] text-[color:var(--ink-3)]">
-          ชุดข้อมูลนี้ไม่มีลูกค้า Active Paid — ดูได้ที่ Active Free, Churned หรือ Ghost ใน Customers
-        </div>
-      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {pendingData ? (
@@ -189,10 +150,10 @@ export default function Dashboard() {
               <>
                 <StackBar
                   data={{
-                    "Active Paid": activePaidCount,
-                    "Active Free": activeFreeCount,
-                    Churned: churnedCount,
-                    Ghost: ghostCount,
+                    "Active Paid": 0,
+                    "Active Free": 0,
+                    Churned: 0,
+                    Ghost: 0,
                   }}
                   palette={LIFECYCLE_COLOR}
                   height={10}
@@ -201,32 +162,32 @@ export default function Dashboard() {
                   <LifecycleStageRow
                     color={LIFECYCLE_COLOR["Active Paid"]}
                     label="Active Paid"
-                    count={activePaidCount}
-                    total={totalCustomers}
-                    detail={`Avg churn ${formatPercent(ap.avg_churn)} · CLV ${formatCurrency(ap.avg_clv)}`}
+                    count={0}
+                    total={0}
+                    detail="Preparing metrics"
                     href="/customers?lifecycle_stage=Active%20Paid"
                   />
                   <LifecycleStageRow
                     color={LIFECYCLE_COLOR["Active Free"]}
                     label="Active Free"
-                    count={activeFreeCount}
-                    total={totalCustomers}
+                    count={0}
+                    total={0}
                     detail="Engagement cohort"
                     href="/customers?lifecycle_stage=Active%20Free"
                   />
                   <LifecycleStageRow
                     color={LIFECYCLE_COLOR["Churned"]}
                     label="Churned"
-                    count={churnedCount}
-                    total={totalCustomers}
+                    count={0}
+                    total={0}
                     detail="Inactive cohort"
                     href="/customers?lifecycle_stage=Churned"
                   />
                   <LifecycleStageRow
                     color={LIFECYCLE_COLOR["Ghost"]}
                     label="Ghost"
-                    count={ghostCount}
-                    total={totalCustomers}
+                    count={0}
+                    total={0}
                     detail="สมัครแล้วแต่ไม่เคยใช้งาน"
                     href="/customers?lifecycle_stage=Ghost"
                   />
@@ -266,9 +227,6 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewCustomers.map((customer) => (
-                      <CustomerPreviewRow key={String(customer.acc_id)} customer={customer} />
-                    ))}
                   </tbody>
                 </table>
               </div>

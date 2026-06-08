@@ -1,99 +1,17 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useEffect, useState } from "react";
 import {
   ShieldCheck, Cpu, Layers, BookOpenCheck,
 } from "lucide-react";
 import {
   PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton,
 } from "@/components/ui";
-import { fetchModelMetrics, fetchTrainingLog } from "@/lib/api";
 import { formatFeatureLabel } from "@/lib/featureLabels";
-import { getDisplayError } from "@/lib/ui-error";
 
 type Tab = "overview" | "churn" | "clv" | "credit" | "log";
 
 export default function ModelHealth() {
-  const [tab, setTab] = useState<Tab>("overview");
-  const [metrics, setMetrics] = useState<any>(null);
-  const [log, setLog] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchModelMetrics()
-      .then((m) => {
-        if (!m.generated_at && !m.churn && !m.data_summary) {
-          setErr("โหลด metrics ไม่สำเร็จ — ลองรีเฟรชหรือ train โมเดลใหม่");
-        } else {
-          setMetrics(m);
-        }
-        setLoading(false);
-      })
-      .catch((e) => {
-        setErr(getDisplayError(e, "Metrics ยังไม่พร้อม — train โมเดลก่อน"));
-        setLoading(false);
-      });
-    fetchTrainingLog()
-      .then((d) => setLog(d.log || ""))
-      .catch(() => {});
-  }, []);
-
-  if (loading || err) return <ModelHealthSkeleton />;
-
-  const m = metrics || {};
-  const ds = m.data_summary || {};
-
-  return (
-    <div className="pb-12">
-      <PageHeader
-        eyebrow="Model intelligence"
-        title="Model Health"
-      />
-
-      <div className="px-8 mt-4 space-y-5">
-        {/* Lineage strip */}
-        <SectionCard title="Training lineage" hint="Versioning & freshness">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Lineage label="Trained at" value={m.generated_at?.split("T")[0] || "—"} icon={BookOpenCheck} />
-            <Lineage label="Cutoff" value={m.cutoff_date || "—"} icon={Layers} />
-            <Lineage label="Features" value={`${ds.n_features || 0} cols`} icon={Cpu} />
-            <Lineage
-              label="Drift status"
-              value={m.drift_status || "—"}
-              icon={ShieldCheck}
-              pill={m.drift_status ? <StatusPill tone={m.drift_status === "ok" ? "ok" : "warn"}>{m.drift_status}</StatusPill> : undefined}
-            />
-          </div>
-        </SectionCard>
-
-        {/* Tabs */}
-        <div className="segmented">
-          {([
-            ["overview","Overview"], ["churn","Churn"], ["clv","CLV"],
-            ["credit","Credit"], ["log","Training log"],
-          ] as [Tab, string][]).map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id)} className={tab === id ? "active" : ""}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        {tab === "overview" && <Overview m={m} />}
-        {tab === "churn" && <ChurnTab m={m} />}
-        {tab === "clv" && <ClvTab m={m} />}
-        {tab === "credit" && <CreditTab m={m} />}
-        {tab === "log" && (
-          <SectionCard title="Training log">
-            <pre className="text-[11.5px] font-mono whitespace-pre-wrap leading-relaxed text-[color:var(--ink-2)] bg-[color:var(--surface-2)] p-4 rounded-md max-h-[60vh] overflow-auto">
-              {log || "—"}
-            </pre>
-          </SectionCard>
-        )}
-      </div>
-    </div>
-  );
+  return <ModelHealthSkeleton />;
 }
 
 /* ─── Tabs ─── */
@@ -307,14 +225,75 @@ function ModelHealthSkeleton() {
     <div className="pb-12">
       <PageHeader eyebrow="Model intelligence" title="Model Health" />
       <div className="px-8 mt-4 space-y-5">
-        <Skeleton className="h-32" />
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          <Skeleton className="h-44" />
-          <Skeleton className="h-44" />
-          <Skeleton className="h-44" />
+        <SectionCard title="Training lineage" hint="Versioning & freshness">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <LineageSkeleton label="Trained at" icon={BookOpenCheck} />
+            <LineageSkeleton label="Cutoff" icon={Layers} />
+            <LineageSkeleton label="Features" icon={Cpu} />
+            <LineageSkeleton label="Drift status" icon={ShieldCheck} />
+          </div>
+        </SectionCard>
+        <div className="segmented">
+          {["Overview", "Churn", "CLV", "Credit", "Training log"].map((label, index) => (
+            <button key={label} className={index === 0 ? "active" : ""}>
+              {label}
+            </button>
+          ))}
         </div>
-        <Skeleton className="h-72" />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <ScoreSkeleton title="Churn" hint="ML v2 candidate" />
+          <ScoreSkeleton title="CLV" hint="BG/NBD · Gamma-Gamma" />
+          <ScoreSkeleton title="Credit" hint="Forecast component" />
+        </div>
+        <SectionCard title="Data summary" hint="ใช้ในการเทรน">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <KVListSkeleton rows={6} />
+            <KVListSkeleton rows={6} />
+          </div>
+        </SectionCard>
       </div>
+    </div>
+  );
+}
+
+function LineageSkeleton({ label, icon: Icon }: { label: string; icon: any }) {
+  return (
+    <div className="surface-soft p-4">
+      <div className="flex items-center gap-2 text-[color:var(--ink-4)]">
+        <Icon size={13} />
+        <span className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">{label}</span>
+      </div>
+      <Skeleton className="mt-2 h-5 w-24" />
+      <Skeleton className="mt-2 h-6 w-20" />
+    </div>
+  );
+}
+
+function ScoreSkeleton({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="surface p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">{title}</div>
+          <div className="text-[12px] text-[color:var(--ink-4)] mt-0.5">{hint}</div>
+        </div>
+        <Skeleton className="h-6 w-16 rounded-full" />
+      </div>
+      <Skeleton className="mt-4 h-8 w-24" />
+      <Skeleton className="mt-3 h-2 w-full rounded-full" />
+    </div>
+  );
+}
+
+function KVListSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className="grid grid-cols-2 gap-3 rounded-md bg-[color:var(--surface-2)] px-3 py-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+      ))}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -11,11 +11,19 @@ import {
   PageHeader, SectionCard, StatusPill, Skeleton,
   lifecycleTone,
 } from "@/components/ui";
-import { fetchPredictions, exportUrl, type PaginatedPredictions, type PredictionOutput } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
-import { getDisplayError } from "@/lib/ui-error";
 
 const STAGES   = ["Active Paid", "Active Free", "Churned", "Ghost"];
+
+type PredictionOutput = {
+  acc_id: number;
+  lifecycle_stage: string | null;
+  sub_stage: string | null;
+  churn_probability: number | null;
+  predicted_clv_6m: number | null;
+  n_purchases: number | null;
+  total_revenue: number | null;
+};
 
 function Inner() {
   const router = useRouter();
@@ -23,45 +31,22 @@ function Inner() {
   const { runId } = useRunStore();
 
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<PaginatedPredictions | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     lifecycle_stage:  sp.get("lifecycle_stage")  || "",
     search:           sp.get("search")           || "",
   });
-
-  useEffect(() => {
-    if (!runId) {
-      setData(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    const params: Record<string, string> = { page: String(page), page_size: "50" };
-    Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
-    fetchPredictions(runId, params)
-      .then(d => { setData(d); setLoading(false); })
-      .catch((e) => {
-        setData(null);
-        setError(getDisplayError(e, "โหลดรายชื่อลูกค้าไม่สำเร็จ"));
-        setLoading(false);
-      });
-  }, [runId, page, filters]);
 
   const setFilter = (k: string, v: string) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); };
   const clearAll  = () => { setFilters({
     lifecycle_stage:"", search: "",
   }); setPage(1); };
 
-  const rows  = data?.data || [];
-  const total = data?.total || 0;
-  const pageSize = data?.page_size || 50;
+  const rows: PredictionOutput[] = [];
+  const total = 0;
+  const pageSize = 50;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const activeFilters = Object.entries(filters).filter(([_, v]) => v).length;
-  const pendingRows = loading || Boolean(error) || !runId || rows.length === 0;
+  const pendingRows = true;
 
   return (
     <div className="pb-12">
@@ -70,7 +55,7 @@ function Inner() {
         title="Customer Intelligence"
         actions={
           <a
-            href={runId ? exportUrl(runId, Object.fromEntries(Object.entries(filters).filter(([,v]) => v))) : "#"}
+            href="#"
             aria-disabled={!runId || total === 0}
             className={`h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] inline-flex items-center gap-1.5 ${!runId || total === 0 ? "opacity-45 pointer-events-none" : "hover:bg-[color:var(--surface-2)]"}`}
           >

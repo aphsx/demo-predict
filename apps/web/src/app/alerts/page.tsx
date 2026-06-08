@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
 import {
   AlertTriangle, ShieldCheck,
@@ -8,9 +8,9 @@ import {
 import {
   PageHeader, SectionCard, AlertItem, StatusPill, Skeleton,
 } from "@/components/ui";
-import { fetchSummary, fetchModelMetrics, type PredictionSummary } from "@/lib/api";
-import { useRunStore } from "@/lib/runStore";
-import { getDisplayError } from "@/lib/ui-error";
+type PredictionSummary = {
+  active_paid?: { avg_churn?: number | null };
+};
 
 type Severity = "danger" | "warn" | "info" | "ok";
 
@@ -27,38 +27,10 @@ interface Alert {
 }
 
 export default function AlertsPage() {
-  const { runId } = useRunStore();
-  const [summary, setSummary] = useState<PredictionSummary | null>(null);
-  const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const summary: PredictionSummary | null = null;
+  const metrics: Record<string, unknown> | null = null;
   const [filterSev, setFilterSev] = useState<Severity | "">("");
   const [filterCat, setFilterCat] = useState<string>("");
-
-  useEffect(() => {
-    if (!runId) {
-      setSummary(null);
-      setMetrics(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    Promise.all([
-      fetchSummary(runId).catch(() => null),
-      fetchModelMetrics().catch(() => null),
-    ]).then(([s, m]) => {
-      setSummary(s);
-      setMetrics(m);
-      setLoading(false);
-    }).catch((e) => {
-      setSummary(null);
-      setMetrics(null);
-      setError(getDisplayError(e, "โหลด alerts ไม่สำเร็จ"));
-      setLoading(false);
-    });
-  }, [runId]);
 
   const alerts = useMemo<Alert[]>(() => buildAlerts(summary, metrics), [summary, metrics]);
   const driftRows = useMemo(() => extractDriftRows(metrics), [metrics]);
@@ -74,7 +46,7 @@ export default function AlertsPage() {
     (!filterSev || a.severity === filterSev) &&
     (!filterCat || a.category === filterCat)
   );
-  const awaitingSignals = loading || Boolean(error) || !runId || (!summary && !metrics);
+  const awaitingSignals = true;
 
   return (
     <div className="pb-12">

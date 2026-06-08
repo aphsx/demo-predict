@@ -1,6 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Phone, Mail, Send, ChevronRight, Check, Clock,
@@ -10,9 +10,6 @@ import {
   PageHeader, SectionCard, StatusPill, Skeleton,
   lifecycleTone,
 } from "@/components/ui";
-import { fetchPredictions, type PredictionOutput } from "@/lib/api";
-import { useRunStore } from "@/lib/runStore";
-import { getDisplayError } from "@/lib/ui-error";
 
 type LaneId = "active_paid" | "active_free" | "churned" | "ghost";
 
@@ -43,43 +40,26 @@ const LANES: { id: LaneId; title: string; hint: string; icon: any; tone: string;
   },
 ];
 
-export default function Playbooks() {
-  const { runId } = useRunStore();
-  const [data, setData] = useState<Partial<Record<LaneId, PredictionOutput[]>>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
+type PredictionOutput = {
+  acc_id: number;
+  lifecycle_stage: string | null;
+  recommended_action: string | null;
+  priority_reason: string | null;
+  churn_probability: number | null;
+  recommended_followup_date: string | null;
+  predicted_clv_6m: number | null;
+  priority_score: number | null;
+};
 
-  useEffect(() => {
-    if (!runId) {
-      setData({});
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    Promise.all(LANES.map(l => fetchPredictions(runId, { ...l.filters, page: "1", page_size: "8" })
-      .then(r => [l.id, sortByPriority(r?.data || [])] as const)
-    ))
-    .then((entries) => {
-      const obj: Partial<Record<LaneId, PredictionOutput[]>> = {};
-      entries.forEach(([k, v]) => { obj[k as LaneId] = v; });
-      setData(obj);
-      setLoading(false);
-    })
-    .catch((e) => {
-      setData({});
-      setError(getDisplayError(e, "โหลด action queue ไม่สำเร็จ"));
-      setLoading(false);
-    });
-  }, [runId]);
+export default function Playbooks() {
+  const data: Partial<Record<LaneId, PredictionOutput[]>> = {};
+  const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
 
   const totalQueue = useMemo(
     () => Object.values(data).reduce((sum, arr) => sum + arr.length, 0),
     [data]
   );
-  const awaitingQueue = loading || Boolean(error) || !runId || totalQueue === 0;
+  const awaitingQueue = true;
   const doneToday = doneIds.size;
   const completion = totalQueue ? doneToday / totalQueue : 0;
 

@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Calendar, ChevronDown, BellDot, LogOut } from "lucide-react";
-import { fetchRuns, Run } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
 import { useSession, signOut } from "@/lib/auth-client";
 
@@ -21,34 +20,10 @@ const TITLE_MAP: Record<string, { title: string; sub: string }> = {
 export default function Topbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const sp = useSearchParams();
-  const [runs, setRuns] = useState<Run[]>([]);
   const { runId, setRunId } = useRunStore();
-
-  useEffect(() => {
-    fetchRuns()
-      .then((r: Run[]) => {
-        const safeRuns = Array.isArray(r) ? r : [];
-        setRuns(safeRuns);
-        const fromUrl = sp.get("run");
-        const doneWithData = safeRuns.find(
-          (x) => x.status === "done" && (x.total_customers ?? 0) > 0
-        );
-        const initial =
-          fromUrl || runId || doneWithData?.id || safeRuns.find((x) => x.status === "done")?.id || safeRuns[0]?.id || "";
-        if (initial) setRunId(initial);
-      })
-      .catch(() => {
-        setRuns([]);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp]);
 
   const dyn = matchDynamicPath(pathname);
   const meta = TITLE_MAP[dyn] || { title: "1Moby", sub: "" };
-
-  const safeRuns = Array.isArray(runs) ? runs : [];
-  const activeRun = safeRuns.find(r => r.id === runId);
 
   return (
     <header className="h-[60px] shrink-0 bg-white/95 backdrop-blur border-b border-[color:var(--line)] flex items-center px-6 gap-4">
@@ -85,12 +60,7 @@ export default function Topbar() {
           onChange={(e) => setRunId(e.target.value)}
           className="appearance-none h-9 pl-9 pr-9 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:border-[color:var(--moby-200)] cursor-pointer min-w-[200px]"
         >
-          {safeRuns.map(r => (
-            <option key={r.id} value={r.id}>
-              {r.name ?? `Run ${r.id.slice(0, 8)}`} · {r.cutoff_date} {r.status !== "done" ? `(${r.status})` : ""}
-            </option>
-          ))}
-          {safeRuns.length === 0 && <option value="">— ยังไม่มี run —</option>}
+          <option value="">Preparing runs...</option>
         </select>
         <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
@@ -107,11 +77,8 @@ export default function Topbar() {
 
       {/* Status */}
       <div className="hidden lg:flex items-center gap-2 h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white">
-        <span className={`w-1.5 h-1.5 rounded-full ${activeRun?.status === "done" ? "bg-[color:var(--ok)]" :
-            activeRun?.status === "processing" ? "bg-[color:var(--info)] pulse-soft" :
-              activeRun?.status === "failed" ? "bg-[color:var(--danger)]" : "bg-[color:var(--ink-5)]"
-          }`} />
-        <span className="text-[12px] text-[color:var(--ink-3)] capitalize">{activeRun?.status || "—"}</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--ink-5)] pulse-soft" />
+        <span className="text-[12px] text-[color:var(--ink-3)] capitalize">Preparing</span>
       </div>
 
       <UserMenu />

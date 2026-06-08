@@ -1,7 +1,5 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Phone, Mail, Send, ChevronRight,
@@ -11,198 +9,16 @@ import {
   PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton,
   lifecycleTone, urgencyTone,
 } from "@/components/ui";
-import { fetchCustomer, type PredictionOutput } from "@/lib/api";
-import { getDisplayError } from "@/lib/ui-error";
-import { useRunStore } from "@/lib/runStore";
+
+type PredictionOutput = {
+  recommended_action: string | null;
+  recommended_followup_date: string | null;
+  ai_explanation: string | null;
+  ai_recommended_message: string | null;
+};
 
 export default function Customer360() {
-  const params = useParams();
-  const accId  = params.id as string;
-  const { runId } = useRunStore();
-  const [c, setC] = useState<PredictionOutput | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!runId || !accId) {
-      setC(null);
-      setLoading(false);
-      setError(runId ? "" : "ยังไม่ได้เลือก prediction run");
-      return;
-    }
-    setLoading(true); setError("");
-    fetchCustomer(runId, accId)
-      .then((d) => { setC(d); setLoading(false); })
-      .catch((e) => { setError(getDisplayError(e, "ไม่พบลูกค้า") ?? "ไม่พบลูกค้า"); setLoading(false); });
-  }, [runId, accId]);
-
-  if (loading) {
-    return <CustomerSkeleton />;
-  }
-  if (error || !c) return <CustomerSkeleton />;
-
-  const stage = c.lifecycle_stage ?? "—";
-
-  return (
-    <div className="pb-12">
-      <PageHeader
-        eyebrow={
-          <Link href="/customers" className="inline-flex items-center gap-1 text-[color:var(--moby-700)] hover:underline">
-            <ArrowLeft size={11} /> Customers
-          </Link>
-        }
-        title={`Account ${c.acc_id}`}
-        actions={
-          <div className="flex items-center gap-2">
-            <ActionBtn icon={Phone}>Log call</ActionBtn>
-            <ActionBtn icon={Mail}>Send email</ActionBtn>
-            <ActionBtn icon={Send} primary>Trigger campaign</ActionBtn>
-          </div>
-        }
-      />
-
-      <div className="px-8 mt-4 space-y-5">
-        {/* Account brief */}
-        <div className="surface p-5">
-          <div className="flex items-center gap-5 flex-wrap">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] text-white grid place-items-center font-semibold text-[18px]">
-              {String(c.acc_id).slice(-2)}
-            </div>
-            <div className="flex-1 min-w-[260px]">
-              <div className="flex items-center flex-wrap gap-2">
-                <StatusPill tone={lifecycleTone(stage)}>{stage}</StatusPill>
-                {c.sub_stage && <StatusPill tone="neutral" dot={false}>{c.sub_stage}</StatusPill>}
-              </div>
-              <div className="mt-2 flex items-center gap-4 text-[12px] text-[color:var(--ink-4)] flex-wrap">
-                <span><span className="text-[color:var(--ink-5)]">Purchases</span> <b className="num text-[color:var(--ink-2)]">{c.n_purchases || 0}</b></span>
-                <span><span className="text-[color:var(--ink-5)]">Total revenue</span> <b className="num text-[color:var(--ink-2)]">{Number(c.total_revenue || 0).toLocaleString()} ฿</b></span>
-                {c.days_since_last_activity != null && (
-                  <span><span className="text-[color:var(--ink-5)]">Inactive</span> <b className="num text-[color:var(--ink-2)]">{c.days_since_last_activity} days</b></span>
-                )}
-              </div>
-            </div>
-                      </div>
-        </div>
-
-        
-        {/* Active Paid layout */}
-        {stage === "Active Paid" && (
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-            {/* Churn */}
-            <SectionCard title="Churn analysis" hint="ความน่าจะเป็นที่จะเลิกใช้ใน 6 เดือน">
-              <ChurnGauge value={c.churn_probability || 0} />
-              <div className="mt-5 space-y-3">
-                <KV label="Risk level" value={c.churn_risk_level ?? "—"} />
-                <KV label="Output status" value={c.output_status || "—"} />
-                {(c.priority_reason || c.output_notes) && (
-                  <div className="pt-2 border-t border-[color:var(--line)]">
-                    <div className="text-[10.5px] uppercase tracking-[.10em] text-[color:var(--ink-5)] mb-2">Priority reason</div>
-                    <div className="text-[12px] leading-5 text-[color:var(--ink-3)]">
-                      {c.priority_reason ?? c.output_notes}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </SectionCard>
-
-            {/* CLV */}
-            <SectionCard title="Lifetime value" hint="คาดการณ์ 6 เดือนข้างหน้า">
-              <div>
-                <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Predicted CLV</div>
-                <div className="num text-[28px] font-semibold text-[color:var(--ink-1)] mt-0.5">
-                  {Number(c.predicted_clv_6m || 0).toLocaleString()} <span className="text-[14px] text-[color:var(--ink-4)]">฿</span>
-                </div>
-                <div className="text-[11.5px] text-[color:var(--ink-5)] mt-1">
-                  {c.customer_value_tier ?? <Skeleton className="h-3 w-28" />}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-[color:var(--line)]">
-                <KV label="Revenue at risk" value={c.revenue_at_risk != null ? `${Number(c.revenue_at_risk || 0).toLocaleString()} ฿` : "—"} accent="rose" />
-                <KV label="Avg txn value" value={c.avg_transaction_value != null ? `${Number(c.avg_transaction_value || 0).toLocaleString()} ฿` : "—"} />
-              </div>
-            </SectionCard>
-
-            {/* Credit */}
-            <SectionCard title="Credit forecast" hint="คาดการณ์การใช้เครดิตจากผล ML v2">
-              {c.predicted_credit_usage_30d != null || c.predicted_credit_usage_90d != null || c.estimated_days_until_topup != null ? (
-                <>
-                  <div className="mt-5 space-y-3">
-                    <KV label="30d credit usage" value={formatNumber(c.predicted_credit_usage_30d)} />
-                    <KV label="90d credit usage" value={formatNumber(c.predicted_credit_usage_90d)} />
-                    <KV label="Days until top-up" value={c.estimated_days_until_topup ?? "—"} />
-                  </div>
-                  <div className="mt-4">
-                    <StatusPill tone={urgencyTone(c.credit_urgency_level ?? "")}>
-                      {c.credit_urgency_level ?? "No urgency"}
-                    </StatusPill>
-                  </div>
-                </>
-              ) : (
-                <PendingMiniCard rows={3} />
-              )}
-            </SectionCard>
-          </div>
-        )}
-
-        {/* Churned layout */}
-        {stage === "Churned" && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <SectionCard title="Past engagement">
-              <div className="space-y-3">
-                <KV label="Ever paid" value={c.ever_paid ? "Yes" : "No"} />
-                <KV label="Total revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
-                <KV label="Days since last activity" value={c.days_since_last_activity ?? "—"} />
-                <KV label="Past purchases" value={c.n_purchases || 0} />
-              </div>
-            </SectionCard>
-            <SectionCard title="Recommended next step">
-              <Recommendation customer={c} />
-            </SectionCard>
-          </div>
-        )}
-
-        {/* Active Free */}
-        {stage === "Active Free" && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <SectionCard title="Engagement summary">
-              <div className="space-y-3">
-                <KV label="Days since last activity" value={c.days_since_last_activity ?? "—"} />
-                <KV label="Ever paid" value={c.ever_paid ? "Yes" : "No"} />
-                <KV label="Total revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
-              </div>
-            </SectionCard>
-            <SectionCard title="Recommended next step">
-              <Recommendation customer={c} />
-            </SectionCard>
-          </div>
-        )}
-
-        {/* Ghost */}
-        {stage === "Ghost" && (
-          <SectionCard title="Ghost account">
-            <div className="surface-soft p-5">
-              <div className="flex items-center gap-3">
-                <Activity size={16} className="text-[color:var(--ink-4)]" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-3 w-64" />
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-        )}
-
-        {/* Footer · model lineage */}
-        <div className="text-[11px] text-[color:var(--ink-5)] flex items-center gap-3 px-1">
-          <ShieldCheck size={11} /> Output from lifecycle / churn / clv / credit components
-          <span className="opacity-50">·</span>
-          point-in-time safe (cutoff respected)
-          <span className="opacity-50">·</span>
-          AI text appears only when persisted on the prediction output
-        </div>
-      </div>
-    </div>
-  );
+  return <CustomerSkeleton />;
 }
 
 /* ── inner ──────────────────────────────────────── */
@@ -233,17 +49,59 @@ function CustomerSkeleton() {
           </Link>
         }
         title="Account profile"
+        actions={
+          <div className="flex items-center gap-2">
+            <ActionBtn icon={Phone}>Log call</ActionBtn>
+            <ActionBtn icon={Mail}>Send email</ActionBtn>
+            <ActionBtn icon={Send} primary>Trigger campaign</ActionBtn>
+          </div>
+        }
       />
       <div className="px-8 mt-4 space-y-5">
-        <Skeleton className="h-24" />
+        <div className="surface p-5">
+          <div className="flex items-center gap-5 flex-wrap">
+            <Skeleton className="h-14 w-14 rounded-full" />
+            <div className="flex-1 min-w-[260px] space-y-3">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-20" />
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+            </div>
+          </div>
+        </div>
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Skeleton className="h-72" />
-          <Skeleton className="h-72" />
-          <Skeleton className="h-72" />
+          <SectionCard title="Churn analysis" hint="ความน่าจะเป็นที่จะเลิกใช้ใน 6 เดือน">
+            <div className="flex justify-center">
+              <Skeleton className="h-[136px] w-[180px] rounded-full" />
+            </div>
+            <div className="mt-5">
+              <PendingMiniCard rows={3} />
+            </div>
+          </SectionCard>
+          <SectionCard title="Lifetime value" hint="คาดการณ์ 6 เดือนข้างหน้า">
+            <PendingMiniCard rows={4} />
+          </SectionCard>
+          <SectionCard title="Credit forecast" hint="คาดการณ์การใช้เครดิตจากผล ML v2">
+            <PendingMiniCard rows={4} />
+          </SectionCard>
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          <Skeleton className="h-48" />
-          <Skeleton className="h-48" />
+          <SectionCard title="Engagement summary">
+            <PendingMiniCard rows={4} />
+          </SectionCard>
+          <SectionCard title="Recommended next step">
+            <PendingMiniCard rows={3} />
+          </SectionCard>
+        </div>
+        <div className="text-[11px] text-[color:var(--ink-5)] flex items-center gap-3 px-1">
+          <ShieldCheck size={11} /> Output from lifecycle / churn / clv / credit components
+          <span className="opacity-50">·</span>
+          point-in-time safe (cutoff respected)
         </div>
       </div>
     </div>

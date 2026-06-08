@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
-import { streamChat } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
 
 /* ── types ──────────────────────────────────────────────── */
@@ -96,23 +95,11 @@ export default function AIChatPage() {
     setMessages(prev => [...prev, userMsg, replyMsg]);
     setStreaming(true);
 
-    const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
-
-    cancelRef.current = streamChat(
-      runId,
-      history,
-      (chunk) => setMessages(prev =>
-        prev.map(m => m.id === replyId ? { ...m, content: m.content + chunk } : m)
-      ),
-      () => { setStreaming(false); cancelRef.current = null; },
-      (err) => {
-        setMessages(prev =>
-          prev.map(m => m.id === replyId ? { ...m, content: "กำลังรอ insight API พร้อมใช้งานสำหรับ run นี้" } : m)
-        );
-        setStreaming(false);
-        cancelRef.current = null;
-      },
+    setMessages(prev =>
+      prev.map(m => m.id === replyId ? { ...m, content: "กำลังเตรียม insight UI สำหรับ run นี้" } : m)
     );
+    setStreaming(false);
+    cancelRef.current = null;
   }, [input, streaming, runId, messages]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
