@@ -51,8 +51,6 @@ export default function Dashboard() {
   }, [runId]);
 
   const ap = summary?.active_paid || {};
-  const wb = summary?.winback || {};
-  const cv = summary?.conversion || {};
   const lc = summary?.lifecycle || {};
 
   const totalCustomers = summary?.total_customers || 0;
@@ -93,8 +91,8 @@ export default function Dashboard() {
                   Dashboard
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px]">
-                  มองภาพรวมลูกค้าทั้งพอร์ตในหน้าเดียว ทั้ง churn risk, conversion, win-back
-                  และสัญญาณที่ควรลงมือก่อน เพื่อให้ทีมตัดสินใจได้เร็วขึ้น
+                  มองภาพรวมลูกค้าทั้งพอร์ตในหน้าเดียว ทั้ง lifecycle, churn risk,
+                  CLV และ credit forecast เพื่อให้ทีมตัดสินใจได้เร็วขึ้น
                 </p>
               </div>
             </div>
@@ -212,7 +210,7 @@ export default function Dashboard() {
                     label="Active Free"
                     count={activeFreeCount}
                     total={totalCustomers}
-                    detail={`Avg convert ${formatPercent(cv.avg_convert)}`}
+                    detail="Engagement cohort"
                     href="/customers?lifecycle_stage=Active%20Free"
                   />
                   <LifecycleStageRow
@@ -220,7 +218,7 @@ export default function Dashboard() {
                     label="Churned"
                     count={churnedCount}
                     total={totalCustomers}
-                    detail={`Avg comeback ${formatPercent(wb.avg_comeback)}`}
+                    detail="Inactive cohort"
                     href="/customers?lifecycle_stage=Churned"
                   />
                   <LifecycleStageRow

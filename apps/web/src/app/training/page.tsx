@@ -773,7 +773,7 @@ async function waitForTrainingHealth(): Promise<void> {
     const res = await fetch("/api/health");
     if (res.ok) {
       const data = await res.json();
-      if (data.models?.churn && data.models?.winback && data.models?.conversion) {
+      if (data.models?.churn && data.models?.clv && data.models?.credit) {
         return;
       }
     }

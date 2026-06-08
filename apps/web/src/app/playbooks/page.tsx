@@ -172,8 +172,6 @@ function Lane({
                   </div>
                   <div className="text-[11.5px] text-[color:var(--ink-4)] mt-1.5">
                     Churn {r.churn_probability != null ? `${(r.churn_probability * 100).toFixed(1)}%` : "—"}
-                    {r.comeback_probability != null ? ` · Comeback ${(r.comeback_probability * 100).toFixed(1)}%` : ""}
-                    {r.conversion_probability != null ? ` · Convert ${(r.conversion_probability * 100).toFixed(1)}%` : ""}
                   </div>
                   {/* Inline actions */}
                   <div className="flex items-center gap-2 mt-2">

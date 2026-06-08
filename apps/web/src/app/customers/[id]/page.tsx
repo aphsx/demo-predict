@@ -169,20 +169,20 @@ export default function Customer360() {
         {/* Churned layout */}
         {stage === "Churned" && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <SectionCard title="Win-back potential">
-              <ChurnGauge value={c.comeback_probability || 0} label="Comeback probability" tone="warn" />
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-5">
-                <KV label="Inactive (days)" value={c.days_since_last_activity ?? "—"} />
-                <KV label="Past purchases" value={c.n_purchases || 0} />
-                <KV label="Past revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
-              </div>
-            </SectionCard>
             <SectionCard title="Past engagement">
               <div className="space-y-3">
                 <KV label="Ever paid" value={c.ever_paid ? "Yes" : "No"} />
                 <KV label="Total revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
                 <KV label="Days since last activity" value={c.days_since_last_activity ?? "—"} />
+                <KV label="Past purchases" value={c.n_purchases || 0} />
               </div>
+            </SectionCard>
+            <SectionCard title="Recommended next step">
+              <EmptyState
+                icon={CalendarClock}
+                title="ใช้ playbook จาก lifecycle stage"
+                hint="ใช้ action จาก churn/CLV/credit และประวัติการใช้งานก่อน"
+              />
             </SectionCard>
           </div>
         )}
@@ -190,19 +190,20 @@ export default function Customer360() {
         {/* Active Free */}
         {stage === "Active Free" && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <SectionCard title="Conversion likelihood">
-              <ChurnGauge value={c.conversion_probability || 0} label="Convert in 6m" tone="violet" />
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-5">
-                <KV label="Days active" value={c.days_since_last_activity ?? "—"} />
-                <KV label="Ever paid" value={c.ever_paid ? "Yes" : "No"} />
-                <KV label="Total revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
-              </div>
-            </SectionCard>
             <SectionCard title="Engagement summary">
               <div className="space-y-3">
                 <KV label="Is active" value={c.is_active ? "Yes" : "No"} />
                 <KV label="Days since last activity" value={c.days_since_last_activity ?? "—"} />
+                <KV label="Ever paid" value={c.ever_paid ? "Yes" : "No"} />
+                <KV label="Total revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
               </div>
+            </SectionCard>
+            <SectionCard title="Recommended next step">
+              <EmptyState
+                icon={Activity}
+                title="ใช้ engagement summary"
+                hint="ใช้ usage/engagement summary และ campaign playbook โดยไม่อ้าง model ที่อยู่นอก scope ML v2"
+              />
             </SectionCard>
           </div>
         )}
@@ -220,7 +221,7 @@ export default function Customer360() {
 
         {/* Footer · model lineage */}
         <div className="text-[11px] text-[color:var(--ink-5)] flex items-center gap-3 px-1">
-          <ShieldCheck size={11} /> Output from churn / clv / credit / win-back / conversion models
+          <ShieldCheck size={11} /> Output from lifecycle / churn / clv / credit components
           <span className="opacity-50">·</span>
           point-in-time safe (cutoff respected)
           <span className="opacity-50">·</span>

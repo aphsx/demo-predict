@@ -276,9 +276,18 @@ export async function fetchActiveModelVersions(): Promise<ModelVersion[]> {
 }
 
 export async function trainModels(cutoff_date?: string): Promise<Record<string, unknown>> {
-  return unwrap<Record<string, unknown>>(
-    await elysia["model-versions"].train.post({ cutoff_date })
-  );
+  const res = await apiFetch("/api/model-versions/train", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ cutoff_date }),
+  });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    throw new Error(
+      isApiError(body) ? body.message : `Training endpoint unavailable (${res.status})`
+    );
+  }
+  return asRecord(body);
 }
 
 // ── [NEW] Train raw data import ───────────────────────────────────────────────

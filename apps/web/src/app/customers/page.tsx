@@ -100,18 +100,16 @@ function Inner() {
                   <th>Lifecycle</th>
                   <th>Churn Prob</th>
                   <th className="text-right">CLV (6m)</th>
-                  <th>Comeback Prob</th>
-                  <th>Convert Prob</th>
                   <th>N Purchases</th>
                   <th>Total Revenue</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && [...Array(8)].map((_, i) => (
-                  <tr key={i}><td colSpan={8}><Skeleton className="h-6 my-1" /></td></tr>
+                  <tr key={i}><td colSpan={6}><Skeleton className="h-6 my-1" /></td></tr>
                 ))}
                 {!loading && rows.length === 0 && (
-                  <tr><td colSpan={8}>
+                  <tr><td colSpan={6}>
                     <EmptyState title="ไม่พบลูกค้าตามเงื่อนไข" hint="ลองปรับ filter หรือเปลี่ยน run" icon={Activity} />
                   </td></tr>
                 )}
@@ -135,16 +133,6 @@ function Inner() {
                     </td>
                     <td className="text-right num">
                       {r.predicted_clv_6m != null ? `${Number(r.predicted_clv_6m).toLocaleString()} ฿` : "—"}
-                    </td>
-                    <td>
-                      {r.comeback_probability != null
-                        ? `${(r.comeback_probability * 100).toFixed(1)}%`
-                        : "—"}
-                    </td>
-                    <td>
-                      {r.conversion_probability != null
-                        ? `${(r.conversion_probability * 100).toFixed(1)}%`
-                        : "—"}
                     </td>
                     <td className="num">{r.n_purchases ?? "—"}</td>
                     <td className="num">

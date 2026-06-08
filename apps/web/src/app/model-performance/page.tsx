@@ -11,7 +11,7 @@ import { fetchModelMetrics, fetchTrainingLog } from "@/lib/api";
 import { formatFeatureLabel } from "@/lib/featureLabels";
 import { getDisplayError } from "@/lib/ui-error";
 
-type Tab = "overview" | "churn" | "clv" | "credit" | "winback" | "conversion" | "log";
+type Tab = "overview" | "churn" | "clv" | "credit" | "log";
 
 export default function ModelHealth() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -72,7 +72,7 @@ export default function ModelHealth() {
         <div className="segmented">
           {([
             ["overview","Overview"], ["churn","Churn"], ["clv","CLV"],
-            ["credit","Credit"], ["winback","Win-back"], ["conversion","Conversion"], ["log","Training log"],
+            ["credit","Credit"], ["log","Training log"],
           ] as [Tab, string][]).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className={tab === id ? "active" : ""}>
               {label}
@@ -85,8 +85,6 @@ export default function ModelHealth() {
         {tab === "churn" && <ChurnTab m={m} />}
         {tab === "clv" && <ClvTab m={m} />}
         {tab === "credit" && <CreditTab m={m} />}
-        {tab === "winback" && <BinaryTab title="Win-back model" stats={m.winback || {}} pos="comeback" cohort="churned" />}
-        {tab === "conversion" && <BinaryTab title="Conversion model" stats={m.conversion || {}} pos="converted" cohort="free" />}
         {tab === "log" && (
           <SectionCard title="Training log">
             <pre className="text-[11.5px] font-mono whitespace-pre-wrap leading-relaxed text-[color:var(--ink-2)] bg-[color:var(--surface-2)] p-4 rounded-md max-h-[60vh] overflow-auto">
@@ -102,14 +100,12 @@ export default function ModelHealth() {
 /* ─── Tabs ─── */
 
 function Overview({ m }: any) {
-  const c = m.churn || {}, lv = m.clv || {}, cr = m.credit || {}, wb = m.winback || {}, cv = m.conversion || {};
+  const c = m.churn || {}, lv = m.clv || {}, cr = m.credit || {};
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       <ScoreCard title="Churn" hint="LightGBM · isotonic" main={c.auc} mainLabel="AUC" green={0.9} ok={0.8} status={c.auc} />
       <ScoreCard title="CLV" hint="BG/NBD · Gamma-Gamma" main={lv.spearman} mainLabel="Spearman" green={0.5} ok={0.3} status={lv.spearman} />
       <ScoreCard title="Credit" hint="LGBM quantile × 5" main={cr.coverage_p10_p90_after} mainLabel="80% coverage" green={0.78} ok={0.7} status={cr.coverage_p10_p90_after} target={0.80} />
-      <ScoreCard title="Win-back" hint="LightGBM · isotonic" main={wb.auc} mainLabel="AUC" green={0.9} ok={0.8} status={wb.auc} />
-      <ScoreCard title="Conversion" hint="LightGBM · isotonic" main={cv.auc} mainLabel="AUC" green={0.9} ok={0.8} status={cv.auc} />
       <SectionCard title="Data summary" hint="ใช้ในการเทรน">
         <KVList rows={[
           ["Total users", ds(m).total_users],
@@ -204,28 +200,6 @@ function CreditTab({ m }: any) {
           ["P25–P75 coverage (cal.)", num(cr.coverage_p25_p75_after), "target 0.50"],
           ["Conformal mult. 80%", num(cr.conformal_mult_80)],
           ["Conformal mult. 50%", num(cr.conformal_mult_50)],
-        ]} />
-      </div>
-    </SectionCard>
-  );
-}
-
-function BinaryTab({ title, stats, pos, cohort }: any) {
-  const rate = stats[`n_${pos}`] && stats[`n_${cohort}`]
-    ? `${((stats[`n_${pos}`] / stats[`n_${cohort}`]) * 100).toFixed(1)}%` : "—";
-  return (
-    <SectionCard title={title}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <KVList rows={[
-          ["AUC-ROC", num(stats.auc), stats.auc > 0.9 ? "Excellent" : stats.auc > 0.8 ? "Good" : "Review"],
-          ["F1", num(stats.f1)],
-          ["Precision", num(stats.precision)],
-          ["Recall", num(stats.recall)],
-        ]} />
-        <KVList rows={[
-          [`Total ${cohort}`, num(stats[`n_${cohort}`])],
-          [`Actual ${pos}`, num(stats[`n_${pos}`])],
-          [`Base rate`, rate],
         ]} />
       </div>
     </SectionCard>
