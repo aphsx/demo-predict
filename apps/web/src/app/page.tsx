@@ -13,7 +13,7 @@ import {
   TrendingDown,
   UsersRound,
 } from "lucide-react";
-import { StackBar, StatusPill } from "@/components/ui";
+import { StatusPill } from "@/components/ui";
 
 type DashboardOverview = {
   run: {
@@ -243,49 +243,44 @@ export default function Dashboard() {
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <div className="space-y-5">
-          <div className="surface-elev overflow-hidden">
-            <PanelHeader
-              eyebrow="Portfolio"
-              title="Lifecycle mix"
-              hint="สัดส่วนลูกค้า active, churned และ ghost"
-            />
-            <div className="border-t border-[color:var(--line-2)] p-4">
-              <StackBar data={overview.lifecycle} palette={LIFECYCLE_PALETTE} height={10} />
-              <div className="mt-4 divide-y divide-[color:var(--line-2)] rounded-2xl border border-[color:var(--line)] bg-white">
-                {Object.entries(overview.lifecycle).map(([stage, count]) => (
-                  <LifecycleRow
-                    key={stage}
-                    label={stage}
-                    value={count}
-                    total={overview.totals.customers}
-                    hint={lifecycleHint(stage)}
-                    color={LIFECYCLE_PALETTE[stage as keyof typeof LIFECYCLE_PALETTE]}
-                  />
-                ))}
-              </div>
+      <section className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-2">
+        <div className="surface-elev flex h-full flex-col overflow-hidden">
+          <PanelHeader
+            eyebrow="Portfolio"
+            title="Lifecycle mix"
+            hint="สัดส่วนลูกค้า active, churned และ ghost"
+          />
+          <div className="flex-1 border-t border-[color:var(--line-2)] p-4">
+            <div className="divide-y divide-[color:var(--line-2)] rounded-2xl border border-[color:var(--line)] bg-white">
+              {Object.entries(overview.lifecycle).map(([stage, count]) => (
+                <LifecycleRow
+                  key={stage}
+                  label={stage}
+                  value={count}
+                  total={overview.totals.customers}
+                  hint={lifecycleHint(stage)}
+                  color={LIFECYCLE_PALETTE[stage as keyof typeof LIFECYCLE_PALETTE]}
+                />
+              ))}
             </div>
           </div>
-          <ValueCard overview={overview} />
         </div>
 
-        <div className="space-y-5">
-          <RiskCard overview={overview} />
-          <DistributionCard
-            icon={CreditCard}
-            eyebrow="Credit"
-            title="Top-up urgency"
-            hint="เฉพาะ active customers ที่ forecast credit ได้"
-            data={{
-              Critical: overview.credit.critical,
-              Warning: overview.credit.warning,
-              Monitor: overview.credit.monitor,
-              Stable: overview.credit.stable,
-            }}
-            palette={CREDIT_PALETTE}
-          />
-        </div>
+        <RiskCard overview={overview} />
+        <ValueCard overview={overview} />
+        <DistributionCard
+          icon={CreditCard}
+          eyebrow="Credit"
+          title="Top-up urgency"
+          hint="เฉพาะ active customers ที่ forecast credit ได้"
+          data={{
+            Critical: overview.credit.critical,
+            Warning: overview.credit.warning,
+            Monitor: overview.credit.monitor,
+            Stable: overview.credit.stable,
+          }}
+          palette={CREDIT_PALETTE}
+        />
       </section>
 
       <section className="surface-elev overflow-hidden">
@@ -370,12 +365,15 @@ function LifecycleRow({
   const pct = total > 0 ? (value / total) * 100 : 0;
 
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3">
-      <div className="min-w-0 flex items-center gap-3">
+    <div className="flex items-center justify-between gap-4 px-4 py-2.5">
+      <div className="min-w-0 flex flex-1 items-center gap-3">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</div>
           <div className="mt-0.5 truncate text-[11.5px] text-[color:var(--ink-5)]">{hint}</div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
+            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+          </div>
         </div>
       </div>
       <div className="shrink-0 text-right">
@@ -404,9 +402,9 @@ function DistributionCard({
   const total = Object.values(data).reduce((sum, value) => sum + value, 0);
 
   return (
-    <div className="surface-elev overflow-hidden">
+    <div className="surface-elev flex h-full flex-col overflow-hidden">
       <PanelHeader eyebrow={eyebrow} title={title} hint={hint} icon={Icon} />
-      <div className="space-y-4 border-t border-[color:var(--line-2)] p-5">
+      <div className="flex-1 space-y-4 border-t border-[color:var(--line-2)] p-5">
         {Object.entries(data).map(([row, value]) => {
           const pct = total > 0 ? (value / total) * 100 : 0;
           return (
@@ -437,14 +435,14 @@ function RiskCard({ overview }: { overview: DashboardOverview }) {
   const highPct = (overview.active_churn.high / overview.active_churn.base_customers) * 100;
 
   return (
-    <div className="surface-elev overflow-hidden">
+    <div className="surface-elev flex h-full flex-col overflow-hidden">
       <PanelHeader
         eyebrow="Churn"
         title="Active customer risk"
         hint="ไม่นับ churned และ ghost เพื่อไม่ให้ตัวเลข churn active ปน lifecycle อื่น"
         icon={TrendingDown}
       />
-      <div className="border-t border-[color:var(--line-2)] p-5">
+      <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
         <div className="mb-4 rounded-2xl border border-[color:var(--danger-bg)] bg-[color:var(--danger-bg)] p-4">
           <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--danger)]">
             High-risk active
@@ -475,14 +473,14 @@ function ValueCard({ overview }: { overview: DashboardOverview }) {
   };
 
   return (
-    <div className="surface-elev overflow-hidden">
+    <div className="surface-elev flex h-full flex-col overflow-hidden">
       <PanelHeader
         eyebrow="Value"
         title="CLV concentration"
         hint="ใช้ดูว่าความเสี่ยงกระทบลูกค้ากลุ่มมูลค่าสูงแค่ไหน"
         icon={Gem}
       />
-      <div className="border-t border-[color:var(--line-2)] p-5">
+      <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>
             <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">Predicted CLV</div>
