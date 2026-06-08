@@ -25,6 +25,45 @@ type PredictionOutput = {
   total_revenue: number | null;
 };
 
+const MOCK_ROWS: PredictionOutput[] = [
+  {
+    acc_id: 10001,
+    lifecycle_stage: "Active Paid",
+    sub_stage: "At-risk paid",
+    churn_probability: 0.68,
+    predicted_clv_6m: 42800,
+    n_purchases: 7,
+    total_revenue: 126400,
+  },
+  {
+    acc_id: 10002,
+    lifecycle_stage: "Active Free",
+    sub_stage: "Engaged free",
+    churn_probability: null,
+    predicted_clv_6m: null,
+    n_purchases: 0,
+    total_revenue: 0,
+  },
+  {
+    acc_id: 10003,
+    lifecycle_stage: "Churned",
+    sub_stage: "Paid churned",
+    churn_probability: null,
+    predicted_clv_6m: 0,
+    n_purchases: 3,
+    total_revenue: 48500,
+  },
+  {
+    acc_id: 10004,
+    lifecycle_stage: "Ghost",
+    sub_stage: "Never activated",
+    churn_probability: null,
+    predicted_clv_6m: null,
+    n_purchases: 0,
+    total_revenue: 0,
+  },
+];
+
 function Inner() {
   const router = useRouter();
   const sp     = useSearchParams();
@@ -41,17 +80,17 @@ function Inner() {
     lifecycle_stage:"", search: "",
   }); setPage(1); };
 
-  const rows: PredictionOutput[] = [];
-  const total = 0;
+  const rows: PredictionOutput[] = MOCK_ROWS;
+  const total = MOCK_ROWS.length;
   const pageSize = 50;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const activeFilters = Object.entries(filters).filter(([_, v]) => v).length;
-  const pendingRows = true;
+  const pendingRows = false;
 
   return (
     <div className="pb-12">
       <PageHeader
-        eyebrow={pendingRows ? "Preparing customers" : `${total.toLocaleString()} customers`}
+        eyebrow={`${total.toLocaleString()} mock customers`}
         title="Customer Intelligence"
         actions={
           <a

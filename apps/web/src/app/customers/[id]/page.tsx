@@ -1,233 +1,274 @@
 "use client";
+
 export const dynamic = "force-dynamic";
+
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import type { ElementType, ReactNode } from "react";
 import {
-  ArrowLeft, Phone, Mail, Send, ChevronRight,
-  CalendarClock, ShieldCheck, Activity,
+  ArrowLeft,
+  Mail,
+  MessageSquareText,
+  Phone,
+  Send,
+  ShieldCheck,
+  Target,
 } from "lucide-react";
-import {
-  PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton,
-  lifecycleTone, urgencyTone,
-} from "@/components/ui";
+import { ProgressMeter, SectionCard, StatusPill, lifecycleTone, urgencyTone } from "@/components/ui";
 
-type PredictionOutput = {
-  recommended_action: string | null;
-  recommended_followup_date: string | null;
-  ai_explanation: string | null;
-  ai_recommended_message: string | null;
-};
+const MOCK_CUSTOMER = {
+  lifecycle_stage: "Active Paid",
+  sub_stage: "At-risk paid",
+  churn_probability: 0.68,
+  churn_risk_level: "High",
+  predicted_clv_6m: 42800,
+  customer_value_tier: "High value",
+  revenue_at_risk: 29104,
+  predicted_credit_usage_30d: 18450,
+  predicted_credit_usage_90d: 56100,
+  estimated_days_until_topup: 9,
+  credit_urgency_level: "Warning",
+  usage_trend: "Declining",
+  days_since_last_activity: 18,
+  n_purchases: 7,
+  total_revenue: 126400,
+  avg_transaction_value: 18057,
+  ever_paid: true,
+  priority_score: 87,
+  priority_reason: "High CLV customer with declining usage and near-term top-up risk.",
+  recommended_action: "Call customer success owner and offer usage review package.",
+  recommended_followup_date: "2026-06-12",
+  ai_status: "generated",
+  ai_explanation:
+    "ลูกค้ารายนี้ยังเป็น Active Paid และมีมูลค่าสูง แต่ usage trend ลดลงต่อเนื่อง ประกอบกับวันล่าสุดที่ใช้งานเริ่มห่าง จึงควรติดต่อก่อนถึงรอบเติมเครดิตถัดไป",
+  ai_recommended_message:
+    "สวัสดีครับ ทีม 1Moby เห็นว่า usage ช่วงนี้ลดลงเล็กน้อย อยากช่วยรีวิวแคมเปญและเครดิตที่เหลือ เพื่อให้รอบส่งถัดไปราบรื่นขึ้นครับ",
+  ai_model: "gemini-pro",
+  output_status: "predicted",
+} as const;
 
-export default function Customer360() {
-  return <CustomerSkeleton />;
+export default function Customer360Mockup() {
+  const params = useParams();
+  const accId = String(params.id ?? "10001");
+
+  return (
+    <div className="pb-12">
+      <div className="px-8 pt-6 pb-2 flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <div className="mb-1">
+            <Link href="/customers" className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[.16em] text-[color:var(--moby-700)] hover:underline">
+              <ArrowLeft size={11} /> Customers
+            </Link>
+          </div>
+          <h2 className="text-[20px] font-semibold text-[color:var(--ink-1)] leading-tight">
+            Account {accId}
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusPill tone="neutral" dot={false}>Mockup</StatusPill>
+          <ActionBtn icon={Phone}>Log call</ActionBtn>
+          <ActionBtn icon={Mail}>Send email</ActionBtn>
+          <ActionBtn icon={Send} primary>Trigger campaign</ActionBtn>
+        </div>
+      </div>
+
+      <div className="px-8 mt-4 space-y-5">
+        <section className="surface p-5">
+          <div className="flex items-center gap-5 flex-wrap">
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] text-white grid place-items-center font-semibold text-[18px]">
+              {accId.slice(-2)}
+            </div>
+            <div className="flex-1 min-w-[260px]">
+              <div className="flex items-center flex-wrap gap-2">
+                <StatusPill tone={lifecycleTone(MOCK_CUSTOMER.lifecycle_stage)}>
+                  {MOCK_CUSTOMER.lifecycle_stage}
+                </StatusPill>
+                <StatusPill tone="neutral" dot={false}>{MOCK_CUSTOMER.sub_stage}</StatusPill>
+                <StatusPill tone="danger">{MOCK_CUSTOMER.churn_risk_level} churn risk</StatusPill>
+              </div>
+              <div className="mt-2 flex items-center gap-4 text-[12px] text-[color:var(--ink-4)] flex-wrap">
+                <Meta label="Purchases" value={MOCK_CUSTOMER.n_purchases.toLocaleString()} />
+                <Meta label="Total revenue" value={`${MOCK_CUSTOMER.total_revenue.toLocaleString()} ฿`} />
+                <Meta label="Inactive" value={`${MOCK_CUSTOMER.days_since_last_activity} days`} />
+                <Meta label="Ever paid" value={MOCK_CUSTOMER.ever_paid ? "Yes" : "No"} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+          <SectionCard title="Churn analysis" hint="ความน่าจะเป็นที่จะเลิกใช้ใน 6 เดือน">
+            <ChurnGauge value={MOCK_CUSTOMER.churn_probability} />
+            <div className="mt-5 grid grid-cols-2 gap-4 border-t border-[color:var(--line)] pt-4">
+              <KV label="Risk level" value={MOCK_CUSTOMER.churn_risk_level} accent="rose" />
+              <KV label="Usage trend" value={MOCK_CUSTOMER.usage_trend} />
+              <KV label="Revenue at risk" value={`${MOCK_CUSTOMER.revenue_at_risk.toLocaleString()} ฿`} accent="rose" />
+              <KV label="Output status" value={MOCK_CUSTOMER.output_status} />
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Lifetime value" hint="คาดการณ์ 6 เดือนข้างหน้า">
+            <div className="space-y-4">
+              <div>
+                <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Predicted CLV</div>
+                <div className="num text-[30px] font-semibold text-[color:var(--ink-1)] mt-1">
+                  {MOCK_CUSTOMER.predicted_clv_6m.toLocaleString()} <span className="text-[14px] text-[color:var(--ink-4)]">฿</span>
+                </div>
+                <div className="mt-2">
+                  <StatusPill tone="brand" dot={false}>{MOCK_CUSTOMER.customer_value_tier}</StatusPill>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 border-t border-[color:var(--line)] pt-4">
+                <KV label="Avg txn value" value={`${MOCK_CUSTOMER.avg_transaction_value.toLocaleString()} ฿`} />
+                <KV label="Purchases" value={MOCK_CUSTOMER.n_purchases} />
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Credit forecast" hint="คาดการณ์การใช้เครดิตและรอบเติมเครดิต">
+            <div className="space-y-4">
+              <ForecastBar label="30d usage" value={MOCK_CUSTOMER.predicted_credit_usage_30d} max={MOCK_CUSTOMER.predicted_credit_usage_90d} />
+              <ForecastBar label="90d usage" value={MOCK_CUSTOMER.predicted_credit_usage_90d} max={MOCK_CUSTOMER.predicted_credit_usage_90d} />
+              <div className="grid grid-cols-2 gap-4 border-t border-[color:var(--line)] pt-4">
+                <KV label="Days until top-up" value={`${MOCK_CUSTOMER.estimated_days_until_topup} days`} accent="blue" />
+                <div>
+                  <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">Urgency</div>
+                  <div className="mt-1">
+                    <StatusPill tone={urgencyTone(MOCK_CUSTOMER.credit_urgency_level)}>
+                      {MOCK_CUSTOMER.credit_urgency_level}
+                    </StatusPill>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+        </section>
+
+        <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-5">
+          <SectionCard title="Recommended next step" hint="สรุปจาก priority_score และ recommended_action">
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Priority score</div>
+                    <div className="num mt-1 text-[32px] font-semibold text-[color:var(--moby-700)]">{MOCK_CUSTOMER.priority_score}</div>
+                  </div>
+                  <Target size={24} className="text-[color:var(--moby-600)]" />
+                </div>
+                <div className="mt-3">
+                  <ProgressMeter value={MOCK_CUSTOMER.priority_score} max={100} tone="blue" showValue={false} />
+                </div>
+              </div>
+              <KV label="Recommended action" value={MOCK_CUSTOMER.recommended_action} accent="blue" />
+              <KV label="Follow-up date" value={MOCK_CUSTOMER.recommended_followup_date} />
+              <KV label="Reason" value={MOCK_CUSTOMER.priority_reason} />
+            </div>
+          </SectionCard>
+
+          <SectionCard title="AI explanation" hint="ข้อความจาก AI ที่ persist ลง prediction output">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <StatusPill tone="ok">{MOCK_CUSTOMER.ai_status}</StatusPill>
+                <StatusPill tone="neutral" dot={false}>{MOCK_CUSTOMER.ai_model}</StatusPill>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4 text-[13px] leading-6 text-[color:var(--ink-3)]">
+                {MOCK_CUSTOMER.ai_explanation}
+              </div>
+              <div className="rounded-2xl border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
+                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-700)]">
+                  <MessageSquareText size={14} /> Suggested message
+                </div>
+                <p className="text-[12.5px] leading-6 text-[color:var(--ink-3)]">
+                  {MOCK_CUSTOMER.ai_recommended_message}
+                </p>
+              </div>
+            </div>
+          </SectionCard>
+        </section>
+
+        <section className="surface p-4">
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)]">
+            <ShieldCheck size={12} /> Mockup from ML v2 prediction output fields
+            <span className="opacity-50">·</span>
+            lifecycle / churn / clv / credit / action / ai
+            <span className="opacity-50">·</span>
+            API not connected
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 }
 
-/* ── inner ──────────────────────────────────────── */
-
-function ActionBtn({ icon: Icon, children, primary }: any) {
+function ActionBtn({ icon: Icon, children, primary }: { icon: ElementType; children: ReactNode; primary?: boolean }) {
   return (
     <button
       disabled
-      title="Action workflow is not wired yet"
-      className={`h-9 px-3 rounded-lg text-[13px] inline-flex items-center gap-1.5 cursor-not-allowed opacity-55 ${
-      primary
-        ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-700)]"
-        : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]"
-    }`}
+      title="Mockup only"
+      className={`h-9 px-3 rounded-lg text-[13px] inline-flex items-center gap-1.5 cursor-not-allowed opacity-75 ${
+        primary
+          ? "bg-[color:var(--moby-600)] text-white"
+          : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)]"
+      }`}
     >
       <Icon size={14} /> {children}
     </button>
   );
 }
 
-function CustomerSkeleton() {
+function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="pb-12">
-      <PageHeader
-        eyebrow={
-          <Link href="/customers" className="inline-flex items-center gap-1 text-[color:var(--moby-700)] hover:underline">
-            <ArrowLeft size={11} /> Customers
-          </Link>
-        }
-        title="Account profile"
-        actions={
-          <div className="flex items-center gap-2">
-            <ActionBtn icon={Phone}>Log call</ActionBtn>
-            <ActionBtn icon={Mail}>Send email</ActionBtn>
-            <ActionBtn icon={Send} primary>Trigger campaign</ActionBtn>
-          </div>
-        }
-      />
-      <div className="px-8 mt-4 space-y-5">
-        <div className="surface p-5">
-          <div className="flex items-center gap-5 flex-wrap">
-            <Skeleton className="h-14 w-14 rounded-full" />
-            <div className="flex-1 min-w-[260px] space-y-3">
-              <div className="flex items-center gap-2">
-                <Skeleton className="h-6 w-24" />
-                <Skeleton className="h-6 w-20" />
-              </div>
-              <div className="flex flex-wrap gap-4">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-4 w-36" />
-                <Skeleton className="h-4 w-32" />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <SectionCard title="Churn analysis" hint="ความน่าจะเป็นที่จะเลิกใช้ใน 6 เดือน">
-            <div className="flex justify-center">
-              <Skeleton className="h-[136px] w-[180px] rounded-full" />
-            </div>
-            <div className="mt-5">
-              <PendingMiniCard rows={3} />
-            </div>
-          </SectionCard>
-          <SectionCard title="Lifetime value" hint="คาดการณ์ 6 เดือนข้างหน้า">
-            <PendingMiniCard rows={4} />
-          </SectionCard>
-          <SectionCard title="Credit forecast" hint="คาดการณ์การใช้เครดิตจากผล ML v2">
-            <PendingMiniCard rows={4} />
-          </SectionCard>
-        </div>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-          <SectionCard title="Engagement summary">
-            <PendingMiniCard rows={4} />
-          </SectionCard>
-          <SectionCard title="Recommended next step">
-            <PendingMiniCard rows={3} />
-          </SectionCard>
-        </div>
-        <div className="text-[11px] text-[color:var(--ink-5)] flex items-center gap-3 px-1">
-          <ShieldCheck size={11} /> Output from lifecycle / churn / clv / credit components
-          <span className="opacity-50">·</span>
-          point-in-time safe (cutoff respected)
-        </div>
-      </div>
-    </div>
+    <span>
+      <span className="text-[color:var(--ink-5)]">{label}</span>{" "}
+      <b className="num text-[color:var(--ink-2)]">{value}</b>
+    </span>
   );
 }
 
-function PendingMiniCard({ rows = 2 }: { rows?: number }) {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="space-y-1.5">
-          <Skeleton className="h-3 w-28" />
-          <Skeleton className="h-5 w-full" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Recommendation({ customer }: { customer: PredictionOutput }) {
-  if (!customer.recommended_action && !customer.recommended_followup_date && !customer.ai_explanation) {
-    return <PendingMiniCard rows={3} />;
-  }
-
-  return (
-    <div className="space-y-4">
-      <KV label="Recommended action" value={customer.recommended_action ?? "—"} accent="blue" />
-      <KV label="Follow-up date" value={customer.recommended_followup_date ?? "—"} />
-      {customer.ai_explanation && (
-        <div className="rounded-md border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3 text-[12px] leading-5 text-[color:var(--ink-3)]">
-          {customer.ai_explanation}
-        </div>
-      )}
-      {customer.ai_recommended_message && (
-        <KV label="AI recommended message" value={customer.ai_recommended_message} />
-      )}
-    </div>
-  );
-}
-
-function ChurnGauge({ value, label = "Churn probability", tone = "auto" }: { value: number; label?: string; tone?: "auto" | "warn" | "violet" }) {
-  const pct = Math.max(0, Math.min(1, value));
-  const color = tone === "warn" ? "var(--warn)"
-    : tone === "violet" ? "#7c3aed"
-    : pct > 0.6 ? "var(--danger)"
-    : pct > 0.3 ? "var(--warn)"
-    : "var(--ok)";
-  const r = 70;
-  const cx = 90, cy = 90;
-  const start = polar(cx, cy, r, 180);
-  const end   = polar(cx, cy, r, 360);
-  const cur   = polar(cx, cy, r, 180 + pct * 180);
-  return (
-    <div className="text-center">
-      <svg width="180" height="100" viewBox="0 0 180 100">
-        <path d={`M${start.x},${start.y} A${r},${r} 0 0 1 ${end.x},${end.y}`} fill="none" stroke="var(--line-2)" strokeWidth="10" strokeLinecap="round" />
-        <path d={`M${start.x},${start.y} A${r},${r} 0 ${pct > 0.5 ? 1 : 0} 1 ${cur.x},${cur.y}`} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />
-      </svg>
-      <div className="num text-[32px] font-semibold leading-none mt-1" style={{ color }}>
-        {(pct * 100).toFixed(1)}%
-      </div>
-      <div className="text-[11.5px] text-[color:var(--ink-5)] mt-1">{label}</div>
-    </div>
-  );
-}
-function polar(cx: number, cy: number, r: number, deg: number) {
-  const rad = (deg * Math.PI) / 180;
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
-}
-
-function KV({ label, value, accent }: { label: string; value: any; accent?: "rose" | "ok" | "blue" }) {
+function KV({ label, value, accent }: { label: string; value: ReactNode; accent?: "rose" | "ok" | "blue" }) {
   const color = accent === "rose" ? "var(--danger)" : accent === "ok" ? "var(--ok)" : accent === "blue" ? "var(--moby-700)" : "var(--ink-1)";
   return (
     <div>
       <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">{label}</div>
-      <div className="num text-[16px] font-semibold mt-0.5" style={{ color }}>{value}</div>
+      <div className="num text-[15px] font-semibold mt-1 leading-6" style={{ color }}>{value}</div>
     </div>
   );
 }
 
-function formatNumber(value: number | null) {
-  return value == null ? "—" : Number(value).toLocaleString();
-}
-
-function CIBar({ lo80, hi80, lo95, hi95, point }: any) {
-  const min = lo95, max = hi95, range = max - min || 1;
-  const pos = (v: number) => ((v - min) / range) * 100;
+function ChurnGauge({ value }: { value: number }) {
+  const pct = Math.max(0, Math.min(1, value));
+  const color = pct >= 0.6 ? "var(--danger)" : pct >= 0.35 ? "var(--warn)" : "var(--ok)";
   return (
-    <div className="mt-4">
-      <div className="relative h-3 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
-        <div className="absolute top-0 bottom-0 bg-[color:var(--moby-100)]" style={{ left: 0, right: 0 }} />
-        <div className="absolute top-0 bottom-0 bg-[color:var(--moby-200)]" style={{ left: `${pos(lo80)}%`, right: `${100 - pos(hi80)}%` }} />
-        <div className="absolute top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[color:var(--moby-700)]" style={{ left: `calc(${pos(point)}% - 1px)` }} />
-      </div>
-      <div className="flex justify-between text-[10.5px] text-[color:var(--ink-5)] num mt-1.5">
-        <span>{Number(lo95).toLocaleString()}</span>
-        <span>{Number(hi95).toLocaleString()}</span>
+    <div className="text-center">
+      <div
+        className="mx-auto grid h-[132px] w-[132px] place-items-center rounded-full"
+        style={{
+          background: `conic-gradient(${color} ${pct * 360}deg, var(--surface-2) 0deg)`,
+        }}
+      >
+        <div className="grid h-[102px] w-[102px] place-items-center rounded-full bg-white">
+          <div>
+            <div className="num text-[28px] font-semibold leading-none" style={{ color }}>
+              {(pct * 100).toFixed(1)}%
+            </div>
+            <div className="mt-1 text-[10.5px] text-[color:var(--ink-5)]">churn</div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function RFMBar({ label, value }: { label: string; value: number | null }) {
-  const v = value ?? 0;
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1">
-        <span className="text-[11px] text-[color:var(--ink-4)]">{label}</span>
-        <span className="num text-[12px] text-[color:var(--ink-2)]">{v}/5</span>
-      </div>
-      <ProgressMeter value={v} max={5} tone="blue" showValue={false} />
-    </div>
-  );
-}
-
-function QuantileBar({ label, value, max, tone, highlight }: any) {
+function ForecastBar({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
-  const color = ({ ok: "var(--ok)", info: "var(--info)", brand: "var(--moby-600)", warn: "var(--warn)", danger: "var(--danger)" } as any)[tone];
   return (
     <div>
-      <div className="flex justify-between items-baseline mb-1">
-        <span className={`text-[11.5px] ${highlight ? "font-medium text-[color:var(--ink-1)]" : "text-[color:var(--ink-4)]"}`}>{label}</span>
-        <span className="num text-[12px] text-[color:var(--ink-2)]">{Number(value).toFixed(0)} days</span>
+      <div className="mb-1 flex justify-between text-[12px]">
+        <span className="text-[color:var(--ink-4)]">{label}</span>
+        <span className="num font-medium text-[color:var(--ink-2)]">{value.toLocaleString()}</span>
       </div>
-      <div className="w-full h-1.5 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
-        <div className="h-full" style={{ width: `${pct}%`, background: color }} />
+      <div className="h-2 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
+        <div className="h-full rounded-full bg-[color:var(--moby-600)]" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
