@@ -3,47 +3,150 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import type { ElementType } from "react";
 import {
   ArrowRight,
-  Bot,
   CalendarClock,
   CreditCard,
   Gem,
-  MessageSquareText,
   ShieldCheck,
-  Target,
+  TrendingDown,
   UsersRound,
 } from "lucide-react";
-import { Skeleton, StatusPill } from "@/components/ui";
+import { StackBar, StatusPill } from "@/components/ui";
 
-const LIFECYCLE_STAGES = [
-  { label: "Active Paid", hint: "ใช้งานอยู่และเคยจ่าย", color: "var(--c-paid)" },
-  { label: "Active Free", hint: "ใช้งานอยู่แต่ยังไม่เคยจ่าย", color: "var(--c-free)" },
-  { label: "Churned", hint: "หยุดใช้งานแล้ว", color: "var(--c-churn)" },
-  { label: "Ghost", hint: "สมัครแล้วแต่ยังไม่ใช้งาน", color: "var(--c-ghost)" },
-] as const;
+type DashboardOverview = {
+  run: {
+    name: string;
+    cutoff_date: string;
+    output_status: "mock" | "ready" | "processing";
+  };
+  totals: {
+    customers: number;
+    active_customers: number;
+    paid_customers: number;
+    ghost_customers: number;
+    revenue_at_risk: number;
+    followups_due_7d: number;
+  };
+  lifecycle: Record<"Active Paid" | "Active Free" | "Churned" | "Ghost", number>;
+  active_churn: {
+    base_customers: number;
+    high: number;
+    medium: number;
+    low: number;
+    avg_probability: number;
+  };
+  value: {
+    high_value: number;
+    mid_value: number;
+    low_value: number;
+    high_value_at_risk: number;
+    predicted_clv_6m: number;
+  };
+  credit: {
+    critical: number;
+    warning: number;
+    monitor: number;
+    stable: number;
+    next_topup_7d: number;
+  };
+  action_queue: {
+    label: string;
+    count: number;
+    hint: string;
+    tone: "danger" | "warn" | "info" | "brand" | "neutral" | "ok";
+  }[];
+};
 
-const CHURN_BUCKETS = ["High risk", "Medium risk", "Low risk"] as const;
-const VALUE_TIERS = ["High value", "Mid value", "Low value"] as const;
-const CREDIT_URGENCY = ["Critical", "Warning", "Monitor", "Stable"] as const;
+const MOCK_OVERVIEW: DashboardOverview = {
+  run: {
+    name: "June 2026 prediction run",
+    cutoff_date: "2026-06-01",
+    output_status: "mock",
+  },
+  totals: {
+    customers: 1284,
+    active_customers: 846,
+    paid_customers: 512,
+    ghost_customers: 187,
+    revenue_at_risk: 1286000,
+    followups_due_7d: 74,
+  },
+  lifecycle: {
+    "Active Paid": 512,
+    "Active Free": 334,
+    Churned: 251,
+    Ghost: 187,
+  },
+  active_churn: {
+    base_customers: 846,
+    high: 96,
+    medium: 214,
+    low: 536,
+    avg_probability: 0.31,
+  },
+  value: {
+    high_value: 118,
+    mid_value: 392,
+    low_value: 337,
+    high_value_at_risk: 41,
+    predicted_clv_6m: 5420000,
+  },
+  credit: {
+    critical: 28,
+    warning: 66,
+    monitor: 143,
+    stable: 609,
+    next_topup_7d: 52,
+  },
+  action_queue: [
+    {
+      label: "Call high-value risk",
+      count: 41,
+      hint: "High CLV + high churn risk",
+      tone: "danger",
+    },
+    {
+      label: "Top-up follow-up",
+      count: 52,
+      hint: "Estimated top-up within 7 days",
+      tone: "warn",
+    },
+    {
+      label: "Activate ghost accounts",
+      count: 187,
+      hint: "Signed up but never activated",
+      tone: "neutral",
+    },
+  ],
+};
 
-const ACTION_SUMMARY = [
-  { label: "Need follow-up", field: "recommended_followup_date" },
-  { label: "Has recommended action", field: "recommended_action" },
-  { label: "AI message ready", field: "ai_recommended_message" },
-] as const;
+const LIFECYCLE_PALETTE = {
+  "Active Paid": "var(--c-paid)",
+  "Active Free": "var(--c-free)",
+  Churned: "var(--c-churn)",
+  Ghost: "var(--c-ghost)",
+};
 
-const PREVIEW_COLUMNS = [
-  "acc_id",
-  "lifecycle_stage",
-  "churn_risk_level",
-  "predicted_clv_6m",
-  "credit_urgency_level",
-  "priority_score",
-  "recommended_action",
-] as const;
+const CHURN_PALETTE = {
+  High: "var(--danger)",
+  Medium: "var(--warn)",
+  Low: "var(--ok)",
+};
+
+const CREDIT_PALETTE = {
+  Critical: "var(--danger)",
+  Warning: "var(--warn)",
+  Monitor: "var(--info)",
+  Stable: "var(--ok)",
+};
 
 export default function Dashboard() {
+  const overview = MOCK_OVERVIEW;
+  const activeHighRiskPct = (overview.active_churn.high / overview.active_churn.base_customers) * 100;
+  const ghostPct = (overview.totals.ghost_customers / overview.totals.customers) * 100;
+
   return (
     <main className="px-8 py-6 pb-12 space-y-6">
       <section
@@ -66,7 +169,7 @@ export default function Dashboard() {
             <div className="space-y-5">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill tone="info">Prediction overview</StatusPill>
-                <StatusPill tone="neutral" dot={false}>UI only</StatusPill>
+                <StatusPill tone="neutral" dot={false}>Mock data</StatusPill>
               </div>
 
               <div className="max-w-3xl">
@@ -77,13 +180,21 @@ export default function Dashboard() {
                   Dashboard
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px]">
-                  ภาพรวมจากผล prediction เช่นจำนวนลูกค้าแต่ละ lifecycle, churn risk,
-                  CLV/value tier, credit urgency และ action ที่ควรทำ ถ้ายังไม่มี API จริงค่าจะเป็น skeleton
+                  ภาพรวมผล prediction ที่ควรเห็นก่อนเริ่มทำงาน: portfolio ทั้งหมด,
+                  active churn risk, value at risk, credit urgency และ action queue ที่ต้องตามต่อ
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3 xl:justify-end">
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="rounded-2xl border border-white/16 bg-white/12 px-4 py-3 text-right backdrop-blur">
+                <div className="text-[11px] font-semibold uppercase tracking-[.14em] text-white/60">
+                  Cutoff
+                </div>
+                <div className="num mt-1 text-[18px] font-semibold">{overview.run.cutoff_date}</div>
+                <div className="mt-1 text-[11px] text-white/62">{overview.run.name}</div>
+              </div>
+              <div className="flex flex-wrap gap-3 xl:justify-end">
               <Link
                 href="/customers"
                 className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/20 bg-white/96 px-4 text-[13px] font-semibold text-slate-900"
@@ -96,129 +207,108 @@ export default function Dashboard() {
               >
                 Action queue <ArrowRight size={13} />
               </Link>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={UsersRound} label="Total customers" hint="all output rows" />
-        <MetricCard icon={Target} label="High churn risk" hint="churn_risk_level = High" />
-        <MetricCard icon={Gem} label="Revenue at risk" hint="sum revenue_at_risk" />
-        <MetricCard icon={CalendarClock} label="Follow-ups due" hint="recommended_followup_date" />
+        <MetricCard
+          icon={UsersRound}
+          label="Total customers"
+          value={formatNumber(overview.totals.customers)}
+          hint={`${formatNumber(overview.totals.active_customers)} active customers`}
+        />
+        <MetricCard
+          icon={TrendingDown}
+          label="Active high risk"
+          value={formatNumber(overview.active_churn.high)}
+          hint={`${activeHighRiskPct.toFixed(1)}% of active customers`}
+          tone="danger"
+        />
+        <MetricCard
+          icon={Gem}
+          label="Revenue at risk"
+          value={formatCurrency(overview.totals.revenue_at_risk)}
+          hint="from active paid customers"
+          tone="warn"
+        />
+        <MetricCard
+          icon={CalendarClock}
+          label="Follow-ups due"
+          value={formatNumber(overview.totals.followups_due_7d)}
+          hint="recommended within 7 days"
+          tone="brand"
+        />
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
         <div className="surface-elev overflow-hidden">
           <PanelHeader
-            eyebrow="Lifecycle overview"
-            title="ลูกค้าแต่ละสถานะมีทั้งหมดกี่คน"
-            hint="นับจาก `lifecycle_stage` และ `sub_stage` ใน output row"
+            eyebrow="Portfolio"
+            title="Lifecycle mix"
+            hint="ดูฐานลูกค้าก่อนว่า active, churned และ ghost มีสัดส่วนเท่าไร"
           />
           <div className="border-t border-[color:var(--line-2)] p-5">
-            <div className="mb-5">
-              <Skeleton className="h-3 w-full rounded-full" />
-              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-                {LIFECYCLE_STAGES.map((stage) => (
-                  <div key={stage.label} className="flex items-center gap-2 text-[11.5px] text-[color:var(--ink-4)]">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: stage.color }} />
-                    {stage.label}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <StackBar data={overview.lifecycle} palette={LIFECYCLE_PALETTE} height={12} />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {LIFECYCLE_STAGES.map((stage) => (
-                <LifecycleCard key={stage.label} {...stage} />
+              {Object.entries(overview.lifecycle).map(([stage, count]) => (
+                <LifecycleCard
+                  key={stage}
+                  label={stage}
+                  value={count}
+                  total={overview.totals.customers}
+                  hint={lifecycleHint(stage)}
+                  color={LIFECYCLE_PALETTE[stage as keyof typeof LIFECYCLE_PALETTE]}
+                />
               ))}
             </div>
           </div>
         </div>
 
         <div className="space-y-5">
-          <DistributionCard
-            icon={Target}
-            eyebrow="Churn"
-            title="Risk distribution"
-            hint="จำนวนลูกค้าแยกตาม `churn_risk_level`"
-            rows={CHURN_BUCKETS}
-          />
+          <RiskCard overview={overview} />
           <DistributionCard
             icon={CreditCard}
             eyebrow="Credit"
-            title="Credit urgency"
-            hint="จำนวนลูกค้าแยกตาม `credit_urgency_level`"
-            rows={CREDIT_URGENCY}
+            title="Top-up urgency"
+            hint="เฉพาะ active customers ที่ forecast credit ได้"
+            data={{
+              Critical: overview.credit.critical,
+              Warning: overview.credit.warning,
+              Monitor: overview.credit.monitor,
+              Stable: overview.credit.stable,
+            }}
+            palette={CREDIT_PALETTE}
           />
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <DistributionCard
-          icon={Gem}
-          eyebrow="Value"
-          title="CLV / value tiers"
-          hint="กลุ่มมูลค่าจาก `customer_value_tier` และ `predicted_clv_6m`"
-          rows={VALUE_TIERS}
-        />
-        <div className="surface-elev overflow-hidden xl:col-span-2">
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <ValueCard overview={overview} />
+        <div className="surface-elev overflow-hidden">
           <PanelHeader
-            eyebrow="Action summary"
-            title="งานที่ควรเกิดจาก prediction output"
-            hint="สรุปจาก priority, recommended action, follow-up date และ AI message"
+            eyebrow="Action queue"
+            title="เรื่องที่ทีมควรทำก่อน"
+            hint="สรุปจาก priority_score, lifecycle, churn, credit forecast และ recommended_action"
           />
           <div className="grid grid-cols-1 gap-4 border-t border-[color:var(--line-2)] p-5 md:grid-cols-3">
-            {ACTION_SUMMARY.map((item) => (
+            {overview.action_queue.map((item) => (
               <ActionSummaryCard key={item.label} {...item} />
             ))}
           </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="surface-elev overflow-hidden">
-          <PanelHeader
-            eyebrow="Customer preview"
-            title="ตัวอย่าง output row ที่จะใช้แสดงใน Customers"
-            hint="ยังไม่เชื่อม API จึงแสดงเฉพาะ skeleton cells"
-          />
-          <div className="overflow-x-auto border-t border-[color:var(--line-2)]">
-            <table className="table-base">
-              <thead>
-                <tr>
-                  {PREVIEW_COLUMNS.map((column) => (
-                    <th key={column}>{column}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from({ length: 6 }).map((_, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {PREVIEW_COLUMNS.map((column, colIndex) => (
-                      <td key={column}>
-                        <Skeleton className={colIndex === 0 ? "h-4 w-16" : "h-4 w-28"} />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="space-y-5">
-          <div className="surface-elev overflow-hidden">
-            <PanelHeader
-              eyebrow="AI output"
-              title="AI enrichment"
-              hint="สถานะข้อความ AI ที่ถูก persist ใน output"
-            />
-            <div className="space-y-4 border-t border-[color:var(--line-2)] p-5">
-              <StatusRow icon={Bot} label="Generated" field="ai_status" />
-              <StatusRow icon={MessageSquareText} label="Recommended message" field="ai_recommended_message" />
-              <StatusRow icon={ShieldCheck} label="Model used" field="ai_model" />
-            </div>
-          </div>
+      <section className="surface p-4">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)]">
+          <ShieldCheck size={12} />
+          Mock dashboard data is isolated in `MOCK_OVERVIEW`
+          <span className="opacity-50">·</span>
+          API-ready shape: totals / lifecycle / active_churn / value / credit / action_queue
+          <span className="opacity-50">·</span>
+          Ghost share: {ghostPct.toFixed(1)}%
         </div>
       </section>
     </main>
@@ -228,12 +318,22 @@ export default function Dashboard() {
 function MetricCard({
   icon: Icon,
   label,
+  value,
   hint,
+  tone = "brand",
 }: {
-  icon: React.ElementType;
+  icon: ElementType;
   label: string;
+  value: string;
   hint: string;
+  tone?: "brand" | "danger" | "warn";
 }) {
+  const toneClass = tone === "danger"
+    ? "text-[color:var(--danger)] bg-[color:var(--danger-bg)]"
+    : tone === "warn"
+      ? "text-[color:var(--warn)] bg-[color:var(--warn-bg)]"
+      : "text-[color:var(--moby-600)] bg-[color:var(--moby-50)]";
+
   return (
     <div className="surface p-5">
       <div className="flex items-start justify-between gap-3">
@@ -241,9 +341,13 @@ function MetricCard({
           <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
             {label}
           </div>
-          <Skeleton className="mt-3 h-8 w-24" />
+          <div className="num mt-2 text-[30px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+            {value}
+          </div>
         </div>
-        <Icon size={17} className="text-[color:var(--moby-600)]" />
+        <span className={`grid h-10 w-10 place-items-center rounded-2xl ${toneClass}`}>
+          <Icon size={17} />
+        </span>
       </div>
       <div className="mt-3 text-[11.5px] text-[color:var(--ink-5)]">{hint}</div>
     </div>
@@ -254,11 +358,17 @@ function LifecycleCard({
   label,
   hint,
   color,
+  value,
+  total,
 }: {
   label: string;
   hint: string;
   color: string;
+  value: number;
+  total: number;
 }) {
+  const pct = total > 0 ? (value / total) * 100 : 0;
+
   return (
     <div className="rounded-[20px] border border-[color:var(--line)] bg-white p-4">
       <div className="flex items-start gap-3">
@@ -269,9 +379,14 @@ function LifecycleCard({
               <div className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</div>
               <div className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">{hint}</div>
             </div>
-            <Skeleton className="h-8 w-16" />
+            <div className="text-right">
+              <div className="num text-[22px] font-semibold text-[color:var(--ink-1)]">{formatNumber(value)}</div>
+              <div className="num text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}%</div>
+            </div>
           </div>
-          <Skeleton className="mt-4 h-2 w-full rounded-full" />
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
+            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+          </div>
         </div>
       </div>
     </div>
@@ -283,67 +398,175 @@ function DistributionCard({
   eyebrow,
   title,
   hint,
-  rows,
+  data,
+  palette,
 }: {
-  icon: React.ElementType;
+  icon: ElementType;
   eyebrow: string;
   title: string;
   hint: string;
-  rows: readonly string[];
+  data: Record<string, number>;
+  palette: Record<string, string>;
 }) {
+  const total = Object.values(data).reduce((sum, value) => sum + value, 0);
+
   return (
     <div className="surface-elev overflow-hidden">
       <PanelHeader eyebrow={eyebrow} title={title} hint={hint} icon={Icon} />
       <div className="space-y-4 border-t border-[color:var(--line-2)] p-5">
-        {rows.map((row) => (
+        {Object.entries(data).map(([row, value]) => {
+          const pct = total > 0 ? (value / total) * 100 : 0;
+          return (
           <div key={row}>
             <div className="mb-1.5 flex items-center justify-between gap-3">
               <span className="text-[12px] font-medium text-[color:var(--ink-2)]">{row}</span>
-              <Skeleton className="h-4 w-12" />
+              <span className="num text-[12px] font-semibold text-[color:var(--ink-2)]">
+                {formatNumber(value)}
+              </span>
             </div>
-            <Skeleton className="h-2 w-full rounded-full" />
+            <div className="h-2 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
+              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: palette[row] }} />
+            </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function ActionSummaryCard({ label, field }: { label: string; field: string }) {
+function RiskCard({ overview }: { overview: DashboardOverview }) {
+  const churnData = {
+    High: overview.active_churn.high,
+    Medium: overview.active_churn.medium,
+    Low: overview.active_churn.low,
+  };
+  const highPct = (overview.active_churn.high / overview.active_churn.base_customers) * 100;
+
+  return (
+    <div className="surface-elev overflow-hidden">
+      <PanelHeader
+        eyebrow="Churn"
+        title="Active customer risk"
+        hint="ไม่นับ churned และ ghost เพื่อไม่ให้ตัวเลข churn active ปน lifecycle อื่น"
+        icon={TrendingDown}
+      />
+      <div className="border-t border-[color:var(--line-2)] p-5">
+        <div className="mb-4 rounded-2xl border border-[color:var(--danger-bg)] bg-[color:var(--danger-bg)] p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--danger)]">
+            High-risk active
+          </div>
+          <div className="mt-1 flex items-end justify-between gap-3">
+            <div className="num text-[30px] font-semibold text-[color:var(--danger)]">
+              {formatNumber(overview.active_churn.high)}
+            </div>
+            <div className="num text-[12px] text-[color:var(--ink-4)]">
+              {highPct.toFixed(1)}% of active
+            </div>
+          </div>
+        </div>
+        <DistributionRows data={churnData} palette={CHURN_PALETTE} />
+        <div className="mt-4 text-[11.5px] text-[color:var(--ink-5)]">
+          Average active churn probability: {(overview.active_churn.avg_probability * 100).toFixed(1)}%
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ValueCard({ overview }: { overview: DashboardOverview }) {
+  const valueData = {
+    "High value": overview.value.high_value,
+    "Mid value": overview.value.mid_value,
+    "Low value": overview.value.low_value,
+  };
+
+  return (
+    <div className="surface-elev overflow-hidden">
+      <PanelHeader
+        eyebrow="Value"
+        title="CLV concentration"
+        hint="ใช้ดูว่าความเสี่ยงกระทบลูกค้ากลุ่มมูลค่าสูงแค่ไหน"
+        icon={Gem}
+      />
+      <div className="border-t border-[color:var(--line-2)] p-5">
+        <div className="mb-4 grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">Predicted CLV</div>
+            <div className="num mt-1 text-[24px] font-semibold text-[color:var(--ink-1)]">
+              {formatCurrency(overview.value.predicted_clv_6m)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">High value at risk</div>
+            <div className="num mt-1 text-[24px] font-semibold text-[color:var(--danger)]">
+              {formatNumber(overview.value.high_value_at_risk)}
+            </div>
+          </div>
+        </div>
+        <DistributionRows
+          data={valueData}
+          palette={{
+            "High value": "var(--moby-600)",
+            "Mid value": "var(--info)",
+            "Low value": "var(--ink-5)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActionSummaryCard({
+  label,
+  count,
+  hint,
+  tone,
+}: {
+  label: string;
+  count: number;
+  hint: string;
+  tone: "danger" | "warn" | "info" | "brand" | "neutral" | "ok";
+}) {
   return (
     <div className="rounded-[20px] border border-[color:var(--line)] bg-white p-4">
       <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
         {label}
       </div>
-      <Skeleton className="mt-3 h-8 w-20" />
-      <div className="mt-3 rounded-lg bg-[color:var(--surface-2)] px-2 py-1.5 text-[11px] text-[color:var(--ink-4)]">
-        {field}
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div className="num text-[30px] font-semibold text-[color:var(--ink-1)]">
+          {formatNumber(count)}
+        </div>
+        <StatusPill tone={tone} dot={false}>queue</StatusPill>
+      </div>
+      <div className="mt-3 text-[11.5px] leading-5 text-[color:var(--ink-4)]">
+        {hint}
       </div>
     </div>
   );
 }
 
-function StatusRow({
-  icon: Icon,
-  label,
-  field,
-}: {
-  icon: React.ElementType;
-  label: string;
-  field: string;
-}) {
+function DistributionRows({ data, palette }: { data: Record<string, number>; palette: Record<string, string> }) {
+  const total = Object.values(data).reduce((sum, value) => sum + value, 0);
+
   return (
-    <div className="flex items-center gap-3">
-      <span className="grid h-8 w-8 place-items-center rounded-xl bg-[color:var(--surface-2)] text-[color:var(--moby-600)]">
-        <Icon size={14} />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[12.5px] font-medium text-[color:var(--ink-2)]">{label}</span>
-          <Skeleton className="h-4 w-12" />
+    <div className="space-y-4">
+      {Object.entries(data).map(([label, value]) => {
+        const pct = total > 0 ? (value / total) * 100 : 0;
+        return (
+        <div key={label}>
+          <div className="mb-1.5 flex items-center justify-between gap-3">
+            <span className="text-[12px] font-medium text-[color:var(--ink-2)]">{label}</span>
+            <span className="num text-[12px] font-semibold text-[color:var(--ink-2)]">
+              {formatNumber(value)}
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
+            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: palette[label] }} />
+          </div>
         </div>
-        <div className="mt-1 text-[11px] text-[color:var(--ink-5)]">{field}</div>
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -357,7 +580,7 @@ function PanelHeader({
   eyebrow: string;
   title: string;
   hint: string;
-  icon?: React.ElementType;
+  icon?: ElementType;
 }) {
   return (
     <header className="flex items-start justify-between gap-4 px-5 py-4">
@@ -377,4 +600,20 @@ function PanelHeader({
       )}
     </header>
   );
+}
+
+function lifecycleHint(stage: string): string {
+  if (stage === "Active Paid") return "จ่ายเงินแล้วและยังใช้งานอยู่";
+  if (stage === "Active Free") return "ยังใช้งานอยู่แต่ยังไม่จ่าย";
+  if (stage === "Churned") return "หยุดใช้งานตาม observed lifecycle";
+  return "สมัครแล้วแต่ยังไม่เกิด activation";
+}
+
+function formatNumber(value: number): string {
+  return value.toLocaleString();
+}
+
+function formatCurrency(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M ฿`;
+  return `${value.toLocaleString()} ฿`;
 }
