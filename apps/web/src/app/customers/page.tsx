@@ -4,11 +4,10 @@ export const dynamic = "force-dynamic";
 
 import { Suspense, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import {
-  PageHeader, SectionCard, StatusPill, Skeleton,
+  PageHeader, StatusPill, Skeleton,
   lifecycleTone,
 } from "@/components/ui";
 import { useRunStore } from "@/lib/runStore";
@@ -105,31 +104,38 @@ function Inner() {
 
       <div className="px-8 mt-4 space-y-4">
         {/* Filter Bar */}
-        <SectionCard
-          title="Filters"
-          hint={activeFilters > 0 ? `${activeFilters} filters active` : "ทุกลูกค้าในรอบนี้"}
-          right={activeFilters > 0
-            ? <button onClick={clearAll} className="text-[12px] text-[color:var(--ink-4)] hover:text-[color:var(--danger)] inline-flex items-center gap-1"><Image src="/icons/clear.svg" alt="" width={12} height={13} aria-hidden /> Clear all</button>
-            : <Filter size={14} className="text-[color:var(--ink-5)]" />
-          }
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            <Select label="Lifecycle stage" value={filters.lifecycle_stage} onChange={v => setFilter("lifecycle_stage", v)} options={STAGES} />
+        <div className="surface px-3 py-3">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-[color:var(--line)] bg-white px-3 focus-within:border-[color:var(--moby-300)]">
+              <Image src="/icons/search.svg" alt="" width={14} height={14} aria-hidden />
+              <input
+                value={filters.search}
+                onChange={e => setFilter("search", e.target.value)}
+                placeholder="Search account ID..."
+                className="h-9 min-w-0 flex-1 bg-transparent text-[13px] outline-none"
+              />
+            </div>
 
-            <div>
-              <label className="text-[11px] font-medium text-[color:var(--ink-4)] block mb-1">Account ID</label>
-              <div className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white flex items-center gap-2 focus-within:border-[color:var(--moby-300)]">
-                <Image src="/icons/search.svg" alt="" width={14} height={14} aria-hidden />
-                <input
-                  value={filters.search}
-                  onChange={e => setFilter("search", e.target.value)}
-                  placeholder="Search…"
-                  className="bg-transparent outline-none text-[13px] flex-1"
-                />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center lg:flex-none">
+              <Select value={filters.lifecycle_stage} onChange={v => setFilter("lifecycle_stage", v)} options={STAGES} />
+
+              <div className="flex items-center justify-between gap-2 sm:justify-start">
+                <div className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[12px] text-[color:var(--ink-4)]">
+                  <Filter size={13} />
+                  {activeFilters > 0 ? `${activeFilters} active` : "All customers"}
+                </div>
+                {activeFilters > 0 && (
+                  <button
+                    onClick={clearAll}
+                    className="inline-flex h-9 items-center gap-1 rounded-lg px-2.5 text-[12px] text-[color:var(--ink-4)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--danger)]"
+                  >
+                    <Image src="/icons/clear.svg" alt="" width={12} height={13} aria-hidden /> Clear
+                  </button>
+                )}
               </div>
             </div>
           </div>
-        </SectionCard>
+        </div>
 
         {/* Table */}
         <div className="surface overflow-hidden">
@@ -206,20 +212,18 @@ function Inner() {
 }
 
 function Select({
-  label, value, onChange, options,
-}: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+  value, onChange, options,
+}: { value: string; onChange: (v: string) => void; options: string[] }) {
   return (
-    <div>
-      <label className="text-[11px] font-medium text-[color:var(--ink-4)] block mb-1">{label}</label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:border-[color:var(--moby-200)]"
-      >
-        <option value="">All</option>
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    </div>
+    <select
+      aria-label="Lifecycle stage"
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="h-9 w-full rounded-lg border border-[color:var(--line)] bg-white px-3 text-[13px] text-[color:var(--ink-2)] hover:border-[color:var(--moby-200)] sm:w-[220px]"
+    >
+      <option value="">All lifecycle stages</option>
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
   );
 }
 
