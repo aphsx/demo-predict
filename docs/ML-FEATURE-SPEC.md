@@ -303,6 +303,12 @@ Fields เหล่านี้ใช้สำหรับ join/filter/debug ไ
 acc_id
 source_id
 cutoff_date
+lifecycle_stage
+sub_stage
+ever_paid
+active_in_window
+has_activity_history
+days_since_last_activity
 eligible_for_churn
 eligible_for_clv
 eligible_for_credit
@@ -310,6 +316,30 @@ output_status
 output_notes
 model_eligibility_json
 ```
+
+Important separation:
+
+```text
+observed lifecycle/status != model prediction
+```
+
+`lifecycle_stage`, `sub_stage`, `ever_paid`, `active_in_window`,
+`has_activity_history`, and `days_since_last_activity` are observed/rule-based fields
+computed from pre-cutoff activity. They explain current state at the prediction cutoff.
+
+`churn_probability`, `predicted_clv_6m`, and credit forecasts are future predictions.
+Do not present observed lifecycle fields as ML scores, and do not feed output/status fields
+back into model features.
+
+Hashing contract:
+
+```text
+feature_code_hash    = feature_df/model input contract only
+lifecycle_code_hash  = observed lifecycle/status contract only
+```
+
+`ml_feature_sets.feature_code_hash` must not change only because lifecycle/status rules change.
+If lifecycle logic changes without feature changes, record it separately in reports/model metadata.
 
 Eligibility:
 
@@ -1178,6 +1208,16 @@ Lifecycle is not a model score. It is a business interpretation layer.
 It guarantees every customer gets a meaningful state even when ML models are not eligible.
 ```
 
+Implemented contract:
+
+```text
+build_lifecycle_outputs(customers, payments, usage, cutoff)
+```
+
+Output lives in `FeatureBuildResult.lifecycle_df`, separate from `feature_df`.
+`feature_df` contains only model input features. `lifecycle_df` contains observed state
+and prediction eligibility metadata.
+
 ### 12.1 Lifecycle Inputs
 
 ```text
@@ -1195,6 +1235,16 @@ usage_total_all
 ```text
 lifecycle_stage
 sub_stage
+ever_paid
+has_activity_history
+active_in_window
+days_since_last_activity
+eligible_for_churn
+eligible_for_clv
+eligible_for_credit
+model_eligibility_json
+output_status
+output_notes
 ```
 
 Candidate rules:
@@ -1214,6 +1264,15 @@ Active Free:
 Active Paid:
   active in active_window_days
   has payment before cutoff
+```
+
+Initial verified train-source counts for `cutoff_date = 2025-07-01`:
+
+```text
+Ghost:       20,309
+Active Paid:  2,335
+Churned:      1,782
+Active Free:    667
 ```
 
 Sub-stage examples:

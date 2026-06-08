@@ -382,6 +382,23 @@ feature rows include every customer
 feature columns deterministic
 no post-cutoff payment/usage used
 feature_stats generated
+lifecycle_df generated separately from feature_df
+observed lifecycle/status fields are not model features
+```
+
+Current verified status:
+
+```text
+apps/ml/src/training/features.py implemented
+apps/ml/scripts/verify_feature_builder.py implemented
+DB smoke passed for cutoff_date=2025-07-01
+feature rows: 25,093
+features: 24
+lifecycle counts:
+  Ghost: 20,309
+  Active Paid: 2,335
+  Churned: 1,782
+  Active Free: 667
 ```
 
 ### Task 4.2: Implement Feature Schema Contract
@@ -415,6 +432,16 @@ ml_feature_sets row inserted
 prediction can validate against feature_schema
 ```
 
+Current verified status:
+
+```text
+FeatureSetContract implemented
+feature_code_hash includes only output-affecting feature_df helpers
+lifecycle_code_hash tracks observed lifecycle/status helpers separately
+nullable contract rules are explicit
+ml_feature_sets upsert verified
+```
+
 ### Task 4.3: Implement PIT/Leakage Checks
 
 Goal:
@@ -438,6 +465,14 @@ max feature usage period < cutoff
 label window not used in feature builder
 Tier B/C features excluded from first churn baseline
 leakage_check_report generated
+```
+
+Current verified status:
+
+```text
+check_train_feature_leakage implemented
+check_predict_feature_leakage implemented
+ml_data_validation_reports row with validation_type=leakage persisted
 ```
 
 ## Phase 5: Preprocessing Pipeline
@@ -474,6 +509,18 @@ feature order preserved
 preprocessor can be saved/loaded
 ```
 
+Current verified status:
+
+```text
+apps/ml/src/training/preprocessing.py implemented
+apps/ml/scripts/verify_preprocessing.py implemented
+DB smoke passed:
+  features: 24
+  train_rows: 20,038
+  holdout_rows: 5,055
+  artifact: /app/models/preprocessor_config.json
+```
+
 ## Phase 6: Churn First
 
 ### Task 6.1: Build Churn Training Dataset
@@ -505,6 +552,9 @@ eligible population matches label viability report
 churn_label exists
 positive/negative counts reported
 feature matrix excludes label columns
+feature matrix excludes lifecycle/status/output metadata
+lifecycle_df joins by acc_id for observed customer state
+model_eligibility_json explains null/fallback scores
 dataset summary saved
 ```
 

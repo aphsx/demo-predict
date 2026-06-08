@@ -8,7 +8,7 @@ Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 | **Train** | clean | **NEW** | `train_clean_*` · runs after raw on same import (async SSE `phase`: raw \| clean) |
 | **Predict** | raw | **NEW** (import only) | `predict_data_sources`, `predict_raw_sheet_*` · `POST /predict-data-sources/import` · `/runs` upload |
 | Predict | clean | **NEW** | `predict_clean_*` · runs after raw on `POST /predict-data-sources/import` |
-| **Predict** | ML output | **LEGACY** (still used) | `prediction_runs`, `predictions` · Arq worker (not wired to `predict_raw_*` yet) |
+| **Predict** | ML output | **REBUILDING** | legacy `prediction_runs`/`predictions` dropped by Alembic `0006`; new output target is `ml_prediction_runs` + `ml_prediction_outputs` |
 | ~~Predict~~ | ~~typed raw~~ | **removed** | ~~`raw_customers`, `raw_payments`, `raw_usage`~~ · ~~`POST /runs/:id/upload`~~ |
 
 ## Removed (004)
@@ -20,10 +20,35 @@ Greenfield raw layers first; legacy typed `raw_*` per run **removed**.
 
 ## Predict raw import (current)
 
-1. Create run → upload on `/runs` → `predict_raw_sheet_*`
+1. Upload predict dataset → `predict_data_sources` + `predict_raw_sheet_*`
 2. Raw import → predict clean (typed + manifest)
-3. Run status → `imported` (customer count from `clean_manifest`)
-4. **No ML pipeline** from clean yet (retry → 503)
+3. Clean rows → `predict_clean_customers`, `predict_clean_payments`, `predict_clean_usage`
+4. Prediction ML output is not wired yet; next target is `ml_prediction_runs` + `ml_prediction_outputs`
+
+## ML rebuild status
+
+Implemented and verified:
+
+```text
+train_clean_*/predict_clean_* loaders
+data validation reports
+label builders and label viability checks
+Tier A feature builder
+feature set contract + ml_feature_sets persistence
+PIT/leakage report
+observed lifecycle/status separation via lifecycle_df
+preprocessing fit/transform/save/load contract
+```
+
+Not wired yet:
+
+```text
+dataset builders
+churn baseline training
+champion aliases
+prediction runner
+ml_prediction_outputs insertion
+```
 
 ## Docker migrations
 
@@ -55,5 +80,6 @@ Then **Refresh** in DBeaver (`localhost:5433`).
 
 ## Next
 
-- Worker `load_from_db` from `predict_raw_*`
-- Remove retry 503 / explain 503 when wired
+- Build dataset contracts from `feature_df + lifecycle_df + labels`
+- Train/evaluate churn baselines before advanced models
+- Implement prediction runner from `predict_clean_*` with champion aliases

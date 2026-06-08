@@ -84,20 +84,22 @@ The user uploads a **fixed-schema Excel file with exactly 8 sheets**. Schema is 
 Tables:
 
 - `user`, `session`, `account`, `verification` — Better Auth (camelCase column names)
-- `model_versions` — trained model registry
-- `prediction_runs` — one run per "Run Analysis" click
-- `raw_customers`, `raw_payments`, `raw_usage` — parsed Excel rows (scoped per run)
-- `predictions` — all ML output per customer per run (flat wide table)
+- `train_data_sources`, `train_raw_sheet_*`, `train_clean_*` — training import/clean foundation
+- `predict_data_sources`, `predict_raw_sheet_*`, `predict_clean_*` — prediction import/clean foundation
+- `ml_training_runs`, `ml_feature_sets`, `ml_model_versions`, `ml_model_aliases`, `ml_model_evaluations` — ML v2 training/model registry
+- `ml_prediction_runs`, `ml_prediction_outputs` — ML v2 prediction runs/output
+- `ml_data_validation_reports` — structured quality-gate reports
 
 Key design decisions:
 
-- Raw data is scoped per run (`run_id` FK with CASCADE). Re-uploading clears and re-inserts.
-- All ML output goes into a single `predictions` table (not split by model type).
-- `model_version_id` on `prediction_runs` is present but currently not set by the pipeline.
+- Train and predict imports are separate. Training uses `train_clean_*`; prediction uses `predict_clean_*`.
+- Legacy `raw_customers`, `raw_payments`, `raw_usage`, `prediction_runs`, `predictions`, and `model_versions` are dropped/replaced.
+- Observed lifecycle/status is separate from predicted scores. `lifecycle_stage` is rule-based, not a model score.
+- All prediction output goes into `ml_prediction_outputs`, one row per customer per prediction run.
 - Better Auth tables use camelCase column names (quoted identifiers in PG) — Drizzle schema
   preserves this in `apps/api/src/db/schema.ts`.
 
-## The Five ML Models + Lifecycle Engine
+## ML v2 Components
 
 | Component           | Type                       | Output                                               |
 | ------------------- | -------------------------- | ---------------------------------------------------- |
@@ -105,17 +107,27 @@ Key design decisions:
 | **Churn**           | LightGBM + Optuna + SHAP   | `churn_probability`, per-customer SHAP factors       |
 | **CLV + RFM**       | BG-NBD + Gamma-Gamma       | `predicted_clv_6m`, `p_alive`, `n_purchases`         |
 | **Credit Forecast** | Quantile regression        | `credit_p10` … `credit_p90`                          |
-| **Winback**         | LightGBM                   | `comeback_probability` (for Churned stage only)      |
-| **Conversion**      | LightGBM                   | `conversion_probability` (for Active Free only)      |
 
-## Job Flow
+Removed from ML v2 scope: win-back/conversion models and `comeback_probability` / `conversion_probability`.
 
-1. User creates a run (`POST /runs`) — status: `pending`
-2. User uploads Excel (`POST /runs/:id/upload`) — Elysia parses, batch-inserts raw rows, sets status `processing`, enqueues Arq job
-3. Arq worker consumes `arq:queue`, runs the full 5-model pipeline via `MobyPredictor`
-4. Worker writes progress to Redis Stream `progress:{run_id}` (XADD)
-5. Elysia's SSE endpoint (`GET /runs/:id/stream`) XREADs from that stream and pushes to browser
-6. Worker saves predictions to `predictions` table, updates run status to `done`/`failed`
+## Current ML Rebuild Status
+
+Implemented and verified:
+
+- Clean data loaders for `train_clean_*` and `predict_clean_*`
+- Gate 1-5 validation reports and persistence into `ml_data_validation_reports`
+- Label builders and label viability checks
+- Tier A feature builder with deterministic 24-feature contract
+- `FeatureBuildResult.feature_df` for model inputs and `FeatureBuildResult.lifecycle_df` for observed lifecycle/status
+- `ml_feature_sets` persistence with `feature_code_hash`
+- Preprocessing contract: fit on train split only, transform validation/test/predict, save/load JSON artifact
+
+Not built yet:
+
+- Dataset builders (`features + labels + lifecycle_df`)
+- Churn baseline/candidate training
+- Champion/challenger alias activation
+- Prediction runner writing `ml_prediction_outputs`
 
 ## Architectural Decisions
 
@@ -135,31 +147,18 @@ Key design decisions:
 Auth (Better Auth)
   /api/auth/*                     Better Auth native handler
 
-Runs
-  GET    /runs                    list user's runs
-  POST   /runs                    create run
-  GET    /runs/:id                get run
-  DELETE /runs/:id                delete run + cascade
+Train Import
+  GET    /train-data-sources
+  POST   /train-data-sources/import
+  GET    /train-data-sources/:id/import/progress
 
-Upload
-  POST   /runs/:id/upload         parse Excel, batch-insert, enqueue Arq job
+Predict Import
+  GET    /predict-data-sources
+  POST   /predict-data-sources/import
+  GET    /predict-data-sources/:id/import/progress
 
-Predictions
-  GET    /runs/:id/predictions    paginated list (filters: lifecycle_stage, search)
-  GET    /runs/:id/predictions/:acc_id   single customer
-  GET    /runs/:id/predictions/:acc_id/explain   SHAP (proxied to FastAPI)
-  GET    /runs/:id/summary        dashboard aggregates
-  GET    /runs/:id/export         CSV download
-
-SSE
-  GET    /runs/:id/stream         Redis Streams XREAD → text/event-stream
-
-Training / Admin
-  GET    /model-metrics           metrics.json from models volume
-  GET    /training-log            training_log.txt from models volume
-  GET    /model-versions          model version history
-  GET    /model-versions/active   latest active version per model type
-  POST   /model-versions/train    trigger training (proxied to FastAPI)
+Legacy prediction routes are not the ML v2 target. Prediction output should be rebuilt on
+`ml_prediction_runs` + `ml_prediction_outputs`.
 
 Health
   GET    /health                  model file check + DB ping
@@ -230,10 +229,11 @@ NEXT_PUBLIC_AUTH_URL     # http://localhost:3001 (browser-visible)
 
 ## What NOT to Change
 
-- `apps/ml/src/` — ML pipeline code. Belongs to the original author. Touch only to fix bugs, never to refactor style.
-- `apps/ml/worker/predict_worker.py` — Arq worker. Same constraint.
+- Legacy `apps/ml/src/models/` model code — replace only after the corresponding ML v2 model is implemented and verified.
+- `apps/ml/src/training/` is the active ML v2 rebuild area.
+- `apps/ml/worker/predict_worker.py` — legacy Arq worker; do not extend it for ML v2 prediction. Build the new prediction runner separately.
 - `apps/ml/alembic/` — Do not add migrations from Drizzle. Alembic owns the schema.
-- `apps/ml/train.py` — Training CLI.
+- Legacy `apps/ml/train.py` — do not revive old filesystem-Excel training; ML v2 trains from `train_clean_*`.
 
 ## Always Check
 

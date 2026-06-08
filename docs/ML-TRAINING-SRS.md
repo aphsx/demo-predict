@@ -493,6 +493,42 @@ cutoff_date         date used to build prediction features
 
 ตาราง output หลัก ต่อ customer ต่อ prediction run
 
+Output row แยกข้อมูลเป็น 3 กลุ่ม:
+
+```text
+observed/rule-based state:
+  lifecycle_stage
+  sub_stage
+  ever_paid
+  days_since_last_activity
+  output_status
+  output_notes
+  model_eligibility_json
+
+future predictions:
+  churn_probability
+  predicted_clv_6m
+  predicted_credit_usage_30d
+  predicted_credit_usage_90d
+  estimated_days_until_topup
+
+derived business outputs:
+  churn_risk_level
+  customer_value_tier
+  revenue_at_risk
+  credit_urgency_level
+  recommended_followup_date
+  priority_score
+  recommended_action
+```
+
+Rule:
+
+```text
+lifecycle_stage is not a model score
+model predictions must be null/fallback when model_eligibility_json says not eligible
+```
+
 Required fields:
 
 ```text
@@ -632,6 +668,18 @@ No usage history:
   credit_urgency_level = Unknown
 ```
 
+Implementation note:
+
+```text
+FeatureBuildResult.feature_df      = model input features only
+FeatureBuildResult.lifecycle_df    = observed lifecycle/status/eligibility fields
+feature_code_hash                  = feature_df/model input logic only
+lifecycle_code_hash                = lifecycle_df logic only
+```
+
+The prediction pipeline must join these by `acc_id` when creating `ml_prediction_outputs`.
+Do not feed `lifecycle_stage`, `output_status`, or `model_eligibility_json` back into model features.
+
 ### 8.1 Lifecycle Outputs
 
 Purpose:
@@ -645,6 +693,14 @@ lifecycle_stage
 sub_stage
 days_since_last_activity
 ever_paid
+has_activity_history
+active_in_window
+eligible_for_churn
+eligible_for_clv
+eligible_for_credit
+model_eligibility_json
+output_status
+output_notes
 ```
 
 Candidate stages:
@@ -658,6 +714,15 @@ New Customer
 Dormant Paid
 High Usage Free
 Low Usage Free
+```
+
+Verified lifecycle split on the current train source at `cutoff_date = 2025-07-01`:
+
+```text
+Ghost:       20,309
+Active Paid:  2,335
+Churned:      1,782
+Active Free:    667
 ```
 
 ### 8.2 Churn Outputs

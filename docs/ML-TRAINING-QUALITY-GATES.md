@@ -346,6 +346,7 @@ feature builder logs max event date used per feature group
 max feature payment_date < cutoff_date
 max feature usage period < cutoff_date
 label rows do not enter feature dataframe
+observed lifecycle/status fields do not enter feature dataframe
 feature names marked PIT risk Tier A/B/C
 ```
 
@@ -356,6 +357,7 @@ any feature uses payment_date >= cutoff_date
 any feature uses usage period >= cutoff_date
 label column included in feature matrix
 target-derived feature included
+lifecycle_stage/output_status/model_eligibility_json included in model feature matrix
 ```
 
 Warning:
@@ -399,6 +401,8 @@ feature dtypes are known
 nullable/default values are known
 categorical vocabularies are known
 feature count matches model expectation
+feature_schema distinguishes contract nullable rules from observed nullable stats
+lifecycle/status fields are stored outside feature_names_json
 ```
 
 Blocker:
@@ -409,7 +413,17 @@ extra feature cannot be ignored safely
 feature dtype mismatch cannot be coerced
 feature order mismatch
 feature_code_hash mismatch without new feature_set_version
+model feature set includes output/status/eligibility metadata
 ```
+
+Hash boundary:
+
+```text
+feature_code_hash changes only when feature_df/model input logic changes
+lifecycle_code_hash changes when observed lifecycle/status logic changes
+```
+
+Do not force a new feature set version only because rule-based lifecycle output changed.
 
 Warning:
 
@@ -490,6 +504,25 @@ Recommended implementation:
 ```text
 sklearn Pipeline / ColumnTransformer
 or equivalent fit/transform object
+```
+
+Current implementation:
+
+```text
+apps/ml/src/training/preprocessing.py
+fit_preprocessor(train_df, feature_schema)
+transform_features(feature_df, fitted_preprocessor)
+save_preprocessor(path)
+load_preprocessor(path)
+```
+
+Verified smoke:
+
+```text
+features: 24
+train_rows: 20,038
+holdout_rows: 5,055
+status: passed
 ```
 
 ## 11. Gate 9: Baseline Comparison

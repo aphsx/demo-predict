@@ -226,6 +226,7 @@ class FeatureBuildResult:
     feature_schema: FeatureSchema
     feature_stats: dict[str, Any]
     eligibility_df: pd.DataFrame
+    lifecycle_df: pd.DataFrame
 
 
 @dataclass(frozen=True)
@@ -282,7 +283,7 @@ def build_transform_config(feature_schema: FeatureSchema) -> dict[str, Any]:
 
 
 def feature_code_hash() -> str:
-    """Hash feature-builder source that affects the feature contract."""
+    """Hash only source that affects the model feature matrix contract."""
 
     payload = {
         "minimum_tier_a_features": MINIMUM_TIER_A_FEATURES,
@@ -290,7 +291,7 @@ def feature_code_hash() -> str:
         "nullable_contract_features": sorted(NULLABLE_CONTRACT_FEATURES),
         "feature_metadata": FEATURE_METADATA,
         "builders": {
-            "all": inspect.getsource(build_all_features),
+            "feature_df": inspect.getsource(_build_feature_df),
             "profile": inspect.getsource(build_profile_features),
             "payment": inspect.getsource(build_payment_features),
             "usage": inspect.getsource(build_usage_features),
@@ -298,7 +299,6 @@ def feature_code_hash() -> str:
             "source": inspect.getsource(build_source_features),
             "activity": inspect.getsource(build_activity_features),
             "interaction": inspect.getsource(build_interaction_features),
-            "eligibility": inspect.getsource(build_eligibility),
             "feature_schema": inspect.getsource(build_feature_schema),
             "feature_stats": inspect.getsource(build_feature_stats),
         },
@@ -324,8 +324,28 @@ def feature_code_hash() -> str:
             "float": inspect.getsource(_float),
         },
     }
-    serialized = json.dumps(payload, sort_keys=True, default=str)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    return _hash_payload(payload)
+
+
+def lifecycle_code_hash() -> str:
+    """Hash source that affects observed lifecycle/status outputs."""
+
+    payload = {
+        "builders": {
+            "eligibility": inspect.getsource(build_eligibility),
+            "lifecycle_outputs": inspect.getsource(build_lifecycle_outputs),
+        },
+        "helpers": {
+            "payment_history": inspect.getsource(_payment_history),
+            "usage_history": inspect.getsource(_usage_history),
+            "customer_ids": inspect.getsource(_customer_ids),
+            "lifecycle_stage": inspect.getsource(_lifecycle_stage),
+            "lifecycle_sub_stage": inspect.getsource(_lifecycle_sub_stage),
+            "model_eligibility": inspect.getsource(_model_eligibility),
+            "timestamp": inspect.getsource(_timestamp),
+        },
+    }
+    return _hash_payload(payload)
 
 
 def build_profile_features(customers: pd.DataFrame, cutoff_date: pd.Timestamp) -> pd.DataFrame:
@@ -534,6 +554,35 @@ def build_all_features(
     """Build the first deterministic Tier A feature set for every customer."""
 
     cutoff = _timestamp(cutoff_date)
+    feature_df = _build_feature_df(customers, payments, usage, cutoff)
+    lifecycle_df = build_lifecycle_outputs(customers, payments, usage, cutoff)
+    eligibility_df = lifecycle_df[
+        ["acc_id", "eligible_for_churn", "eligible_for_clv", "eligible_for_credit"]
+    ].copy()
+
+    return FeatureBuildResult(
+        feature_df=feature_df.reset_index(drop=True),
+        feature_names=list(MINIMUM_TIER_A_FEATURES),
+        feature_schema=build_feature_schema(feature_df, MINIMUM_TIER_A_FEATURES),
+        feature_stats=build_feature_stats(
+            feature_df,
+            MINIMUM_TIER_A_FEATURES,
+            cutoff,
+            payments,
+            usage,
+        ),
+        eligibility_df=eligibility_df,
+        lifecycle_df=lifecycle_df,
+    )
+
+
+def _build_feature_df(
+    customers: pd.DataFrame,
+    payments: pd.DataFrame,
+    usage: pd.DataFrame,
+    cutoff_date: pd.Timestamp,
+) -> pd.DataFrame:
+    cutoff = _timestamp(cutoff_date)
     feature_df = _base_customer_frame(customers)
     for part in [
         build_profile_features(customers, cutoff),
@@ -549,21 +598,7 @@ def build_all_features(
     feature_df = _ensure_feature_columns(feature_df, MINIMUM_TIER_A_FEATURES)
     feature_df = feature_df[["acc_id", *MINIMUM_TIER_A_FEATURES]].sort_values("acc_id")
     feature_df = _apply_feature_defaults(feature_df)
-    eligibility_df = build_eligibility(customers, payments, usage, cutoff)
-
-    return FeatureBuildResult(
-        feature_df=feature_df.reset_index(drop=True),
-        feature_names=list(MINIMUM_TIER_A_FEATURES),
-        feature_schema=build_feature_schema(feature_df, MINIMUM_TIER_A_FEATURES),
-        feature_stats=build_feature_stats(
-            feature_df,
-            MINIMUM_TIER_A_FEATURES,
-            cutoff,
-            payments,
-            usage,
-        ),
-        eligibility_df=eligibility_df,
-    )
+    return feature_df.reset_index(drop=True)
 
 
 def build_eligibility(
@@ -574,6 +609,29 @@ def build_eligibility(
     active_window_days: int = 180,
 ) -> pd.DataFrame:
     """Build model eligibility flags without removing customer output rows."""
+
+    lifecycle = build_lifecycle_outputs(
+        customers,
+        payments,
+        usage,
+        cutoff_date,
+        active_window_days=active_window_days,
+    )
+    return lifecycle[["acc_id", "eligible_for_churn", "eligible_for_clv", "eligible_for_credit"]]
+
+
+def build_lifecycle_outputs(
+    customers: pd.DataFrame,
+    payments: pd.DataFrame,
+    usage: pd.DataFrame,
+    cutoff_date: pd.Timestamp,
+    active_window_days: int = 180,
+) -> pd.DataFrame:
+    """Assign observed lifecycle/state fields from pre-cutoff activity.
+
+    Lifecycle is not a model prediction. It is a rule-based state that decides
+    which predictive models are eligible for each customer.
+    """
 
     cutoff = _timestamp(cutoff_date)
     active_start = cutoff - pd.Timedelta(days=active_window_days)
@@ -600,11 +658,32 @@ def build_eligibility(
     )
     ever_paid_ids = set(payment_history["acc_id"].dropna().astype(int))
     has_history_ids = set(activity["acc_id"].dropna().astype(int))
+    last_activity = activity.groupby("acc_id", dropna=True)["date"].max()
 
     rows = pd.DataFrame({"acc_id": sorted(customer_ids)})
-    rows["eligible_for_churn"] = rows["acc_id"].isin(active_ids & ever_paid_ids)
-    rows["eligible_for_clv"] = rows["acc_id"].isin(active_ids)
-    rows["eligible_for_credit"] = rows["acc_id"].isin(has_history_ids)
+    rows["ever_paid"] = rows["acc_id"].isin(ever_paid_ids)
+    rows["has_activity_history"] = rows["acc_id"].isin(has_history_ids)
+    rows["active_in_window"] = rows["acc_id"].isin(active_ids)
+    rows["days_since_last_activity"] = rows["acc_id"].map((cutoff - last_activity).dt.days)
+    rows["lifecycle_stage"] = rows.apply(_lifecycle_stage, axis=1)
+    rows["sub_stage"] = rows.apply(_lifecycle_sub_stage, axis=1)
+    rows["eligible_for_churn"] = rows["active_in_window"] & rows["ever_paid"]
+    rows["eligible_for_clv"] = rows["active_in_window"]
+    rows["eligible_for_credit"] = rows["has_activity_history"]
+    rows["model_eligibility_json"] = rows.apply(_model_eligibility, axis=1)
+    rows["output_status"] = rows["model_eligibility_json"].map(
+        lambda eligibility: "predicted"
+        if all(model["eligible"] for model in eligibility.values())
+        else "partial"
+    )
+    rows["output_notes"] = rows["model_eligibility_json"].map(
+        lambda eligibility: "; ".join(
+            f"{model_type}: {model['reason']}"
+            for model_type, model in eligibility.items()
+            if not model["eligible"]
+        )
+        or None
+    )
     return rows
 
 
@@ -650,6 +729,11 @@ def build_feature_stats(
 
 def _base_customer_frame(customers: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({"acc_id": sorted(_customer_ids(customers))})
+
+
+def _hash_payload(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, sort_keys=True, default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _payment_history(payments: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
@@ -843,6 +927,59 @@ def _empty_feature_frame(feature_names: list[str]) -> pd.DataFrame:
 
 def _customer_ids(customers: pd.DataFrame) -> set[int]:
     return set(customers["acc_id"].dropna().astype(int).tolist())
+
+
+def _lifecycle_stage(row: pd.Series) -> str:
+    if not row["has_activity_history"]:
+        return "Ghost"
+    if not row["active_in_window"]:
+        return "Churned"
+    if row["ever_paid"]:
+        return "Active Paid"
+    return "Active Free"
+
+
+def _lifecycle_sub_stage(row: pd.Series) -> str:
+    stage = row["lifecycle_stage"]
+    if stage == "Ghost":
+        return "Ghost"
+    if stage == "Churned":
+        return "Churned Paid" if row["ever_paid"] else "Churned Free"
+    if stage == "Active Free":
+        return "Active Free"
+    return "Active Paid"
+
+
+def _model_eligibility(row: pd.Series) -> dict[str, dict[str, Any]]:
+    return {
+        "churn": {
+            "eligible": bool(row["eligible_for_churn"]),
+            "status": "eligible" if row["eligible_for_churn"] else "not_eligible",
+            "reason": (
+                "Active paid customer."
+                if row["eligible_for_churn"]
+                else "Requires active customer with payment history."
+            ),
+        },
+        "clv": {
+            "eligible": bool(row["eligible_for_clv"]),
+            "status": "eligible" if row["eligible_for_clv"] else "fallback",
+            "reason": (
+                "Active customer."
+                if row["eligible_for_clv"]
+                else "Requires activity in the active window."
+            ),
+        },
+        "credit": {
+            "eligible": bool(row["eligible_for_credit"]),
+            "status": "eligible" if row["eligible_for_credit"] else "insufficient_data",
+            "reason": (
+                "Has payment or usage history."
+                if row["eligible_for_credit"]
+                else "Requires payment or usage history."
+            ),
+        },
+    }
 
 
 def _timestamp(value: pd.Timestamp) -> pd.Timestamp:

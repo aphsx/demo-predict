@@ -21,6 +21,7 @@ from src.training.features import (  # noqa: E402
     MINIMUM_TIER_A_FEATURES,
     build_all_features,
     build_feature_set_contract,
+    lifecycle_code_hash,
 )
 from src.training.repository import save_feature_set_contract, save_validation_report  # noqa: E402
 from src.training.validation import (  # noqa: E402
@@ -177,12 +178,17 @@ def build_feature_builder_artifacts(
             "feature_names": contract.feature_names,
             "transform_config": contract.transform_config,
             "feature_code_hash": contract.feature_code_hash,
+            "lifecycle_code_hash": lifecycle_code_hash(),
             "status": contract.status,
         },
         "eligibility_counts": {
             "eligible_for_churn": int(result.eligibility_df["eligible_for_churn"].sum()),
             "eligible_for_clv": int(result.eligibility_df["eligible_for_clv"].sum()),
             "eligible_for_credit": int(result.eligibility_df["eligible_for_credit"].sum()),
+        },
+        "lifecycle_counts": {
+            str(stage): int(count)
+            for stage, count in result.lifecycle_df["lifecycle_stage"].value_counts().items()
         },
     }
     return report, contract, leakage_report
@@ -255,8 +261,10 @@ def main() -> None:
     print(f"features:    {report['feature_stats']['feature_count']}")
     print(f"rows:        {report['feature_stats']['row_count']}")
     print(f"code_hash:   {report['feature_set_contract']['feature_code_hash']}")
+    print(f"life_hash:   {report['feature_set_contract']['lifecycle_code_hash']}")
     print(f"leakage:     {report['leakage_report']['status']}")
     print(f"eligibility: {report['eligibility_counts']}")
+    print(f"lifecycle:   {report['lifecycle_counts']}")
     if persisted_feature_set_id:
         print(f"feature_set: {persisted_feature_set_id}")
     if persisted_leakage_report_id:

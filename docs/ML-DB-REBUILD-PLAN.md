@@ -98,6 +98,15 @@ model_versions
 - การลบจริงต้องทำผ่าน Alembic migration ไม่ใช้ Drizzle generate/push
 - `prediction_runs` เก่าจะถูกแทนด้วย run schema ใหม่ ไม่ใช่การลบ concept ของ run ออก
 
+Current status:
+
+```text
+apps/ml/alembic/versions/2026_06_05_0006_drop_legacy_ml_tables.py
+```
+
+Legacy `prediction_runs`, `predictions`, `model_versions`, and old `explanations` are dropped by Alembic `0006`.
+Runtime/UI references to win-back/conversion outputs have been removed from the active app. Alembic baseline history still contains old columns because migration history must remain replayable.
+
 ## Run Model In New System
 
 ระบบใหม่ยังต้องมี "run" แยกตามจุดประสงค์ แต่จะออกแบบใหม่ให้ชัดกว่าเดิม:
@@ -137,6 +146,15 @@ Win-back Prediction
 Conversion Prediction
 comeback_probability
 conversion_probability
+```
+
+Runtime cleanup status:
+
+```text
+apps/ml/src/models/winback_model.py      removed
+apps/ml/src/models/conversion_model.py   removed
+tracked __pycache__ artifacts            removed
+web win-back/conversion UI references    removed
 ```
 
 ## Proposed New Tables
