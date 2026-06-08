@@ -1,6 +1,6 @@
-# Model Health Dashboard
+# Model Metrics Dashboard
 
-เอกสารนี้เป็น contract ของหน้า `Model Metrics` (`/model-performance`) สำหรับดูว่า model พร้อมใช้งานจริงหรือไม่ ไม่ใช่แค่ดูว่า offline score สูงหรือไม่
+เอกสารนี้เป็น contract ของหน้า `Model Metrics` (`/model-performance`) สำหรับดูว่าแต่ละ model แม่นยำแค่ไหน วัดด้วย metric อะไร และผล train/validation/test/backtest เป็นอย่างไร
 
 ใช้คู่กับ:
 
@@ -13,44 +13,41 @@ docs/ML-DB-REBUILD-PLAN.md
 
 ## 1. Goal
 
-หน้า Model Health ต้องตอบคำถามเหล่านี้ได้ในหน้าเดียว:
+หน้า Model Metrics ต้องตอบคำถามเหล่านี้ได้ในหน้าเดียว:
 
 ```text
-1. champion model ของ churn / CLV / credit เป็น version ไหน
-2. แต่ละ model healthy พอใช้ prediction จริงหรือไม่
-3. metric สำคัญผ่าน baseline, champion tolerance, calibration และ backtest หรือไม่
-4. มี gate/blocker อะไรที่ห้าม promote หรือห้ามใช้ prediction หรือไม่
-5. artifact, feature schema, preprocessing และ model card ครบหรือไม่
-6. model performance แย่เฉพาะ segment/cutoff ใดหรือไม่
+1. churn / CLV / credit model ใช้ metric อะไรเป็น primary และ secondary
+2. metric ล่าสุดของแต่ละ model เป็นเท่าไร
+3. validation, test, backtest ต่างกันแค่ไหน
+4. candidate/champion model ชนะ baseline เท่าไร
+5. classification threshold และ confusion matrix ของ churn เป็นอย่างไร
+6. calibration, ranking, segment และ cutoff stability มีปัญหาหรือไม่
+7. ค่า metric แต่ละตัวอยู่ที่เท่าไร โดยไม่ปนกับ release status หรือคำอธิบายที่ไม่ใช่ค่าวัด
 ```
 
-## 2. Health Status
+## 2. Metric-Only UI Rule
 
-ทุก model ต้องมี status รวม:
+หน้าแรกของ `Model Metrics` ต้องแสดงเฉพาะ:
 
 ```text
-healthy
-watch
-blocked
-missing
+model name
+split name
+metric name
+metric value
 ```
 
-ความหมาย:
+ไม่ควรแสดงในหน้าแรก:
 
 ```text
-healthy = ใช้งานได้ ไม่มี blocker และผ่าน metric gate หลัก
-watch   = ใช้งานได้ แต่มี warning ที่ต้องติดตาม เช่น calibration drift หรือ segment gap
-blocked = ห้าม promote หรือห้ามใช้ prediction จนกว่า blocker จะถูกแก้
-missing = ยังไม่มี champion alias หรือ artifact ที่จำเป็น
+health status
+pass/watch/fail badge
+promotion status
+artifact/model-card checklist
+long notes
+narrative explanation
 ```
 
-Portfolio health ของทั้งหน้า:
-
-```text
-blocked ถ้ามี model ใดเป็น blocked หรือ missing
-watch   ถ้าไม่มี blocked/missing แต่มี model ใดเป็น watch
-healthy ถ้าทุก model เป็น healthy
-```
+เกณฑ์ target, promotion blocker, artifact readiness และ model card สามารถอยู่ในหน้า/section อื่นภายหลังได้ แต่ไม่ใช่ scope ของ metric-first mock นี้
 
 ## 3. Data Source
 
@@ -68,61 +65,63 @@ ml_training_runs
 Page API ในอนาคตควรรวมข้อมูลเป็น response เดียว:
 
 ```text
-GET /model-health
+GET /model-metrics
 ```
 
 หรือ resource equivalent ใน Elysia:
 
 ```text
-GET /model-health/summary
-GET /model-health/:model_type
+GET /model-metrics/summary
+GET /model-metrics/:model_type
 ```
 
-ห้ามอ่าน legacy `/model-metrics` เป็น source of truth สำหรับ ML v2 ยกเว้นช่วง mock/transition เท่านั้น
+ใน ML v2 source of truth ต้องมาจาก `ml_model_evaluations` ไม่ใช่ legacy metrics artifact
 
 ## 4. Required Page Sections
 
-### 4.1 Portfolio Summary
+หน้า `/model-performance` ต้องเป็นหน้าเดียว ไม่มี tab เพราะจุดประสงค์คือดูค่าวัดเร็ว
 
-ต้องโชว์:
+### 4.1 Metric Summary
 
-```text
-overall_health_status
-champion_count
-blocked_count
-watch_count
-last_training_run_finished_at
-latest_cutoff_date
-latest_test_cutoff_date
-```
-
-### 4.2 Champion Cards
-
-ต้องมี card สำหรับ:
-
-```text
-churn
-clv
-credit
-```
-
-แต่ละ card ต้องโชว์:
+ด้านบนของหน้าต้องเป็นตัวเลข metric summary ไม่ใช่ champion card, health card, status card หรือ release readiness card
 
 ```text
 model_type
-health_status
-alias = champion
-model_version
-algorithm
-trained_at
-cutoff_date
-horizon_days
 primary_metric_name
 primary_metric_value
-primary_metric_target
-baseline_delta
-champion_delta
-main_blocker_or_warning
+secondary_metric_name
+secondary_metric_value
+baseline_delta_pct
+```
+
+ตัวอย่าง:
+
+```text
+churn: PR-AUC, ROC-AUC, F1, precision, recall, recall@top10%, lift@top10%
+clv: MAE, RMSE, SMAPE, Spearman, top-decile revenue capture
+credit: MAE 30d/90d, RMSE 30d/90d, SMAPE 30d/90d, quantile coverage, urgent precision/recall
+```
+
+### 4.2 Model Metric Matrix
+
+ต้องมี matrix เปรียบเทียบ metric หลักของทุก model:
+
+```text
+model_type
+split
+primary_metric
+secondary_metric
+baseline_delta_pct
+```
+
+Allowed splits:
+
+```text
+train
+validation
+test
+latest_backtest
+baseline_comparison
 ```
 
 ### 4.3 Evaluation Matrix
@@ -140,9 +139,9 @@ ablation if feature-set comparison was run
 robustness if segment/cutoff stability was run
 ```
 
-Missing required row = blocker สำหรับ champion promotion
+หน้านี้แสดงว่ามี split ใดบ้างผ่านตัวเลข metric แต่ไม่ต้องแสดง blocker ใน UI metric-first
 
-### 4.4 Metric Details
+### 4.4 Per-Model Metric Details
 
 Metric details ต้องแยกตาม model type และ dataset split:
 
@@ -153,7 +152,9 @@ latest_backtest
 baseline_comparison
 ```
 
-UI ต้องไม่โชว์ค่าเดียวแบบไม่มี split เพราะจะทำให้เข้าใจผิดว่าเป็น production quality ทั้งหมด
+UI ต้องไม่โชว์ค่าเดียวแบบไม่มี split เพราะจะทำให้เข้าใจผิดว่าเป็น production quality ทั้งหมด แต่หน้าแรกสามารถโชว์ latest test metric เป็น summary ได้ถ้าระบุ split ชัดเจน
+
+Metric details ทั้งหมดควรอยู่ในหน้าเดียวกัน แยกด้วย section เท่านั้น ห้ามซ่อน metric หลักไว้หลัง tab/dropdown ในเวอร์ชันแรก
 
 ### 4.5 Calibration And Thresholds
 
@@ -168,7 +169,6 @@ f1_at_threshold
 brier_score
 log_loss
 expected_calibration_error
-calibration_status
 ```
 
 Threshold ต้องมาจาก validation/calibration split เท่านั้น ห้ามเลือกจาก test split
@@ -183,7 +183,6 @@ horizon_days
 primary_metric_value
 secondary_metric_value
 baseline_delta
-status
 ```
 
 ถ้า latest cutoff ตกเกิน tolerance = blocker หรือ watch ตาม severity
@@ -207,24 +206,6 @@ CLV MAE by value tier
 credit MAE by usage volume tier
 ```
 
-### 4.8 Artifact And Reproducibility
-
-ต้องโชว์ completeness:
-
-```text
-model artifact exists
-preprocessor artifact exists
-feature set exists
-feature_code_hash exists
-label definition exists
-training data snapshot exists
-model_card.json exists
-model_card.md exists
-artifact load test passed
-```
-
-Missing required artifact = blocker
-
 ## 5. Metric Contract
 
 ### 5.1 Common Keys
@@ -239,20 +220,8 @@ Missing required artifact = blocker
   "negative_count": 1623,
   "primary_metric_name": "pr_auc",
   "primary_metric_value": 0.712,
-  "primary_metric_target": 0.65,
-  "baseline_delta_pct": 8.4,
-  "champion_delta_pct": 1.2,
-  "status": "passed"
+  "baseline_delta_pct": 8.4
 }
-```
-
-Allowed `status`:
-
-```text
-passed
-warning
-failed
-missing
 ```
 
 ### 5.2 Churn Metrics
@@ -342,9 +311,9 @@ Required keys:
 }
 ```
 
-## 6. Initial Health Thresholds
+## 6. Initial Thresholds For Evaluation Logic
 
-These are initial defaults. They should be revisited after real training evidence exists.
+These thresholds are for backend evaluation logic and promotion decisions. They should not be shown as primary UI content on the metric-first page.
 
 ```text
 churn:
@@ -377,26 +346,17 @@ credit MAE cannot worsen more than 5% vs current champion
 
 ## 7. Mock UI Requirement
 
-Before backend API is ready, `/model-performance` should use static mock data with the same shape expected from future `/model-health`.
-
-Mock UI must clearly label itself:
-
-```text
-Mock health data
-```
+Before backend API is ready, `/model-performance` should use static mock data with the same shape expected from future `/model-metrics`.
 
 The mock must include:
 
 ```text
-portfolio summary
-champion cards
-evaluation matrix
+single-page layout with no tabs
+model metric summary
+model metric matrix by split
 churn threshold/calibration details
-model comparison against baseline/champion
 backtest stability
-segment robustness
-artifact checklist
-open blockers/warnings
+baseline delta
 ```
 
 The mock must not pretend that real ML v2 evaluation is already complete.
@@ -430,15 +390,15 @@ Use model
 
 ## 9. Acceptance
 
-The Model Health page is acceptable when:
+The Model Metrics page is acceptable when:
 
 ```text
 1. it separates prediction business output from model quality output
-2. it shows split-aware metrics, not a single unqualified score
-3. it makes promotion blockers visible above fold
-4. it shows baseline and champion comparison
+2. the top section is numeric model metrics, not champion/health/status cards
+3. it is a single page with no tabs for the initial version
+4. it shows split-aware metrics, not a single unqualified score
 5. it shows calibration/threshold details for churn
-6. it shows backtest and segment stability
-7. it shows artifact/model-card completeness
+6. it shows backtest stability in compact form
+7. it avoids artifact/model-card/release evidence on this page
 8. it is backed by `ml_model_evaluations` once backend is available
 ```
