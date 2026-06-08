@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Verify clean data loaders, Gate 1 readiness, and Gate 2 schema checks.
+"""Verify clean data loaders and early ML quality gates.
 
-This script is read-only. It does not train, score, or write database rows.
+This script does not train or score. It only writes database rows when
+`--persist-reports` is passed.
 """
 
 from __future__ import annotations
@@ -25,9 +26,11 @@ from src.training.data import (  # noqa: E402
     load_train_clean,
 )
 from src.training.labels import LabelConfig  # noqa: E402
+from src.training.repository import save_validation_reports  # noqa: E402
 from src.training.validation import (  # noqa: E402
     check_predict_source_readiness,
     check_predict_schema_quality,
+    check_train_cutoff_feasibility,
     check_train_label_viability,
     check_train_schema_quality,
     check_train_source_readiness,
@@ -45,6 +48,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--horizon-days", type=int, default=180)
     parser.add_argument("--active-window-days", type=int, default=180)
     parser.add_argument("--output-json", type=Path, help="Optional path for a JSON report.")
+    parser.add_argument(
+        "--persist-reports",
+        action="store_true",
+        help="Insert generated validation reports into ml_data_validation_reports.",
+    )
+    parser.add_argument("--training-run-id", help="Optional ml_training_runs.id for persisted reports.")
+    parser.add_argument("--prediction-run-id", help="Optional ml_prediction_runs.id for persisted reports.")
     return parser.parse_args()
 
 
@@ -76,21 +86,30 @@ def verify_source(
     if source_kind == "train":
         readiness = check_train_source_readiness(source_id)
         schema_quality = check_train_schema_quality(source_id)
+        cutoff_feasibility = (
+            check_train_cutoff_feasibility(source_id, label_config)
+            if schema_quality.status != "failed"
+            else None
+        )
         label_viability = (
             check_train_label_viability(source_id, label_config)
             if schema_quality.status != "failed"
+            and cutoff_feasibility is not None
+            and cutoff_feasibility.status != "failed"
             else None
         )
         loader = load_train_clean
     else:
         readiness = check_predict_source_readiness(source_id)
         schema_quality = check_predict_schema_quality(source_id)
+        cutoff_feasibility = None
         label_viability = None
         loader = load_predict_clean
 
     if (
         readiness.status == "failed"
         or schema_quality.status == "failed"
+        or (cutoff_feasibility is not None and cutoff_feasibility.status == "failed")
         or (label_viability is not None and label_viability.status == "failed")
     ):
         return {
@@ -100,6 +119,9 @@ def verify_source(
             "status": "failed",
             "readiness": readiness.to_dict(),
             "schema_quality": schema_quality.to_dict(),
+            "cutoff_feasibility": cutoff_feasibility.to_dict()
+            if cutoff_feasibility
+            else None,
             "label_viability": label_viability.to_dict() if label_viability else None,
             "loader_checks": [],
             "dataframe_summary": None,
@@ -117,6 +139,7 @@ def verify_source(
         "passed"
         if readiness.status != "failed"
         and schema_quality.status != "failed"
+        and (cutoff_feasibility is None or cutoff_feasibility.status != "failed")
         and (label_viability is None or label_viability.status != "failed")
         and all(c["passed"] for c in loader_checks)
         else "failed"
@@ -129,6 +152,7 @@ def verify_source(
         "status": status,
         "readiness": readiness.to_dict(),
         "schema_quality": schema_quality.to_dict(),
+        "cutoff_feasibility": cutoff_feasibility.to_dict() if cutoff_feasibility else None,
         "label_viability": label_viability.to_dict() if label_viability else None,
         "loader_checks": loader_checks,
         "dataframe_summary": {
@@ -223,6 +247,23 @@ def main() -> None:
     )
     report = verify_source(source_kind, source_id, label_config)
 
+    persisted_report_ids: list[str] = []
+    if args.persist_reports:
+        reports = [
+            _report_from_dict(report["readiness"]),
+            _report_from_dict(report["schema_quality"]),
+        ]
+        if report["cutoff_feasibility"] is not None:
+            reports.append(_report_from_dict(report["cutoff_feasibility"]))
+        if report["label_viability"] is not None:
+            reports.append(_report_from_dict(report["label_viability"]))
+        persisted_report_ids = save_validation_reports(
+            reports,
+            training_run_id=args.training_run_id,
+            prediction_run_id=args.prediction_run_id,
+        )
+        report["persisted_report_ids"] = persisted_report_ids
+
     print("=" * 80)
     print("Clean Data Access Verification")
     print("=" * 80)
@@ -231,9 +272,13 @@ def main() -> None:
     print(f"status:      {report['status']}")
     print(f"readiness:   {report['readiness']['status']}")
     print(f"schema:      {report['schema_quality']['status']}")
+    if report["cutoff_feasibility"] is not None:
+        print(f"cutoff:      {report['cutoff_feasibility']['status']}")
     if report["label_viability"] is not None:
         print(f"labels:      {report['label_viability']['status']}")
     print(f"rows:        {report['readiness']['stats']['row_counts']}")
+    if persisted_report_ids:
+        print(f"persisted:   {persisted_report_ids}")
     print("=" * 80)
 
     if args.output_json:
@@ -246,6 +291,30 @@ def main() -> None:
 
     if report["status"] != "passed":
         raise SystemExit(1)
+
+
+def _report_from_dict(raw: dict[str, Any]):
+    from src.training.validation import ValidationCheck, ValidationReport
+
+    return ValidationReport(
+        source_id=raw["source_id"],
+        source_kind=raw["source_kind"],
+        validation_type=raw["validation_type"],
+        status=raw["status"],
+        row_count=raw["row_count"],
+        stats=raw["stats"],
+        anomalies=raw["anomalies"],
+        checks=[
+            ValidationCheck(
+                name=check["name"],
+                severity=check["severity"],
+                passed=check["passed"],
+                message=check["message"],
+                details=check.get("details"),
+            )
+            for check in raw["checks"]
+        ],
+    )
 
 
 if __name__ == "__main__":

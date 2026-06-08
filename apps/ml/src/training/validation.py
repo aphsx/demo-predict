@@ -59,6 +59,9 @@ CLV_ELIGIBLE_MIN = 500
 CLV_NONZERO_MIN = 100
 CREDIT_USAGE_NONZERO_MIN = 500
 TOPUP_OBSERVED_MIN = 500
+CLV_TOP_1_SHARE_WARNING_MAX = 0.50
+TOPUP_CENSORING_WARNING_MAX = 0.90
+MIN_HISTORY_DAYS_WARNING = 180
 
 
 @dataclass(frozen=True)
@@ -121,6 +124,27 @@ def check_predict_schema_quality(source_id: str) -> ValidationReport:
     """Gate 2 schema/data quality checks for a predict source."""
 
     return _check_schema_quality(source_id=source_id, tables=PREDICT_TABLES)
+
+
+def check_train_cutoff_feasibility(
+    source_id: str,
+    config: LabelConfig,
+) -> ValidationReport:
+    """Gate 3 cutoff/horizon feasibility checks for a train source."""
+
+    dataset = load_clean_dataset(source_id=source_id, tables=TRAIN_TABLES)
+    checks = _cutoff_feasibility_checks(dataset, config)
+
+    return ValidationReport(
+        source_id=source_id,
+        source_kind="train",
+        validation_type="profile",
+        status=_report_status(checks),
+        row_count=len(dataset.customers),
+        stats=_cutoff_feasibility_stats(dataset, config),
+        anomalies=_anomalies_from_checks(checks),
+        checks=checks,
+    )
 
 
 def check_train_label_viability(
@@ -300,6 +324,109 @@ def _schema_quality_stats(dataset: CleanDataset) -> dict[str, Any]:
     }
 
 
+def _cutoff_feasibility_checks(
+    dataset: CleanDataset,
+    config: LabelConfig,
+) -> list[ValidationCheck]:
+    cutoff = _timestamp(config.cutoff_date)
+    active_start = cutoff - pd.Timedelta(days=config.active_window_days)
+    horizon_end = cutoff + pd.Timedelta(days=config.horizon_days)
+    min_activity, max_activity = _activity_date_range(dataset.payments, dataset.usage)
+    has_activity = min_activity is not None and max_activity is not None
+    history_days = (cutoff - min_activity).days if min_activity is not None else 0
+
+    return [
+        ValidationCheck(
+            name="active_window_positive",
+            severity="blocker",
+            passed=config.active_window_days > 0,
+            message=(
+                "active_window_days is positive."
+                if config.active_window_days > 0
+                else "active_window_days must be positive."
+            ),
+            details={"active_window_days": config.active_window_days},
+        ),
+        ValidationCheck(
+            name="horizon_days_positive",
+            severity="blocker",
+            passed=config.horizon_days > 0,
+            message=(
+                "horizon_days is positive."
+                if config.horizon_days > 0
+                else "horizon_days must be positive."
+            ),
+            details={"horizon_days": config.horizon_days},
+        ),
+        ValidationCheck(
+            name="activity_exists",
+            severity="blocker",
+            passed=has_activity,
+            message="Activity data exists." if has_activity else "No payment or usage activity found.",
+        ),
+        ValidationCheck(
+            name="history_before_cutoff",
+            severity="blocker",
+            passed=bool(has_activity and min_activity < active_start),
+            message=(
+                "Historical activity covers the active lookback window."
+                if has_activity and min_activity < active_start
+                else "Historical activity does not cover the active lookback window."
+            ),
+            details={
+                "min_activity_date": min_activity.isoformat() if min_activity is not None else None,
+                "required_before": active_start.isoformat(),
+            },
+        ),
+        ValidationCheck(
+            name="future_label_window",
+            severity="blocker",
+            passed=bool(has_activity and max_activity >= horizon_end),
+            message=(
+                "Future activity covers the label horizon."
+                if has_activity and max_activity >= horizon_end
+                else "Future activity does not cover the label horizon."
+            ),
+            details={
+                "max_activity_date": max_activity.isoformat() if max_activity is not None else None,
+                "required_at_or_after": horizon_end.isoformat(),
+            },
+        ),
+        ValidationCheck(
+            name="history_depth_warning",
+            severity="warning",
+            passed=history_days >= MIN_HISTORY_DAYS_WARNING,
+            message=(
+                "History depth before cutoff is sufficient."
+                if history_days >= MIN_HISTORY_DAYS_WARNING
+                else "History depth before cutoff is shallow."
+            ),
+            details={"history_days": history_days, "threshold": MIN_HISTORY_DAYS_WARNING},
+        ),
+    ]
+
+
+def _cutoff_feasibility_stats(
+    dataset: CleanDataset,
+    config: LabelConfig,
+) -> dict[str, Any]:
+    cutoff = _timestamp(config.cutoff_date)
+    horizon_end = cutoff + pd.Timedelta(days=config.horizon_days)
+    active_start = cutoff - pd.Timedelta(days=config.active_window_days)
+    min_activity, max_activity = _activity_date_range(dataset.payments, dataset.usage)
+
+    return {
+        "gate": "cutoff_horizon_feasibility",
+        "cutoff_date": cutoff.date().isoformat(),
+        "horizon_days": config.horizon_days,
+        "active_window_days": config.active_window_days,
+        "active_start": active_start.date().isoformat(),
+        "horizon_end": horizon_end.date().isoformat(),
+        "min_activity_date": min_activity.isoformat() if min_activity is not None else None,
+        "max_activity_date": max_activity.isoformat() if max_activity is not None else None,
+    }
+
+
 def _label_viability_checks(label_set: dict[str, pd.DataFrame]) -> list[ValidationCheck]:
     churn = label_set["churn"]
     clv = label_set["clv"]
@@ -311,9 +438,11 @@ def _label_viability_checks(label_set: dict[str, pd.DataFrame]) -> list[Validati
     churn_rate = _rate(churn_positive, len(churn))
 
     clv_nonzero = int((clv["future_revenue_6m"] > 0).sum()) if len(clv) else 0
+    clv_top_1_share = _top_share(clv["future_revenue_6m"], 0.01)
     credit_30_nonzero = int((credit_usage["future_credit_usage_30d"] > 0).sum())
     credit_90_nonzero = int((credit_usage["future_credit_usage_90d"] > 0).sum())
     topup_observed = int(topup_timing["topup_observed"].sum())
+    topup_censoring_rate = 1.0 - _rate(topup_observed, len(topup_timing))
 
     return [
         _minimum_count_check(
@@ -351,6 +480,21 @@ def _label_viability_checks(label_set: dict[str, pd.DataFrame]) -> list[Validati
         ),
         _minimum_count_check("clv_eligible_count", len(clv), CLV_ELIGIBLE_MIN, "blocker"),
         _minimum_count_check("clv_future_revenue_nonzero", clv_nonzero, CLV_NONZERO_MIN, "blocker"),
+        _variance_check("clv_future_revenue_variance", clv["future_revenue_6m"], "blocker"),
+        ValidationCheck(
+            name="clv_top_1_percent_revenue_share",
+            severity="warning",
+            passed=clv_top_1_share <= CLV_TOP_1_SHARE_WARNING_MAX,
+            message=(
+                "CLV top 1% revenue share is within warning threshold."
+                if clv_top_1_share <= CLV_TOP_1_SHARE_WARNING_MAX
+                else "CLV top 1% revenue share is high."
+            ),
+            details={
+                "top_1_share": clv_top_1_share,
+                "threshold": CLV_TOP_1_SHARE_WARNING_MAX,
+            },
+        ),
         _minimum_count_check(
             "credit_future_usage_30d_nonzero",
             credit_30_nonzero,
@@ -363,11 +507,35 @@ def _label_viability_checks(label_set: dict[str, pd.DataFrame]) -> list[Validati
             CREDIT_USAGE_NONZERO_MIN,
             "blocker",
         ),
+        _variance_check(
+            "credit_future_usage_30d_variance",
+            credit_usage["future_credit_usage_30d"],
+            "blocker",
+        ),
+        _variance_check(
+            "credit_future_usage_90d_variance",
+            credit_usage["future_credit_usage_90d"],
+            "blocker",
+        ),
         _minimum_count_check(
             "topup_timing_observed",
             topup_observed,
             TOPUP_OBSERVED_MIN,
             "warning",
+        ),
+        ValidationCheck(
+            name="topup_censoring_rate",
+            severity="warning",
+            passed=topup_censoring_rate <= TOPUP_CENSORING_WARNING_MAX,
+            message=(
+                "Top-up censoring rate is within warning threshold."
+                if topup_censoring_rate <= TOPUP_CENSORING_WARNING_MAX
+                else "Top-up censoring rate is high."
+            ),
+            details={
+                "censoring_rate": topup_censoring_rate,
+                "threshold": TOPUP_CENSORING_WARNING_MAX,
+            },
         ),
     ]
 
@@ -394,6 +562,8 @@ def _label_viability_stats(label_set: dict[str, pd.DataFrame]) -> dict[str, Any]
             if len(clv)
             else 0,
             "future_revenue_total": float(clv["future_revenue_6m"].sum()) if len(clv) else 0.0,
+            "future_revenue_variance": _variance(clv["future_revenue_6m"]),
+            "top_1_percent_revenue_share": _top_share(clv["future_revenue_6m"], 0.01),
         },
         "credit": {
             "customers": int(len(credit_usage)),
@@ -403,11 +573,19 @@ def _label_viability_stats(label_set: dict[str, pd.DataFrame]) -> dict[str, Any]
             "future_usage_90d_nonzero_count": int(
                 (credit_usage["future_credit_usage_90d"] > 0).sum()
             ),
+            "future_usage_30d_variance": _variance(credit_usage["future_credit_usage_30d"]),
+            "future_usage_90d_variance": _variance(credit_usage["future_credit_usage_90d"]),
         },
         "topup_timing": {
             "customers": int(len(topup_timing)),
             "observed_count": int(topup_timing["topup_observed"].sum()),
             "observed_rate": _rate(int(topup_timing["topup_observed"].sum()), len(topup_timing)),
+            "censoring_rate": 1.0
+            - _rate(int(topup_timing["topup_observed"].sum()), len(topup_timing)),
+            "days_until_next_topup_quantiles": _quantiles(
+                topup_timing["days_until_next_topup"],
+                [0.5, 0.9],
+            ),
         },
     }
 
@@ -428,6 +606,25 @@ def _minimum_count_check(
             else "Count is below viability threshold."
         ),
         details={"count": int(count), "threshold": threshold},
+    )
+
+
+def _variance_check(
+    name: str,
+    series: pd.Series,
+    severity: CheckSeverity,
+) -> ValidationCheck:
+    variance = _variance(series)
+    return ValidationCheck(
+        name=name,
+        severity=severity,
+        passed=variance > 0,
+        message=(
+            "Target has variance."
+            if variance > 0
+            else "Target has no variance."
+        ),
+        details={"variance": variance},
     )
 
 
@@ -604,6 +801,50 @@ def _high_null_rate_check(frame_name: str, frame: pd.DataFrame, column: str) -> 
 
 def _series_values(series: pd.Series) -> list[str]:
     return sorted(str(value) for value in series.dropna().unique())
+
+
+def _activity_date_range(
+    payments: pd.DataFrame,
+    usage: pd.DataFrame,
+) -> tuple[pd.Timestamp | None, pd.Timestamp | None]:
+    dates = pd.concat(
+        [
+            payments["payment_date"].dropna(),
+            usage.loc[usage["usage"] > 0, "period"].dropna(),
+        ],
+        ignore_index=True,
+    )
+    if dates.empty:
+        return None, None
+    return pd.Timestamp(dates.min()), pd.Timestamp(dates.max())
+
+
+def _timestamp(value: pd.Timestamp) -> pd.Timestamp:
+    timestamp = pd.Timestamp(value)
+    return timestamp.tz_localize(None) if timestamp.tzinfo else timestamp
+
+
+def _variance(series: pd.Series) -> float:
+    clean = pd.to_numeric(series, errors="coerce").dropna()
+    if clean.empty:
+        return 0.0
+    return float(clean.var(ddof=0))
+
+
+def _top_share(series: pd.Series, share: float) -> float:
+    clean = pd.to_numeric(series, errors="coerce").dropna()
+    total = float(clean.sum())
+    if clean.empty or total <= 0:
+        return 0.0
+    top_n = max(1, int(len(clean) * share))
+    return float(clean.nlargest(top_n).sum() / total)
+
+
+def _quantiles(series: pd.Series, quantiles: list[float]) -> dict[str, float | None]:
+    clean = pd.to_numeric(series, errors="coerce").dropna()
+    if clean.empty:
+        return {f"p{int(q * 100)}": None for q in quantiles}
+    return {f"p{int(q * 100)}": float(clean.quantile(q)) for q in quantiles}
 
 
 def _null_rate(series: pd.Series) -> float:
