@@ -18,6 +18,7 @@ from src.training.data import (
     database_url,
     load_clean_dataset,
 )
+from src.training.features import MINIMUM_TIER_A_FEATURES, build_all_features
 from src.training.labels import LabelConfig, build_label_set
 
 
@@ -77,7 +78,7 @@ class ValidationCheck:
 class ValidationReport:
     source_id: str
     source_kind: SourceKind
-    validation_type: Literal["profile", "schema", "label_viability"]
+    validation_type: Literal["profile", "schema", "label_viability", "leakage"]
     status: ReportStatus
     row_count: int
     stats: dict[str, Any]
@@ -124,6 +125,24 @@ def check_predict_schema_quality(source_id: str) -> ValidationReport:
     """Gate 2 schema/data quality checks for a predict source."""
 
     return _check_schema_quality(source_id=source_id, tables=PREDICT_TABLES)
+
+
+def check_train_feature_leakage(
+    source_id: str,
+    cutoff_date: pd.Timestamp,
+) -> ValidationReport:
+    """Gate 5 PIT/leakage checks for train features."""
+
+    return _check_feature_leakage(source_id=source_id, tables=TRAIN_TABLES, cutoff_date=cutoff_date)
+
+
+def check_predict_feature_leakage(
+    source_id: str,
+    cutoff_date: pd.Timestamp,
+) -> ValidationReport:
+    """Gate 5 PIT/leakage checks for predict features."""
+
+    return _check_feature_leakage(source_id=source_id, tables=PREDICT_TABLES, cutoff_date=cutoff_date)
 
 
 def check_train_cutoff_feasibility(
@@ -237,6 +256,42 @@ def _check_schema_quality(source_id: str, tables: CleanTableSet) -> ValidationRe
         status=_report_status(checks),
         row_count=len(dataset.customers),
         stats=_schema_quality_stats(dataset),
+        anomalies=_anomalies_from_checks(checks),
+        checks=checks,
+    )
+
+
+def _check_feature_leakage(
+    source_id: str,
+    tables: CleanTableSet,
+    cutoff_date: pd.Timestamp,
+) -> ValidationReport:
+    dataset = load_clean_dataset(source_id=source_id, tables=tables)
+    feature_result = build_all_features(
+        dataset.customers,
+        dataset.payments,
+        dataset.usage,
+        cutoff_date,
+    )
+    checks = _feature_leakage_checks(
+        feature_result.feature_stats,
+        feature_result.feature_names,
+        cutoff_date,
+    )
+
+    return ValidationReport(
+        source_id=source_id,
+        source_kind=tables.source_kind,
+        validation_type="leakage",
+        status=_report_status(checks),
+        row_count=len(feature_result.feature_df),
+        stats={
+            "gate": "point_in_time_leakage",
+            "cutoff_date": _timestamp(pd.Timestamp(cutoff_date)).date().isoformat(),
+            "feature_count": len(feature_result.feature_names),
+            "feature_names": feature_result.feature_names,
+            "pit": feature_result.feature_stats["pit"],
+        },
         anomalies=_anomalies_from_checks(checks),
         checks=checks,
     )
@@ -425,6 +480,82 @@ def _cutoff_feasibility_stats(
         "min_activity_date": min_activity.isoformat() if min_activity is not None else None,
         "max_activity_date": max_activity.isoformat() if max_activity is not None else None,
     }
+
+
+def _feature_leakage_checks(
+    feature_stats: dict[str, Any],
+    feature_names: list[str],
+    cutoff_date: pd.Timestamp,
+) -> list[ValidationCheck]:
+    cutoff = _timestamp(cutoff_date)
+    pit_stats = feature_stats["pit"]
+    max_payment_date = _optional_timestamp(pit_stats["max_feature_payment_date"])
+    max_usage_period = _optional_timestamp(pit_stats["max_feature_usage_period"])
+    forbidden_snapshot_fields = {
+        "last_access",
+        "last_send",
+        "credit_sms",
+        "credit_email",
+        "expire_sms",
+        "expire_email",
+    }
+    forbidden_features = sorted(forbidden_snapshot_fields & set(feature_names))
+
+    return [
+        ValidationCheck(
+            name="feature_payment_dates_pre_cutoff",
+            severity="blocker",
+            passed=max_payment_date is None or max_payment_date < cutoff,
+            message=(
+                "Feature payment dates are strictly before cutoff."
+                if max_payment_date is None or max_payment_date < cutoff
+                else "Feature payment dates include cutoff-or-future rows."
+            ),
+            details={
+                "max_feature_payment_date": pit_stats["max_feature_payment_date"],
+                "cutoff_date": cutoff.date().isoformat(),
+            },
+        ),
+        ValidationCheck(
+            name="feature_usage_periods_pre_cutoff",
+            severity="blocker",
+            passed=max_usage_period is None or max_usage_period < cutoff,
+            message=(
+                "Feature usage periods are strictly before cutoff."
+                if max_usage_period is None or max_usage_period < cutoff
+                else "Feature usage periods include cutoff-or-future rows."
+            ),
+            details={
+                "max_feature_usage_period": pit_stats["max_feature_usage_period"],
+                "cutoff_date": cutoff.date().isoformat(),
+            },
+        ),
+        ValidationCheck(
+            name="minimum_tier_a_feature_set_only",
+            severity="blocker",
+            passed=feature_names == MINIMUM_TIER_A_FEATURES,
+            message=(
+                "Feature names match the minimum Tier A baseline contract."
+                if feature_names == MINIMUM_TIER_A_FEATURES
+                else "Feature names differ from the minimum Tier A baseline contract."
+            ),
+            details={
+                "expected": MINIMUM_TIER_A_FEATURES,
+                "actual": feature_names,
+            },
+        ),
+        ValidationCheck(
+            name="snapshot_leakage_fields_excluded",
+            severity="blocker",
+            passed=not forbidden_features,
+            message=(
+                "Snapshot leakage-prone fields are excluded."
+                if not forbidden_features
+                else "Snapshot leakage-prone fields are present in feature names."
+            ),
+            details={"forbidden_features": forbidden_features},
+        ),
+    ]
 
 
 def _label_viability_checks(label_set: dict[str, pd.DataFrame]) -> list[ValidationCheck]:
@@ -822,6 +953,12 @@ def _activity_date_range(
 def _timestamp(value: pd.Timestamp) -> pd.Timestamp:
     timestamp = pd.Timestamp(value)
     return timestamp.tz_localize(None) if timestamp.tzinfo else timestamp
+
+
+def _optional_timestamp(value: str | None) -> pd.Timestamp | None:
+    if value is None:
+        return None
+    return _timestamp(pd.Timestamp(value))
 
 
 def _variance(series: pd.Series) -> float:

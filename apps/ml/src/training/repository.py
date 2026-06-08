@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import create_engine, text
 
 from src.training.data import database_url
+from src.training.features import FeatureSetContract
 from src.training.validation import ValidationReport
 
 
@@ -86,6 +87,62 @@ def save_validation_reports(
         )
         for report in reports
     ]
+
+
+def save_feature_set_contract(contract: FeatureSetContract) -> str:
+    """Persist a feature set contract to `ml_feature_sets`.
+
+    Upsert keeps repeated verification runs idempotent for the same
+    name/version/model_type tuple.
+    """
+
+    with create_engine(database_url()).begin() as conn:
+        feature_set_id = conn.execute(
+            text(
+                """
+                INSERT INTO ml_feature_sets (
+                  name,
+                  version,
+                  model_type,
+                  feature_names_json,
+                  feature_schema_json,
+                  transform_config_json,
+                  feature_code_hash,
+                  status
+                )
+                VALUES (
+                  :name,
+                  :version,
+                  :model_type,
+                  CAST(:feature_names_json AS JSONB),
+                  CAST(:feature_schema_json AS JSONB),
+                  CAST(:transform_config_json AS JSONB),
+                  :feature_code_hash,
+                  :status
+                )
+                ON CONFLICT ON CONSTRAINT uq_ml_feature_sets_name_version_type
+                DO UPDATE SET
+                  feature_names_json = EXCLUDED.feature_names_json,
+                  feature_schema_json = EXCLUDED.feature_schema_json,
+                  transform_config_json = EXCLUDED.transform_config_json,
+                  feature_code_hash = EXCLUDED.feature_code_hash,
+                  status = EXCLUDED.status
+                RETURNING id::text
+                """
+            ),
+            {
+                "name": contract.name,
+                "version": contract.version,
+                "model_type": contract.model_type,
+                "feature_names_json": _json_dumps(contract.feature_names),
+                "feature_schema_json": _json_dumps(contract.feature_schema),
+                "transform_config_json": _json_dumps(contract.transform_config),
+                "feature_code_hash": contract.feature_code_hash,
+                "status": contract.status,
+            },
+        ).scalar_one()
+
+    return str(feature_set_id)
 
 
 def _json_dumps(value: Any) -> str:
