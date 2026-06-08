@@ -21,7 +21,6 @@ from src.training.features import (  # noqa: E402
     MINIMUM_TIER_A_FEATURES,
     build_all_features,
     build_feature_set_contract,
-    lifecycle_code_hash,
 )
 from src.training.repository import save_feature_set_contract, save_validation_report  # noqa: E402
 from src.training.validation import (  # noqa: E402
@@ -178,7 +177,7 @@ def build_feature_builder_artifacts(
             "feature_names": contract.feature_names,
             "transform_config": contract.transform_config,
             "feature_code_hash": contract.feature_code_hash,
-            "lifecycle_code_hash": lifecycle_code_hash(),
+            "lifecycle_code_hash": contract.lifecycle_code_hash,
             "status": contract.status,
         },
         "eligibility_counts": {

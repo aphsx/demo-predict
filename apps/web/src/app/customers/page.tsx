@@ -6,13 +6,14 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Filter, Activity } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter } from "lucide-react";
 import {
-  PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
+  PageHeader, SectionCard, StatusPill, Skeleton,
   lifecycleTone,
 } from "@/components/ui";
-import { fetchPredictions, exportUrl } from "@/lib/api";
+import { fetchPredictions, exportUrl, type PaginatedPredictions, type PredictionOutput } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
+import { getDisplayError } from "@/lib/ui-error";
 
 const STAGES   = ["Active Paid", "Active Free", "Churned", "Ghost"];
 
@@ -22,19 +23,32 @@ function Inner() {
   const { runId } = useRunStore();
 
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<PaginatedPredictions | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     lifecycle_stage:  sp.get("lifecycle_stage")  || "",
     search:           sp.get("search")           || "",
   });
 
   useEffect(() => {
-    if (!runId) return;
+    if (!runId) {
+      setData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const params: any = { page: String(page), page_size: "50" };
+    setError(null);
+    const params: Record<string, string> = { page: String(page), page_size: "50" };
     Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
-    fetchPredictions(runId, params).then(d => { setData(d); setLoading(false); });
+    fetchPredictions(runId, params)
+      .then(d => { setData(d); setLoading(false); })
+      .catch((e) => {
+        setData(null);
+        setError(getDisplayError(e, "โหลดรายชื่อลูกค้าไม่สำเร็จ"));
+        setLoading(false);
+      });
   }, [runId, page, filters]);
 
   const setFilter = (k: string, v: string) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); };
@@ -44,18 +58,21 @@ function Inner() {
 
   const rows  = data?.data || [];
   const total = data?.total || 0;
-  const pages = Math.max(1, Math.ceil(total / 50));
+  const pageSize = data?.page_size || 50;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
   const activeFilters = Object.entries(filters).filter(([_, v]) => v).length;
+  const pendingRows = loading || Boolean(error) || !runId || rows.length === 0;
 
   return (
     <div className="pb-12">
       <PageHeader
-        eyebrow={`${total.toLocaleString()} customers`}
+        eyebrow={pendingRows ? "Preparing customers" : `${total.toLocaleString()} customers`}
         title="Customer Intelligence"
         actions={
           <a
-            href={exportUrl(runId, Object.fromEntries(Object.entries(filters).filter(([,v]) => v)))}
-            className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1.5"
+            href={runId ? exportUrl(runId, Object.fromEntries(Object.entries(filters).filter(([,v]) => v))) : "#"}
+            aria-disabled={!runId || total === 0}
+            className={`h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] inline-flex items-center gap-1.5 ${!runId || total === 0 ? "opacity-45 pointer-events-none" : "hover:bg-[color:var(--surface-2)]"}`}
           >
             <Image src="/icons/download.svg" alt="" width={16} height={17} aria-hidden /> Export CSV
           </a>
@@ -105,15 +122,10 @@ function Inner() {
                 </tr>
               </thead>
               <tbody>
-                {loading && [...Array(8)].map((_, i) => (
+                {pendingRows && [...Array(8)].map((_, i) => (
                   <tr key={i}><td colSpan={6}><Skeleton className="h-6 my-1" /></td></tr>
                 ))}
-                {!loading && rows.length === 0 && (
-                  <tr><td colSpan={6}>
-                    <EmptyState title="ไม่พบลูกค้าตามเงื่อนไข" hint="ลองปรับ filter หรือเปลี่ยน run" icon={Activity} />
-                  </td></tr>
-                )}
-                {!loading && rows.map((r: any) => (
+                {!pendingRows && rows.map((r: PredictionOutput) => (
                   <tr
                     key={r.acc_id}
                     className="cursor-pointer"
@@ -122,7 +134,7 @@ function Inner() {
                     <td className="num text-[color:var(--moby-700)] font-medium">{r.acc_id}</td>
                     <td>
                       <div className="flex items-center gap-1.5">
-                        <StatusPill tone={lifecycleTone(r.lifecycle_stage)}>{r.lifecycle_stage}</StatusPill>
+                        <StatusPill tone={lifecycleTone(r.lifecycle_stage ?? "")}>{r.lifecycle_stage ?? "—"}</StatusPill>
                         {r.sub_stage && <span className="text-[11px] text-[color:var(--ink-5)]">{r.sub_stage}</span>}
                       </div>
                     </td>
@@ -147,7 +159,7 @@ function Inner() {
           {/* Footer / pagination */}
           <div className="flex items-center justify-between px-5 py-3 border-t border-[color:var(--line-2)] bg-[color:var(--surface-2)]">
             <div className="text-[12px] text-[color:var(--ink-4)] num">
-              {total === 0 ? "0 results" : `${(page - 1) * 50 + 1}–${Math.min(page * 50, total)} of ${total.toLocaleString()}`}
+              {pendingRows ? "Preparing prediction output..." : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()}`}
             </div>
             <div className="flex items-center gap-2">
               <button

@@ -438,6 +438,7 @@ Current verified status:
 FeatureSetContract implemented
 feature_code_hash includes only output-affecting feature_df helpers
 lifecycle_code_hash tracks observed lifecycle/status helpers separately
+lifecycle_code_hash persists in transform_config_json.metadata
 nullable contract rules are explicit
 ml_feature_sets upsert verified
 ```

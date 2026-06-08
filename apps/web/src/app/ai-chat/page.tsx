@@ -50,7 +50,7 @@ const QUICK_PROMPTS = [
   { icon: Zap, label: "แนะนำ action เร่งด่วน" },
 ];
 
-const WELCOME = "สวัสดีครับ! ผมคือ **Moby AI** — วิเคราะห์ข้อมูลลูกค้าจากรอบการประเมินที่เลือกได้เลยครับ\n\nถามเรื่อง churn risk, CLV, lifecycle, หรือขอ action ที่แนะนำก็ได้ครับ";
+const WELCOME = "Moby AI จะตอบจาก insight API จริงของ run ที่เลือกเท่านั้น\n\nหาก API ยังไม่พร้อม ระบบจะแสดงสถานะรอเชื่อมต่อแทนการสร้างคำตอบหรือตัวเลขจำลอง";
 
 /* ════════════════════════════════════════════════════════════
    Page
@@ -107,7 +107,7 @@ export default function AIChatPage() {
       () => { setStreaming(false); cancelRef.current = null; },
       (err) => {
         setMessages(prev =>
-          prev.map(m => m.id === replyId ? { ...m, content: `เกิดข้อผิดพลาด: ${err}` } : m)
+          prev.map(m => m.id === replyId ? { ...m, content: "กำลังรอ insight API พร้อมใช้งานสำหรับ run นี้" } : m)
         );
         setStreaming(false);
         cancelRef.current = null;
@@ -241,14 +241,14 @@ export default function AIChatPage() {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKey}
                 rows={2}
-                placeholder="ถามเรื่องลูกค้า, churn risk, CLV, model performance… (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัด)"
+                placeholder="ถามด้วยข้อมูลจริงจาก run ที่เลือกเท่านั้น (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัด)"
                 className="w-full resize-none bg-transparent text-[13.5px] text-[color:var(--ink-2)]
                   placeholder:text-[color:var(--ink-5)] outline-none leading-relaxed max-h-[160px]"
               />
             </div>
             <div className="flex items-center gap-2 px-3 pb-3 border-t border-[color:var(--line)] pt-2">
               <span className="flex-1 text-[11px] text-[color:var(--ink-5)]">
-                {runId ? "Gemini · ข้อมูลจาก run จริง" : "⚠ กรุณาเลือก run ก่อน"}
+                {runId ? "ใช้ real insight API เท่านั้น · ไม่มี mock fallback" : "กรุณาเลือก run ก่อน"}
               </span>
               <button
                 id="ai-chat-page-send"
@@ -289,7 +289,7 @@ export default function AIChatPage() {
           </div>
 
           <div className="border-t border-[color:var(--line)] pt-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-3">ความสามารถ</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-3">เมื่อ API พร้อม</p>
             <ul className="space-y-2.5">
               {[
                 "วิเคราะห์ churn risk",
@@ -308,9 +308,9 @@ export default function AIChatPage() {
 
           <div className="border-t border-[color:var(--line)] pt-4 mt-auto">
             <div className="rounded-lg border border-[color:var(--line)] bg-white p-3">
-              <p className="text-[11px] font-semibold text-[color:var(--moby-700)] mb-1">Gemini AI</p>
+              <p className="text-[11px] font-semibold text-[color:var(--moby-700)] mb-1">Real insights only</p>
               <p className="text-[10.5px] text-[color:var(--ink-4)] leading-relaxed">
-                วิเคราะห์จากข้อมูลจริงในรอบที่เลือก ข้อมูลไม่ถูกส่งออกนอกระบบ
+                ไม่มี fallback เป็นข้อมูลจำลอง หาก backend ยังไม่พร้อมจะแสดงสถานะรอเชื่อมต่อ
               </p>
             </div>
           </div>

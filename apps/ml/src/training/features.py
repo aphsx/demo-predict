@@ -238,6 +238,7 @@ class FeatureSetContract:
     feature_schema: FeatureSchema
     transform_config: dict[str, Any]
     feature_code_hash: str
+    lifecycle_code_hash: str
     status: str = "candidate"
 
 
@@ -251,19 +252,31 @@ def build_feature_set_contract(
 ) -> FeatureSetContract:
     """Build a persistable feature set contract for model training/prediction."""
 
+    feature_hash = feature_code_hash()
+    lifecycle_hash = lifecycle_code_hash()
     return FeatureSetContract(
         name=name,
         version=version,
         model_type=model_type,
         feature_names=list(result.feature_names),
         feature_schema=result.feature_schema,
-        transform_config=build_transform_config(result.feature_schema),
-        feature_code_hash=feature_code_hash(),
+        transform_config=build_transform_config(
+            result.feature_schema,
+            feature_code_hash=feature_hash,
+            lifecycle_code_hash=lifecycle_hash,
+        ),
+        feature_code_hash=feature_hash,
+        lifecycle_code_hash=lifecycle_hash,
         status=status,
     )
 
 
-def build_transform_config(feature_schema: FeatureSchema) -> dict[str, Any]:
+def build_transform_config(
+    feature_schema: FeatureSchema,
+    *,
+    feature_code_hash: str | None = None,
+    lifecycle_code_hash: str | None = None,
+) -> dict[str, Any]:
     """Describe deterministic preprocessing defaults without fitting on data."""
 
     return {
@@ -279,6 +292,10 @@ def build_transform_config(feature_schema: FeatureSchema) -> dict[str, Any]:
             for feature_name, metadata in feature_schema.items()
             if metadata.get("nullable")
         ],
+        "metadata": {
+            "feature_code_hash": feature_code_hash,
+            "lifecycle_code_hash": lifecycle_code_hash,
+        },
     }
 
 

@@ -4,50 +4,44 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Phone, Mail, Send, AlertTriangle, ChevronRight,
-  CalendarClock, Banknote, ShieldCheck, Activity,
+  ArrowLeft, Phone, Mail, Send, ChevronRight,
+  CalendarClock, ShieldCheck, Activity,
 } from "lucide-react";
 import {
-  PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton, EmptyState,
-  lifecycleTone,
+  PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton,
+  lifecycleTone, urgencyTone,
 } from "@/components/ui";
-import { fetchCustomer, fetchCustomerExplain } from "@/lib/api";
-import { formatFeatureLabel } from "@/lib/featureLabels";
+import { fetchCustomer, type PredictionOutput } from "@/lib/api";
+import { getDisplayError } from "@/lib/ui-error";
 import { useRunStore } from "@/lib/runStore";
 
 export default function Customer360() {
   const params = useParams();
   const accId  = params.id as string;
   const { runId } = useRunStore();
-  const [c, setC] = useState<any>(null);
-  const [explain, setExplain] = useState<any>(null);
+  const [c, setC] = useState<PredictionOutput | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!runId || !accId) return;
+    if (!runId || !accId) {
+      setC(null);
+      setLoading(false);
+      setError(runId ? "" : "ยังไม่ได้เลือก prediction run");
+      return;
+    }
     setLoading(true); setError("");
-    Promise.all([
-      fetchCustomer(runId, accId),
-      fetchCustomerExplain(runId, accId),
-    ]).then(([d, exp]) => { setC(d); setExplain(exp); setLoading(false); })
-      .catch(() => { setError("ไม่พบลูกค้า"); setLoading(false); });
+    fetchCustomer(runId, accId)
+      .then((d) => { setC(d); setLoading(false); })
+      .catch((e) => { setError(getDisplayError(e, "ไม่พบลูกค้า") ?? "ไม่พบลูกค้า"); setLoading(false); });
   }, [runId, accId]);
 
   if (loading) {
-    return (
-      <div className="p-8 space-y-4">
-        <Skeleton className="h-24" />
-        <div className="grid grid-cols-3 gap-4">
-          <Skeleton className="h-72" /><Skeleton className="h-72" /><Skeleton className="h-72" />
-        </div>
-      </div>
-    );
+    return <CustomerSkeleton />;
   }
-  if (error) return <div className="p-8"><EmptyState title={error} icon={AlertTriangle} /></div>;
-  if (!c) return null;
+  if (error || !c) return <CustomerSkeleton />;
 
-  const stage = c.lifecycle_stage;
+  const stage = c.lifecycle_stage ?? "—";
 
   return (
     <div className="pb-12">
@@ -98,16 +92,14 @@ export default function Customer360() {
             <SectionCard title="Churn analysis" hint="ความน่าจะเป็นที่จะเลิกใช้ใน 6 เดือน">
               <ChurnGauge value={c.churn_probability || 0} />
               <div className="mt-5 space-y-3">
-                <KV label="P(alive)" value={c.p_alive != null ? `${(c.p_alive * 100).toFixed(1)}%` : "—"} />
-                {explain?.top_risk_factors?.length > 0 && (
+                <KV label="Risk level" value={c.churn_risk_level ?? "—"} />
+                <KV label="Output status" value={c.output_status || "—"} />
+                {(c.priority_reason || c.output_notes) && (
                   <div className="pt-2 border-t border-[color:var(--line)]">
-                    <div className="text-[10.5px] uppercase tracking-[.10em] text-[color:var(--ink-5)] mb-2">Risk factors</div>
-                    {(Array.isArray(explain?.top_risk_factors) ? explain.top_risk_factors : []).map((f: any, i: number) => (
-                      <div key={i} className="text-[12px] text-[color:var(--ink-3)] mb-1 flex items-start gap-1.5">
-                        <span className="text-[color:var(--warn)] mt-0.5">·</span>
-                        <span>{formatFeatureLabel(f.feature, f.feature_value)}</span>
-                      </div>
-                    ))}
+                    <div className="text-[10.5px] uppercase tracking-[.10em] text-[color:var(--ink-5)] mb-2">Priority reason</div>
+                    <div className="text-[12px] leading-5 text-[color:var(--ink-3)]">
+                      {c.priority_reason ?? c.output_notes}
+                    </div>
                   </div>
                 )}
               </div>
@@ -120,19 +112,10 @@ export default function Customer360() {
                 <div className="num text-[28px] font-semibold text-[color:var(--ink-1)] mt-0.5">
                   {Number(c.predicted_clv_6m || 0).toLocaleString()} <span className="text-[14px] text-[color:var(--ink-4)]">฿</span>
                 </div>
-                {c.clv_ci95_lo != null && (
-                  <div className="text-[11.5px] text-[color:var(--ink-5)] mt-1 num">
-                    95% CI: {Number(c.clv_ci95_lo).toLocaleString()} – {Number(c.clv_ci95_hi).toLocaleString()} ฿
-                  </div>
-                )}
+                <div className="text-[11.5px] text-[color:var(--ink-5)] mt-1">
+                  {c.customer_value_tier ?? <Skeleton className="h-3 w-28" />}
+                </div>
               </div>
-              {c.clv_ci95_lo != null && (
-                <CIBar
-                  lo80={c.clv_ci80_lo} hi80={c.clv_ci80_hi}
-                  lo95={c.clv_ci95_lo} hi95={c.clv_ci95_hi}
-                  point={c.predicted_clv_6m}
-                />
-              )}
               <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-[color:var(--line)]">
                 <KV label="Revenue at risk" value={c.revenue_at_risk != null ? `${Number(c.revenue_at_risk || 0).toLocaleString()} ฿` : "—"} accent="rose" />
                 <KV label="Avg txn value" value={c.avg_transaction_value != null ? `${Number(c.avg_transaction_value || 0).toLocaleString()} ฿` : "—"} />
@@ -140,27 +123,22 @@ export default function Customer360() {
             </SectionCard>
 
             {/* Credit */}
-            <SectionCard title="Credit forecast" hint="ทำนายว่าจะซื้อเครดิตอีกในกี่วัน">
-              {c.credit_p50 != null ? (
+            <SectionCard title="Credit forecast" hint="คาดการณ์การใช้เครดิตจากผล ML v2">
+              {c.predicted_credit_usage_30d != null || c.predicted_credit_usage_90d != null || c.estimated_days_until_topup != null ? (
                 <>
                   <div className="mt-5 space-y-3">
-                    <QuantileBar label="Optimistic (P10)" value={c.credit_p10} max={c.credit_p90} tone="ok" />
-                    <QuantileBar label="Early (P25)" value={c.credit_p25} max={c.credit_p90} tone="info" />
-                    <QuantileBar label="Likely (P50)" value={c.credit_p50} max={c.credit_p90} tone="brand" highlight />
-                    <QuantileBar label="Late (P75)" value={c.credit_p75} max={c.credit_p90} tone="warn" />
-                    <QuantileBar label="Pessimistic (P90)" value={c.credit_p90} max={c.credit_p90} tone="danger" />
+                    <KV label="30d credit usage" value={formatNumber(c.predicted_credit_usage_30d)} />
+                    <KV label="90d credit usage" value={formatNumber(c.predicted_credit_usage_90d)} />
+                    <KV label="Days until top-up" value={c.estimated_days_until_topup ?? "—"} />
                   </div>
-                  <div className="mt-4 text-[11.5px] text-[color:var(--ink-5)]">
-                    forecast confidence{" "}
-                    <b className="num text-[color:var(--ink-3)]">{c.forecast_confidence != null ? (c.forecast_confidence * 100).toFixed(0) + "%" : "—"}</b>
+                  <div className="mt-4">
+                    <StatusPill tone={urgencyTone(c.credit_urgency_level ?? "")}>
+                      {c.credit_urgency_level ?? "No urgency"}
+                    </StatusPill>
                   </div>
                 </>
               ) : (
-                <EmptyState
-                  icon={Banknote}
-                  title="ยังไม่มีพยากรณ์เครดิต"
-                  hint={c.n_purchases <= 1 ? "ลูกค้ายังซื้อแค่ครั้งเดียว — ต้องมี ≥ 2 transaction" : "ไม่มีข้อมูลเพียงพอ"}
-                />
+                <PendingMiniCard rows={3} />
               )}
             </SectionCard>
           </div>
@@ -178,11 +156,7 @@ export default function Customer360() {
               </div>
             </SectionCard>
             <SectionCard title="Recommended next step">
-              <EmptyState
-                icon={CalendarClock}
-                title="ใช้ playbook จาก lifecycle stage"
-                hint="ใช้ action จาก churn/CLV/credit และประวัติการใช้งานก่อน"
-              />
+              <Recommendation customer={c} />
             </SectionCard>
           </div>
         )}
@@ -192,18 +166,13 @@ export default function Customer360() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <SectionCard title="Engagement summary">
               <div className="space-y-3">
-                <KV label="Is active" value={c.is_active ? "Yes" : "No"} />
                 <KV label="Days since last activity" value={c.days_since_last_activity ?? "—"} />
                 <KV label="Ever paid" value={c.ever_paid ? "Yes" : "No"} />
                 <KV label="Total revenue" value={`${Number(c.total_revenue || 0).toLocaleString()} ฿`} />
               </div>
             </SectionCard>
             <SectionCard title="Recommended next step">
-              <EmptyState
-                icon={Activity}
-                title="ใช้ engagement summary"
-                hint="ใช้ usage/engagement summary และ campaign playbook โดยไม่อ้าง model ที่อยู่นอก scope ML v2"
-              />
+              <Recommendation customer={c} />
             </SectionCard>
           </div>
         )}
@@ -211,11 +180,15 @@ export default function Customer360() {
         {/* Ghost */}
         {stage === "Ghost" && (
           <SectionCard title="Ghost account">
-            <EmptyState
-              icon={Activity}
-              title="สมัครแล้วแต่ยังไม่ใช้งาน"
-              hint="รอให้ลูกค้าเริ่มใช้งาน"
-            />
+            <div className="surface-soft p-5">
+              <div className="flex items-center gap-3">
+                <Activity size={16} className="text-[color:var(--ink-4)]" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-64" />
+                </div>
+              </div>
+            </div>
           </SectionCard>
         )}
 
@@ -225,7 +198,7 @@ export default function Customer360() {
           <span className="opacity-50">·</span>
           point-in-time safe (cutoff respected)
           <span className="opacity-50">·</span>
-          SHAP-based factor explanations
+          AI text appears only when persisted on the prediction output
         </div>
       </div>
     </div>
@@ -236,13 +209,78 @@ export default function Customer360() {
 
 function ActionBtn({ icon: Icon, children, primary }: any) {
   return (
-    <button className={`h-9 px-3 rounded-lg text-[13px] inline-flex items-center gap-1.5 ${
+    <button
+      disabled
+      title="Action workflow is not wired yet"
+      className={`h-9 px-3 rounded-lg text-[13px] inline-flex items-center gap-1.5 cursor-not-allowed opacity-55 ${
       primary
         ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-700)]"
         : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]"
-    }`}>
+    }`}
+    >
       <Icon size={14} /> {children}
     </button>
+  );
+}
+
+function CustomerSkeleton() {
+  return (
+    <div className="pb-12">
+      <PageHeader
+        eyebrow={
+          <Link href="/customers" className="inline-flex items-center gap-1 text-[color:var(--moby-700)] hover:underline">
+            <ArrowLeft size={11} /> Customers
+          </Link>
+        }
+        title="Account profile"
+      />
+      <div className="px-8 mt-4 space-y-5">
+        <Skeleton className="h-24" />
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+          <Skeleton className="h-72" />
+          <Skeleton className="h-72" />
+          <Skeleton className="h-72" />
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <Skeleton className="h-48" />
+          <Skeleton className="h-48" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PendingMiniCard({ rows = 2 }: { rows?: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className="space-y-1.5">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-5 w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Recommendation({ customer }: { customer: PredictionOutput }) {
+  if (!customer.recommended_action && !customer.recommended_followup_date && !customer.ai_explanation) {
+    return <PendingMiniCard rows={3} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <KV label="Recommended action" value={customer.recommended_action ?? "—"} accent="blue" />
+      <KV label="Follow-up date" value={customer.recommended_followup_date ?? "—"} />
+      {customer.ai_explanation && (
+        <div className="rounded-md border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3 text-[12px] leading-5 text-[color:var(--ink-3)]">
+          {customer.ai_explanation}
+        </div>
+      )}
+      {customer.ai_recommended_message && (
+        <KV label="AI recommended message" value={customer.ai_recommended_message} />
+      )}
+    </div>
   );
 }
 
@@ -284,6 +322,10 @@ function KV({ label, value, accent }: { label: string; value: any; accent?: "ros
       <div className="num text-[16px] font-semibold mt-0.5" style={{ color }}>{value}</div>
     </div>
   );
+}
+
+function formatNumber(value: number | null) {
+  return value == null ? "—" : Number(value).toLocaleString();
 }
 
 function CIBar({ lo80, hi80, lo95, hi95, point }: any) {

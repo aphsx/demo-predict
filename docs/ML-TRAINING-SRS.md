@@ -59,6 +59,8 @@ verification
 
 - ใช้ Better Auth login/session
 - ML records ใหม่ต้องอ้างอิง user ผ่าน `created_by`, `imported_by`, ownership fields
+- Internal users can read all ML runs/data sources; ownership fields are for audit
+  and write/mutation permission, not read filtering.
 
 ### 2.2 Training Data Import/Clean
 

@@ -424,6 +424,7 @@ lifecycle_code_hash changes when observed lifecycle/status logic changes
 ```
 
 Do not force a new feature set version only because rule-based lifecycle output changed.
+Persist lifecycle hash in `transform_config_json.metadata.lifecycle_code_hash` for audit.
 
 Warning:
 

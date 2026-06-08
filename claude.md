@@ -11,11 +11,11 @@ by CLV/RFM, and forecast credit consumption.
 ## Tech Stack
 
 - **Frontend:** Next.js 14 (App Router) + TypeScript + Tailwind CSS + Better Auth client
-- **API:** Elysia.js on Bun + Better Auth (server) + Drizzle ORM + ioredis
-- **ML Worker:** Python + Arq consumer + FastAPI (internal routes only: `/health`, `/internal/explain`, `/internal/train`)
+- **API:** Elysia.js on Bun + Better Auth (server) + Drizzle ORM
+- **ML Runtime:** Python + FastAPI health/internal surface; ML v2 training/prediction runner is being rebuilt
 - **ML libs:** LightGBM, XGBoost, SHAP, lifetimes (BG-NBD/Gamma-Gamma), scikit-learn, Optuna
 - **Database:** PostgreSQL 15
-- **Queue:** Arq (Python-native Redis task queue) for job dispatch; Redis Streams for progress events
+- **Progress:** Redis Streams for train import progress events
 - **Storage:** Local filesystem (`./models` volume) in dev; R2 deferred
 - **Monorepo:** Turborepo + Bun workspaces
 
@@ -25,8 +25,8 @@ by CLV/RFM, and forecast credit consumption.
 moby-analytics/
 ├── apps/
 │   ├── web/           # Next.js 14 — frontend + proxy rewrite to Elysia
-│   ├── api/           # Elysia.js (Bun) — REST + auth + orchestration + SSE
-│   └── ml/            # Python — FastAPI (internal) + Arq worker + train CLI
+│   ├── api/           # Elysia.js (Bun) — auth + import/clean REST
+│   └── ml/            # Python — FastAPI health + ML v2 rebuild modules
 ├── packages/
 │   └── types/         # Shared TypeScript types (stub; populate as routes solidify)
 ├── models/            # ML model artifacts (.pkl, metrics.json, training_log.txt)
@@ -42,10 +42,10 @@ moby-analytics/
 | Service | Internal | External | Notes |
 |---|---|---|---|
 | Next.js (`web`) | `:3000` | `:3000` | Proxy rewrites `/api/*` → Elysia |
-| Elysia (`api`) | `:3001` | `:3001` | REST + Better Auth + SSE |
+| Elysia (`api`) | `:3001` | `:3001` | REST + Better Auth |
 | FastAPI (`ml`) | `:8000` | `:8001` | Internal routes only |
 | PostgreSQL (`db`) | `:5432` | `:5433` | Alembic manages schema |
-| Redis | `:6379` | — | Arq queue + progress Streams |
+| Redis | `:6379` | — | Train import progress Streams |
 
 ## Traffic Flow
 
@@ -56,12 +56,11 @@ Browser → Next.js :3000
 
 Elysia :3001
   → PostgreSQL (Drizzle)
-  → Redis (Arq enqueue + progress XREAD)
-  → FastAPI :8000/internal/explain  (SHAP, token-gated)
-  → FastAPI :8000/internal/train    (training trigger, token-gated)
+  → Redis Streams (train import progress)
+  → mounted routes: /train-data-sources, /predict-data-sources
 
 FastAPI :8000/health  ← Docker healthcheck
-Arq worker            ← arq:queue (Redis), writes results to PostgreSQL
+ML v2 training/prediction runner is not wired to Elysia yet
 ```
 
 ## Data Model
@@ -134,9 +133,9 @@ Not built yet:
 | Decision | Rationale |
 |---|---|
 | **Elysia (not FastAPI) owns REST** | Single process boundaries: ML pipeline code is Python-only; Elysia handles TypeScript-native concerns (typed API, SSE, Drizzle). |
-| **Arq for jobs** | Python-native queue; the only consumer is Python. No need for cross-language Streams protocol. |
-| **Redis Streams for progress** | Worker pushes structured events; SSE endpoint XREADs without polling. |
-| **FastAPI is internal-only** | SHAP and training require Python. Elysia proxies these via X-Internal-Token. FastAPI never serves the browser directly. |
+| **No legacy Arq API enqueue** | Old `/runs` prediction runtime is removed; do not reintroduce `arq:queue` job producer for ML v2. |
+| **Redis Streams for import progress** | Train import writes structured events that the API polls for progress. |
+| **FastAPI is internal-only** | Python ML code stays behind the API boundary. Browser routes should go through Elysia/Next.js. |
 | **Drizzle in introspect mode** | Alembic owns schema; Drizzle reflects it. `drizzle-kit generate` is never run. |
 | **SSE not WebSockets** | Server pushes only. Auto-reconnect built-in. Works behind any proxy. |
 | **PostgreSQL not MongoDB** | Data is relational. All ML output is tabular. |
@@ -222,7 +221,7 @@ NEXT_PUBLIC_AUTH_URL     # http://localhost:3001 (browser-visible)
 
 ## What To Build Next (Phase 2)
 
-- **LLM / Gemini insights** — `GET /runs/:id/explanation`, Gemini API call after ML pipeline completes, persisted in a new `explanations` table. The AI Chat page currently returns hardcoded demo responses; replace with real streaming.
+- **LLM / Gemini insights** — rebuild after ML v2 prediction outputs exist; do not reuse legacy `/runs/:id/explanation`.
 - **R2 integration** — store `.pkl` files in Cloudflare R2 keyed by `dataset_id` (currently local filesystem)
 - **Eden Treaty** — typed API client from web → Elysia (currently plain `fetch` + manual types in `web/src/lib/api.ts`)
 - **Real email notifications** on pipeline completion
@@ -231,14 +230,15 @@ NEXT_PUBLIC_AUTH_URL     # http://localhost:3001 (browser-visible)
 
 - Legacy `apps/ml/src/models/` model code — replace only after the corresponding ML v2 model is implemented and verified.
 - `apps/ml/src/training/` is the active ML v2 rebuild area.
-- `apps/ml/worker/predict_worker.py` — legacy Arq worker; do not extend it for ML v2 prediction. Build the new prediction runner separately.
+- Legacy Arq worker/API enqueue path — do not extend it for ML v2 prediction. Build the new prediction runner separately.
 - `apps/ml/alembic/` — Do not add migrations from Drizzle. Alembic owns the schema.
 - Legacy `apps/ml/train.py` — do not revive old filesystem-Excel training; ML v2 trains from `train_clean_*`.
 
 ## Always Check
 
 - Is the run status updated to `running`/`done`/`failed` at the right points?
-- Are all Elysia routes using `requireUser` and scoped by `userId`?
-- Does `verifyRunOwnership` return 403 (not bypass) when `run.userId` is null?
+- Are all Elysia routes using `requireUser`?
+- Are run/source read routes shared across all authenticated internal users?
+- Are run/source mutation routes restricted to the owner/importer (or future admin role), with null owner denied?
 - Are uploaded files validated (size, MIME, required sheet presence) before inserting?
 - Are batch inserts used (never row-by-row `for` loops)?

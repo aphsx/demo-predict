@@ -2,10 +2,10 @@
 export const dynamic = "force-dynamic";
 import { useEffect, useState } from "react";
 import {
-  Activity, ShieldCheck, AlertTriangle, Cpu, Layers, BookOpenCheck,
+  ShieldCheck, Cpu, Layers, BookOpenCheck,
 } from "lucide-react";
 import {
-  PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton, EmptyState,
+  PageHeader, SectionCard, StatusPill, ProgressMeter, Skeleton,
 } from "@/components/ui";
 import { fetchModelMetrics, fetchTrainingLog } from "@/lib/api";
 import { formatFeatureLabel } from "@/lib/featureLabels";
@@ -39,8 +39,7 @@ export default function ModelHealth() {
       .catch(() => {});
   }, []);
 
-  if (loading) return <div className="p-8 space-y-3"><Skeleton className="h-24" /><Skeleton className="h-72" /></div>;
-  if (err) return <div className="p-8"><EmptyState title={err} icon={AlertTriangle} /></div>;
+  if (loading || err) return <ModelHealthSkeleton />;
 
   const m = metrics || {};
   const ds = m.data_summary || {};
@@ -61,9 +60,9 @@ export default function ModelHealth() {
             <Lineage label="Features" value={`${ds.n_features || 0} cols`} icon={Cpu} />
             <Lineage
               label="Drift status"
-              value="OK"
+              value={m.drift_status || "—"}
               icon={ShieldCheck}
-              pill={<StatusPill tone="ok">PSI 0.08 · KS p 0.42</StatusPill>}
+              pill={m.drift_status ? <StatusPill tone={m.drift_status === "ok" ? "ok" : "warn"}>{m.drift_status}</StatusPill> : undefined}
             />
           </div>
         </SectionCard>
@@ -137,7 +136,11 @@ function ChurnTab({ m }: any) {
       </SectionCard>
       <SectionCard title="Top SHAP factors" hint="Mean |SHAP|">
         {!(Array.isArray(m.churn_shap_top10) && m.churn_shap_top10.length > 0) ? (
-          <EmptyState title="ไม่มีข้อมูล SHAP" />
+          <div className="space-y-2">
+            <Skeleton className="h-6" />
+            <Skeleton className="h-6" />
+            <Skeleton className="h-6" />
+          </div>
         ) : (
           <div className="space-y-2">
             {m.churn_shap_top10.map((d: any, i: number) => (
@@ -249,7 +252,15 @@ function KVList({ rows }: { rows: [string, any, string?][] }) {
 
 function CompetitionTable({ data }: { data: Record<string, any> }) {
   const entries = Object.entries(data || {});
-  if (entries.length === 0) return <EmptyState title="ยังไม่มีผลเปรียบเทียบ" />;
+  if (entries.length === 0) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-8" />
+        <Skeleton className="h-8" />
+        <Skeleton className="h-8" />
+      </div>
+    );
+  }
   return (
     <div className="overflow-x-auto">
       <table className="table-base">
@@ -289,4 +300,21 @@ function num(v: any) {
   if (v == null) return "—";
   if (typeof v === "number") return Number.isInteger(v) ? v.toLocaleString() : v.toFixed(4);
   return String(v);
+}
+
+function ModelHealthSkeleton() {
+  return (
+    <div className="pb-12">
+      <PageHeader eyebrow="Model intelligence" title="Model Health" />
+      <div className="px-8 mt-4 space-y-5">
+        <Skeleton className="h-32" />
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <Skeleton className="h-44" />
+          <Skeleton className="h-44" />
+          <Skeleton className="h-44" />
+        </div>
+        <Skeleton className="h-72" />
+      </div>
+    </div>
+  );
 }

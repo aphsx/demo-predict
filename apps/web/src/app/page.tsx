@@ -11,7 +11,7 @@ import {
   StackBar,
   lifecycleTone,
 } from "@/components/ui";
-import { fetchPredictions, fetchSummary } from "@/lib/api";
+import { fetchPredictions, fetchSummary, type PredictionOutput, type PredictionSummary } from "@/lib/api";
 import { getDisplayError } from "@/lib/ui-error";
 import { useRunStore } from "@/lib/runStore";
 
@@ -24,13 +24,19 @@ const LIFECYCLE_COLOR: Record<string, string> = {
 
 export default function Dashboard() {
   const { runId } = useRunStore();
-  const [summary, setSummary] = useState<any>(null);
-  const [previewCustomers, setPreviewCustomers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<PredictionSummary | null>(null);
+  const [previewCustomers, setPreviewCustomers] = useState<PredictionOutput[]>([]);
+  const [loading, setLoading] = useState(Boolean(runId));
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!runId) { setLoading(false); return; }
+    if (!runId) {
+      setSummary(null);
+      setPreviewCustomers([]);
+      setLoadError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setLoadError(null);
     Promise.all([
@@ -38,7 +44,7 @@ export default function Dashboard() {
       fetchPredictions(runId, { page: "1", page_size: "16" }),
     ])
       .then(([s, predictionPage]) => {
-        setSummary(s);
+        setSummary(s as PredictionSummary);
         setPreviewCustomers(pickCustomerPreview(predictionPage.data, 6));
         setLoading(false);
       })
@@ -58,6 +64,7 @@ export default function Dashboard() {
   const activeFreeCount = lc["Active Free"]?.total || 0;
   const churnedCount = lc["Churned"]?.total || 0;
   const ghostCount = lc["Ghost"]?.total || 0;
+  const pendingData = loading || Boolean(loadError) || !runId || totalCustomers === 0;
 
   return (
     <div className="px-8 py-6 pb-12 space-y-6">
@@ -117,20 +124,14 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {loadError && (
-        <div className="rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
-          {loadError}
-        </div>
-      )}
-
-      {!loading && !loadError && totalCustomers > 0 && activePaidCount === 0 && (
+      {!pendingData && activePaidCount === 0 && (
         <div className="rounded-2xl border border-[color:var(--line)] bg-[linear-gradient(180deg,#ffffff,rgba(250,251,253,0.96))] px-4 py-3 text-[13px] text-[color:var(--ink-3)]">
           ชุดข้อมูลนี้ไม่มีลูกค้า Active Paid — ดูได้ที่ Active Free, Churned หรือ Ghost ใน Customers
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {loading ? (
+        {pendingData ? (
           [...Array(4)].map((_, i) => <Skeleton key={i} className="h-[124px]" />)
         ) : (
           <>
@@ -175,7 +176,7 @@ export default function Dashboard() {
             actionHref="/customers"
           />
           <div className="border-t border-[color:var(--line-2)] px-5 py-5">
-            {loading ? (
+            {pendingData ? (
               <div className="space-y-4">
                 <Skeleton className="h-2.5 w-full rounded-full" />
                 <div className="space-y-2.5">
@@ -243,7 +244,7 @@ export default function Dashboard() {
             actionHref="/customers"
           />
           <div className="border-t border-[color:var(--line-2)]">
-            {loading ? (
+            {pendingData ? (
               <div className="space-y-0 p-1">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="border-b border-[color:var(--line-2)] px-4 py-3 last:border-0">
@@ -251,11 +252,6 @@ export default function Dashboard() {
                     <Skeleton className="h-3 w-40" />
                   </div>
                 ))}
-              </div>
-            ) : previewCustomers.length === 0 ? (
-              <div className="px-5 py-10 text-center">
-                <p className="text-[13px] font-medium text-[color:var(--ink-2)]">ยังไม่มีลูกค้า</p>
-                <p className="mt-1 text-[12px] text-[color:var(--ink-5)]">อัปโหลดข้อมูลและรัน analysis ก่อน</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -270,7 +266,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {previewCustomers.map((customer: Record<string, unknown>) => (
+                    {previewCustomers.map((customer) => (
                       <CustomerPreviewRow key={String(customer.acc_id)} customer={customer} />
                     ))}
                   </tbody>
@@ -428,9 +424,9 @@ function LifecycleStageRow({
 function CustomerPreviewRow({
   customer,
 }: {
-  customer: Record<string, unknown>;
+  customer: PredictionOutput;
 }) {
-  const accId = String(customer.acc_id ?? "");
+  const accId = String(customer.acc_id);
   const stage = String(customer.lifecycle_stage ?? "");
   const churn =
     customer.churn_probability != null
@@ -497,11 +493,8 @@ function formatCurrency(value: unknown) {
   return `${Number(value || 0).toLocaleString()} ฿`;
 }
 
-function pickCustomerPreview(rows: Record<string, unknown>[], limit: number) {
-  const copy = [...rows];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy.slice(0, limit);
+function pickCustomerPreview(rows: PredictionOutput[], limit: number) {
+  return [...rows]
+    .sort((a, b) => Number(b.priority_score ?? 0) - Number(a.priority_score ?? 0))
+    .slice(0, limit);
 }

@@ -123,6 +123,8 @@ ml_prediction_runs   = รอบการ predict จาก predict dataset
 - ทุก output row ต้องรู้ว่า generated จาก prediction run ไหน
 - ทุก model artifact ต้องรู้ว่าเกิดจาก training run ไหน
 - ownership/user tracking ต้องคงไว้ผ่าน `created_by` หรือ field ที่ผูกกับ Better Auth user
+- read access เป็น shared internal: authenticated users อ่าน runs/data sources ได้ทุกอัน
+- write/mutation access ค่อยจำกัด owner/importer หรือ admin role ในอนาคต
 
 ดังนั้นเราจะไม่ทิ้ง run concept แต่จะลบ schema run เก่าแล้วสร้างใหม่ให้ตรงกับ training/prediction pipeline ใหม่
 
@@ -350,6 +352,13 @@ transform_config_json
 feature_code_hash
 status
 created_at
+```
+
+Hash metadata:
+
+```text
+feature_code_hash = stored in ml_feature_sets.feature_code_hash
+lifecycle_code_hash = stored in transform_config_json.metadata.lifecycle_code_hash
 ```
 
 เหตุผล:

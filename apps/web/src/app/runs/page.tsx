@@ -39,7 +39,7 @@ import {
   Clock3, AlertCircle, FileSpreadsheet, ChevronRight,
 } from "lucide-react";
 import {
-  PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
+  PageHeader, SectionCard, StatusPill, Skeleton,
 } from "@/components/ui";
 import { api, retryRun, Run } from "@/lib/api";
 import { getDisplayError } from "@/lib/ui-error";
@@ -249,18 +249,9 @@ export default function RunsPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading && [...Array(4)].map((_, i) => (
+                {(loading || runs.length === 0) && [...Array(4)].map((_, i) => (
                   <tr key={i}><td colSpan={7}><Skeleton className="h-6 my-1" /></td></tr>
                 ))}
-                {!loading && runs.length === 0 && (
-                  <tr><td colSpan={7}>
-                    <EmptyState
-                      icon={FileSpreadsheet}
-                      title="ยังไม่มี run"
-                      hint="Create run และ upload Excel เพื่อเริ่มประมวลผล"
-                    />
-                  </td></tr>
-                )}
                 {!loading && runs.map(run => {
                   const Icon = statusIcon[run.status];
                   return (

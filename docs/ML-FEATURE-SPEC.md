@@ -339,7 +339,8 @@ lifecycle_code_hash  = observed lifecycle/status contract only
 ```
 
 `ml_feature_sets.feature_code_hash` must not change only because lifecycle/status rules change.
-If lifecycle logic changes without feature changes, record it separately in reports/model metadata.
+If lifecycle logic changes without feature changes, record it separately as
+`transform_config_json.metadata.lifecycle_code_hash`.
 
 Eligibility:
 

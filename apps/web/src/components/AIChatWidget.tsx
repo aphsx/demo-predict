@@ -36,27 +36,8 @@ interface Msg {
   ts: Date;
 }
 
-/* ─────────────────────────────────────────────
-   Mock response engine
-───────────────────────────────────────────── */
-const REPLIES: Record<string, string> = {
-  default: "สวัสดีครับ! ผมคือ **Moby AI** ช่วยวิเคราะห์ข้อมูลลูกค้า, churn risk, CLV และ lifecycle stage ให้คุณได้ครับ 🐋",
-  churn: "กลุ่ม **Active Paid** ที่มี churn probability > 60% คิดเป็นราว 12% ของพอร์ต แนะนำส่ง retention offer ภายใน 48 ชั่วโมงครับ",
-  clv: "CLV 6 เดือน — **Median:** 8,400 ฿  |  **Top 10%:** > 42,000 ฿\nลูกค้า high-CLV มักใช้งาน > 15 ครั้ง/เดือนครับ",
-  lifecycle: "Lifecycle แบ่งเป็น 4 stage: **Active Paid → Active Free → Churned → Ghost**\nCome-back probability เฉลี่ยอยู่ที่ 34% ครับ",
-  model: "โมเดล XGBoost Ensemble ฝึกบน 90 features — AUC-ROC: **0.89**\nRetrain ทุก 7 วัน หรือเมื่อ drift score > 0.05 ครับ",
-  alert: "ขณะนี้ไม่มี critical alert ที่ต้องการ action ด่วน ระบบ model health ทำงานปกติครับ",
-};
-
-function getReply(text: string): string {
-  const t = text.toLowerCase();
-  if (t.includes("churn") || t.includes("เลิก") || t.includes("ออก")) return REPLIES.churn;
-  if (t.includes("clv") || t.includes("มูลค่า") || t.includes("revenue")) return REPLIES.clv;
-  if (t.includes("lifecycle") || t.includes("stage") || t.includes("สรุป")) return REPLIES.lifecycle;
-  if (t.includes("model") || t.includes("โมเดล") || t.includes("predict")) return REPLIES.model;
-  if (t.includes("alert") || t.includes("แจ้งเตือน") || t.includes("signal")) return REPLIES.alert;
-  return REPLIES.default;
-}
+const UNAVAILABLE_REPLY =
+  "Moby AI ยังไม่ได้เชื่อมต่อกับ insight API จริง จึงยังไม่ตอบตัวเลขหรือคำแนะนำจาก prediction output เพื่อหลีกเลี่ยงข้อมูลจำลอง";
 
 /* ─────────────────────────────────────────────
    Tiny markdown renderer  (**bold** only)
@@ -91,7 +72,7 @@ const fmt = (d: Date) => d.toLocaleTimeString("th-TH", TIME_FORMAT);
 /* ─────────────────────────────────────────────
    Suggested chips  (only shown on first load)
 ───────────────────────────────────────────── */
-const CHIPS = ["วิเคราะห์ churn risk", "CLV สูงสุด", "สรุป lifecycle", "Model health"];
+const CHIPS = ["ดู churn risk", "ดู CLV", "ดู lifecycle", "Model health"];
 
 /* ─────────────────────────────────────────────
    Sub-components
@@ -137,7 +118,7 @@ export default function AIChatWidget() {
   const INIT: Msg = {
     id: "init",
     role: "assistant",
-    text: REPLIES.default,
+    text: UNAVAILABLE_REPLY,
     ts: new Date(),
   };
 
@@ -189,9 +170,7 @@ export default function AIChatWidget() {
     setMsgs(prev => [...prev, userMsg]);
     setBusy(true);
 
-    await new Promise(r => setTimeout(r, 800 + Math.random() * 600));
-
-    const botMsg: Msg = { id: `b-${Date.now()}`, role: "assistant", text: getReply(text), ts: new Date() };
+    const botMsg: Msg = { id: `b-${Date.now()}`, role: "assistant", text: UNAVAILABLE_REPLY, ts: new Date() };
     setMsgs(prev => [...prev, botMsg]);
     setBusy(false);
 
@@ -268,7 +247,7 @@ export default function AIChatWidget() {
             <p className="text-[13.5px] font-semibold text-white leading-tight">Moby AI</p>
             <p className="text-[10.5px] text-blue-200 flex items-center gap-1.5 mt-0.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Online · ตอบทันที
+              Not connected · no mock insights
             </p>
           </div>
           <div className="flex items-center gap-1">
@@ -369,7 +348,7 @@ export default function AIChatWidget() {
                 value={input}
                 onChange={handleChange}
                 onKeyDown={onKey}
-                placeholder="ถามเรื่องลูกค้า, churn, CLV…"
+                placeholder="AI insights ยังไม่พร้อมใช้งาน"
                 className="flex-1 resize-none bg-transparent
                   text-[13px] text-[color:var(--ink-2)]
                   placeholder:text-[color:var(--ink-5)]
@@ -397,7 +376,7 @@ export default function AIChatWidget() {
 
           {/* Disclaimer */}
           <p className="text-[9.5px] text-[color:var(--ink-6)] text-center pb-2 px-4 leading-tight">
-            Demo mode · ข้อมูลจำลอง ·{" "}
+            Waiting for real insight API · no mock prediction data ·{" "}
             <Link
               href="/ai-chat"
               className="text-[color:var(--moby-500)] hover:underline"

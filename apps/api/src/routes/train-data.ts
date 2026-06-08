@@ -5,6 +5,7 @@ import Elysia, { t } from "elysia";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
+import { canMutateOwnedRecord, denyMutation } from "../lib/access-control";
 import { requireUser } from "../lib/auth-middleware";
 import { importTrainExcel, prepareTrainDataSource, type TrainImportResult } from "../lib/train-import";
 import type { TrainImportProgressEvent } from "../lib/train-import-progress";
@@ -292,9 +293,12 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
   })
   .delete(
     "/:id",
-    async ({ params, set }) => {
+    async ({ params, userId, set }) => {
       const [row] = await db
-        .select({ importStatus: trainDataSources.importStatus })
+        .select({
+          importStatus: trainDataSources.importStatus,
+          importedBy: trainDataSources.importedBy,
+        })
         .from(trainDataSources)
         .where(eq(trainDataSources.id, params.id))
         .limit(1);
@@ -302,6 +306,10 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
       if (!row) {
         set.status = 404;
         return { message: "Train data source not found" };
+      }
+
+      if (!canMutateOwnedRecord(userId, row.importedBy)) {
+        return denyMutation(set, "You can view this training data source, but only the importer can delete it.");
       }
 
       await db.delete(trainDataSources).where(eq(trainDataSources.id, params.id));

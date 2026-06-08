@@ -7,11 +7,12 @@ import {
   Flame, Sparkles, ShieldOff, Wallet,
 } from "lucide-react";
 import {
-  PageHeader, SectionCard, StatusPill, Skeleton, EmptyState,
+  PageHeader, SectionCard, StatusPill, Skeleton,
   lifecycleTone,
 } from "@/components/ui";
-import { fetchPredictions } from "@/lib/api";
+import { fetchPredictions, type PredictionOutput } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
+import { getDisplayError } from "@/lib/ui-error";
 
 type LaneId = "active_paid" | "active_free" | "churned" | "ghost";
 
@@ -44,19 +45,32 @@ const LANES: { id: LaneId; title: string; hint: string; icon: any; tone: string;
 
 export default function Playbooks() {
   const { runId } = useRunStore();
-  const [data, setData] = useState<Partial<Record<LaneId, any[]>>>({});
+  const [data, setData] = useState<Partial<Record<LaneId, PredictionOutput[]>>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!runId) return;
+    if (!runId) {
+      setData({});
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setError(null);
     Promise.all(LANES.map(l => fetchPredictions(runId, { ...l.filters, page: "1", page_size: "8" })
-      .then(r => [l.id, r?.data || []] as const).catch(() => [l.id, []] as const)
-    )).then((entries) => {
-      const obj: Partial<Record<LaneId, any[]>> = {};
-      entries.forEach(([k, v]) => { obj[k as LaneId] = v as any[]; });
+      .then(r => [l.id, sortByPriority(r?.data || [])] as const)
+    ))
+    .then((entries) => {
+      const obj: Partial<Record<LaneId, PredictionOutput[]>> = {};
+      entries.forEach(([k, v]) => { obj[k as LaneId] = v; });
       setData(obj);
+      setLoading(false);
+    })
+    .catch((e) => {
+      setData({});
+      setError(getDisplayError(e, "โหลด action queue ไม่สำเร็จ"));
       setLoading(false);
     });
   }, [runId]);
@@ -65,6 +79,7 @@ export default function Playbooks() {
     () => Object.values(data).reduce((sum, arr) => sum + arr.length, 0),
     [data]
   );
+  const awaitingQueue = loading || Boolean(error) || !runId || totalQueue === 0;
   const doneToday = doneIds.size;
   const completion = totalQueue ? doneToday / totalQueue : 0;
 
@@ -83,9 +98,19 @@ export default function Playbooks() {
       <div className="px-8 mt-4 space-y-5">
         {/* Top KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <KpiTile label="Calls in queue" value={totalQueue} hint="ตามลำดับ priority" tone="blue" />
-          <KpiTile label="Completed" value={doneToday} hint="ในรอบเซสชันนี้" tone="emerald" />
-          <KpiTile label="Completion" value={`${(completion * 100).toFixed(0)}%`} hint="กรอบงานวันนี้" tone="violet" raw />
+          {awaitingQueue ? (
+            <>
+              <Skeleton className="h-[116px]" />
+              <Skeleton className="h-[116px]" />
+              <Skeleton className="h-[116px]" />
+            </>
+          ) : (
+            <>
+              <KpiTile label="Calls in queue" value={totalQueue} hint="ตามลำดับ priority" tone="blue" />
+              <KpiTile label="Completed" value={doneToday} hint="ในรอบเซสชันนี้" tone="emerald" />
+              <KpiTile label="Completion" value={`${(completion * 100).toFixed(0)}%`} hint="กรอบงานวันนี้" tone="violet" raw />
+            </>
+          )}
         </div>
 
         {/* Lanes */}
@@ -93,7 +118,7 @@ export default function Playbooks() {
           {LANES.map(lane => (
             <Lane key={lane.id} lane={lane}
               rows={data[lane.id] || []}
-              loading={loading}
+              loading={awaitingQueue}
               done={doneIds}
               onToggle={(id: string) => setDoneIds(prev => {
                 const n = new Set(prev);
@@ -110,7 +135,13 @@ export default function Playbooks() {
 
 function Lane({
   lane, rows, loading, done, onToggle,
-}: any) {
+}: {
+  lane: (typeof LANES)[number];
+  rows: PredictionOutput[];
+  loading: boolean;
+  done: Set<string>;
+  onToggle: (id: string) => void;
+}) {
   const Icon = lane.icon;
   const palette: Record<string, { bg: string; fg: string }> = {
     rose:   { bg: "var(--danger-bg)", fg: "var(--danger)" },
@@ -140,11 +171,10 @@ function Lane({
         </Link>
       }
     >
-      {loading && <div className="space-y-2"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /></div>}
-      {!loading && rows.length === 0 && <EmptyState title="ไม่มีลูกค้าในเลนนี้" />}
+      {(loading || rows.length === 0) && <div className="space-y-2"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /></div>}
       {!loading && rows.length > 0 && (
         <ul className="-mx-5 -my-5 divide-y divide-[color:var(--line-2)]">
-          {rows.map((r: any) => {
+          {rows.map((r) => {
             const isDone = done.has(String(r.acc_id));
             return (
               <li key={r.acc_id} className={`flex gap-3 p-4 items-start hover:bg-[color:var(--surface-2)] ${isDone ? "opacity-50" : ""}`}>
@@ -167,12 +197,19 @@ function Lane({
                       {r.acc_id}
                     </Link>
                     <div className="flex items-center gap-1.5">
-                      <StatusPill tone={lifecycleTone(r.lifecycle_stage)}>{r.lifecycle_stage}</StatusPill>
+                      <StatusPill tone={lifecycleTone(r.lifecycle_stage ?? "")}>{r.lifecycle_stage ?? "—"}</StatusPill>
                     </div>
                   </div>
                   <div className="text-[11.5px] text-[color:var(--ink-4)] mt-1.5">
-                    Churn {r.churn_probability != null ? `${(r.churn_probability * 100).toFixed(1)}%` : "—"}
+                    {r.recommended_action || r.priority_reason || (
+                      <>Churn {r.churn_probability != null ? `${(r.churn_probability * 100).toFixed(1)}%` : "—"}</>
+                    )}
                   </div>
+                  {r.recommended_followup_date && (
+                    <div className="text-[11px] text-[color:var(--ink-5)] mt-1">
+                      Follow up: {r.recommended_followup_date}
+                    </div>
+                  )}
                   {/* Inline actions */}
                   <div className="flex items-center gap-2 mt-2">
                     <ChipBtn icon={Phone}>Call</ChipBtn>
@@ -182,7 +219,7 @@ function Lane({
                 </div>
                 {/* CLV */}
                 <div className="text-right shrink-0">
-                  {r.predicted_clv_6m > 0 && (
+                  {Number(r.predicted_clv_6m ?? 0) > 0 && (
                     <>
                       <div className="text-[10px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">CLV</div>
                       <div className="num text-[13px] font-semibold text-[color:var(--ink-1)]">
@@ -202,7 +239,11 @@ function Lane({
 
 function ChipBtn({ icon: Icon, children }: any) {
   return (
-    <button className="h-7 px-2 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-3)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1">
+    <button
+      disabled
+      title="Action workflow is not wired yet"
+      className="h-7 px-2 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-3)] inline-flex items-center gap-1 cursor-not-allowed opacity-55"
+    >
       <Icon size={11} /> {children}
     </button>
   );
@@ -217,4 +258,8 @@ function KpiTile({ label, value, hint, tone, raw }: any) {
       <div className="text-[11.5px] text-[color:var(--ink-5)] mt-0.5">{hint}</div>
     </div>
   );
+}
+
+function sortByPriority(rows: PredictionOutput[]) {
+  return [...rows].sort((a, b) => Number(b.priority_score ?? 0) - Number(a.priority_score ?? 0));
 }

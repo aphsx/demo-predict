@@ -87,7 +87,7 @@ export default function Topbar() {
         >
           {safeRuns.map(r => (
             <option key={r.id} value={r.id}>
-              {r.name} · {r.cutoff_date} {r.status !== "done" ? `(${r.status})` : ""}
+              {r.name ?? `Run ${r.id.slice(0, 8)}`} · {r.cutoff_date} {r.status !== "done" ? `(${r.status})` : ""}
             </option>
           ))}
           {safeRuns.length === 0 && <option value="">— ยังไม่มี run —</option>}
@@ -103,7 +103,6 @@ export default function Topbar() {
         title="Alerts"
       >
         <BellDot size={15} className="text-[color:var(--ink-3)]" />
-        <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[color:var(--danger)] pulse-soft" />
       </button>
 
       {/* Status */}

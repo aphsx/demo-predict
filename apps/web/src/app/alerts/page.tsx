@@ -3,14 +3,14 @@ export const dynamic = "force-dynamic";
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
-  AlertTriangle, ShieldCheck, Activity, Bell, Filter,
-  ChevronRight,
+  AlertTriangle, ShieldCheck,
 } from "lucide-react";
 import {
-  PageHeader, SectionCard, AlertItem, StatusPill, Skeleton, EmptyState,
+  PageHeader, SectionCard, AlertItem, StatusPill, Skeleton,
 } from "@/components/ui";
-import { fetchSummary, fetchModelMetrics } from "@/lib/api";
+import { fetchSummary, fetchModelMetrics, type PredictionSummary } from "@/lib/api";
 import { useRunStore } from "@/lib/runStore";
+import { getDisplayError } from "@/lib/ui-error";
 
 type Severity = "danger" | "warn" | "info" | "ok";
 
@@ -28,22 +28,40 @@ interface Alert {
 
 export default function AlertsPage() {
   const { runId } = useRunStore();
-  const [summary, setSummary] = useState<any>(null);
-  const [metrics, setMetrics] = useState<any>(null);
+  const [summary, setSummary] = useState<PredictionSummary | null>(null);
+  const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filterSev, setFilterSev] = useState<Severity | "">("");
   const [filterCat, setFilterCat] = useState<string>("");
 
   useEffect(() => {
-    if (!runId) return;
+    if (!runId) {
+      setSummary(null);
+      setMetrics(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setError(null);
     Promise.all([
       fetchSummary(runId).catch(() => null),
       fetchModelMetrics().catch(() => null),
-    ]).then(([s, m]) => { setSummary(s); setMetrics(m); setLoading(false); });
+    ]).then(([s, m]) => {
+      setSummary(s);
+      setMetrics(m);
+      setLoading(false);
+    }).catch((e) => {
+      setSummary(null);
+      setMetrics(null);
+      setError(getDisplayError(e, "โหลด alerts ไม่สำเร็จ"));
+      setLoading(false);
+    });
   }, [runId]);
 
-  const alerts = useMemo<Alert[]>(() => buildAlerts(summary), [summary]);
+  const alerts = useMemo<Alert[]>(() => buildAlerts(summary, metrics), [summary, metrics]);
+  const driftRows = useMemo(() => extractDriftRows(metrics), [metrics]);
 
   const counts = useMemo(() => ({
     danger: alerts.filter(a => a.severity === "danger").length,
@@ -56,6 +74,7 @@ export default function AlertsPage() {
     (!filterSev || a.severity === filterSev) &&
     (!filterCat || a.category === filterCat)
   );
+  const awaitingSignals = loading || Boolean(error) || !runId || (!summary && !metrics);
 
   return (
     <div className="pb-12">
@@ -67,10 +86,21 @@ export default function AlertsPage() {
       <div className="px-8 mt-4 space-y-5">
         {/* Severity strip */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <SevTile sev="danger" label="Critical" count={counts.danger} active={filterSev === "danger"} onClick={() => setFilterSev(s => s === "danger" ? "" : "danger")} />
-          <SevTile sev="warn" label="Warning" count={counts.warn} active={filterSev === "warn"} onClick={() => setFilterSev(s => s === "warn" ? "" : "warn")} />
-          <SevTile sev="info" label="Informational" count={counts.info} active={filterSev === "info"} onClick={() => setFilterSev(s => s === "info" ? "" : "info")} />
-          <SevTile sev="ok" label="Resolved" count={counts.ok} active={filterSev === "ok"} onClick={() => setFilterSev(s => s === "ok" ? "" : "ok")} />
+          {awaitingSignals ? (
+            <>
+              <Skeleton className="h-[94px]" />
+              <Skeleton className="h-[94px]" />
+              <Skeleton className="h-[94px]" />
+              <Skeleton className="h-[94px]" />
+            </>
+          ) : (
+            <>
+              <SevTile sev="danger" label="Critical" count={counts.danger} active={filterSev === "danger"} onClick={() => setFilterSev(s => s === "danger" ? "" : "danger")} />
+              <SevTile sev="warn" label="Warning" count={counts.warn} active={filterSev === "warn"} onClick={() => setFilterSev(s => s === "warn" ? "" : "warn")} />
+              <SevTile sev="info" label="Informational" count={counts.info} active={filterSev === "info"} onClick={() => setFilterSev(s => s === "info" ? "" : "info")} />
+              <SevTile sev="ok" label="Resolved" count={counts.ok} active={filterSev === "ok"} onClick={() => setFilterSev(s => s === "ok" ? "" : "ok")} />
+            </>
+          )}
         </div>
 
         <SectionCard
@@ -92,15 +122,8 @@ export default function AlertsPage() {
             </div>
           }
         >
-          {loading && <div className="space-y-2"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /></div>}
-          {!loading && filtered.length === 0 && (
-            <EmptyState
-              icon={ShieldCheck}
-              title="ไม่มี alert ที่ตรงกับเงื่อนไข"
-              hint="ลองปรับ filter หรือเปลี่ยน run"
-            />
-          )}
-          {!loading && filtered.length > 0 && (
+          {(awaitingSignals || filtered.length === 0) && <div className="space-y-2"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /></div>}
+          {!awaitingSignals && filtered.length > 0 && (
             <div className="-mx-5 -my-5">
               {filtered.map(a => (
                 <div key={a.id} className="flex items-start">
@@ -120,12 +143,17 @@ export default function AlertsPage() {
 
         {/* Drift snapshot */}
         <SectionCard title="Drift snapshot" hint="PSI per top-feature · KS p-value">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <DriftTile feature="usage_decay_ratio" psi={0.07} ks={0.41} />
-            <DriftTile feature="pay_recency_days" psi={0.11} ks={0.18} />
-            <DriftTile feature="credit_sms_log" psi={0.04} ks={0.55} />
-            <DriftTile feature="usage_recent_3m" psi={0.27} ks={0.04} alarm />
-          </div>
+          {awaitingSignals || driftRows.length === 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {driftRows.map((row) => (
+                <DriftTile key={row.feature} {...row} />
+              ))}
+            </div>
+          )}
         </SectionCard>
       </div>
     </div>
@@ -166,7 +194,8 @@ function SevTile({
   );
 }
 
-function DriftTile({ feature, psi, ks, alarm }: { feature: string; psi: number; ks: number; alarm?: boolean }) {
+function DriftTile({ feature, psi, ks }: { feature: string; psi: number; ks: number }) {
+  const alarm = psi > 0.25 || ks < 0.05;
   return (
     <div className="surface-soft p-4">
       <div className="text-[11.5px] font-mono text-[color:var(--ink-3)] truncate">{feature}</div>
@@ -191,13 +220,13 @@ function DriftTile({ feature, psi, ks, alarm }: { feature: string; psi: number; 
 
 /* ─── derive alerts ─── */
 
-function buildAlerts(summary: any): Alert[] {
+function buildAlerts(summary: PredictionSummary | null, metrics: Record<string, unknown> | null): Alert[] {
   const out: Alert[] = [];
   let id = 1;
-  const ap = summary?.active_paid || {};
+  const ap = asRecord(summary?.active_paid);
 
   if (summary) {
-    const avgChurn = ap.avg_churn || 0;
+    const avgChurn = Number(ap.avg_churn || 0);
     if (avgChurn > 0.5) {
       out.push({
         id: `a${id++}`, severity: "danger", category: "Portfolio",
@@ -209,12 +238,43 @@ function buildAlerts(summary: any): Alert[] {
     }
   }
 
-  // Always show at least 1 info signal
-  out.push({
-    id: `a${id++}`, severity: "ok", category: "Model",
-    title: "Pipeline completed successfully",
-    body: "ไม่มี error หรือ drift ตรวจพบ",
-    time: "now",
-  });
+  const driftRows = extractDriftRows(metrics);
+  for (const row of driftRows.filter((item) => item.psi > 0.25 || item.ks < 0.05)) {
+    out.push({
+      id: `a${id++}`,
+      severity: "warn",
+      category: "Model",
+      title: `Potential drift in ${row.feature}`,
+      body: "Drift metric exceeded the configured UI threshold.",
+      metric: `PSI ${row.psi.toFixed(2)} · KS p ${row.ks.toFixed(2)}`,
+      threshold: "PSI ≤ 0.25 · KS p ≥ 0.05",
+      time: "now",
+    });
+  }
+
   return out;
+}
+
+function extractDriftRows(metrics: Record<string, unknown> | null): { feature: string; psi: number; ks: number }[] {
+  const drift = metrics?.drift;
+  const rows: unknown[] = Array.isArray(drift)
+    ? drift
+    : Array.isArray(asRecord(drift).features)
+      ? asRecord(drift).features as unknown[]
+      : [];
+
+  return rows.flatMap((row) => {
+    const rec = asRecord(row);
+    const feature = String(rec.feature ?? rec.name ?? "");
+    const psi = Number(rec.psi ?? rec.psi_value);
+    const ks = Number(rec.ks ?? rec.ks_p_value ?? rec.ks_p);
+    if (!feature || !Number.isFinite(psi) || !Number.isFinite(ks)) return [];
+    return [{ feature, psi, ks }];
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
