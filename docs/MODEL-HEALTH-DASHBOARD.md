@@ -66,6 +66,193 @@ Credit Forecast:
 
 หน้า UI สามารถแสดง `model` เป็น target/current champion ได้ แต่ต้องไม่สื่อว่า champion ถูกเลือกแล้วถ้า `ml_model_aliases` ยังไม่มี champion จริง หลัง backend พร้อม ค่า model name ควรมาจาก model registry ไม่ใช่ hardcode
 
+## 1.2 Where Metrics Come From
+
+Metric บนหน้านี้ไม่ได้เป็นค่าที่ library รับรองให้เอง และไม่ควร hardcode เป็นตัวเลขถาวรใน production
+
+Source of truth ต้องมาจาก historical evaluation/backtest ของข้อมูล 1Moby:
+
+```text
+1. ใช้ข้อมูลก่อน cutoff_date เป็น features
+2. ใช้ผลลัพธ์หลัง cutoff_date + horizon เป็น label/actual
+3. ให้ model ทำนายจากข้อมูลก่อน cutoff เท่านั้น
+4. เทียบ prediction กับ actual เพื่อคำนวณ metric
+5. เก็บผล evaluation ลง `ml_model_evaluations`
+```
+
+Library เช่น scikit-learn, LightGBM, XGBoost หรือ lifetimes เป็นเพียงเครื่องมือสำหรับ train model และคำนวณ metric เท่านั้น ความน่าเชื่อถือของ metric มาจาก:
+
+```text
+point-in-time correctness
+temporal train/eval split
+baseline comparison
+multiple cutoff backtests
+leakage checks
+```
+
+ตัวอย่าง mapping:
+
+```text
+Churn F1/precision/recall:
+  compare predicted churn vs actual churn observed after cutoff
+
+CLV MAE/SMAPE/Spearman:
+  compare predicted future value vs actual payment amount after cutoff
+
+Credit SMAPE/MAE/coverage:
+  compare forecast credit usage vs actual usage after cutoff
+
+Lifecycle coverage/conflict:
+  validate deterministic rules assign every customer to exactly one lifecycle stage
+```
+
+## 1.3 Evaluation Standard
+
+มาตรฐานที่ต้องใช้กับ production-quality ML ของโปรเจกต์นี้คือ:
+
+```text
+point-in-time temporal backtesting
++ baseline comparison
++ model registry / champion selection
++ persisted evaluation evidence
+```
+
+นี่คือมาตรฐานหลัก ไม่ใช่การเลือก library หรือ algorithm ตัวใดตัวหนึ่งแล้วถือว่าถูกต้องโดยอัตโนมัติ
+
+### Required Protocol
+
+ทุก model ที่จะถูกแสดงเป็น production/champion ต้องผ่าน protocol นี้:
+
+```text
+1. Data readiness gate
+   train_data_sources ต้อง ready และ clean tables ต้องมีข้อมูลพอ
+
+2. Point-in-time dataset
+   features ใช้เฉพาะข้อมูลก่อน cutoff_date
+   labels/actual ใช้เฉพาะข้อมูลหลัง cutoff_date ภายใน horizon
+
+3. Temporal split / backtest
+   train บนอดีต
+   validate/test บนช่วงเวลาที่ใหม่กว่า
+   backtest หลาย cutoff ถ้าข้อมูลพอ
+
+4. Baseline first
+   train baseline ง่าย ๆ ก่อนเสมอ
+   candidate model ต้องชนะ baseline ถึงจะมีสิทธิ์เป็น champion
+
+5. Candidate comparison
+   ทดลอง model family ที่เหมาะกับโจทย์
+   เลือกจาก metric หลัก + business metric + stability ไม่ใช่ metric เดียว
+
+6. Leakage and preprocessing safety
+   ห้ามใช้ข้อมูลหลัง cutoff เป็น feature
+   preprocessing ต้อง fit บน train split เท่านั้น
+
+7. Persist evidence
+   metrics ต้องถูกบันทึกใน ml_model_evaluations
+   artifact/config/model metadata ต้องถูกบันทึกใน model registry
+
+8. Champion gate
+   ห้ามตั้ง ml_model_aliases champion ถ้า required evaluation rows, artifact, และ metadata ยังไม่ครบ
+```
+
+### Standard By Model
+
+```text
+Lifecycle:
+  standard: deterministic rule contract
+  pass condition: every customer maps to exactly one stage, rules are versioned/auditable
+
+Churn:
+  standard: calibrated classifier with ranking evaluation
+  pass condition: beats recency/RFM/logistic baselines, stable PR-AUC/lift@top10, calibration acceptable
+
+CLV:
+  standard: value regression plus ranking evaluation
+  pass condition: beats historical/RFM/BG-NBD baseline, MAE acceptable, high-value ranking stable
+
+Credit:
+  standard: forecasting regression with urgency quality
+  pass condition: beats moving-average baseline, SMAPE/MAE acceptable, no negative forecasts, urgency recall usable
+```
+
+ถ้ายังไม่มี protocol นี้ครบ หน้า UI ต้องถือว่าเป็น mock/evaluation preview เท่านั้น ไม่ใช่หลักฐานว่า model พร้อมใช้งานจริง
+
+## 1.4 Metric Calculation Standard
+
+เครื่องมือวัดต้องเป็นมาตรฐานและ reproducible โดยให้ backend evaluation เป็นผู้คำนวณ ไม่ใช่ UI คำนวณเอง
+
+หน้านี้ต้องแยก 2 เรื่องออกจากกัน:
+
+```text
+metric standard = สูตร/ค่าวัดที่คนทั่วไปใช้กัน เช่น F1, precision, recall, MAE, SMAPE
+metric value    = ผลลัพธ์จริงจาก backtest ของข้อมูลเรา
+```
+
+ห้ามสร้างเลข metric เองเพื่อให้ UI ดูสมบูรณ์ เช่น 0.91, 0.87, 33.7% ถ้ายังไม่มี evaluation จริงใน `ml_model_evaluations`
+
+ไม่มี threshold สากลที่บอกว่า `F1 = 0.91` หรือ `PR-AUC = 0.80` คือดีเสมอ เพราะขึ้นกับ label balance, data quality, horizon, และ business capacity สิ่งที่เป็นมาตรฐานคือใช้ metric ที่ถูกประเภท และเปรียบเทียบกับ baseline/backtest อย่างถูกต้อง
+
+ใช้ library มาตรฐานเมื่อมี metric ตรงตัว:
+
+```text
+scikit-learn:
+  classification:
+    precision_score
+    recall_score
+    f1_score
+    roc_auc_score
+    average_precision_score  # PR-AUC
+    log_loss
+    brier_score_loss
+    confusion_matrix
+
+  regression:
+    mean_absolute_error
+    mean_squared_error
+    mean_absolute_percentage_error only if denominator behavior is acceptable
+
+scipy / pandas:
+  ranking:
+    spearmanr or pandas rank correlation
+
+lifetimes:
+  CLV statistical model fitting/evaluation support for BG-NBD / Gamma-Gamma
+```
+
+ใช้ custom metric function ของโปรเจกต์เมื่อ library ไม่มีนิยามที่ตรง business:
+
+```text
+custom:
+  SMAPE
+  lift@top10%
+  recall@top5% / recall@top10%
+  top-decile revenue capture
+  revenue_at_risk captured@top10%
+  quantile coverage P10-P90
+  urgent precision / urgent recall
+  lifecycle rule coverage
+  lifecycle unknown/conflict rate
+```
+
+ข้อบังคับ:
+
+```text
+1. ทุก custom metric ต้องอยู่ใน evaluation module กลาง ห้ามเขียนซ้ำใน script/UI
+2. ทุก metric ต้องมี unit test หรือ fixture test ด้วย input/output ที่ตรวจได้
+3. ทุก metric ต้องระบุ population, cutoff_date, horizon_days, sample_count
+4. ทุก metric value ที่โชว์ใน UI ต้องมาจาก `ml_model_evaluations`
+5. UI ห้ามคำนวณ metric เอง ยกเว้น formatting เท่านั้น
+```
+
+ดังนั้น “มาตรฐาน” ของเครื่องมือวัดคือ:
+
+```text
+use scikit-learn/scipy/lifetimes for standard metrics
+use project-owned tested functions for business metrics
+persist all outputs to ml_model_evaluations
+```
+
 ## 2. Metric-Only UI Rule
 
 หน้าแรกของ `Model Metrics` ต้องแสดงเฉพาะข้อมูลที่ช่วยอ่านคุณภาพ model ได้เร็ว:

@@ -19,6 +19,8 @@ type SummaryMetric = {
   note?: string;
 };
 
+// Mock values for UI preview only.
+// Replace with values from ml_model_evaluations once backend evaluation is wired.
 const SUMMARY_METRICS: SummaryMetric[] = [
   {
     model: "Lifecycle",
@@ -90,6 +92,10 @@ export default function ModelMetricsPage() {
       />
 
       <div className="px-8 mt-4 space-y-5">
+        <p className="max-w-4xl text-[12.5px] leading-6 text-[color:var(--ink-4)]">
+          Preview uses mock metric values. Production values must come from backend historical backtests persisted in the model registry.
+        </p>
+
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
           {SUMMARY_METRICS.map((metric) => (
             <MetricSummaryCard key={metric.model} metric={metric} />
