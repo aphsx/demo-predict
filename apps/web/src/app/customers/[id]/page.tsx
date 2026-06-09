@@ -16,8 +16,6 @@ import {
 import { StatusPill, lifecycleTone } from "@/components/ui";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 
-const BRAND_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 48%, ${MOBY_BRAND.orangeWarm} 76%, ${MOBY_BRAND.orange} 100%)`;
-const ORANGE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
 const BLUE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 100%)`;
 
 const MOCK_CUSTOMER = {
@@ -138,8 +136,6 @@ export default function Customer360Mockup() {
               <FactCard label="Purchases" value={MOCK_CUSTOMER.n_purchases.toLocaleString()} />
               <FactCard label="Total revenue" value={formatCurrency(MOCK_CUSTOMER.total_revenue)} />
               <FactCard label="Avg txn" value={formatCurrency(MOCK_CUSTOMER.avg_transaction_value)} />
-              <FactCard label="Ever paid" value={MOCK_CUSTOMER.ever_paid ? "Yes" : "No"} />
-              <FactCard label="Output" value={MOCK_CUSTOMER.output_status} />
             </div>
           </Panel>
 
@@ -149,15 +145,13 @@ export default function Customer360Mockup() {
                 icon={TrendingDown}
                 label="Churn pressure"
                 value={`${churnPct.toFixed(1)}%`}
-                hint="High risk because usage is falling while the customer remains paid."
                 meterValue={churnPct}
-                gradient={ORANGE_GRADIENT}
+                gradient={BLUE_GRADIENT}
               />
               <SignalRow
                 icon={Gem}
                 label="Commercial value"
                 value={formatCurrency(MOCK_CUSTOMER.predicted_clv_6m)}
-                hint={`${MOCK_CUSTOMER.customer_value_tier}; ${formatCurrency(MOCK_CUSTOMER.revenue_at_risk)} revenue at risk.`}
                 meterValue={78}
                 gradient={BLUE_GRADIENT}
               />
@@ -165,9 +159,8 @@ export default function Customer360Mockup() {
                 icon={CreditCard}
                 label="Credit demand"
                 value={MOCK_CUSTOMER.predicted_credit_usage_90d.toLocaleString()}
-                hint={`${MOCK_CUSTOMER.predicted_credit_usage_30d.toLocaleString()} credits expected in 30 days.`}
                 meterValue={100}
-                gradient={BRAND_GRADIENT}
+                gradient={BLUE_GRADIENT}
               />
             </div>
           </Panel>
@@ -233,6 +226,10 @@ function UsageLineChart({
 
     return { ...point, x, y };
   });
+  const usageColorStops = points.map((point, index) => ({
+    offset: `${(index / Math.max(1, points.length - 1)) * 100}%`,
+    color: usageOrangeColor((point.usage - min) / range),
+  }));
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
   const areaPath = `${path} L ${points[points.length - 1]?.x ?? paddingX} ${height - paddingY} L ${paddingX} ${height - paddingY} Z`;
 
@@ -246,13 +243,13 @@ function UsageLineChart({
       >
         <defs>
           <linearGradient id="usageLineGradient" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0%" stopColor={MOBY_BRAND.blue} />
-            <stop offset="58%" stopColor={MOBY_BRAND.blueLight} />
-            <stop offset="100%" stopColor={MOBY_BRAND.orange} />
+            {usageColorStops.map((stop) => (
+              <stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
+            ))}
           </linearGradient>
           <linearGradient id="usageAreaGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={MOBY_BRAND.blueLight} stopOpacity="0.22" />
-            <stop offset="100%" stopColor={MOBY_BRAND.blueLight} stopOpacity="0" />
+            <stop offset="0%" stopColor={MOBY_BRAND.orangeWarm} stopOpacity="0.24" />
+            <stop offset="100%" stopColor={MOBY_BRAND.orangeWarm} stopOpacity="0" />
           </linearGradient>
         </defs>
 
@@ -277,7 +274,14 @@ function UsageLineChart({
 
         {points.map((point) => (
           <g key={point.month}>
-            <circle cx={point.x} cy={point.y} r="7" fill="white" stroke={MOBY_BRAND.blue} strokeWidth="3" />
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="7"
+              fill="white"
+              stroke={usageOrangeColor((point.usage - min) / range)}
+              strokeWidth="3"
+            />
             <text x={point.x} y={height - 6} textAnchor="middle" className="fill-[color:var(--ink-5)] text-[11px] font-semibold">
               {point.month}
             </text>
@@ -295,28 +299,27 @@ function SignalRow({
   icon: Icon,
   label,
   value,
-  hint,
   meterValue,
   gradient,
 }: {
   icon: ElementType;
   label: string;
   value: string;
-  hint: string;
   meterValue: number;
   gradient: string;
 }) {
   return (
     <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
-      <div className="mb-4 flex items-start gap-3">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold text-[color:var(--ink-1)]">{label}</p>
+          <p className="num mt-2 whitespace-nowrap text-[26px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
+            {value}
+          </p>
+        </div>
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[color:var(--surface-2)] text-[color:var(--moby-700)]">
           <Icon size={17} />
         </span>
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-[color:var(--ink-1)]">{label}</p>
-          <p className="num mt-1 text-[20px] font-semibold text-[color:var(--ink-1)]">{value}</p>
-          <p className="mt-2 text-[11.5px] leading-5 text-[color:var(--ink-4)]">{hint}</p>
-        </div>
       </div>
       <BrandMeter value={meterValue} max={100} gradient={gradient} hideValue />
     </div>
@@ -404,4 +407,15 @@ function FactCard({ label, value }: { label: string; value: string }) {
 
 function formatCurrency(value: number): string {
   return `${value.toLocaleString()} ฿`;
+}
+
+function usageOrangeColor(normalizedValue: number): string {
+  const pct = Math.max(0, Math.min(1, normalizedValue));
+  const low = { r: 255, g: 164, b: 0 };
+  const high = { r: 252, g: 76, b: 2 };
+  const r = Math.round(low.r + (high.r - low.r) * pct);
+  const g = Math.round(low.g + (high.g - low.g) * pct);
+  const b = Math.round(low.b + (high.b - low.b) * pct);
+
+  return `rgb(${r}, ${g}, ${b})`;
 }
