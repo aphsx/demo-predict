@@ -1,5 +1,7 @@
 # Web Dev Workflow
 
+docker compose up -d --build api
+
 คู่มือสั้นๆ สำหรับตอนแก้ UI ใน `apps/web`
 
 ## ถ้าแก้ UI แล้วต้อง build ใหม่ไหม

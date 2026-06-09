@@ -36,8 +36,26 @@ interface Msg {
   ts: Date;
 }
 
-const UNAVAILABLE_REPLY =
-  "Moby AI ยังไม่ได้เชื่อมต่อกับ insight API จริง จึงยังไม่ตอบตัวเลขหรือคำแนะนำจาก prediction output เพื่อหลีกเลี่ยงข้อมูลจำลอง";
+type ChatApiResponse = {
+  model?: string;
+  message?: {
+    role: "assistant";
+    content: string;
+  } | string;
+  code?: string;
+  detail?: string;
+};
+
+type ChatApiSuccess = {
+  model?: string;
+  message?: {
+    role: "assistant";
+    content: string;
+  };
+};
+
+const WELCOME_REPLY =
+  "Moby AI พร้อมรับคำถามผ่าน Chat API แล้ว แต่ยังไม่มี prediction context จาก run จริงใน widget นี้ จึงจะไม่แต่งตัวเลขหรือ insight จำลอง";
 
 /* ─────────────────────────────────────────────
    Tiny markdown renderer  (**bold** only)
@@ -125,7 +143,7 @@ export default function AIChatWidget() {
   const INIT: Msg = {
     id: "init",
     role: "assistant",
-    text: UNAVAILABLE_REPLY,
+    text: WELCOME_REPLY,
     ts: new Date(),
   };
 
@@ -137,6 +155,7 @@ export default function AIChatWidget() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cancelRef = useRef<(() => void) | null>(null);
 
   /* auto-scroll to bottom */
   useEffect(() => {
@@ -174,21 +193,71 @@ export default function AIChatWidget() {
     if (textareaRef.current) textareaRef.current.style.height = "auto";
 
     const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", text, ts: new Date() };
+    const nextMsgs = [...msgs, userMsg];
+    const controller = new AbortController();
+
     setMsgs(prev => [...prev, userMsg]);
     setBusy(true);
+    cancelRef.current = () => controller.abort();
 
-    const botMsg: Msg = { id: `b-${Date.now()}`, role: "assistant", text: UNAVAILABLE_REPLY, ts: new Date() };
-    setMsgs(prev => [...prev, botMsg]);
-    setBusy(false);
+    try {
+      const res = await fetch("/api/ai-chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: nextMsgs
+            .filter((msg) => msg.id !== "init")
+            .map((msg) => ({
+              role: msg.role,
+              content: msg.text,
+            })),
+        }),
+        signal: controller.signal,
+      });
 
-    if (!open) setUnread(n => n + 1);
-  }, [input, busy, open]);
+      const data = (await res.json().catch(() => null)) as ChatApiResponse | null;
+      const success = data as ChatApiSuccess | null;
+      if (!res.ok || !success?.message?.content) {
+        const apiMessage = typeof data?.message === "string" ? data.message : null;
+        throw new Error(apiMessage ?? data?.detail ?? data?.code ?? "chat_api_failed");
+      }
+
+      const botMsg: Msg = {
+        id: `b-${Date.now()}`,
+        role: "assistant",
+        text: success.message.content,
+        ts: new Date(),
+      };
+      setMsgs(prev => [...prev, botMsg]);
+      if (!open) setUnread(n => n + 1);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      const message = error instanceof Error ? error.message : "chat_api_failed";
+      const botMsg: Msg = {
+        id: `b-${Date.now()}`,
+        role: "assistant",
+        text: `เชื่อมต่อ Chat API ไม่สำเร็จ: ${message}`,
+        ts: new Date(),
+      };
+      setMsgs(prev => [...prev, botMsg]);
+      if (!open) setUnread(n => n + 1);
+    } finally {
+      setBusy(false);
+      cancelRef.current = null;
+    }
+  }, [input, busy, open, msgs]);
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  const reset = () => setMsgs([{ ...INIT, id: `init-${Date.now()}`, ts: new Date() }]);
+  const reset = () => {
+    cancelRef.current?.();
+    setMsgs([{ ...INIT, id: `init-${Date.now()}`, ts: new Date() }]);
+    setBusy(false);
+  };
 
   const firstLoad = msgs.length <= 1 && !busy;
 
@@ -254,7 +323,7 @@ export default function AIChatWidget() {
             <p className="truncate text-[13.5px] font-semibold text-white leading-tight">Moby AI</p>
             <p className="truncate text-[10.5px] text-blue-200 flex items-center gap-1.5 mt-0.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Not connected · no mock insights
+              Ollama Cloud · no mock insights
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -352,7 +421,7 @@ export default function AIChatWidget() {
                 value={input}
                 onChange={handleChange}
                 onKeyDown={onKey}
-                placeholder="AI insights ยังไม่พร้อมใช้งาน"
+                placeholder="ถาม Moby AI"
                 className="flex-1 resize-none bg-transparent
                   text-[13px] text-[color:var(--ink-2)]
                   placeholder:text-[color:var(--ink-5)]
@@ -381,7 +450,7 @@ export default function AIChatWidget() {
 
           {/* Disclaimer */}
           <p className="text-[9.5px] text-[color:var(--ink-6)] text-center pb-2 px-4 leading-tight">
-            Waiting for real insight API · no mock prediction data ·{" "}
+            Chat API connected · no mock prediction data ·{" "}
             <Link
               href="/ai-chat"
               className="text-[color:var(--moby-500)] hover:underline"
