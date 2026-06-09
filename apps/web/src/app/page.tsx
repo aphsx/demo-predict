@@ -3,7 +3,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import type { ElementType } from "react";
+import { type ElementType, useEffect, useRef } from "react";
 import {
   ArrowRight,
   CalendarClock,
@@ -11,8 +11,15 @@ import {
   Gem,
   ShieldCheck,
   TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import { StatusPill } from "@/components/ui";
+
+type MonthlyRevenuePoint = {
+  month: string;
+  revenue: number;
+  payments: number;
+};
 
 type DashboardOverview = {
   run: {
@@ -55,13 +62,22 @@ type DashboardOverview = {
     next_topup_7d: number;
     predicted_usage_30d: number;
   };
-  action_queue: {
-    label: string;
-    count: number;
-    hint: string;
-    tone: "danger" | "warn" | "info" | "brand" | "neutral" | "ok";
-  }[];
 };
+
+const MONTHLY_REVENUE: MonthlyRevenuePoint[] = [
+  { month: "2025-07", revenue: 742000, payments: 58 },
+  { month: "2025-08", revenue: 786000, payments: 63 },
+  { month: "2025-09", revenue: 821000, payments: 66 },
+  { month: "2025-10", revenue: 805000, payments: 61 },
+  { month: "2025-11", revenue: 864000, payments: 70 },
+  { month: "2025-12", revenue: 912000, payments: 74 },
+  { month: "2026-01", revenue: 895000, payments: 72 },
+  { month: "2026-02", revenue: 936000, payments: 76 },
+  { month: "2026-03", revenue: 971000, payments: 81 },
+  { month: "2026-04", revenue: 1008000, payments: 83 },
+  { month: "2026-05", revenue: 1181000, payments: 90 },
+  { month: "2026-06", revenue: 1048000, payments: 84 },
+];
 
 const MOCK_OVERVIEW: DashboardOverview = {
   run: {
@@ -109,26 +125,6 @@ const MOCK_OVERVIEW: DashboardOverview = {
     next_topup_7d: 52,
     predicted_usage_30d: 1840000,
   },
-  action_queue: [
-    {
-      label: "Call high-value risk",
-      count: 41,
-      hint: "High CLV + high churn risk",
-      tone: "danger",
-    },
-    {
-      label: "Top-up follow-up",
-      count: 52,
-      hint: "Estimated top-up within 7 days",
-      tone: "warn",
-    },
-    {
-      label: "Activate ghost accounts",
-      count: 187,
-      hint: "Signed up but never activated",
-      tone: "neutral",
-    },
-  ],
 };
 
 const LIFECYCLE_PALETTE = {
@@ -190,7 +186,7 @@ export default function Dashboard() {
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px]">
                   ภาพรวมผล prediction ที่ควรเห็นก่อนเริ่มทำงาน: portfolio ทั้งหมด,
-                  high-value risk, active churn risk, value at risk, credit urgency และ action queue ที่ต้องตามต่อ
+                  high-value risk, active churn risk, value at risk, credit urgency และรายได้รายเดือนล่าสุด
                 </p>
               </div>
             </div>
@@ -204,18 +200,12 @@ export default function Dashboard() {
                 <div className="mt-1 text-[11px] text-white/62">{overview.run.name}</div>
               </div>
               <div className="flex flex-wrap gap-3 xl:justify-end">
-              <Link
-                href="/customers"
-                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/20 bg-white/96 px-4 text-[13px] font-semibold text-slate-900"
-              >
-                Customers <ArrowRight size={13} />
-              </Link>
-              <Link
-                href="/playbooks"
-                className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/22 bg-white/12 px-4 text-[13px] font-semibold text-white"
-              >
-                Action queue <ArrowRight size={13} />
-              </Link>
+                <Link
+                  href="/customers"
+                  className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/20 bg-white/96 px-4 text-[13px] font-semibold text-slate-900"
+                >
+                  Customers <ArrowRight size={13} />
+                </Link>
               </div>
             </div>
           </div>
@@ -255,24 +245,14 @@ export default function Dashboard() {
       </section>
 
       <section className="space-y-5">
-        <LifecycleMixCard overview={overview} />
+        <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)]">
+          <LifecycleMixCard overview={overview} />
+          <MonthlyRevenueCard data={MONTHLY_REVENUE} />
+        </div>
         <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
           <RiskCard overview={overview} />
           <ValueCard overview={overview} />
           <CreditUrgencyCard overview={overview} />
-        </div>
-      </section>
-
-      <section className="surface-elev overflow-hidden">
-        <PanelHeader
-          eyebrow="Action queue"
-          title="เรื่องที่ทีมควรทำก่อน"
-          hint="สรุปจาก priority_score, lifecycle, churn, credit forecast และ recommended_action"
-        />
-        <div className="grid grid-cols-1 gap-4 border-t border-[color:var(--line-2)] p-5 md:grid-cols-3">
-          {overview.action_queue.map((item) => (
-            <ActionSummaryCard key={item.label} {...item} />
-          ))}
         </div>
       </section>
 
@@ -281,7 +261,7 @@ export default function Dashboard() {
           <ShieldCheck size={12} />
           Mock dashboard data is isolated in `MOCK_OVERVIEW`
           <span className="opacity-50">·</span>
-          API-ready shape: totals / lifecycle / active_churn / value / credit / action_queue
+          API-ready shape: totals / lifecycle / active_churn / value / credit / monthly_revenue
           <span className="opacity-50">·</span>
           Ghost share: {ghostPct.toFixed(1)}%
         </div>
@@ -349,36 +329,53 @@ function MetricCard({
 }
 
 function LifecycleMixCard({ overview }: { overview: DashboardOverview }) {
+  const lifecycleEntries = Object.entries(overview.lifecycle) as Array<[
+    keyof typeof LIFECYCLE_PALETTE,
+    number,
+  ]>;
+
   return (
-    <div className="surface-elev overflow-hidden p-4">
-      <div className="flex flex-col gap-3 lg:flex-row">
-        <div className="rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4 lg:w-[280px] lg:shrink-0">
-          <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--moby-700)]">
-            Total portfolio
-          </div>
-          <div className="mt-2 flex items-end justify-between gap-4">
-            <div className="num text-[34px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
-              {formatNumber(overview.totals.customers)}
-            </div>
-            <div className="text-right text-[12px] text-[color:var(--ink-4)]">
-              <span className="num font-semibold text-[color:var(--ink-2)]">
-                {formatNumber(overview.totals.active_customers)}
-              </span>{" "}
-              active
-            </div>
-          </div>
+    <div className="surface-elev flex h-full flex-col overflow-hidden p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+            Customer lifecycle mix
+          </h2>
         </div>
-        <div className="flex flex-1 flex-col divide-y divide-[color:var(--line-2)] overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white md:flex-row md:divide-x md:divide-y-0">
-          {Object.entries(overview.lifecycle).map(([stage, count]) => (
-            <LifecycleFact
+        <span className="rounded-full bg-[color:var(--moby-50)] px-3 py-1 text-[11px] font-semibold text-[color:var(--moby-700)]">
+          4 segments
+        </span>
+      </div>
+
+      <div
+        className="mt-5 flex h-3 overflow-hidden rounded-full bg-[color:var(--surface-2)]"
+        aria-label="Lifecycle distribution"
+      >
+        {lifecycleEntries.map(([stage, count]) => {
+          const pct = overview.totals.customers > 0 ? (count / overview.totals.customers) * 100 : 0;
+          return (
+            <span
               key={stage}
-              label={stage}
-              value={count}
-              total={overview.totals.customers}
-              color={LIFECYCLE_PALETTE[stage as keyof typeof LIFECYCLE_PALETTE]}
+              className="h-full"
+              style={{
+                width: `${pct}%`,
+                background: LIFECYCLE_PALETTE[stage],
+              }}
             />
-          ))}
-        </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {lifecycleEntries.map(([stage, count]) => (
+          <LifecycleFact
+            key={stage}
+            label={stage}
+            value={count}
+            total={overview.totals.customers}
+            color={LIFECYCLE_PALETTE[stage]}
+          />
+        ))}
       </div>
     </div>
   );
@@ -398,18 +395,25 @@ function LifecycleFact({
   const pct = total > 0 ? (value / total) * 100 : 0;
 
   return (
-    <div className="flex min-w-0 flex-1 items-center justify-between gap-4 p-4">
-      <div className="flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-        <div className="min-w-0">
-          <div className="truncate text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
-            {label}
+    <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+          <div className="min-w-0">
+            <div className="truncate text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+              {label}
+            </div>
           </div>
-          <div className="num mt-1 text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}% of total</div>
+        </div>
+        <div className="text-right">
+          <div className="num text-[20px] font-semibold leading-none text-[color:var(--ink-1)]">
+            {formatNumber(value)}
+          </div>
+          <div className="num mt-1 text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}%</div>
         </div>
       </div>
-      <div className="num shrink-0 text-[24px] font-semibold text-[color:var(--ink-1)]">
-        {formatNumber(value)}
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
   );
@@ -596,58 +600,161 @@ function CreditUrgencyCard({ overview }: { overview: DashboardOverview }) {
   );
 }
 
-function ActionSummaryCard({
-  label,
-  count,
-  hint,
-  tone,
-}: {
-  label: string;
-  count: number;
-  hint: string;
-  tone: "danger" | "warn" | "info" | "brand" | "neutral" | "ok";
-}) {
+function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
+  const latest = data[data.length - 1];
+  const first = data[0];
+  const trendPct = first.revenue > 0 ? ((latest.revenue - first.revenue) / first.revenue) * 100 : 0;
+
   return (
-    <div className="rounded-[20px] border border-[color:var(--line)] bg-white p-4">
-      <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
-        {label}
-      </div>
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <div className="num text-[30px] font-semibold text-[color:var(--ink-1)]">
-          {formatNumber(count)}
+    <section className="surface-elev overflow-hidden">
+      <header className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+              Monthly revenue
+            </p>
+            <StatusPill tone={trendPct >= 0 ? "ok" : "warn"} dot={false}>
+              {trendPct >= 0 ? "+" : ""}
+              {trendPct.toFixed(1)}% vs first month
+            </StatusPill>
+          </div>
+          <h2 className="mt-1 text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+            รายได้รายเดือนจนถึงข้อมูลล่าสุด
+          </h2>
+          <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
+            Production source: group `Backend_payment.amount` by `payment_date` month.
+          </p>
         </div>
-        <StatusPill tone={tone} dot={false}>queue</StatusPill>
+        <div className="rounded-2xl border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] px-4 py-3 text-right">
+          <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--moby-700)]">
+            Latest
+          </div>
+          <div className="num mt-1 text-[22px] font-semibold tracking-[-0.03em] text-[color:var(--ink-1)]">
+            {formatCurrency(latest.revenue)}
+          </div>
+          <div className="mt-1 text-[11px] text-[color:var(--ink-5)]">
+            {latest.month} · {latest.payments} payments
+          </div>
+        </div>
+      </header>
+      <div className="border-t border-[color:var(--line-2)] p-5">
+        <MonthlyRevenueChart data={data} />
       </div>
-      <div className="mt-3 text-[11.5px] leading-5 text-[color:var(--ink-4)]">
-        {hint}
-      </div>
-    </div>
+    </section>
   );
 }
 
-function MiniInsightTile({
-  label,
-  value,
-  hint,
-  color,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  color: string;
-}) {
+function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const width = Math.max(720, data.length * 118);
+  const height = 290;
+  const padding = { top: 42, right: 30, bottom: 38, left: 74 };
+  const values = data.map((point) => point.revenue);
+  const min = Math.min(...values) * 0.94;
+  const max = Math.max(...values) * 1.04;
+  const range = max - min || 1;
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const points = data.map((point, index) => {
+    const x = padding.left + (index / (data.length - 1)) * plotWidth;
+    const y = padding.top + plotHeight - ((point.revenue - min) / range) * plotHeight;
+    return { ...point, x, y };
+  });
+  const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
+  const areaPath = `${linePath} L${points[points.length - 1].x},${padding.top + plotHeight} L${points[0].x},${padding.top + plotHeight} Z`;
+  const gridValues = [max, min + range * 0.5, min];
+
+  useEffect(() => {
+    const scrollContainer = scrollRef.current;
+    if (!scrollContainer) return;
+    scrollContainer.scrollLeft = scrollContainer.scrollWidth;
+  }, []);
+
   return (
-    <div className="rounded-2xl border border-[color:var(--line)] bg-white p-3">
-      <div className="flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-        <span className="truncate text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
-          {label}
-        </span>
+    <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_220px]">
+      <div>
+        <div className="mb-2 text-[11px] text-[color:var(--ink-5)]">
+          Focus ล่าสุดประมาณ 6 เดือน · เลื่อนซ้ายเพื่อดูเดือนก่อนหน้า
+        </div>
+        <div ref={scrollRef} className="overflow-x-auto pb-1">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="min-w-[720px]"
+            style={{ width }}
+            aria-label="Monthly revenue trend chart"
+          >
+            <defs>
+              <linearGradient id="dashboardMonthlyRevenueArea" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="var(--moby-600)" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="var(--moby-600)" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+
+            {gridValues.map((value) => {
+              const y = padding.top + plotHeight - ((value - min) / range) * plotHeight;
+              return (
+                <g key={value}>
+                  <line
+                    x1={padding.left}
+                    x2={width - padding.right}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--line-2)"
+                    strokeDasharray="5 7"
+                  />
+                  <text x={16} y={y + 4} className="fill-[color:var(--ink-5)] text-[11px]">
+                    {formatCompactCurrency(value)}
+                  </text>
+                </g>
+              );
+            })}
+
+            <path d={areaPath} fill="url(#dashboardMonthlyRevenueArea)" />
+            <path d={linePath} fill="none" stroke="var(--moby-600)" strokeWidth="3" strokeLinecap="round" />
+
+            {points.map((point) => (
+              <g key={point.month}>
+                <text
+                  x={point.x}
+                  y={point.y - 12}
+                  textAnchor="middle"
+                  className="fill-[color:var(--ink-2)] text-[10px] font-semibold"
+                >
+                  {formatCompactCurrency(point.revenue)}
+                </text>
+                <circle cx={point.x} cy={point.y} r="4.5" fill="white" stroke="var(--moby-600)" strokeWidth="3" />
+                <text
+                  x={point.x}
+                  y={height - 14}
+                  textAnchor="middle"
+                  className="fill-[color:var(--ink-5)] text-[10px]"
+                >
+                  {formatMonth(point.month)}
+                </text>
+              </g>
+            ))}
+          </svg>
+        </div>
       </div>
-      <div className="num mt-3 text-[22px] font-semibold text-[color:var(--ink-1)]">
-        {value}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 2xl:grid-cols-1">
+        {data.slice(-3).map((point) => (
+          <div key={point.month} className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={13} className="text-[color:var(--moby-600)]" />
+              <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+                {point.month}
+              </div>
+            </div>
+            <div className="num mt-2 text-[20px] font-semibold text-[color:var(--ink-1)]">
+              {formatCurrency(point.revenue)}
+            </div>
+            <div className="mt-1 text-[11px] text-[color:var(--ink-5)]">
+              {point.payments} payments
+            </div>
+          </div>
+        ))}
       </div>
-      <div className="mt-1 text-[11px] text-[color:var(--ink-5)]">{hint}</div>
     </div>
   );
 }
@@ -692,8 +799,22 @@ function formatCurrency(value: number): string {
   return `${value.toLocaleString()} ฿`;
 }
 
+function formatCompactCurrency(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
+  return value.toLocaleString();
+}
+
 function formatCredits(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M credits`;
   return `${value.toLocaleString()} credits`;
 }
+
+function formatMonth(value: string): string {
+  const [, month] = value.split("-");
+  const monthIndex = Number(month) - 1;
+  const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return names[monthIndex] ?? value;
+}
+
 
