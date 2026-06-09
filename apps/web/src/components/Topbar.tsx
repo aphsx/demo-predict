@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
-import { Calendar, ChevronDown, BellDot, LogOut } from "lucide-react";
+import { Calendar, ChevronDown, LogOut } from "lucide-react";
 import { useRunStore } from "@/lib/runStore";
 import { useSession, signOut } from "@/lib/auth-client";
 
@@ -10,7 +10,6 @@ const TITLE_MAP: Record<string, { title: string; sub: string }> = {
   "/": { title: "Dashboard", sub: "ภาพรวมพอร์ตลูกค้าและสัญญาณเตือน real-time" },
   "/playbooks": { title: "Action Queue", sub: "งานที่ควรทำวันนี้ จัดอันดับด้วย Priority Score" },
   "/customers": { title: "Customers", sub: "ค้นหา · กรอง · เจาะลึกลูกค้ารายบุคคล" },
-  "/alerts": { title: "Alerts", sub: "Anomaly · Drift · Threshold breach" },
   "/model-performance": { title: "Model Health", sub: "Quality · Calibration · Feature importance" },
   "/runs": { title: "Pipelines & Data", sub: "Ingest · Validate · Predict" },
   "/training": { title: "Model Training", sub: "Import training data · Train models" },
@@ -65,15 +64,6 @@ export default function Topbar() {
         <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
       </div>
-
-      {/* Notifications */}
-      <button
-        onClick={() => router.push("/alerts")}
-        className="relative h-9 w-9 grid place-items-center rounded-lg border border-[color:var(--line)] bg-white hover:bg-[color:var(--surface-2)]"
-        title="Alerts"
-      >
-        <BellDot size={15} className="text-[color:var(--ink-3)]" />
-      </button>
 
       {/* Status */}
       <div className="hidden lg:flex items-center gap-2 h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white">

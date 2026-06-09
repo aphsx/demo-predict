@@ -261,7 +261,6 @@ export default function AIChatPage() {
             <div className="space-y-1">
               {[
                 { href: "/customers", label: "Customers" },
-                { href: "/alerts", label: "Alerts" },
                 { href: "/playbooks", label: "Action Queue" },
                 { href: "/model-performance", label: "Model Health" },
               ].map(({ href, label }) => (
