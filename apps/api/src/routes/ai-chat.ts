@@ -23,6 +23,10 @@ type OllamaChatResponse = {
   done?: boolean;
 };
 
+type OllamaErrorResponse = {
+  error?: string;
+};
+
 type OllamaChatSuccess = OllamaChatResponse & {
   message: {
     content: string;
@@ -68,6 +72,27 @@ function isOllamaChatResponse(value: unknown): value is OllamaChatSuccess {
   return typeof message.content === "string";
 }
 
+function parseOllamaError(text: string): string {
+  if (!text.trim()) return "";
+  try {
+    const parsed = JSON.parse(text) as OllamaErrorResponse;
+    return typeof parsed.error === "string" ? parsed.error : text;
+  } catch {
+    return text;
+  }
+}
+
+function mapOllamaErrorCode(message: string): string {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("requires a subscription") || normalized.includes("upgrade for access")) {
+    return "ollama_subscription_required";
+  }
+  if (normalized.includes("model") && normalized.includes("not found")) {
+    return "ollama_model_not_found";
+  }
+  return "ollama_request_failed";
+}
+
 export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
   .use(requireUser)
   .post(
@@ -111,12 +136,14 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
+        const errorMessage = parseOllamaError(errorText);
+        const code = mapOllamaErrorCode(errorMessage);
         set.status = response.status >= 500 ? 502 : response.status;
         return {
-          message: "Ollama chat request failed",
-          code: "ollama_request_failed",
+          message: errorMessage || "Ollama chat request failed",
+          code,
           status: response.status,
-          detail: errorText.slice(0, 500) || undefined,
+          detail: errorMessage.slice(0, 500) || undefined,
         };
       }
 

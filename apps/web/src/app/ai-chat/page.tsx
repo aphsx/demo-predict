@@ -18,6 +18,24 @@ interface Message {
   ts: Date;
 }
 
+type ChatApiResponse = {
+  model?: string;
+  message?: {
+    role: "assistant";
+    content: string;
+  } | string;
+  code?: string;
+  detail?: string;
+};
+
+type ChatApiSuccess = {
+  model?: string;
+  message?: {
+    role: "assistant";
+    content: string;
+  };
+};
+
 const TEXT_WRAP = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
 const CHAT_COLUMN = "mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col px-3 pb-3 sm:px-5 sm:pb-5 lg:px-6";
 const MESSAGE_BUBBLE = "max-w-full rounded-2xl px-4 py-3 text-[13.5px] leading-relaxed";
@@ -90,34 +108,67 @@ export default function AIChatPage() {
     resizeInput();
   };
 
-  const send = useCallback((text?: string) => {
+  const send = useCallback(async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || streaming) return;
-    if (!runId) {
-      setMessages(prev => [...prev, {
-        id: Date.now() + "_err",
-        role: "assistant",
-        content: "กรุณาเลือก Run ก่อนครับ — ไปที่หน้า Runs แล้วเปิด run ที่ต้องการ",
-        ts: new Date(),
-      }]);
-      return;
-    }
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content, ts: new Date() };
     const replyId = Date.now().toString() + "_r";
     const replyMsg: Message = { id: replyId, role: "assistant", content: "", ts: new Date() };
+    const nextMessages = [...messages, userMsg];
+    const controller = new AbortController();
 
     setMessages(prev => [...prev, userMsg, replyMsg]);
     setStreaming(true);
+    cancelRef.current = () => controller.abort();
 
-    setMessages(prev =>
-      prev.map(m => m.id === replyId ? { ...m, content: "กำลังเตรียม insight UI สำหรับ run นี้" } : m)
-    );
-    setStreaming(false);
-    cancelRef.current = null;
-  }, [input, streaming, runId]);
+    try {
+      const res = await fetch("/api/ai-chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: nextMessages
+            .filter((message) => message.id !== "init")
+            .map((message) => ({
+              role: message.role,
+              content: message.content,
+            })),
+        }),
+        signal: controller.signal,
+      });
+
+      const data = (await res.json().catch(() => null)) as ChatApiResponse | null;
+      const success = data as ChatApiSuccess | null;
+      if (!res.ok || !success?.message?.content) {
+        const apiMessage = typeof data?.message === "string" ? data.message : null;
+        throw new Error(apiMessage ?? data?.detail ?? data?.code ?? "chat_api_failed");
+      }
+
+      setMessages(prev =>
+        prev.map(m => m.id === replyId ? { ...m, content: success.message!.content, ts: new Date() } : m)
+      );
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      const message = error instanceof Error ? error.message : "chat_api_failed";
+      setMessages(prev =>
+        prev.map(m => m.id === replyId
+          ? {
+              ...m,
+              content: `เชื่อมต่อ Chat API ไม่สำเร็จ: ${message}`,
+              ts: new Date(),
+            }
+          : m
+        )
+      );
+    } finally {
+      setStreaming(false);
+      cancelRef.current = null;
+    }
+  }, [input, messages, streaming]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
@@ -244,7 +295,7 @@ export default function AIChatPage() {
                 />
                 <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-[color:var(--line)] pt-2">
                   <span className={`flex-1 text-[11px] text-[color:var(--ink-5)] ${TEXT_WRAP}`}>
-                    {runId ? "ใช้ real insight API เท่านั้น · ไม่มี mock fallback" : "กรุณาเลือก run ก่อน"}
+                    {runId ? `Ollama Cloud · Run ${runId.slice(0, 8)} · no mock fallback` : "Ollama Cloud chat · ยังไม่มี run context"}
                   </span>
                   <button
                     id="ai-chat-page-send"
