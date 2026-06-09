@@ -10,6 +10,7 @@ import {
 import { executeReadOnlySql, type QueryResultPreview } from "../lib/ai/sql-executor";
 import { validateTextToSql } from "../lib/ai/sql-guard";
 import { getAiUserRole } from "../lib/ai/semantic-layer";
+import { checkUserQuestionSafety, sanitizeRetrievedText } from "../lib/ai/safety";
 
 type ChatRole = "user" | "assistant";
 
@@ -57,12 +58,22 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
       try {
         const role = getAiUserRole();
         const latestQuestion = messages[messages.length - 1]?.content ?? "";
+        const safety = checkUserQuestionSafety(latestQuestion);
+        if (!safety.ok) {
+          set.status = 400;
+          return {
+            message: safety.blockedReason ?? "Question was blocked by AI safety policy.",
+            code: "ai_safety_blocked",
+            detail: safety.warnings.join("; ") || undefined,
+          };
+        }
+
         const knowledgeHits = searchCompanyKnowledge(latestQuestion);
         const plan = await generateTextToSqlPlan({ config, role, messages });
 
         let sql: string | null = null;
         let queryResult: QueryResultPreview | null = null;
-        const warnings: string[] = [];
+        const warnings: string[] = [...safety.warnings];
         let blockedReason: string | null = null;
 
         if (plan.should_query && plan.sql) {
@@ -78,7 +89,7 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
         }
 
         const knowledgeEvidence = knowledgeHits
-          .map((hit) => `${hit.title} (${hit.source}): ${hit.content}`)
+          .map((hit) => `${hit.title} (${hit.source}): ${sanitizeRetrievedText(hit.content)}`)
           .join("\n\n");
         const directAnswer = blockedReason
           ? `คำถามนี้ต้อง query ฐานข้อมูล แต่ SQL ที่ AI สร้างถูกบล็อก: ${blockedReason}`

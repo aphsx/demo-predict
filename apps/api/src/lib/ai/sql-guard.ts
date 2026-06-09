@@ -79,6 +79,20 @@ const SQL_KEYWORDS = new Set([
   "extract",
   "now",
   "current_date",
+  "interval",
+]);
+
+const ALLOWED_FUNCTIONS = new Set([
+  "count",
+  "sum",
+  "avg",
+  "min",
+  "max",
+  "coalesce",
+  "round",
+  "date_trunc",
+  "extract",
+  "now",
 ]);
 
 function stripSqlComments(sql: string): string {
@@ -87,6 +101,12 @@ function stripSqlComments(sql: string): string {
 
 function normalizeSql(sql: string): string {
   return stripSqlComments(sql).trim().replace(/;+\s*$/g, "");
+}
+
+function stripStringLiterals(sql: string): string {
+  return sql
+    .replace(/'([^']|'')*'/g, "''")
+    .replace(/"([^"]|"")*"/g, '""');
 }
 
 function referencedTables(sql: string): string[] {
@@ -140,6 +160,17 @@ function selectedColumns(sql: string): string[] {
     .filter(Boolean);
 }
 
+function outputAliases(sql: string): Set<string> {
+  const aliases = new Set<string>();
+  const match = sql.match(/\bselect\s+([\s\S]+?)\s+\bfrom\b/i);
+  if (!match) return aliases;
+  for (const part of match[1].split(",")) {
+    const alias = part.match(/\s+as\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/i)?.[1];
+    if (alias) aliases.add(alias.toLowerCase());
+  }
+  return aliases;
+}
+
 export function validateTextToSql(sql: string, role: AiUserRole): SqlValidationResult {
   const normalized = normalizeSql(sql);
   const warnings: string[] = [];
@@ -153,6 +184,9 @@ export function validateTextToSql(sql: string, role: AiUserRole): SqlValidationR
   }
 
   const lowered = normalized.toLowerCase();
+  if (/\$\$/.test(lowered)) {
+    return { ok: false, reason: "Dollar-quoted SQL blocks are not allowed." };
+  }
   for (const token of BLOCKED_TOKENS) {
     if (new RegExp(`\\b${token}\\b`, "i").test(lowered)) {
       return { ok: false, reason: `Blocked SQL token: ${token}.` };
@@ -172,9 +206,16 @@ export function validateTextToSql(sql: string, role: AiUserRole): SqlValidationR
   }
 
   const aliases = tableAliases(normalized);
+  const tableAliasNames = new Set(aliases.keys());
   const allowedColumnsByTable = new Map(
     allowedTables.map((table) => [table.name, new Set(table.columns.map((column) => column.name))])
   );
+  const allowedColumnsForUsedTables = new Set<string>();
+  for (const tableName of usedTables) {
+    for (const column of allowedColumnsByTable.get(tableName) ?? []) {
+      allowedColumnsForUsedTables.add(column);
+    }
+  }
 
   const qualifiedColumns = normalized.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g);
   for (const match of qualifiedColumns) {
@@ -192,6 +233,23 @@ export function validateTextToSql(sql: string, role: AiUserRole): SqlValidationR
   const selected = selectedColumns(normalized);
   if (selected.includes("*")) {
     return { ok: false, reason: "SELECT * is not allowed. Select explicit columns." };
+  }
+
+  const allowedIdentifiers = new Set<string>([
+    ...SQL_KEYWORDS,
+    ...ALLOWED_FUNCTIONS,
+    ...allowedTableNames,
+    ...tableAliasNames,
+    ...allowedColumnsForUsedTables,
+    ...outputAliases(normalized),
+  ]);
+  const identifierSql = stripStringLiterals(normalized);
+  const identifiers = identifierSql.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/g) ?? [];
+  for (const identifier of identifiers) {
+    const normalizedIdentifier = identifier.toLowerCase();
+    if (!allowedIdentifiers.has(normalizedIdentifier)) {
+      return { ok: false, reason: `Identifier is not allowed or not modeled: ${identifier}.` };
+    }
   }
 
   return { ok: true, sql: ensureLimit(normalized, warnings), warnings };
