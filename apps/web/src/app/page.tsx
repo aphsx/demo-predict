@@ -135,6 +135,7 @@ const BRAND_BLUE_YELLOW_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%
 const BRAND_YELLOW_ORANGE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
 const BRAND_TRACK = "rgba(0, 107, 255, 0.08)";
 const NEUTRAL_GHOST_GRADIENT = "linear-gradient(90deg, var(--ink-6) 0%, var(--ink-5) 100%)";
+const TEXT_SAFE = "min-w-0 break-words [overflow-wrap:anywhere]";
 
 const LIFECYCLE_PALETTE = {
   "Active Paid": BRAND_BLUE_GRADIENT,
@@ -162,9 +163,9 @@ export default function Dashboard() {
   const ghostPct = (overview.totals.ghost_customers / overview.totals.customers) * 100;
 
   return (
-    <main className="px-8 py-6 pb-12">
+    <main className="min-w-0 px-4 py-5 pb-12 sm:px-6 lg:px-8">
       <section
-        className="relative overflow-hidden rounded-[30px] border border-white/20 px-6 py-6 text-white sm:px-7 lg:px-8"
+        className="relative min-w-0 overflow-hidden rounded-[26px] border border-white/20 px-4 py-6 text-white sm:rounded-[30px] sm:px-7 lg:px-8"
         style={{
           backgroundImage: [
             "radial-gradient(rgba(7, 29, 126, 0.52) 0%, transparent 42%)",
@@ -179,16 +180,16 @@ export default function Dashboard() {
       >
         <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.10),transparent_45%)]" />
         <div className="relative">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-            <div className="space-y-5">
-              <div className="max-w-3xl">
+          <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0 space-y-5">
+              <div className="min-w-0 max-w-3xl">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
                   ML v2 output summary
                 </p>
                 <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-[42px]">
                   Dashboard
                 </h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px]">
+                <p className={`mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px] ${TEXT_SAFE}`}>
                   ภาพรวมผล prediction ที่ควรเห็นก่อนเริ่มทำงาน: portfolio ทั้งหมด,
                   high-value risk, active churn risk, value at risk, credit urgency และรายได้รายเดือนล่าสุด
                 </p>
@@ -244,7 +245,7 @@ export default function Dashboard() {
       </section>
 
       <section className="surface mt-5 p-4">
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)]">
+        <div className={`flex min-w-0 flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
           <ShieldCheck size={12} />
           Mock dashboard data is isolated in `MOCK_OVERVIEW`
           <span className="opacity-50">·</span>
@@ -280,12 +281,12 @@ function MetricCard({
 
   const content = (
     <>
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+      <div className="flex min-w-0 items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className={`text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
             {label}
           </div>
-          <div className="num mt-1 text-[26px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
+          <div className={`num mt-1 text-[clamp(22px,5vw,26px)] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
             {value}
           </div>
         </div>
@@ -293,8 +294,8 @@ function MetricCard({
           <Icon size={17} />
         </span>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-3 text-[11.5px] text-[color:var(--ink-4)]">
-        <span>{hint}</span>
+      <div className="mt-1.5 flex min-w-0 items-start justify-between gap-3 text-[11.5px] text-[color:var(--ink-4)]">
+        <span className={TEXT_SAFE}>{hint}</span>
         {href ? <ArrowRight size={12} className="shrink-0 text-[color:var(--ink-4)]" /> : null}
       </div>
     </>
@@ -304,7 +305,7 @@ function MetricCard({
     return (
       <Link
         href={href}
-        className="block rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)] transition-colors hover:bg-[color:var(--surface-2)]"
+        className="block min-w-0 rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)] transition-colors hover:bg-[color:var(--surface-2)]"
       >
         {content}
       </Link>
@@ -312,7 +313,7 @@ function MetricCard({
   }
 
   return (
-    <div className="rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)]">
+    <div className="min-w-0 rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)]">
       {content}
     </div>
   );
@@ -326,18 +327,18 @@ function LifecycleMixCard({ overview }: { overview: DashboardOverview }) {
 
   return (
     <section className="surface-elev h-full overflow-hidden">
-      <div className="flex items-start justify-between gap-4 border-b border-[color:var(--line-2)] px-5 py-4">
-        <div>
-          <h2 className="text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+      <div className="flex min-w-0 items-start justify-between gap-4 border-b border-[color:var(--line-2)] px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <h2 className={`text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
             Customer lifecycle mix
           </h2>
         </div>
-        <span className="rounded-full bg-[color:var(--surface-2)] px-3 py-1 text-[11px] font-semibold text-[color:var(--ink-3)]">
+        <span className="shrink-0 rounded-full bg-[color:var(--surface-2)] px-3 py-1 text-[11px] font-semibold text-[color:var(--ink-3)]">
           4 segments
         </span>
       </div>
 
-      <div className="p-5">
+      <div className="p-4 sm:p-5">
         <div
           className="flex h-3 overflow-hidden rounded-full"
           style={{ background: BRAND_TRACK }}
@@ -388,8 +389,8 @@ function LifecycleFact({
   const pct = total > 0 ? (value / total) * 100 : 0;
 
   return (
-    <div className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
-      <div className="flex items-center justify-between gap-4">
+    <div className="min-w-0 rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+      <div className="flex min-w-0 items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
           <div className="min-w-0">
@@ -398,7 +399,7 @@ function LifecycleFact({
             </div>
           </div>
         </div>
-        <div className="text-right">
+        <div className="shrink-0 text-right">
           <div className="num text-[20px] font-semibold leading-none text-[color:var(--ink-1)]">
             {formatNumber(value)}
           </div>
@@ -428,12 +429,12 @@ function RiskCard({ overview }: { overview: DashboardOverview }) {
         hint="ไม่นับ churned และ ghost เพื่อไม่ให้ตัวเลข churn active ปน lifecycle อื่น"
         icon={TrendingDown}
       />
-      <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
+      <div className="flex-1 border-t border-[color:var(--line-2)] p-4 sm:p-5">
         <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
-          <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--danger)]">
+          <div className={`text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--danger)] ${TEXT_SAFE}`}>
             High-risk active
           </div>
-          <div className="mt-2 flex items-end justify-between gap-4">
+          <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
             <div className="num text-[34px] font-semibold tracking-[-0.04em] text-[color:var(--danger)]">
               {formatNumber(overview.active_churn.high)}
             </div>
@@ -444,7 +445,7 @@ function RiskCard({ overview }: { overview: DashboardOverview }) {
         </div>
         <div className="space-y-3">
           {churnData.map(([label, value]) => (
-            <div key={label} className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+            <div key={label} className="min-w-0 rounded-[24px] border border-[color:var(--line)] bg-white p-4">
               <RiskListRow
                 label={label}
                 value={value}
@@ -478,14 +479,14 @@ function RiskListRow({
   const pct = total && total > 0 ? (value / total) * 100 : null;
 
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex min-w-0 items-center justify-between gap-4">
       <div className="flex min-w-0 items-center gap-3">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
         <div className="min-w-0">
           <div className="truncate text-[12px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-2)]">
             {label}
           </div>
-          <div className="num mt-1 text-[11px] text-[color:var(--ink-5)]">
+          <div className={`num mt-1 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
             {pct !== null ? `${pct.toFixed(1)}% of ${totalLabel ?? "total"}` : hint}
           </div>
         </div>
@@ -523,11 +524,11 @@ function ValueCard({ overview }: { overview: DashboardOverview }) {
         hint="ใช้ดูว่าความเสี่ยงกระทบลูกค้ากลุ่มมูลค่าสูงแค่ไหน"
         icon={Gem}
       />
-      <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
+      <div className="flex-1 border-t border-[color:var(--line-2)] p-4 sm:p-5">
         <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
-          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--moby-700)]">Predicted CLV</div>
-          <div className="mt-2 flex items-end justify-between gap-4">
-            <div className="num text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
+          <div className={`text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--moby-700)] ${TEXT_SAFE}`}>Predicted CLV</div>
+          <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
+            <div className={`num text-[clamp(24px,6vw,28px)] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
               {formatCurrency(overview.value.predicted_clv_6m)}
             </div>
             <div className="pb-1 text-right text-[12px] text-[color:var(--ink-4)]">6-month forecast</div>
@@ -535,7 +536,7 @@ function ValueCard({ overview }: { overview: DashboardOverview }) {
         </div>
         <div className="space-y-3">
           {valueData.map(([label, value, hint, color]) => (
-            <div key={label} className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+            <div key={label} className="min-w-0 rounded-[24px] border border-[color:var(--line)] bg-white p-4">
               <RiskListRow
                 label={label}
                 value={value}
@@ -566,20 +567,20 @@ function CreditUrgencyCard({ overview }: { overview: DashboardOverview }) {
         hint="เฉพาะ active customers ที่ forecast credit ได้"
         icon={CreditCard}
       />
-      <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
+      <div className="flex-1 border-t border-[color:var(--line-2)] p-4 sm:p-5">
         <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
-          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--warn)]">
+          <div className={`text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--warn)] ${TEXT_SAFE}`}>
             Next top-up 7d
           </div>
-          <div className="mt-2 flex items-end justify-between gap-4">
+          <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
             <div className="num text-[30px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
               {formatNumber(overview.credit.next_topup_7d)}
             </div>
-            <div className="pb-1 text-right">
+            <div className="min-w-0 pb-1 text-right">
               <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
                 30d usage
               </div>
-              <div className="num mt-1 text-[12px] font-semibold text-[color:var(--ink-2)]">
+              <div className={`num mt-1 text-[12px] font-semibold text-[color:var(--ink-2)] ${TEXT_SAFE}`}>
                 {formatCredits(overview.credit.predicted_usage_30d)}
               </div>
             </div>
@@ -587,7 +588,7 @@ function CreditUrgencyCard({ overview }: { overview: DashboardOverview }) {
         </div>
         <div className="space-y-3">
           {creditData.map(([label, value]) => (
-            <div key={label} className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+            <div key={label} className="min-w-0 rounded-[24px] border border-[color:var(--line)] bg-white p-4">
               <RiskListRow
                 label={label}
                 value={value}
@@ -609,9 +610,9 @@ function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
   const trendPct = first.revenue > 0 ? ((latest.revenue - first.revenue) / first.revenue) * 100 : 0;
 
   return (
-    <section className="surface-elev overflow-hidden">
-      <header className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
-        <div>
+    <section className="surface-elev min-w-0 overflow-hidden">
+      <header className="flex min-w-0 flex-wrap items-start justify-between gap-4 px-4 py-4 sm:px-5">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
               Monthly revenue
@@ -621,11 +622,11 @@ function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
               {trendPct.toFixed(1)}% vs first month
             </StatusPill>
           </div>
-          <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+          <h2 className={`mt-1 text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
             รายได้รายเดือนจนถึงข้อมูลล่าสุด
           </h2>
         </div>
-        <div className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-right">
+        <div className="w-full rounded-[22px] border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-right sm:w-auto">
           <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
             Latest
           </div>
@@ -637,7 +638,7 @@ function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
           </div>
         </div>
       </header>
-      <div className="border-t border-[color:var(--line-2)] p-5">
+      <div className="border-t border-[color:var(--line-2)] p-4 sm:p-5">
         <MonthlyRevenueChart data={data} />
       </div>
     </section>
@@ -682,12 +683,12 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
   }, []);
 
   return (
-    <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_220px]">
-      <div className="overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white p-4">
-        <div className="mb-2 text-[11px] text-[color:var(--ink-5)]">
+    <div className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_220px]">
+      <div className="min-w-0 overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+        <div className={`mb-2 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
           Focus ล่าสุดประมาณ 6 เดือน · เลื่อนซ้ายเพื่อดูเดือนก่อนหน้า
         </div>
-        <div ref={scrollRef} className="overflow-x-auto pb-1">
+        <div ref={scrollRef} className="min-w-0 overflow-x-auto overscroll-x-contain pb-1">
           <svg
             viewBox={`0 0 ${width} ${height}`}
             className="min-w-[720px]"
@@ -764,16 +765,16 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 2xl:grid-cols-1">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 2xl:grid-cols-1">
         {data.slice(-3).map((point) => (
-          <div key={point.month} className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
-            <div className="flex items-center gap-2">
+          <div key={point.month} className="min-w-0 rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+            <div className="flex min-w-0 items-center gap-2">
               <TrendingUp size={13} style={{ color: revenueBandColor(point.revenue, colorMin, colorMax) }} />
-              <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+              <div className={`text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
                 {point.month}
               </div>
             </div>
-            <div className="num mt-2 text-[20px] font-semibold text-[color:var(--ink-1)]">
+            <div className={`num mt-2 text-[20px] font-semibold text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
               {formatCurrency(point.revenue)}
             </div>
             <div className="mt-1 text-[11px] text-[color:var(--ink-5)]">
@@ -798,15 +799,15 @@ function PanelHeader({
   icon?: ElementType;
 }) {
   return (
-    <header className="flex items-start justify-between gap-4 px-5 py-4">
-      <div>
+    <header className="flex min-w-0 items-start justify-between gap-4 px-4 py-4 sm:px-5">
+      <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
           {eyebrow}
         </p>
-        <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+        <h2 className={`mt-1 text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
           {title}
         </h2>
-        <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">{hint}</p>
+        <p className={`mt-1 text-[12px] leading-5 text-[color:var(--ink-4)] ${TEXT_SAFE}`}>{hint}</p>
       </div>
       {Icon && (
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[color:var(--surface-2)] text-[color:var(--moby-700)]">

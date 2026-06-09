@@ -1,7 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, type ChangeEvent } from "react";
 import {
   Send, RotateCcw, Sparkles, User,
   ChevronRight, TrendingUp, Users, AlertTriangle, Zap,
@@ -18,15 +18,19 @@ interface Message {
   ts: Date;
 }
 
+const TEXT_WRAP = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
+const CHAT_COLUMN = "mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col px-3 pb-3 sm:px-5 sm:pb-5 lg:px-6";
+const MESSAGE_BUBBLE = "max-w-full rounded-2xl px-4 py-3 text-[13.5px] leading-relaxed";
+
 /* ── markdown-lite renderer ─────────────────────────────── */
-function renderMessage(text: string) {
+function renderMessage(text: string, strongClassName = "font-semibold text-[color:var(--ink-1)]") {
   return text.split("\n").map((line, li) => {
     const parts = line.split(/(\*\*[^*]+\*\*)/g).map((p, pi) =>
       p.startsWith("**") && p.endsWith("**")
-        ? <strong key={pi} className="font-semibold text-[color:var(--ink-1)]">{p.slice(2, -2)}</strong>
+        ? <strong key={pi} className={strongClassName}>{p.slice(2, -2)}</strong>
         : <span key={pi}>{p}</span>
     );
-    return <span key={li} className="block">{parts}</span>;
+    return <span key={li} className={li > 0 ? "mt-1 block" : "block"}>{parts}</span>;
   });
 }
 
@@ -74,6 +78,18 @@ export default function AIChatPage() {
     setTimeout(() => inputRef.current?.focus(), 80);
   }, []);
 
+  const resizeInput = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  };
+
+  const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    resizeInput();
+  };
+
   const send = useCallback((text?: string) => {
     const content = (text ?? input).trim();
     if (!content || streaming) return;
@@ -87,6 +103,7 @@ export default function AIChatPage() {
       return;
     }
     setInput("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
 
     const userMsg: Message = { id: Date.now().toString(), role: "user", content, ts: new Date() };
     const replyId = Date.now().toString() + "_r";
@@ -100,7 +117,7 @@ export default function AIChatPage() {
     );
     setStreaming(false);
     cancelRef.current = null;
-  }, [input, streaming, runId, messages]);
+  }, [input, streaming, runId]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
@@ -111,6 +128,7 @@ export default function AIChatPage() {
     setMessages([{ id: "init", role: "assistant", content: WELCOME, ts: new Date() }]);
     setStreaming(false);
     setInput("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
     setTimeout(() => inputRef.current?.focus(), 80);
   };
 
@@ -118,7 +136,7 @@ export default function AIChatPage() {
   const thinking = streaming && messages[messages.length - 1]?.content === "";
 
   return (
-    <div className="h-full flex flex-col bg-[color:var(--bg)]">
+    <div className="flex h-full min-h-0 flex-col bg-[color:var(--bg)]">
       <PageHeader
         eyebrow={runId ? `AI · Run ${runId.slice(0, 8)}…` : "AI · ไม่มี run"}
         title="Moby AI Assistant"
@@ -127,7 +145,7 @@ export default function AIChatPage() {
             onClick={reset}
             className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white
               text-[13px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]
-              inline-flex items-center gap-1.5 transition-colors"
+              inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
           >
             <RotateCcw size={13} />
             Reset conversation
@@ -135,44 +153,58 @@ export default function AIChatPage() {
         }
       />
 
-      <div className="flex flex-1 overflow-hidden gap-0">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
 
         {/* ── main chat column ───────────────────────────── */}
-        <div className="flex-1 flex flex-col overflow-hidden px-6 pb-6 max-w-3xl mx-auto w-full">
+        <div className={CHAT_COLUMN}>
 
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-[color:var(--line)] bg-white shadow-[var(--shadow-1)]">
           {/* messages */}
           <div
             ref={scrollRef}
-            className="flex-1 overflow-y-auto space-y-5 py-5 pr-1"
+            className="flex-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain bg-[#f8fafc] px-3 py-4 sm:px-5"
           >
             {messages.map(msg => (
-              <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+              <div key={msg.id} className={`flex min-w-0 gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                 {/* avatar */}
                 {msg.role === "assistant" ? (
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)]
-                    flex items-center justify-center shrink-0 mt-0.5 shadow-md">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] shadow-md">
                     <Sparkles size={15} className="text-white" />
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[color:var(--ink-3)] shadow-sm ring-1 ring-[color:var(--line)]">
                     <User size={15} className="text-[color:var(--ink-3)]" />
                   </div>
                 )}
 
-                <div className={`flex flex-col gap-1 max-w-[82%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                  <div className="flex items-center gap-2 px-1">
-                    <span className="text-[11px] text-[color:var(--ink-5)]">
+                <div
+                  className={[
+                    "flex min-w-0 flex-col gap-1",
+                    "max-w-[min(78%,46rem)] sm:max-w-[min(74%,48rem)]",
+                    msg.role === "user" ? "items-end" : "items-start",
+                  ].join(" ")}
+                >
+                  <div className="flex max-w-full min-w-0 items-center gap-2 px-1">
+                    <span className="truncate text-[11px] text-[color:var(--ink-5)]">
                       {msg.role === "assistant" ? "Moby AI" : "You"}
                     </span>
-                    <span className="text-[11px] text-[color:var(--ink-6)]">·</span>
-                    <span className="text-[11px] text-[color:var(--ink-5)]">{fmtTime(msg.ts)}</span>
+                    <span className="shrink-0 text-[11px] text-[color:var(--ink-6)]">·</span>
+                    <span className="shrink-0 text-[11px] text-[color:var(--ink-5)]">{fmtTime(msg.ts)}</span>
                   </div>
-                  <div className={`px-4 py-3 rounded-2xl text-[13.5px] leading-relaxed
-                    ${msg.role === "user"
-                      ? "bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-700)] text-white rounded-tr-sm"
-                      : "bg-white border border-[color:var(--line)] text-[color:var(--ink-2)] rounded-tl-sm shadow-sm"
-                    }`}>
-                    {renderMessage(msg.content)}
+                  <div
+                    className={[
+                      MESSAGE_BUBBLE,
+                      TEXT_WRAP,
+                      "max-h-[min(420px,58dvh)] overflow-y-auto overscroll-contain",
+                      msg.role === "user"
+                        ? "rounded-tr-sm bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-700)] text-white"
+                        : "rounded-tl-sm border border-[color:var(--line)] bg-white text-[color:var(--ink-2)] shadow-sm",
+                    ].join(" ")}
+                  >
+                    {renderMessage(
+                      msg.content,
+                      msg.role === "user" ? "font-semibold text-white" : "font-semibold text-[color:var(--ink-1)]",
+                    )}
                   </div>
                 </div>
               </div>
@@ -180,12 +212,11 @@ export default function AIChatPage() {
 
             {/* thinking */}
             {thinking && (
-              <div className="flex gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)]
-                  flex items-center justify-center shrink-0 shadow-md">
+              <div className="flex min-w-0 gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] shadow-md">
                   <Sparkles size={15} className="text-white animate-pulse" />
                 </div>
-                <div className="bg-white border border-[color:var(--line)] px-4 py-3.5 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-2">
+                <div className="flex max-w-[min(78%,46rem)] items-center gap-2 rounded-2xl rounded-tl-sm border border-[color:var(--line)] bg-white px-4 py-3.5 shadow-sm">
                   <span className="text-[12px] text-[color:var(--ink-4)]">กำลังวิเคราะห์</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--moby-500)] animate-bounce" style={{ animationDelay: "0ms" }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--moby-500)] animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -195,67 +226,68 @@ export default function AIChatPage() {
             )}
           </div>
 
-          {/* quick prompts */}
-          {showQuick && (
-            <div className="grid grid-cols-2 gap-2.5 mb-4">
-              {QUICK_PROMPTS.map(({ icon: Icon, label }) => (
-                <button
-                  key={label}
-                  onClick={() => send(label)}
-                  className="flex items-center gap-3 p-3.5 rounded-xl border border-[color:var(--line)]
-                    bg-white hover:bg-[color:var(--surface-2)] hover:border-[color:var(--line)]
-                    text-left group transition-all shadow-sm"
-                >
-                  <div className="flex items-center justify-center shrink-0">
-                    <Icon size={14} className="text-[color:var(--moby-600)]" />
-                  </div>
-                  <span className="text-[12.5px] font-medium text-[color:var(--ink-2)] group-hover:text-[color:var(--moby-700)]">
-                    {label}
+          <footer className="shrink-0 border-t border-[color:var(--line)] bg-white">
+            {/* input box */}
+            <div className="p-3 sm:p-4">
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-2">
+                <textarea
+                  ref={inputRef}
+                  id="ai-chat-page-input"
+                  value={input}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKey}
+                  rows={1}
+                  placeholder="ถามด้วยข้อมูลจริงจาก run ที่เลือกเท่านั้น (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัด)"
+                  className={`max-h-[160px] min-h-[42px] w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-[color:var(--ink-2)]
+                    placeholder:text-[color:var(--ink-5)] outline-none focus:outline-none focus:ring-0 focus-visible:outline-none ${TEXT_WRAP}`}
+                  style={{ overflowY: "auto" }}
+                />
+                <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-[color:var(--line)] pt-2">
+                  <span className={`flex-1 text-[11px] text-[color:var(--ink-5)] ${TEXT_WRAP}`}>
+                    {runId ? "ใช้ real insight API เท่านั้น · ไม่มี mock fallback" : "กรุณาเลือก run ก่อน"}
                   </span>
-                  <ChevronRight size={13} className="ml-auto text-[color:var(--ink-5)] group-hover:text-[color:var(--moby-500)]" />
-                </button>
-              ))}
+                  <button
+                    id="ai-chat-page-send"
+                    onClick={() => send()}
+                    disabled={!input.trim() || streaming}
+                    className={`flex h-9 shrink-0 items-center gap-2 rounded-xl px-4 text-[13px] font-medium transition-all
+                      ${input.trim() && !streaming
+                        ? "bg-[color:var(--moby-600)] text-white shadow-sm hover:bg-[color:var(--moby-700)] active:scale-95"
+                        : "cursor-not-allowed bg-[color:var(--line)] text-[color:var(--ink-5)]"
+                      }`}
+                  >
+                    <Send size={13} />
+                    ส่ง
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
-
-          {/* input box */}
-          <div className="surface shadow-sm">
-            <div className="px-4 pt-3.5 pb-2">
-              <textarea
-                ref={inputRef}
-                id="ai-chat-page-input"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKey}
-                rows={2}
-                placeholder="ถามด้วยข้อมูลจริงจาก run ที่เลือกเท่านั้น (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัด)"
-                className="w-full resize-none bg-transparent text-[13.5px] text-[color:var(--ink-2)]
-                  placeholder:text-[color:var(--ink-5)] outline-none leading-relaxed max-h-[160px]"
-              />
-            </div>
-            <div className="flex items-center gap-2 px-3 pb-3 border-t border-[color:var(--line)] pt-2">
-              <span className="flex-1 text-[11px] text-[color:var(--ink-5)]">
-                {runId ? "ใช้ real insight API เท่านั้น · ไม่มี mock fallback" : "กรุณาเลือก run ก่อน"}
-              </span>
-              <button
-                id="ai-chat-page-send"
-                onClick={() => send()}
-                disabled={!input.trim() || streaming}
-                className={`h-9 px-4 rounded-lg text-[13px] font-medium flex items-center gap-2 transition-all
-                  ${input.trim() && !streaming
-                    ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-700)] shadow-sm"
-                    : "bg-[color:var(--line)] text-[color:var(--ink-5)] cursor-not-allowed"
-                  }`}
-              >
-                <Send size={13} />
-                ส่ง
-              </button>
-            </div>
-          </div>
+          </footer>
+          </section>
         </div>
 
         {/* ── right context panel ────────────────────────── */}
-        <aside className="w-[220px] shrink-0 border-l border-[color:var(--line)] hidden xl:flex flex-col gap-4 p-5 overflow-y-auto">
+        <aside className="hidden w-[240px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-[color:var(--line)] p-5 xl:flex">
+          {showQuick && (
+            <div>
+              <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+                ตัวอย่างคำถาม
+              </p>
+              <div className="space-y-2.5">
+                {QUICK_PROMPTS.map(({ label }) => (
+                  <button
+                    key={label}
+                    onClick={() => send(label)}
+                    className={`block w-full text-left text-[12px] leading-5 text-[color:var(--ink-3)]
+                      transition-colors hover:text-[color:var(--moby-700)] ${TEXT_WRAP}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-3">ลิงก์ด่วน</p>
             <div className="space-y-1">
@@ -265,10 +297,10 @@ export default function AIChatPage() {
                 { href: "/model-performance", label: "Model Health" },
               ].map(({ href, label }) => (
                 <Link key={href} href={href}
-                  className="flex items-center gap-2 px-2.5 py-2 rounded-md text-[12.5px]
+                  className="flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-[12.5px]
                     text-[color:var(--ink-3)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-1)] transition-colors group">
                   <ChevronRight size={12} className="text-[color:var(--ink-5)] group-hover:text-[color:var(--moby-600)]" />
-                  {label}
+                  <span className={TEXT_WRAP}>{label}</span>
                 </Link>
               ))}
             </div>
@@ -284,18 +316,18 @@ export default function AIChatPage() {
                 "ตรวจ model drift",
                 "แนะนำ playbook",
               ].map(cap => (
-                <li key={cap} className="flex items-start gap-2 text-[11.5px] text-[color:var(--ink-3)]">
+                <li key={cap} className="flex min-w-0 items-start gap-2 text-[11.5px] text-[color:var(--ink-3)]">
                   <span className="w-1 h-1 rounded-full bg-[color:var(--moby-500)] mt-1.5 shrink-0" />
-                  {cap}
+                  <span className={TEXT_WRAP}>{cap}</span>
                 </li>
               ))}
             </ul>
           </div>
 
           <div className="border-t border-[color:var(--line)] pt-4 mt-auto">
-            <div className="rounded-lg border border-[color:var(--line)] bg-white p-3">
+            <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-white p-3">
               <p className="text-[11px] font-semibold text-[color:var(--moby-700)] mb-1">Real insights only</p>
-              <p className="text-[10.5px] text-[color:var(--ink-4)] leading-relaxed">
+              <p className={`text-[10.5px] text-[color:var(--ink-4)] leading-relaxed ${TEXT_WRAP}`}>
                 ไม่มี fallback เป็นข้อมูลจำลอง หาก backend ยังไม่พร้อมจะแสดงสถานะรอเชื่อมต่อ
               </p>
             </div>
