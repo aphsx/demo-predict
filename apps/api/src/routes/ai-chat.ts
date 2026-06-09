@@ -1,5 +1,15 @@
 import Elysia, { t } from "elysia";
 import { requireUser } from "../lib/auth-middleware";
+import { searchCompanyKnowledge } from "../lib/ai/company-knowledge";
+import {
+  generateFinalAnswer,
+  generateTextToSqlPlan,
+  getOllamaConfig,
+  mapOllamaErrorCode,
+} from "../lib/ai/ollama";
+import { executeReadOnlySql, type QueryResultPreview } from "../lib/ai/sql-executor";
+import { validateTextToSql } from "../lib/ai/sql-guard";
+import { getAiUserRole } from "../lib/ai/semantic-layer";
 
 type ChatRole = "user" | "assistant";
 
@@ -8,51 +18,8 @@ type ChatMessage = {
   content: string;
 };
 
-type OllamaMessage = {
-  role: "system" | ChatRole;
-  content: string;
-};
-
-type OllamaChatResponse = {
-  model?: string;
-  created_at?: string;
-  message?: {
-    role?: string;
-    content?: string;
-  };
-  done?: boolean;
-};
-
-type OllamaErrorResponse = {
-  error?: string;
-};
-
-type OllamaChatSuccess = OllamaChatResponse & {
-  message: {
-    content: string;
-  };
-};
-
-const DEFAULT_OLLAMA_HOST = "https://ollama.com";
-const DEFAULT_OLLAMA_MODEL = "qwen3.5:397b-cloud";
 const MAX_MESSAGES = 24;
 const MAX_CONTENT_CHARS = 12_000;
-
-const SYSTEM_PROMPT = [
-  "You are Moby AI, an internal analytics assistant for 1Moby.",
-  "Answer in Thai by default unless the user asks for another language.",
-  "Do not invent customer metrics, prediction scores, run results, or model outputs.",
-  "If the user asks for unavailable analytics data, say the chat API is connected but prediction context has not been provided yet.",
-  "Keep answers concise and operational.",
-].join("\n");
-
-function getOllamaConfig() {
-  return {
-    apiKey: process.env.OLLAMA_API_KEY?.trim() ?? "",
-    host: (process.env.OLLAMA_HOST?.trim() || DEFAULT_OLLAMA_HOST).replace(/\/+$/, ""),
-    model: process.env.OLLAMA_MODEL?.trim() || DEFAULT_OLLAMA_MODEL,
-  };
-}
 
 function normalizeMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages
@@ -62,35 +29,6 @@ function normalizeMessages(messages: ChatMessage[]): ChatMessage[] {
     }))
     .filter((message) => message.content.length > 0)
     .slice(-MAX_MESSAGES);
-}
-
-function isOllamaChatResponse(value: unknown): value is OllamaChatSuccess {
-  if (!value || typeof value !== "object") return false;
-  const maybe = value as { message?: unknown };
-  if (!maybe.message || typeof maybe.message !== "object") return false;
-  const message = maybe.message as { content?: unknown };
-  return typeof message.content === "string";
-}
-
-function parseOllamaError(text: string): string {
-  if (!text.trim()) return "";
-  try {
-    const parsed = JSON.parse(text) as OllamaErrorResponse;
-    return typeof parsed.error === "string" ? parsed.error : text;
-  } catch {
-    return text;
-  }
-}
-
-function mapOllamaErrorCode(message: string): string {
-  const normalized = message.toLowerCase();
-  if (normalized.includes("requires a subscription") || normalized.includes("upgrade for access")) {
-    return "ollama_subscription_required";
-  }
-  if (normalized.includes("model") && normalized.includes("not found")) {
-    return "ollama_model_not_found";
-  }
-  return "ollama_request_failed";
 }
 
 export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
@@ -116,53 +54,82 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
         };
       }
 
-      const ollamaMessages: OllamaMessage[] = [
-        { role: "system", content: SYSTEM_PROMPT },
-        ...messages,
-      ];
+      try {
+        const role = getAiUserRole();
+        const latestQuestion = messages[messages.length - 1]?.content ?? "";
+        const knowledgeHits = searchCompanyKnowledge(latestQuestion);
+        const plan = await generateTextToSqlPlan({ config, role, messages });
 
-      const response = await fetch(`${config.host}/api/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify({
+        let sql: string | null = null;
+        let queryResult: QueryResultPreview | null = null;
+        const warnings: string[] = [];
+        let blockedReason: string | null = null;
+
+        if (plan.should_query && plan.sql) {
+          const validation = validateTextToSql(plan.sql, role);
+          if (validation.ok) {
+            sql = validation.sql;
+            warnings.push(...validation.warnings);
+            queryResult = await executeReadOnlySql(validation.sql);
+          } else {
+            blockedReason = validation.reason;
+            warnings.push(`SQL blocked: ${validation.reason}`);
+          }
+        }
+
+        const knowledgeEvidence = knowledgeHits
+          .map((hit) => `${hit.title} (${hit.source}): ${hit.content}`)
+          .join("\n\n");
+        const directAnswer = blockedReason
+          ? `คำถามนี้ต้อง query ฐานข้อมูล แต่ SQL ที่ AI สร้างถูกบล็อก: ${blockedReason}`
+          : [plan.answer_without_query, knowledgeEvidence].filter(Boolean).join("\n\n");
+
+        const content = await generateFinalAnswer({
+          config,
+          messages,
+          sql,
+          queryResult,
+          warnings,
+          directAnswer,
+        });
+
+        return {
           model: config.model,
-          messages: ollamaMessages,
-          stream: false,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        const errorMessage = parseOllamaError(errorText);
+          message: {
+            role: "assistant" as const,
+            content,
+          },
+          evidence: {
+            mode: sql ? "text_to_sql" : "knowledge_or_direct",
+            role,
+            sql,
+            sql_reasoning: plan.reasoning,
+            warnings,
+            blocked_reason: blockedReason,
+            query_result: queryResult
+              ? {
+                  columns: queryResult.columns,
+                  row_count: queryResult.row_count,
+                  rows: queryResult.rows,
+                }
+              : null,
+            sources: knowledgeHits.map((hit) => ({
+              source: hit.source,
+              title: hit.title,
+              score: hit.score,
+            })),
+          },
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "AI chat request failed";
         const code = mapOllamaErrorCode(errorMessage);
-        set.status = response.status >= 500 ? 502 : response.status;
+        set.status = code === "ollama_request_failed" ? 502 : 400;
         return {
-          message: errorMessage || "Ollama chat request failed",
+          message: errorMessage,
           code,
-          status: response.status,
-          detail: errorMessage.slice(0, 500) || undefined,
+          detail: errorMessage.slice(0, 500),
         };
       }
-
-      const data: unknown = await response.json();
-      if (!isOllamaChatResponse(data)) {
-        set.status = 502;
-        return {
-          message: "Unexpected Ollama chat response",
-          code: "ollama_bad_response",
-        };
-      }
-
-      return {
-        model: config.model,
-        message: {
-          role: "assistant" as const,
-          content: data.message.content,
-        },
-      };
     },
     {
       body: t.Object({

@@ -34,6 +34,20 @@ type ChatApiSuccess = {
     role: "assistant";
     content: string;
   };
+  evidence?: {
+    mode?: "text_to_sql" | "knowledge_or_direct";
+    sql?: string | null;
+    warnings?: string[];
+    blocked_reason?: string | null;
+    query_result?: {
+      row_count: number;
+    } | null;
+    sources?: Array<{
+      source: string;
+      title: string;
+      score: number;
+    }>;
+  };
 };
 
 const TEXT_WRAP = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
@@ -71,7 +85,28 @@ const QUICK_PROMPTS = [
   { icon: Zap, label: "แนะนำ action เร่งด่วน" },
 ];
 
-const WELCOME = "Moby AI จะตอบจาก insight API จริงของ run ที่เลือกเท่านั้น\n\nหาก API ยังไม่พร้อม ระบบจะแสดงสถานะรอเชื่อมต่อแทนการสร้างคำตอบหรือตัวเลขจำลอง";
+const WELCOME = "Moby AI จะตอบจาก Text-to-SQL และความรู้บริษัทที่มี evidence เท่านั้น\n\nหากข้อมูลไม่พอ ระบบจะบอกว่าขาดข้อมูล แทนการสร้างตัวเลขจำลอง";
+
+function formatEvidence(evidence: ChatApiSuccess["evidence"]) {
+  if (!evidence) return "";
+  const parts: string[] = [];
+
+  if (evidence.sql) {
+    parts.push(`SQL ที่ใช้:\n${evidence.sql}`);
+    parts.push(`จำนวนแถวที่อ่าน: ${evidence.query_result?.row_count ?? 0}`);
+  }
+  if (evidence.blocked_reason) {
+    parts.push(`SQL ถูกบล็อก: ${evidence.blocked_reason}`);
+  }
+  if (evidence.sources?.length) {
+    parts.push(`แหล่งความรู้: ${evidence.sources.map((source) => source.title).join(", ")}`);
+  }
+  if (evidence.warnings?.length) {
+    parts.push(`คำเตือน: ${evidence.warnings.join("; ")}`);
+  }
+
+  return parts.length ? `\n\n---\n${parts.join("\n")}` : "";
+}
 
 /* ════════════════════════════════════════════════════════════
    Page
@@ -149,7 +184,10 @@ export default function AIChatPage() {
       }
 
       setMessages(prev =>
-        prev.map(m => m.id === replyId ? { ...m, content: success.message!.content, ts: new Date() } : m)
+        prev.map(m => m.id === replyId
+          ? { ...m, content: `${success.message!.content}${formatEvidence(success.evidence)}`, ts: new Date() }
+          : m
+        )
       );
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -292,14 +330,14 @@ export default function AIChatPage() {
                   onChange={handleInputChange}
                   onKeyDown={handleKey}
                   rows={1}
-                  placeholder="ถามด้วยข้อมูลจริงจาก run ที่เลือกเท่านั้น (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัด)"
+                  placeholder="ถามข้อมูลบริษัทหรือฐานข้อมูลด้วยภาษาไทย (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัด)"
                   className={`max-h-[160px] min-h-[42px] w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-[color:var(--ink-2)]
                     placeholder:text-[color:var(--ink-5)] outline-none focus:outline-none focus:ring-0 focus-visible:outline-none ${TEXT_WRAP}`}
                   style={{ overflowY: "auto" }}
                 />
                 <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-[color:var(--line)] pt-2">
                   <span className={`flex-1 text-[11px] text-[color:var(--ink-5)] ${TEXT_WRAP}`}>
-                    {runId ? `Ollama Cloud · Run ${runId.slice(0, 8)} · no mock fallback` : "Ollama Cloud chat · ยังไม่มี run context"}
+                    {runId ? `Ollama Cloud · Text-to-SQL · Run ${runId.slice(0, 8)}` : "Ollama Cloud · Text-to-SQL · knowledge evidence"}
                   </span>
                   <button
                     id="ai-chat-page-send"
