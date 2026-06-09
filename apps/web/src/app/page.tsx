@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { StatusPill } from "@/components/ui";
+import { MOBY_BRAND } from "@/lib/login-brand-colors";
 
 type MonthlyRevenuePoint = {
   month: string;
@@ -127,24 +128,32 @@ const MOCK_OVERVIEW: DashboardOverview = {
   },
 };
 
+const BRAND_BLUE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blue} 100%)`;
+const BRAND_YELLOW_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orangeWarm} 100%)`;
+const BRAND_ORANGE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orange} 0%, ${MOBY_BRAND.orange} 100%)`;
+const BRAND_BLUE_YELLOW_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.orangeWarm} 100%)`;
+const BRAND_YELLOW_ORANGE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
+const BRAND_TRACK = "rgba(0, 107, 255, 0.08)";
+const NEUTRAL_GHOST_GRADIENT = "linear-gradient(90deg, var(--ink-6) 0%, var(--ink-5) 100%)";
+
 const LIFECYCLE_PALETTE = {
-  "Active Paid": "var(--c-paid)",
-  "Active Free": "var(--c-free)",
-  Churned: "var(--c-churn)",
-  Ghost: "var(--c-ghost)",
+  "Active Paid": BRAND_BLUE_GRADIENT,
+  "Active Free": BRAND_YELLOW_GRADIENT,
+  Churned: BRAND_ORANGE_GRADIENT,
+  Ghost: NEUTRAL_GHOST_GRADIENT,
 };
 
 const CHURN_PALETTE = {
-  High: "var(--danger)",
-  Medium: "var(--warn)",
-  Low: "var(--ok)",
+  High: BRAND_ORANGE_GRADIENT,
+  Medium: BRAND_YELLOW_ORANGE_GRADIENT,
+  Low: BRAND_BLUE_GRADIENT,
 };
 
 const CREDIT_PALETTE = {
-  Critical: "var(--danger)",
-  Warning: "var(--warn)",
-  Monitor: "var(--info)",
-  Stable: "var(--ok)",
+  Critical: BRAND_ORANGE_GRADIENT,
+  Warning: BRAND_YELLOW_ORANGE_GRADIENT,
+  Monitor: BRAND_YELLOW_GRADIENT,
+  Stable: BRAND_BLUE_GRADIENT,
 };
 
 export default function Dashboard() {
@@ -153,7 +162,7 @@ export default function Dashboard() {
   const ghostPct = (overview.totals.ghost_customers / overview.totals.customers) * 100;
 
   return (
-    <main className="px-8 py-6 pb-12 space-y-6">
+    <main className="px-8 py-6 pb-12">
       <section
         className="relative overflow-hidden rounded-[30px] border border-white/20 px-6 py-6 text-white sm:px-7 lg:px-8"
         style={{
@@ -161,7 +170,7 @@ export default function Dashboard() {
             "radial-gradient(rgba(7, 29, 126, 0.52) 0%, transparent 42%)",
             "url(/assets/intro/about_bg.webp)",
             "linear-gradient(180deg, rgba(0,0,0,0.24) 0%, rgba(0,0,0,0.04) 38%, rgba(0,0,0,0.16) 100%)",
-            "linear-gradient(140deg, #1d1f2a -10%, #006bff 57%, #1893f0 72%, #ffa400 87%, #fc4c02 97%)",
+            `linear-gradient(140deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blue} 56%, ${MOBY_BRAND.orangeWarm} 82%, ${MOBY_BRAND.orange} 100%)`,
           ].join(", "),
           backgroundRepeat: "no-repeat, no-repeat, no-repeat, no-repeat",
           backgroundSize: "140% 150%, cover, 100% 100%, 100% 100%",
@@ -212,7 +221,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           icon={Gem}
           label="Avg monthly value"
@@ -244,7 +253,7 @@ export default function Dashboard() {
         />
       </section>
 
-      <section className="space-y-5">
+      <section className="mt-5 space-y-5">
         <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)]">
           <LifecycleMixCard overview={overview} />
           <MonthlyRevenueCard data={MONTHLY_REVENUE} />
@@ -256,7 +265,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="surface p-4">
+      <section className="surface mt-5 p-4">
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)]">
           <ShieldCheck size={12} />
           Mock dashboard data is isolated in `MOCK_OVERVIEW`
@@ -293,20 +302,20 @@ function MetricCard({
 
   const content = (
     <>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+          <div className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
             {label}
           </div>
-          <div className="num mt-2 text-[30px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+          <div className="num mt-1 text-[26px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
             {value}
           </div>
         </div>
-        <span className={`grid h-10 w-10 place-items-center rounded-2xl ${toneClass}`}>
+        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl ${toneClass}`}>
           <Icon size={17} />
         </span>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-3 text-[11.5px] text-[color:var(--ink-5)]">
+      <div className="mt-1.5 flex items-center justify-between gap-3 text-[11.5px] text-[color:var(--ink-4)]">
         <span>{hint}</span>
         {href ? <ArrowRight size={12} className="shrink-0 text-[color:var(--ink-4)]" /> : null}
       </div>
@@ -315,14 +324,17 @@ function MetricCard({
 
   if (href) {
     return (
-      <Link href={href} className="surface lift block p-5 transition hover:-translate-y-0.5">
+      <Link
+        href={href}
+        className="block rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)] transition-colors hover:bg-[color:var(--surface-2)]"
+      >
         {content}
       </Link>
     );
   }
 
   return (
-    <div className="surface p-5">
+    <div className="rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)]">
       {content}
     </div>
   );
@@ -335,49 +347,52 @@ function LifecycleMixCard({ overview }: { overview: DashboardOverview }) {
   ]>;
 
   return (
-    <div className="surface-elev flex h-full flex-col overflow-hidden p-5">
-      <div className="flex items-start justify-between gap-4">
+    <section className="surface-elev h-full overflow-hidden">
+      <div className="flex items-start justify-between gap-4 border-b border-[color:var(--line-2)] px-5 py-4">
         <div>
-          <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+          <h2 className="text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
             Customer lifecycle mix
           </h2>
         </div>
-        <span className="rounded-full bg-[color:var(--moby-50)] px-3 py-1 text-[11px] font-semibold text-[color:var(--moby-700)]">
+        <span className="rounded-full bg-[color:var(--surface-2)] px-3 py-1 text-[11px] font-semibold text-[color:var(--ink-3)]">
           4 segments
         </span>
       </div>
 
-      <div
-        className="mt-5 flex h-3 overflow-hidden rounded-full bg-[color:var(--surface-2)]"
-        aria-label="Lifecycle distribution"
-      >
-        {lifecycleEntries.map(([stage, count]) => {
-          const pct = overview.totals.customers > 0 ? (count / overview.totals.customers) * 100 : 0;
-          return (
-            <span
-              key={stage}
-              className="h-full"
-              style={{
-                width: `${pct}%`,
-                background: LIFECYCLE_PALETTE[stage],
-              }}
-            />
-          );
-        })}
-      </div>
+      <div className="p-5">
+        <div
+          className="flex h-3 overflow-hidden rounded-full"
+          style={{ background: BRAND_TRACK }}
+          aria-label="Lifecycle distribution"
+        >
+          {lifecycleEntries.map(([stage, count]) => {
+            const pct = overview.totals.customers > 0 ? (count / overview.totals.customers) * 100 : 0;
+            return (
+              <span
+                key={stage}
+                className="h-full"
+                style={{
+                  width: `${pct}%`,
+                  background: LIFECYCLE_PALETTE[stage],
+                }}
+              />
+            );
+          })}
+        </div>
 
-      <div className="mt-4 space-y-2">
-        {lifecycleEntries.map(([stage, count]) => (
-          <LifecycleFact
-            key={stage}
-            label={stage}
-            value={count}
-            total={overview.totals.customers}
-            color={LIFECYCLE_PALETTE[stage]}
-          />
-        ))}
+        <div className="mt-4 space-y-2">
+          {lifecycleEntries.map(([stage, count]) => (
+            <LifecycleFact
+              key={stage}
+              label={stage}
+              value={count}
+              total={overview.totals.customers}
+              color={LIFECYCLE_PALETTE[stage]}
+            />
+          ))}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -412,7 +427,7 @@ function LifecycleFact({
           <div className="num mt-1 text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}%</div>
         </div>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full" style={{ background: BRAND_TRACK }}>
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
@@ -436,7 +451,7 @@ function RiskCard({ overview }: { overview: DashboardOverview }) {
         icon={TrendingDown}
       />
       <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
-        <div className="mb-4 rounded-[24px] border border-[color:var(--danger-bg)] bg-[color:var(--danger-bg)] p-4">
+        <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
           <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--danger)]">
             High-risk active
           </div>
@@ -506,10 +521,20 @@ function RiskListRow({
 
 function ValueCard({ overview }: { overview: DashboardOverview }) {
   const valueData = [
-    ["High value at risk", overview.value.high_value_at_risk, "High CLV + high churn risk", "var(--danger)"],
-    ["High value", overview.value.high_value, "accounts", "var(--moby-600)"],
-    ["Mid value", overview.value.mid_value, "accounts", "var(--info)"],
-    ["Low value", overview.value.low_value, "accounts", "var(--ink-5)"],
+    [
+      "High value at risk",
+      overview.value.high_value_at_risk,
+      "High CLV + high churn risk",
+      BRAND_ORANGE_GRADIENT,
+    ],
+    [
+      "High value",
+      overview.value.high_value,
+      "accounts",
+      BRAND_BLUE_GRADIENT,
+    ],
+    ["Mid value", overview.value.mid_value, "accounts", BRAND_YELLOW_GRADIENT],
+    ["Low value", overview.value.low_value, "accounts", BRAND_BLUE_YELLOW_GRADIENT],
   ] as const;
 
   return (
@@ -521,7 +546,7 @@ function ValueCard({ overview }: { overview: DashboardOverview }) {
         icon={Gem}
       />
       <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
-        <div className="mb-4 rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
+        <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
           <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--moby-700)]">Predicted CLV</div>
           <div className="mt-2 flex items-end justify-between gap-4">
             <div className="num text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
@@ -564,7 +589,7 @@ function CreditUrgencyCard({ overview }: { overview: DashboardOverview }) {
         icon={CreditCard}
       />
       <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
-        <div className="mb-4 rounded-[24px] border border-[color:var(--warn-bg)] bg-[color:var(--warn-bg)] p-4">
+        <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
           <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--warn)]">
             Next top-up 7d
           </div>
@@ -618,15 +643,15 @@ function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
               {trendPct.toFixed(1)}% vs first month
             </StatusPill>
           </div>
-          <h2 className="mt-1 text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+          <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
             รายได้รายเดือนจนถึงข้อมูลล่าสุด
           </h2>
           <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
             Production source: group `Backend_payment.amount` by `payment_date` month.
           </p>
         </div>
-        <div className="rounded-2xl border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] px-4 py-3 text-right">
-          <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--moby-700)]">
+        <div className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-right">
+          <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
             Latest
           </div>
           <div className="num mt-1 text-[22px] font-semibold tracking-[-0.03em] text-[color:var(--ink-1)]">
@@ -650,8 +675,10 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
   const height = 290;
   const padding = { top: 42, right: 30, bottom: 38, left: 74 };
   const values = data.map((point) => point.revenue);
-  const min = Math.min(...values) * 0.94;
-  const max = Math.max(...values) * 1.04;
+  const colorMin = Math.min(...values);
+  const colorMax = Math.max(...values);
+  const min = colorMin * 0.94;
+  const max = colorMax * 1.04;
   const range = max - min || 1;
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
@@ -662,6 +689,15 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
   });
   const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
   const areaPath = `${linePath} L${points[points.length - 1].x},${padding.top + plotHeight} L${points[0].x},${padding.top + plotHeight} Z`;
+  const lineSegments = points.slice(1).map((point, index) => {
+    const previous = points[index];
+    const segmentValue = (previous.revenue + point.revenue) / 2;
+    return {
+      key: `${previous.month}-${point.month}`,
+      d: `M${previous.x},${previous.y} L${point.x},${point.y}`,
+      color: revenueBandColor(segmentValue, colorMin, colorMax),
+    };
+  });
   const gridValues = [max, min + range * 0.5, min];
 
   useEffect(() => {
@@ -672,7 +708,7 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
 
   return (
     <div className="grid grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_220px]">
-      <div>
+      <div className="overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white p-4">
         <div className="mb-2 text-[11px] text-[color:var(--ink-5)]">
           Focus ล่าสุดประมาณ 6 เดือน · เลื่อนซ้ายเพื่อดูเดือนก่อนหน้า
         </div>
@@ -685,8 +721,8 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
           >
             <defs>
               <linearGradient id="dashboardMonthlyRevenueArea" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="var(--moby-600)" stopOpacity="0.18" />
-                <stop offset="100%" stopColor="var(--moby-600)" stopOpacity="0" />
+                <stop offset="0%" stopColor={MOBY_BRAND.orangeWarm} stopOpacity="0.20" />
+                <stop offset="100%" stopColor={MOBY_BRAND.orangeWarm} stopOpacity="0" />
               </linearGradient>
             </defs>
 
@@ -710,7 +746,16 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
             })}
 
             <path d={areaPath} fill="url(#dashboardMonthlyRevenueArea)" />
-            <path d={linePath} fill="none" stroke="var(--moby-600)" strokeWidth="3" strokeLinecap="round" />
+            {lineSegments.map((segment) => (
+              <path
+                key={segment.key}
+                d={segment.d}
+                fill="none"
+                stroke={segment.color}
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+            ))}
 
             {points.map((point) => (
               <g key={point.month}>
@@ -722,7 +767,14 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
                 >
                   {formatCompactCurrency(point.revenue)}
                 </text>
-                <circle cx={point.x} cy={point.y} r="4.5" fill="white" stroke="var(--moby-600)" strokeWidth="3" />
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r="5"
+                  fill="white"
+                  stroke={revenueBandColor(point.revenue, colorMin, colorMax)}
+                  strokeWidth="3"
+                />
                 <text
                   x={point.x}
                   y={height - 14}
@@ -739,9 +791,9 @@ function MonthlyRevenueChart({ data }: { data: MonthlyRevenuePoint[] }) {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 2xl:grid-cols-1">
         {data.slice(-3).map((point) => (
-          <div key={point.month} className="rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3">
+          <div key={point.month} className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
             <div className="flex items-center gap-2">
-              <TrendingUp size={13} className="text-[color:var(--moby-600)]" />
+              <TrendingUp size={13} style={{ color: revenueBandColor(point.revenue, colorMin, colorMax) }} />
               <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
                 {point.month}
               </div>
@@ -776,13 +828,13 @@ function PanelHeader({
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
           {eyebrow}
         </p>
-        <h2 className="mt-1 text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+        <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
           {title}
         </h2>
         <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">{hint}</p>
       </div>
       {Icon && (
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[color:var(--surface-2)] text-[color:var(--moby-600)]">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[color:var(--surface-2)] text-[color:var(--moby-700)]">
           <Icon size={16} />
         </span>
       )}
@@ -815,6 +867,13 @@ function formatMonth(value: string): string {
   const monthIndex = Number(month) - 1;
   const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return names[monthIndex] ?? value;
+}
+
+function revenueBandColor(value: number, min: number, max: number): string {
+  const score = max > min ? ((value - min) / (max - min)) * 100 : 100;
+  if (score >= 67) return MOBY_BRAND.orange;
+  if (score >= 34) return MOBY_BRAND.orangeWarm;
+  return MOBY_BRAND.blue;
 }
 
 
