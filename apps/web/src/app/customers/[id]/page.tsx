@@ -7,14 +7,23 @@ import { useParams } from "next/navigation";
 import type { ElementType, ReactNode } from "react";
 import {
   ArrowLeft,
+  CalendarClock,
+  CreditCard,
+  Gem,
   Mail,
   MessageSquareText,
   Phone,
   Send,
   ShieldCheck,
   Target,
+  TrendingDown,
 } from "lucide-react";
-import { ProgressMeter, SectionCard, StatusPill, lifecycleTone, urgencyTone } from "@/components/ui";
+import { StatusPill, lifecycleTone, urgencyTone } from "@/components/ui";
+import { MOBY_BRAND } from "@/lib/login-brand-colors";
+
+const BRAND_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 48%, ${MOBY_BRAND.orangeWarm} 76%, ${MOBY_BRAND.orange} 100%)`;
+const ORANGE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
+const BLUE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 100%)`;
 
 const MOCK_CUSTOMER = {
   lifecycle_stage: "Active Paid",
@@ -50,153 +59,249 @@ const MOCK_CUSTOMER = {
 export default function Customer360Mockup() {
   const params = useParams();
   const accId = String(params.id ?? "10001");
+  const churnPct = MOCK_CUSTOMER.churn_probability * 100;
 
   return (
-    <div className="pb-12">
-      <div className="px-8 pt-6 pb-2 flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <div className="mb-1">
-            <Link href="/customers" className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[.16em] text-[color:var(--moby-700)] hover:underline">
-              <ArrowLeft size={11} /> Customers
-            </Link>
-          </div>
-          <h2 className="text-[20px] font-semibold text-[color:var(--ink-1)] leading-tight">
-            Account {accId}
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusPill tone="neutral" dot={false}>Mockup</StatusPill>
-          <ActionBtn icon={Phone}>Log call</ActionBtn>
-          <ActionBtn icon={Mail}>Send email</ActionBtn>
-          <ActionBtn icon={Send} primary>Trigger campaign</ActionBtn>
-        </div>
-      </div>
+    <main className="px-8 py-6 pb-12 space-y-5">
+      <section
+        className="relative overflow-hidden rounded-[30px] border border-white/20 px-6 py-6 text-white shadow-[var(--shadow-2)] sm:px-7 lg:px-8"
+        style={{
+          backgroundImage: [
+            "radial-gradient(rgba(7, 29, 126, 0.48) 0%, transparent 44%)",
+            "url(/assets/intro/about_bg.webp)",
+            "linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.04) 42%, rgba(0,0,0,0.14) 100%)",
+            `linear-gradient(140deg, ${MOBY_BRAND.dark} -10%, ${MOBY_BRAND.blue} 56%, ${MOBY_BRAND.blueLight} 72%, ${MOBY_BRAND.orangeWarm} 88%, ${MOBY_BRAND.orange} 100%)`,
+          ].join(", "),
+          backgroundRepeat: "no-repeat, no-repeat, no-repeat, no-repeat",
+          backgroundSize: "140% 150%, cover, 100% 100%, 100% 100%",
+          backgroundPosition: "center, center, center, center",
+        }}
+      >
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.12),transparent_45%)]" />
+        <div className="relative">
+          <Link
+            href="/customers"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[.16em] text-white/72 hover:text-white"
+          >
+            <ArrowLeft size={11} /> Customers
+          </Link>
 
-      <div className="px-8 mt-4 space-y-5">
-        <section className="surface p-5">
-          <div className="flex items-center gap-5 flex-wrap">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] text-white grid place-items-center font-semibold text-[18px]">
-              {accId.slice(-2)}
-            </div>
-            <div className="flex-1 min-w-[260px]">
-              <div className="flex items-center flex-wrap gap-2">
+          <div className="mt-5 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
                 <StatusPill tone={lifecycleTone(MOCK_CUSTOMER.lifecycle_stage)}>
                   {MOCK_CUSTOMER.lifecycle_stage}
                 </StatusPill>
                 <StatusPill tone="neutral" dot={false}>{MOCK_CUSTOMER.sub_stage}</StatusPill>
                 <StatusPill tone="danger">{MOCK_CUSTOMER.churn_risk_level} churn risk</StatusPill>
+                <StatusPill tone="neutral" dot={false}>Mockup</StatusPill>
               </div>
-              <div className="mt-2 flex items-center gap-4 text-[12px] text-[color:var(--ink-4)] flex-wrap">
-                <Meta label="Purchases" value={MOCK_CUSTOMER.n_purchases.toLocaleString()} />
-                <Meta label="Total revenue" value={`${MOCK_CUSTOMER.total_revenue.toLocaleString()} ฿`} />
-                <Meta label="Inactive" value={`${MOCK_CUSTOMER.days_since_last_activity} days`} />
-                <Meta label="Ever paid" value={MOCK_CUSTOMER.ever_paid ? "Yes" : "No"} />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
+                Customer 360
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-[42px]">
+                Account {accId}
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px]">
+                สรุปภาพรวมลูกค้ารายนี้แบบอ่านเร็ว: ความเสี่ยง churn, มูลค่าที่ควรปกป้อง,
+                การใช้เครดิต และ action ที่ทีม 1Moby ควรทำต่อ
+              </p>
+            </div>
+
+            <div className="w-full rounded-[24px] border border-white/16 bg-white/12 p-4 backdrop-blur xl:w-[360px]">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-[.14em] text-white/60">
+                    Priority score
+                  </div>
+                  <div className="num mt-1 text-[40px] font-semibold leading-none">
+                    {MOCK_CUSTOMER.priority_score}
+                  </div>
+                </div>
+                <Target size={30} className="text-white/86" />
               </div>
+              <div className="mt-4">
+                <BrandMeter
+                  value={MOCK_CUSTOMER.priority_score}
+                  max={100}
+                  gradient={ORANGE_GRADIENT}
+                  trackClassName="bg-white/18"
+                  hideValue
+                />
+              </div>
+              <p className="mt-3 text-[12px] leading-5 text-white/72">
+                {MOCK_CUSTOMER.recommended_action}
+              </p>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <SectionCard title="Churn analysis" hint="ความน่าจะเป็นที่จะเลิกใช้ใน 6 เดือน">
-            <ChurnGauge value={MOCK_CUSTOMER.churn_probability} />
-            <div className="mt-5 grid grid-cols-2 gap-4 border-t border-[color:var(--line)] pt-4">
-              <KV label="Risk level" value={MOCK_CUSTOMER.churn_risk_level} accent="rose" />
-              <KV label="Usage trend" value={MOCK_CUSTOMER.usage_trend} />
-              <KV label="Revenue at risk" value={`${MOCK_CUSTOMER.revenue_at_risk.toLocaleString()} ฿`} accent="rose" />
-              <KV label="Output status" value={MOCK_CUSTOMER.output_status} />
-            </div>
-          </SectionCard>
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          icon={TrendingDown}
+          label="Churn probability"
+          value={`${churnPct.toFixed(1)}%`}
+          hint={`${MOCK_CUSTOMER.churn_risk_level} risk · ${MOCK_CUSTOMER.usage_trend}`}
+          color="var(--danger)"
+        />
+        <MetricCard
+          icon={Gem}
+          label="Predicted CLV"
+          value={formatCurrency(MOCK_CUSTOMER.predicted_clv_6m)}
+          hint={MOCK_CUSTOMER.customer_value_tier}
+          color={MOBY_BRAND.blue}
+        />
+        <MetricCard
+          icon={CreditCard}
+          label="Credit forecast"
+          value={MOCK_CUSTOMER.predicted_credit_usage_90d.toLocaleString()}
+          hint={`${MOCK_CUSTOMER.estimated_days_until_topup} days until top-up`}
+          color={MOBY_BRAND.orange}
+        />
+        <MetricCard
+          icon={CalendarClock}
+          label="Follow-up"
+          value={MOCK_CUSTOMER.recommended_followup_date}
+          hint="recommended next contact"
+          color={MOBY_BRAND.blueLight}
+        />
+      </section>
 
-          <SectionCard title="Lifetime value" hint="คาดการณ์ 6 เดือนข้างหน้า">
-            <div className="space-y-4">
-              <div>
-                <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Predicted CLV</div>
-                <div className="num text-[30px] font-semibold text-[color:var(--ink-1)] mt-1">
-                  {MOCK_CUSTOMER.predicted_clv_6m.toLocaleString()} <span className="text-[14px] text-[color:var(--ink-4)]">฿</span>
-                </div>
-                <div className="mt-2">
-                  <StatusPill tone="brand" dot={false}>{MOCK_CUSTOMER.customer_value_tier}</StatusPill>
-                </div>
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.12fr)_minmax(360px,0.88fr)]">
+        <Panel eyebrow="Prediction signals" title="Risk, value, and credit">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
+            <div className="rounded-[24px] border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
+              <RiskDial value={MOCK_CUSTOMER.churn_probability} />
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[color:var(--line-2)] pt-4">
+                <MiniStat label="Inactive" value={`${MOCK_CUSTOMER.days_since_last_activity}d`} />
+                <MiniStat label="Purchases" value={MOCK_CUSTOMER.n_purchases.toLocaleString()} />
               </div>
-              <div className="grid grid-cols-2 gap-4 border-t border-[color:var(--line)] pt-4">
-                <KV label="Avg txn value" value={`${MOCK_CUSTOMER.avg_transaction_value.toLocaleString()} ฿`} />
-                <KV label="Purchases" value={MOCK_CUSTOMER.n_purchases} />
-              </div>
             </div>
-          </SectionCard>
 
-          <SectionCard title="Credit forecast" hint="คาดการณ์การใช้เครดิตและรอบเติมเครดิต">
             <div className="space-y-4">
-              <ForecastBar label="30d usage" value={MOCK_CUSTOMER.predicted_credit_usage_30d} max={MOCK_CUSTOMER.predicted_credit_usage_90d} />
-              <ForecastBar label="90d usage" value={MOCK_CUSTOMER.predicted_credit_usage_90d} max={MOCK_CUSTOMER.predicted_credit_usage_90d} />
-              <div className="grid grid-cols-2 gap-4 border-t border-[color:var(--line)] pt-4">
-                <KV label="Days until top-up" value={`${MOCK_CUSTOMER.estimated_days_until_topup} days`} accent="blue" />
+              <SignalRow
+                label="Churn risk"
+                value={`${churnPct.toFixed(1)}%`}
+                hint="probability in next 6 months"
+                meterValue={churnPct}
+                gradient={ORANGE_GRADIENT}
+              />
+              <SignalRow
+                label="Revenue at risk"
+                value={formatCurrency(MOCK_CUSTOMER.revenue_at_risk)}
+                hint={`จาก total revenue ${formatCurrency(MOCK_CUSTOMER.total_revenue)}`}
+                meterValue={(MOCK_CUSTOMER.revenue_at_risk / MOCK_CUSTOMER.total_revenue) * 100}
+                gradient={ORANGE_GRADIENT}
+              />
+              <SignalRow
+                label="Predicted CLV"
+                value={formatCurrency(MOCK_CUSTOMER.predicted_clv_6m)}
+                hint={`${MOCK_CUSTOMER.customer_value_tier} · avg txn ${formatCurrency(MOCK_CUSTOMER.avg_transaction_value)}`}
+                meterValue={78}
+                gradient={BLUE_GRADIENT}
+              />
+              <SignalRow
+                label="90d credit usage"
+                value={MOCK_CUSTOMER.predicted_credit_usage_90d.toLocaleString()}
+                hint={`30d forecast ${MOCK_CUSTOMER.predicted_credit_usage_30d.toLocaleString()}`}
+                meterValue={100}
+                gradient={BRAND_GRADIENT}
+              />
+            </div>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Next best action" title="What the team should do">
+          <div className="space-y-4">
+            <div className="rounded-[24px] border p-4" style={{ borderColor: "rgba(252,76,2,0.22)", background: "rgba(252,76,2,0.055)" }}>
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-white shadow-[0_12px_28px_rgba(252,76,2,0.16)]" style={{ background: ORANGE_GRADIENT }}>
+                  <Phone size={18} />
+                </span>
                 <div>
-                  <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">Urgency</div>
-                  <div className="mt-1">
-                    <StatusPill tone={urgencyTone(MOCK_CUSTOMER.credit_urgency_level)}>
-                      {MOCK_CUSTOMER.credit_urgency_level}
-                    </StatusPill>
-                  </div>
+                  <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">
+                    {MOCK_CUSTOMER.recommended_action}
+                  </p>
+                  <p className="mt-1 text-[12.5px] leading-6 text-[color:var(--ink-4)]">
+                    {MOCK_CUSTOMER.priority_reason}
+                  </p>
                 </div>
               </div>
             </div>
-          </SectionCard>
-        </section>
 
-        <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-5">
-          <SectionCard title="Recommended next step" hint="สรุปจาก priority_score และ recommended_action">
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[.12em] text-[color:var(--ink-5)]">Priority score</div>
-                    <div className="num mt-1 text-[32px] font-semibold text-[color:var(--moby-700)]">{MOCK_CUSTOMER.priority_score}</div>
-                  </div>
-                  <Target size={24} className="text-[color:var(--moby-600)]" />
-                </div>
-                <div className="mt-3">
-                  <ProgressMeter value={MOCK_CUSTOMER.priority_score} max={100} tone="blue" showValue={false} />
-                </div>
-              </div>
-              <KV label="Recommended action" value={MOCK_CUSTOMER.recommended_action} accent="blue" />
-              <KV label="Follow-up date" value={MOCK_CUSTOMER.recommended_followup_date} />
-              <KV label="Reason" value={MOCK_CUSTOMER.priority_reason} />
+            <div className="grid grid-cols-2 gap-3">
+              <InfoTile label="Follow-up date" value={MOCK_CUSTOMER.recommended_followup_date} />
+              <InfoTile label="Urgency" value={<StatusPill tone={urgencyTone(MOCK_CUSTOMER.credit_urgency_level)}>{MOCK_CUSTOMER.credit_urgency_level}</StatusPill>} />
+              <InfoTile label="Lifecycle" value={MOCK_CUSTOMER.lifecycle_stage} />
+              <InfoTile label="Ever paid" value={MOCK_CUSTOMER.ever_paid ? "Yes" : "No"} />
             </div>
-          </SectionCard>
 
-          <SectionCard title="AI explanation" hint="ข้อความจาก AI ที่ persist ลง prediction output">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <ActionBtn icon={Phone}>Log call</ActionBtn>
+              <ActionBtn icon={Mail}>Send email</ActionBtn>
+              <ActionBtn icon={Send} primary>Trigger campaign</ActionBtn>
+            </div>
+          </div>
+        </Panel>
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+        <Panel eyebrow="Credit forecast" title="Top-up timing">
+          <div className="space-y-4">
+            <BrandMeter
+              label="30d usage"
+              value={MOCK_CUSTOMER.predicted_credit_usage_30d}
+              max={MOCK_CUSTOMER.predicted_credit_usage_90d}
+              gradient={BLUE_GRADIENT}
+              formatValue={(value) => value.toLocaleString()}
+            />
+            <BrandMeter
+              label="90d usage"
+              value={MOCK_CUSTOMER.predicted_credit_usage_90d}
+              max={MOCK_CUSTOMER.predicted_credit_usage_90d}
+              gradient={BRAND_GRADIENT}
+              formatValue={(value) => value.toLocaleString()}
+            />
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3 text-[12.5px] leading-6 text-[color:var(--ink-4)]">
+              เหลือประมาณ <b className="num text-[color:var(--ink-1)]">{MOCK_CUSTOMER.estimated_days_until_topup} วัน</b> ก่อนถึงรอบเติมเครดิตถัดไป ควรติดต่อก่อน usage ลดลงต่อเนื่อง
+            </div>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="AI assist" title="Explanation and suggested message">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
                 <StatusPill tone="ok">{MOCK_CUSTOMER.ai_status}</StatusPill>
                 <StatusPill tone="neutral" dot={false}>{MOCK_CUSTOMER.ai_model}</StatusPill>
               </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-white p-4 text-[13px] leading-6 text-[color:var(--ink-3)]">
+              <p className="text-[13px] leading-6 text-[color:var(--ink-3)]">
                 {MOCK_CUSTOMER.ai_explanation}
-              </div>
-              <div className="rounded-2xl border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
-                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-700)]">
-                  <MessageSquareText size={14} /> Suggested message
-                </div>
-                <p className="text-[12.5px] leading-6 text-[color:var(--ink-3)]">
-                  {MOCK_CUSTOMER.ai_recommended_message}
-                </p>
-              </div>
+              </p>
             </div>
-          </SectionCard>
-        </section>
-
-        <section className="surface p-4">
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)]">
-            <ShieldCheck size={12} /> Mockup from ML v2 prediction output fields
-            <span className="opacity-50">·</span>
-            lifecycle / churn / clv / credit / action / ai
-            <span className="opacity-50">·</span>
-            API not connected
+            <div className="rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
+              <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-700)]">
+                <MessageSquareText size={14} /> Suggested message
+              </div>
+              <p className="text-[12.5px] leading-6 text-[color:var(--ink-3)]">
+                {MOCK_CUSTOMER.ai_recommended_message}
+              </p>
+            </div>
           </div>
-        </section>
-      </div>
-    </div>
+        </Panel>
+      </section>
+
+      <section className="surface p-4">
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)]">
+          <ShieldCheck size={12} /> Mockup from ML v2 prediction output fields
+          <span className="opacity-50">·</span>
+          lifecycle / churn / clv / credit / action / ai
+          <span className="opacity-50">·</span>
+          API not connected
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -205,71 +310,200 @@ function ActionBtn({ icon: Icon, children, primary }: { icon: ElementType; child
     <button
       disabled
       title="Mockup only"
-      className={`h-9 px-3 rounded-lg text-[13px] inline-flex items-center gap-1.5 cursor-not-allowed opacity-75 ${
+      className={`inline-flex h-10 flex-1 cursor-not-allowed items-center justify-center gap-1.5 rounded-2xl px-3 text-[13px] font-semibold opacity-75 sm:flex-none ${
         primary
-          ? "bg-[color:var(--moby-600)] text-white"
+          ? "text-white shadow-[0_14px_30px_rgba(0,107,255,0.14)]"
           : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)]"
       }`}
+      style={primary ? { background: BLUE_GRADIENT } : undefined}
     >
       <Icon size={14} /> {children}
     </button>
   );
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
+function Panel({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  children: ReactNode;
+}) {
   return (
-    <span>
-      <span className="text-[color:var(--ink-5)]">{label}</span>{" "}
-      <b className="num text-[color:var(--ink-2)]">{value}</b>
-    </span>
+    <section className="surface-elev overflow-hidden">
+      <div className="border-b border-[color:var(--line-2)] px-5 py-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
+          {eyebrow}
+        </p>
+        <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+          {title}
+        </h2>
+      </div>
+      <div className="p-5">{children}</div>
+    </section>
   );
 }
 
-function KV({ label, value, accent }: { label: string; value: ReactNode; accent?: "rose" | "ok" | "blue" }) {
-  const color = accent === "rose" ? "var(--danger)" : accent === "ok" ? "var(--ok)" : accent === "blue" ? "var(--moby-700)" : "var(--ink-1)";
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  color,
+}: {
+  icon: ElementType;
+  label: string;
+  value: string;
+  hint: string;
+  color: string;
+}) {
   return (
-    <div>
-      <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">{label}</div>
-      <div className="num text-[15px] font-semibold mt-1 leading-6" style={{ color }}>{value}</div>
+    <div className="surface-elev relative overflow-hidden p-5">
+      <div className="absolute inset-x-0 top-0 h-1" style={{ background: color }} />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+            {label}
+          </div>
+          <div className="num mt-1.5 text-[24px] font-semibold tracking-[-0.03em] text-[color:var(--ink-1)]">
+            {value}
+          </div>
+          <div className="mt-1 text-[11.5px] text-[color:var(--ink-4)]">{hint}</div>
+        </div>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[color:var(--surface-2)]" style={{ color }}>
+          <Icon size={18} />
+        </span>
+      </div>
     </div>
   );
 }
 
-function ChurnGauge({ value }: { value: number }) {
+function RiskDial({ value }: { value: number }) {
   const pct = Math.max(0, Math.min(1, value));
-  const color = pct >= 0.6 ? "var(--danger)" : pct >= 0.35 ? "var(--warn)" : "var(--ok)";
+  const color = pct >= 0.6 ? MOBY_BRAND.orange : pct >= 0.35 ? MOBY_BRAND.orangeWarm : MOBY_BRAND.blueLight;
   return (
     <div className="text-center">
       <div
-        className="mx-auto grid h-[132px] w-[132px] place-items-center rounded-full"
+        className="mx-auto grid h-[154px] w-[154px] place-items-center rounded-full shadow-[inset_0_0_0_1px_rgba(13,17,35,0.06)]"
         style={{
-          background: `conic-gradient(${color} ${pct * 360}deg, var(--surface-2) 0deg)`,
+          background: `conic-gradient(${color} ${pct * 360}deg, rgba(13,17,35,0.08) 0deg)`,
         }}
       >
-        <div className="grid h-[102px] w-[102px] place-items-center rounded-full bg-white">
+        <div className="grid h-[116px] w-[116px] place-items-center rounded-full bg-white shadow-[var(--shadow-1)]">
           <div>
-            <div className="num text-[28px] font-semibold leading-none" style={{ color }}>
+            <div className="num text-[32px] font-semibold leading-none" style={{ color }}>
               {(pct * 100).toFixed(1)}%
             </div>
-            <div className="mt-1 text-[10.5px] text-[color:var(--ink-5)]">churn</div>
+            <div className="mt-1 text-[10.5px] font-semibold uppercase tracking-[.14em] text-[color:var(--ink-5)]">
+              churn
+            </div>
           </div>
         </div>
+      </div>
+      <div className="mt-4 flex justify-center">
+        <StatusPill tone="danger">{MOCK_CUSTOMER.churn_risk_level} risk</StatusPill>
       </div>
     </div>
   );
 }
 
-function ForecastBar({ label, value, max }: { label: string; value: number; max: number }) {
+function SignalRow({
+  label,
+  value,
+  hint,
+  meterValue,
+  gradient,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  meterValue: number;
+  gradient: string;
+}) {
+  return (
+    <div className="rounded-[22px] border border-[color:var(--line)] bg-white p-4">
+      <div className="mb-3 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[12px] font-semibold text-[color:var(--ink-1)]">{label}</p>
+          <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-4)]">{hint}</p>
+        </div>
+        <div className="num text-right text-[17px] font-semibold text-[color:var(--ink-1)]">{value}</div>
+      </div>
+      <BrandMeter value={meterValue} max={100} gradient={gradient} hideValue />
+    </div>
+  );
+}
+
+function BrandMeter({
+  label,
+  value,
+  max,
+  gradient,
+  formatValue,
+  hideValue = false,
+  trackClassName = "bg-[rgba(13,17,35,0.08)]",
+}: {
+  label?: string;
+  value: number;
+  max: number;
+  gradient: string;
+  formatValue?: (value: number) => string;
+  hideValue?: boolean;
+  trackClassName?: string;
+}) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   return (
     <div>
-      <div className="mb-1 flex justify-between text-[12px]">
-        <span className="text-[color:var(--ink-4)]">{label}</span>
-        <span className="num font-medium text-[color:var(--ink-2)]">{value.toLocaleString()}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
-        <div className="h-full rounded-full bg-[color:var(--moby-600)]" style={{ width: `${pct}%` }} />
+      {(label || !hideValue) && (
+        <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
+          {label && <span className="font-medium text-[color:var(--ink-4)]">{label}</span>}
+          {!hideValue && (
+            <span className="num font-semibold text-[color:var(--ink-2)]">
+              {formatValue ? formatValue(value) : `${pct.toFixed(0)}%`}
+            </span>
+          )}
+        </div>
+      )}
+      <div className={`relative h-3 overflow-hidden rounded-full ${trackClassName}`}>
+        <div
+          className="h-full rounded-full transition-[width] duration-300"
+          style={{
+            width: `${pct}%`,
+            backgroundImage: gradient,
+            boxShadow: "0 0 18px rgba(252,76,2,0.16)",
+          }}
+        />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-20"
+          style={{
+            backgroundImage: "linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.42) 50%, transparent 82%)",
+          }}
+        />
       </div>
     </div>
   );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">{label}</p>
+      <p className="num mt-1 text-[18px] font-semibold text-[color:var(--ink-1)]">{value}</p>
+    </div>
+  );
+}
+
+function InfoTile({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-[color:var(--line)] bg-white p-3">
+      <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">{label}</p>
+      <div className="num mt-1 text-[13px] font-semibold text-[color:var(--ink-1)]">{value}</div>
+    </div>
+  );
+}
+
+function formatCurrency(value: number): string {
+  return `${value.toLocaleString()} ฿`;
 }

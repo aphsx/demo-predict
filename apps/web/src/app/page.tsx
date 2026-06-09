@@ -11,7 +11,6 @@ import {
   Gem,
   ShieldCheck,
   TrendingDown,
-  UsersRound,
 } from "lucide-react";
 import { StatusPill } from "@/components/ui";
 
@@ -44,12 +43,18 @@ type DashboardOverview = {
     high_value_at_risk: number;
     predicted_clv_6m: number;
   };
+  monthly_value: {
+    avg_monthly_revenue: number;
+    last_month_revenue: number;
+    months: number;
+  };
   credit: {
     critical: number;
     warning: number;
     monitor: number;
     stable: number;
     next_topup_7d: number;
+    predicted_usage_30d: number;
   };
   action_queue: {
     label: string;
@@ -93,12 +98,18 @@ const MOCK_OVERVIEW: DashboardOverview = {
     high_value_at_risk: 41,
     predicted_clv_6m: 5420000,
   },
+  monthly_value: {
+    avg_monthly_revenue: 914000,
+    last_month_revenue: 1048000,
+    months: 12,
+  },
   credit: {
     critical: 28,
     warning: 66,
     monitor: 143,
     stable: 609,
     next_topup_7d: 52,
+    predicted_usage_30d: 1840000,
   },
   action_queue: [
     {
@@ -181,7 +192,7 @@ export default function Dashboard() {
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px]">
                   ภาพรวมผล prediction ที่ควรเห็นก่อนเริ่มทำงาน: portfolio ทั้งหมด,
-                  active churn risk, value at risk, credit urgency และ action queue ที่ต้องตามต่อ
+                  high-value risk, active churn risk, value at risk, credit urgency และ action queue ที่ต้องตามต่อ
                 </p>
               </div>
             </div>
@@ -215,10 +226,12 @@ export default function Dashboard() {
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          icon={UsersRound}
-          label="Total customers"
-          value={formatNumber(overview.totals.customers)}
-          hint={`${formatNumber(overview.totals.active_customers)} active customers`}
+          icon={Gem}
+          label="Avg monthly value"
+          value={formatCurrency(overview.monthly_value.avg_monthly_revenue)}
+          hint={`${overview.monthly_value.months}-month avg from payment history`}
+          tone="warn"
+          href="/monthly-value"
         />
         <MetricCard
           icon={TrendingDown}
@@ -228,17 +241,17 @@ export default function Dashboard() {
           tone="danger"
         />
         <MetricCard
-          icon={Gem}
+          icon={CreditCard}
           label="Revenue at risk"
           value={formatCurrency(overview.totals.revenue_at_risk)}
-          hint="from active paid customers"
+          hint="estimated loss if high-risk customers churn"
           tone="warn"
         />
         <MetricCard
           icon={CalendarClock}
-          label="Follow-ups due"
-          value={formatNumber(overview.totals.followups_due_7d)}
-          hint="recommended within 7 days"
+          label="30d credit demand"
+          value={formatCredits(overview.credit.predicted_usage_30d)}
+          hint="forecast from SMS/Email usage history"
           tone="brand"
         />
       </section>
@@ -316,12 +329,14 @@ function MetricCard({
   value,
   hint,
   tone = "brand",
+  href,
 }: {
   icon: ElementType;
   label: string;
   value: string;
   hint: string;
   tone?: "brand" | "danger" | "warn";
+  href?: string;
 }) {
   const toneClass = tone === "danger"
     ? "text-[color:var(--danger)] bg-[color:var(--danger-bg)]"
@@ -329,8 +344,8 @@ function MetricCard({
       ? "text-[color:var(--warn)] bg-[color:var(--warn-bg)]"
       : "text-[color:var(--moby-600)] bg-[color:var(--moby-50)]";
 
-  return (
-    <div className="surface p-5">
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
@@ -344,7 +359,24 @@ function MetricCard({
           <Icon size={17} />
         </span>
       </div>
-      <div className="mt-3 text-[11.5px] text-[color:var(--ink-5)]">{hint}</div>
+      <div className="mt-3 flex items-center justify-between gap-3 text-[11.5px] text-[color:var(--ink-5)]">
+        <span>{hint}</span>
+        {href ? <ArrowRight size={12} className="shrink-0 text-[color:var(--ink-4)]" /> : null}
+      </div>
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className="surface lift block p-5 transition hover:-translate-y-0.5">
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="surface p-5">
+      {content}
     </div>
   );
 }
@@ -607,4 +639,9 @@ function formatNumber(value: number): string {
 function formatCurrency(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M ฿`;
   return `${value.toLocaleString()} ฿`;
+}
+
+function formatCredits(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M credits`;
+  return `${value.toLocaleString()} credits`;
 }
