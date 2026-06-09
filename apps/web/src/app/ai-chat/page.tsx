@@ -215,7 +215,10 @@ export default function AIChatPage() {
             ref={scrollRef}
             className="flex-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain bg-[#f8fafc] px-3 py-4 sm:px-5"
           >
-            {messages.map(msg => (
+            {messages.map(msg => {
+              if (msg.role === "assistant" && msg.content.trim() === "") return null;
+
+              return (
               <div key={msg.id} className={`flex min-w-0 gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                 {/* avatar */}
                 {msg.role === "assistant" ? (
@@ -259,7 +262,8 @@ export default function AIChatPage() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             {/* thinking */}
             {thinking && (
