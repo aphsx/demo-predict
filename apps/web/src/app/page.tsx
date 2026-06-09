@@ -34,7 +34,6 @@ type DashboardOverview = {
     high: number;
     medium: number;
     low: number;
-    avg_probability: number;
   };
   value: {
     high_value: number;
@@ -89,7 +88,6 @@ const MOCK_OVERVIEW: DashboardOverview = {
     high: 96,
     medium: 214,
     low: 536,
-    avg_probability: 0.31,
   },
   value: {
     high_value: 118,
@@ -256,44 +254,13 @@ export default function Dashboard() {
         />
       </section>
 
-      <section className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-2">
-        <div className="surface-elev flex h-full flex-col overflow-hidden">
-          <PanelHeader
-            eyebrow="Portfolio"
-            title="Lifecycle mix"
-            hint="สัดส่วนลูกค้า active, churned และ ghost"
-          />
-          <div className="flex-1 border-t border-[color:var(--line-2)] p-4">
-            <div className="divide-y divide-[color:var(--line-2)] rounded-2xl border border-[color:var(--line)] bg-white">
-              {Object.entries(overview.lifecycle).map(([stage, count]) => (
-                <LifecycleRow
-                  key={stage}
-                  label={stage}
-                  value={count}
-                  total={overview.totals.customers}
-                  hint={lifecycleHint(stage)}
-                  color={LIFECYCLE_PALETTE[stage as keyof typeof LIFECYCLE_PALETTE]}
-                />
-              ))}
-            </div>
-          </div>
+      <section className="space-y-5">
+        <LifecycleMixCard overview={overview} />
+        <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
+          <RiskCard overview={overview} />
+          <ValueCard overview={overview} />
+          <CreditUrgencyCard overview={overview} />
         </div>
-
-        <RiskCard overview={overview} />
-        <ValueCard overview={overview} />
-        <DistributionCard
-          icon={CreditCard}
-          eyebrow="Credit"
-          title="Top-up urgency"
-          hint="เฉพาะ active customers ที่ forecast credit ได้"
-          data={{
-            Critical: overview.credit.critical,
-            Warning: overview.credit.warning,
-            Monitor: overview.credit.monitor,
-            Stable: overview.credit.stable,
-          }}
-          palette={CREDIT_PALETTE}
-        />
       </section>
 
       <section className="surface-elev overflow-hidden">
@@ -381,89 +348,79 @@ function MetricCard({
   );
 }
 
-function LifecycleRow({
-  label,
-  hint,
-  color,
-  value,
-  total,
-}: {
-  label: string;
-  hint: string;
-  color: string;
-  value: number;
-  total: number;
-}) {
-  const pct = total > 0 ? (value / total) * 100 : 0;
-
+function LifecycleMixCard({ overview }: { overview: DashboardOverview }) {
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-2.5">
-      <div className="min-w-0 flex flex-1 items-center gap-3">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</div>
-          <div className="mt-0.5 truncate text-[11.5px] text-[color:var(--ink-5)]">{hint}</div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
-            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+    <div className="surface-elev overflow-hidden p-4">
+      <div className="flex flex-col gap-3 lg:flex-row">
+        <div className="rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4 lg:w-[280px] lg:shrink-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--moby-700)]">
+            Total portfolio
+          </div>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <div className="num text-[34px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
+              {formatNumber(overview.totals.customers)}
+            </div>
+            <div className="text-right text-[12px] text-[color:var(--ink-4)]">
+              <span className="num font-semibold text-[color:var(--ink-2)]">
+                {formatNumber(overview.totals.active_customers)}
+              </span>{" "}
+              active
+            </div>
           </div>
         </div>
-      </div>
-      <div className="shrink-0 text-right">
-        <div className="num text-[17px] font-semibold text-[color:var(--ink-1)]">{formatNumber(value)}</div>
-        <div className="num text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}%</div>
+        <div className="flex flex-1 flex-col divide-y divide-[color:var(--line-2)] overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white md:flex-row md:divide-x md:divide-y-0">
+          {Object.entries(overview.lifecycle).map(([stage, count]) => (
+            <LifecycleFact
+              key={stage}
+              label={stage}
+              value={count}
+              total={overview.totals.customers}
+              color={LIFECYCLE_PALETTE[stage as keyof typeof LIFECYCLE_PALETTE]}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function DistributionCard({
-  icon: Icon,
-  eyebrow,
-  title,
-  hint,
-  data,
-  palette,
+function LifecycleFact({
+  label,
+  value,
+  total,
+  color,
 }: {
-  icon: ElementType;
-  eyebrow: string;
-  title: string;
-  hint: string;
-  data: Record<string, number>;
-  palette: Record<string, string>;
+  label: string;
+  value: number;
+  total: number;
+  color: string;
 }) {
-  const total = Object.values(data).reduce((sum, value) => sum + value, 0);
+  const pct = total > 0 ? (value / total) * 100 : 0;
 
   return (
-    <div className="surface-elev flex h-full flex-col overflow-hidden">
-      <PanelHeader eyebrow={eyebrow} title={title} hint={hint} icon={Icon} />
-      <div className="flex-1 space-y-4 border-t border-[color:var(--line-2)] p-5">
-        {Object.entries(data).map(([row, value]) => {
-          const pct = total > 0 ? (value / total) * 100 : 0;
-          return (
-          <div key={row}>
-            <div className="mb-1.5 flex items-center justify-between gap-3">
-              <span className="text-[12px] font-medium text-[color:var(--ink-2)]">{row}</span>
-              <span className="num text-[12px] font-semibold text-[color:var(--ink-2)]">
-                {formatNumber(value)}
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
-              <div className="h-full rounded-full" style={{ width: `${pct}%`, background: palette[row] }} />
-            </div>
+    <div className="flex min-w-0 flex-1 items-center justify-between gap-4 p-4">
+      <div className="flex items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+        <div className="min-w-0">
+          <div className="truncate text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+            {label}
           </div>
-          );
-        })}
+          <div className="num mt-1 text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}% of total</div>
+        </div>
+      </div>
+      <div className="num shrink-0 text-[24px] font-semibold text-[color:var(--ink-1)]">
+        {formatNumber(value)}
       </div>
     </div>
   );
 }
 
 function RiskCard({ overview }: { overview: DashboardOverview }) {
-  const churnData = {
-    High: overview.active_churn.high,
-    Medium: overview.active_churn.medium,
-    Low: overview.active_churn.low,
-  };
+  const churnData = [
+    ["High", overview.active_churn.high],
+    ["Medium", overview.active_churn.medium],
+    ["Low", overview.active_churn.low],
+  ] as const;
   const highPct = (overview.active_churn.high / overview.active_churn.base_customers) * 100;
 
   return (
@@ -475,34 +432,81 @@ function RiskCard({ overview }: { overview: DashboardOverview }) {
         icon={TrendingDown}
       />
       <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
-        <div className="mb-4 rounded-2xl border border-[color:var(--danger-bg)] bg-[color:var(--danger-bg)] p-4">
+        <div className="mb-4 rounded-[24px] border border-[color:var(--danger-bg)] bg-[color:var(--danger-bg)] p-4">
           <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--danger)]">
             High-risk active
           </div>
-          <div className="mt-1 flex items-end justify-between gap-3">
-            <div className="num text-[30px] font-semibold text-[color:var(--danger)]">
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <div className="num text-[34px] font-semibold tracking-[-0.04em] text-[color:var(--danger)]">
               {formatNumber(overview.active_churn.high)}
             </div>
-            <div className="num text-[12px] text-[color:var(--ink-4)]">
-              {highPct.toFixed(1)}% of active
+            <div className="num pb-1 text-right text-[12px] text-[color:var(--ink-4)]">
+              {highPct.toFixed(1)}% of active customers
             </div>
           </div>
         </div>
-        <DistributionRows data={churnData} palette={CHURN_PALETTE} />
-        <div className="mt-4 text-[11.5px] text-[color:var(--ink-5)]">
-          Average active churn probability: {(overview.active_churn.avg_probability * 100).toFixed(1)}%
+        <div className="space-y-3">
+          {churnData.map(([label, value]) => (
+            <div key={label} className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+              <RiskListRow
+                label={label}
+                value={value}
+                total={overview.active_churn.base_customers}
+                totalLabel="active"
+                color={CHURN_PALETTE[label as keyof typeof CHURN_PALETTE]}
+              />
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
+function RiskListRow({
+  label,
+  value,
+  total,
+  totalLabel,
+  hint,
+  color,
+}: {
+  label: string;
+  value: number;
+  total?: number;
+  totalLabel?: string;
+  hint?: string;
+  color: string;
+}) {
+  const pct = total && total > 0 ? (value / total) * 100 : null;
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+        <div className="min-w-0">
+          <div className="truncate text-[12px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-2)]">
+            {label}
+          </div>
+          <div className="num mt-1 text-[11px] text-[color:var(--ink-5)]">
+            {pct !== null ? `${pct.toFixed(1)}% of ${totalLabel ?? "total"}` : hint}
+          </div>
+        </div>
+      </div>
+      <div className="num text-[22px] font-semibold text-[color:var(--ink-1)]">
+        {formatNumber(value)}
+      </div>
+    </div>
+  );
+}
+
 function ValueCard({ overview }: { overview: DashboardOverview }) {
-  const valueData = {
-    "High value": overview.value.high_value,
-    "Mid value": overview.value.mid_value,
-    "Low value": overview.value.low_value,
-  };
+  const valueData = [
+    ["High value at risk", overview.value.high_value_at_risk, "High CLV + high churn risk", "var(--danger)"],
+    ["High value", overview.value.high_value, "accounts", "var(--moby-600)"],
+    ["Mid value", overview.value.mid_value, "accounts", "var(--info)"],
+    ["Low value", overview.value.low_value, "accounts", "var(--ink-5)"],
+  ] as const;
 
   return (
     <div className="surface-elev flex h-full flex-col overflow-hidden">
@@ -513,28 +517,80 @@ function ValueCard({ overview }: { overview: DashboardOverview }) {
         icon={Gem}
       />
       <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <div>
-            <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">Predicted CLV</div>
-            <div className="num mt-1 text-[24px] font-semibold text-[color:var(--ink-1)]">
+        <div className="mb-4 rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--moby-700)]">Predicted CLV</div>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <div className="num text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
               {formatCurrency(overview.value.predicted_clv_6m)}
             </div>
+            <div className="pb-1 text-right text-[12px] text-[color:var(--ink-4)]">6-month forecast</div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">High value at risk</div>
-            <div className="num mt-1 text-[24px] font-semibold text-[color:var(--danger)]">
-              {formatNumber(overview.value.high_value_at_risk)}
+        </div>
+        <div className="space-y-3">
+          {valueData.map(([label, value, hint, color]) => (
+            <div key={label} className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+              <RiskListRow
+                label={label}
+                value={value}
+                hint={hint}
+                color={color}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreditUrgencyCard({ overview }: { overview: DashboardOverview }) {
+  const creditData = [
+    ["Critical", overview.credit.critical],
+    ["Warning", overview.credit.warning],
+    ["Monitor", overview.credit.monitor],
+    ["Stable", overview.credit.stable],
+  ] as const;
+
+  return (
+    <div className="surface-elev flex h-full flex-col overflow-hidden">
+      <PanelHeader
+        eyebrow="Credit"
+        title="Top-up urgency"
+        hint="เฉพาะ active customers ที่ forecast credit ได้"
+        icon={CreditCard}
+      />
+      <div className="flex-1 border-t border-[color:var(--line-2)] p-5">
+        <div className="mb-4 rounded-[24px] border border-[color:var(--warn-bg)] bg-[color:var(--warn-bg)] p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--warn)]">
+            Next top-up 7d
+          </div>
+          <div className="mt-2 flex items-end justify-between gap-4">
+            <div className="num text-[30px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
+              {formatNumber(overview.credit.next_topup_7d)}
+            </div>
+            <div className="pb-1 text-right">
+              <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+                30d usage
+              </div>
+              <div className="num mt-1 text-[12px] font-semibold text-[color:var(--ink-2)]">
+                {formatCredits(overview.credit.predicted_usage_30d)}
+              </div>
             </div>
           </div>
         </div>
-        <DistributionRows
-          data={valueData}
-          palette={{
-            "High value": "var(--moby-600)",
-            "Mid value": "var(--info)",
-            "Low value": "var(--ink-5)",
-          }}
-        />
+        <div className="space-y-3">
+          {creditData.map(([label, value]) => (
+            <div key={label} className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+              <RiskListRow
+                label={label}
+                value={value}
+                total={overview.active_churn.base_customers}
+                totalLabel="active"
+                color={CREDIT_PALETTE[label as keyof typeof CREDIT_PALETTE]}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -569,27 +625,29 @@ function ActionSummaryCard({
   );
 }
 
-function DistributionRows({ data, palette }: { data: Record<string, number>; palette: Record<string, string> }) {
-  const total = Object.values(data).reduce((sum, value) => sum + value, 0);
-
+function MiniInsightTile({
+  label,
+  value,
+  hint,
+  color,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  color: string;
+}) {
   return (
-    <div className="space-y-4">
-      {Object.entries(data).map(([label, value]) => {
-        const pct = total > 0 ? (value / total) * 100 : 0;
-        return (
-        <div key={label}>
-          <div className="mb-1.5 flex items-center justify-between gap-3">
-            <span className="text-[12px] font-medium text-[color:var(--ink-2)]">{label}</span>
-            <span className="num text-[12px] font-semibold text-[color:var(--ink-2)]">
-              {formatNumber(value)}
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-[color:var(--surface-2)]">
-            <div className="h-full rounded-full" style={{ width: `${pct}%`, background: palette[label] }} />
-          </div>
-        </div>
-        );
-      })}
+    <div className="rounded-2xl border border-[color:var(--line)] bg-white p-3">
+      <div className="flex items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+        <span className="truncate text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+          {label}
+        </span>
+      </div>
+      <div className="num mt-3 text-[22px] font-semibold text-[color:var(--ink-1)]">
+        {value}
+      </div>
+      <div className="mt-1 text-[11px] text-[color:var(--ink-5)]">{hint}</div>
     </div>
   );
 }
@@ -625,13 +683,6 @@ function PanelHeader({
   );
 }
 
-function lifecycleHint(stage: string): string {
-  if (stage === "Active Paid") return "จ่ายเงินแล้วและยังใช้งานอยู่";
-  if (stage === "Active Free") return "ยังใช้งานอยู่แต่ยังไม่จ่าย";
-  if (stage === "Churned") return "หยุดใช้งานตาม observed lifecycle";
-  return "สมัครแล้วแต่ยังไม่เกิด activation";
-}
-
 function formatNumber(value: number): string {
   return value.toLocaleString();
 }
@@ -645,3 +696,4 @@ function formatCredits(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M credits`;
   return `${value.toLocaleString()} credits`;
 }
+
