@@ -141,11 +141,16 @@ body {
 .hairline { border-color: var(--line); }
 hr.hairline { border-top: 1px solid var(--line); border-bottom: none; }
 
-/* scrollbar */
-::-webkit-scrollbar       { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #d6dbe2; border-radius: 8px; border: 2px solid var(--bg); }
-::-webkit-scrollbar-thumb:hover { background: #b8c0cc; }
-::-webkit-scrollbar-track { background: transparent; }
+/* scrollbar: keep scrolling available, hide the visual rail everywhere */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 
 /* focus */
 :focus-visible { outline: 2px solid var(--moby-500); outline-offset: 2px; border-radius: 6px; }
