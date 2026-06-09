@@ -2,10 +2,11 @@
 
 export const dynamic = "force-dynamic";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, type MouseEvent } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Loader2, Sparkles } from "lucide-react";
+import { StatusDialog } from "@/components/StatusDialog";
 import {
   PageHeader, StatusPill, Skeleton,
   lifecycleTone,
@@ -13,6 +14,8 @@ import {
 import { useRunStore } from "@/lib/runStore";
 
 const STAGES   = ["Active Paid", "Active Free", "Churned", "Ghost"];
+
+type AiGenerationStatus = "generating" | "generated";
 
 type PredictionOutput = {
   acc_id: number;
@@ -73,11 +76,28 @@ function Inner() {
     lifecycle_stage:  sp.get("lifecycle_stage")  || "",
     search:           sp.get("search")           || "",
   });
+  const [aiGeneration, setAiGeneration] = useState<Record<number, AiGenerationStatus>>({});
+  const [pendingOverwriteAccId, setPendingOverwriteAccId] = useState<number | null>(null);
 
   const setFilter = (k: string, v: string) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); };
   const clearAll  = () => { setFilters({
     lifecycle_stage:"", search: "",
   }); setPage(1); };
+  const startAiGeneration = (accId: number) => {
+    setAiGeneration(current => ({ ...current, [accId]: "generating" }));
+    window.setTimeout(() => {
+      setAiGeneration(current => ({ ...current, [accId]: "generated" }));
+    }, 3000);
+  };
+  const generateReason = (event: MouseEvent<HTMLButtonElement>, accId: number) => {
+    event.stopPropagation();
+    if (aiGeneration[accId] === "generated") {
+      setPendingOverwriteAccId(accId);
+      return;
+    }
+
+    startAiGeneration(accId);
+  };
 
   const rows: PredictionOutput[] = MOCK_ROWS;
   const total = MOCK_ROWS.length;
@@ -149,39 +169,59 @@ function Inner() {
                   <th className="text-right">CLV (6m)</th>
                   <th>N Purchases</th>
                   <th>Total Revenue</th>
+                  <th>AI Reason</th>
                 </tr>
               </thead>
               <tbody>
                 {pendingRows && [...Array(8)].map((_, i) => (
-                  <tr key={i}><td colSpan={6}><Skeleton className="h-6 my-1" /></td></tr>
+                  <tr key={i}><td colSpan={7}><Skeleton className="h-6 my-1" /></td></tr>
                 ))}
-                {!pendingRows && rows.map((r: PredictionOutput) => (
-                  <tr
-                    key={r.acc_id}
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/customers/${r.acc_id}`)}
-                  >
-                    <td className="num text-[color:var(--moby-700)] font-medium">{r.acc_id}</td>
-                    <td>
-                      <div className="flex items-center gap-1.5">
-                        <StatusPill tone={lifecycleTone(r.lifecycle_stage ?? "")}>{r.lifecycle_stage ?? "—"}</StatusPill>
-                        {r.sub_stage && <span className="text-[11px] text-[color:var(--ink-5)]">{r.sub_stage}</span>}
-                      </div>
-                    </td>
-                    <td>
-                      {r.churn_probability != null
-                        ? `${(r.churn_probability * 100).toFixed(1)}%`
-                        : "—"}
-                    </td>
-                    <td className="text-right num">
-                      {r.predicted_clv_6m != null ? `${Number(r.predicted_clv_6m).toLocaleString()} ฿` : "—"}
-                    </td>
-                    <td className="num">{r.n_purchases ?? "—"}</td>
-                    <td className="num">
-                      {r.total_revenue != null ? `${Number(r.total_revenue).toLocaleString()} ฿` : "—"}
-                    </td>
-                  </tr>
-                ))}
+                {!pendingRows && rows.map((r: PredictionOutput) => {
+                  const aiStatus = aiGeneration[r.acc_id];
+
+                  return (
+                    <tr
+                      key={r.acc_id}
+                      className="cursor-pointer"
+                      onClick={() => router.push(`/customers/${r.acc_id}`)}
+                    >
+                      <td className="num text-[color:var(--moby-700)] font-medium">{r.acc_id}</td>
+                      <td>
+                        <div className="flex items-center gap-1.5">
+                          <StatusPill tone={lifecycleTone(r.lifecycle_stage ?? "")}>{r.lifecycle_stage ?? "—"}</StatusPill>
+                          {r.sub_stage && <span className="text-[11px] text-[color:var(--ink-5)]">{r.sub_stage}</span>}
+                        </div>
+                      </td>
+                      <td>
+                        {r.churn_probability != null
+                          ? `${(r.churn_probability * 100).toFixed(1)}%`
+                          : "—"}
+                      </td>
+                      <td className="text-right num">
+                        {r.predicted_clv_6m != null ? `${Number(r.predicted_clv_6m).toLocaleString()} ฿` : "—"}
+                      </td>
+                      <td className="num">{r.n_purchases ?? "—"}</td>
+                      <td className="num">
+                        {r.total_revenue != null ? `${Number(r.total_revenue).toLocaleString()} ฿` : "—"}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          disabled={aiStatus === "generating"}
+                          onClick={(event) => generateReason(event, r.acc_id)}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] px-2.5 text-[12px] font-semibold text-[color:var(--moby-700)] hover:border-[color:var(--moby-200)] hover:bg-white disabled:cursor-wait disabled:opacity-70"
+                        >
+                          {aiStatus === "generating" ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Sparkles size={13} />
+                          )}
+                          {aiStatus === "generating" ? "Generating..." : "Gen AI"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -207,6 +247,22 @@ function Inner() {
           </div>
         </div>
       </div>
+
+      {pendingOverwriteAccId != null && (
+        <StatusDialog
+          open
+          tone="warning"
+          title="AI data มีอยู่แล้ว"
+          message={`Account ${pendingOverwriteAccId} มี reason จาก AI อยู่แล้ว ต้องการ generate ใหม่และเขียนทับข้อมูลเดิมไหม?`}
+          confirmLabel="เขียนทับ"
+          cancelLabel="ยกเลิก"
+          onCancel={() => setPendingOverwriteAccId(null)}
+          onConfirm={() => {
+            startAiGeneration(pendingOverwriteAccId);
+            setPendingOverwriteAccId(null);
+          }}
+        />
+      )}
     </div>
   );
 }

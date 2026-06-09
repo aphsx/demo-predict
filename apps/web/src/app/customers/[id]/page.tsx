@@ -7,18 +7,13 @@ import { useParams } from "next/navigation";
 import type { ElementType, ReactNode } from "react";
 import {
   ArrowLeft,
-  CalendarClock,
   CreditCard,
   Gem,
-  Mail,
   MessageSquareText,
-  Phone,
-  Send,
   ShieldCheck,
-  Target,
   TrendingDown,
 } from "lucide-react";
-import { StatusPill, lifecycleTone, urgencyTone } from "@/components/ui";
+import { StatusPill, lifecycleTone } from "@/components/ui";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 
 const BRAND_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 48%, ${MOBY_BRAND.orangeWarm} 76%, ${MOBY_BRAND.orange} 100%)`;
@@ -63,79 +58,31 @@ export default function Customer360Mockup() {
 
   return (
     <main className="px-8 py-6 pb-12 space-y-5">
-      <section
-        className="relative overflow-hidden rounded-[30px] border border-white/20 px-6 py-6 text-white shadow-[var(--shadow-2)] sm:px-7 lg:px-8"
-        style={{
-          backgroundImage: [
-            "radial-gradient(rgba(7, 29, 126, 0.48) 0%, transparent 44%)",
-            "url(/assets/intro/about_bg.webp)",
-            "linear-gradient(180deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.04) 42%, rgba(0,0,0,0.14) 100%)",
-            `linear-gradient(140deg, ${MOBY_BRAND.dark} -10%, ${MOBY_BRAND.blue} 56%, ${MOBY_BRAND.blueLight} 72%, ${MOBY_BRAND.orangeWarm} 88%, ${MOBY_BRAND.orange} 100%)`,
-          ].join(", "),
-          backgroundRepeat: "no-repeat, no-repeat, no-repeat, no-repeat",
-          backgroundSize: "140% 150%, cover, 100% 100%, 100% 100%",
-          backgroundPosition: "center, center, center, center",
-        }}
-      >
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.12),transparent_45%)]" />
-        <div className="relative">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
           <Link
             href="/customers"
-            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[.16em] text-white/72 hover:text-white"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[.16em] text-[color:var(--ink-5)] hover:text-[color:var(--moby-700)]"
           >
             <ArrowLeft size={11} /> Customers
           </Link>
-
-          <div className="mt-5 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-            <div className="max-w-3xl">
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <StatusPill tone={lifecycleTone(MOCK_CUSTOMER.lifecycle_stage)}>
-                  {MOCK_CUSTOMER.lifecycle_stage}
-                </StatusPill>
-                <StatusPill tone="neutral" dot={false}>{MOCK_CUSTOMER.sub_stage}</StatusPill>
-                <StatusPill tone="danger">{MOCK_CUSTOMER.churn_risk_level} churn risk</StatusPill>
-                <StatusPill tone="neutral" dot={false}>Mockup</StatusPill>
-              </div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
-                Customer 360
-              </p>
-              <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-[42px]">
-                Account {accId}
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px]">
-                สรุปภาพรวมลูกค้ารายนี้แบบอ่านเร็ว: ความเสี่ยง churn, มูลค่าที่ควรปกป้อง,
-                การใช้เครดิต และ action ที่ทีม 1Moby ควรทำต่อ
-              </p>
-            </div>
-
-            <div className="w-full rounded-[24px] border border-white/16 bg-white/12 p-4 backdrop-blur xl:w-[360px]">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[.14em] text-white/60">
-                    Priority score
-                  </div>
-                  <div className="num mt-1 text-[40px] font-semibold leading-none">
-                    {MOCK_CUSTOMER.priority_score}
-                  </div>
-                </div>
-                <Target size={30} className="text-white/86" />
-              </div>
-              <div className="mt-4">
-                <BrandMeter
-                  value={MOCK_CUSTOMER.priority_score}
-                  max={100}
-                  gradient={ORANGE_GRADIENT}
-                  trackClassName="bg-white/18"
-                  hideValue
-                />
-              </div>
-              <p className="mt-3 text-[12px] leading-5 text-white/72">
-                {MOCK_CUSTOMER.recommended_action}
-              </p>
-            </div>
-          </div>
+          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--ink-5)]">
+            Customer 360
+          </p>
+          <h1 className="mt-1 text-[34px] font-semibold leading-tight tracking-[-0.045em] text-[color:var(--ink-1)]">
+            Account {accId}
+          </h1>
         </div>
-      </section>
+
+        <div className="flex flex-wrap gap-2">
+          <StatusPill tone={lifecycleTone(MOCK_CUSTOMER.lifecycle_stage)}>
+            {MOCK_CUSTOMER.lifecycle_stage}
+          </StatusPill>
+          <StatusPill tone="neutral" dot={false}>{MOCK_CUSTOMER.sub_stage}</StatusPill>
+          <StatusPill tone="danger">{MOCK_CUSTOMER.churn_risk_level} churn risk</StatusPill>
+          <StatusPill tone="neutral" dot={false}>Mockup</StatusPill>
+        </div>
+      </header>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -160,16 +107,16 @@ export default function Customer360Mockup() {
           color={MOBY_BRAND.orange}
         />
         <MetricCard
-          icon={CalendarClock}
-          label="Follow-up"
-          value={MOCK_CUSTOMER.recommended_followup_date}
-          hint="recommended next contact"
-          color={MOBY_BRAND.blueLight}
+          icon={Gem}
+          label="Revenue at risk"
+          value={formatCurrency(MOCK_CUSTOMER.revenue_at_risk)}
+          hint={`จาก total revenue ${formatCurrency(MOCK_CUSTOMER.total_revenue)}`}
+          color={MOBY_BRAND.orangeWarm}
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.12fr)_minmax(360px,0.88fr)]">
-        <Panel eyebrow="Prediction signals" title="Risk, value, and credit">
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_410px]">
+        <Panel eyebrow="Risk profile" title="Prediction signals">
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
             <div className="rounded-[24px] border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
               <RiskDial value={MOCK_CUSTOMER.churn_probability} />
@@ -212,74 +159,19 @@ export default function Customer360Mockup() {
           </div>
         </Panel>
 
-        <Panel eyebrow="Next best action" title="What the team should do">
+        <Panel eyebrow="AI reason" title="Generated context">
           <div className="space-y-4">
-            <div className="rounded-[24px] border p-4" style={{ borderColor: "rgba(252,76,2,0.22)", background: "rgba(252,76,2,0.055)" }}>
-              <div className="flex items-start gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-white shadow-[0_12px_28px_rgba(252,76,2,0.16)]" style={{ background: ORANGE_GRADIENT }}>
-                  <Phone size={18} />
-                </span>
-                <div>
-                  <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">
-                    {MOCK_CUSTOMER.recommended_action}
-                  </p>
-                  <p className="mt-1 text-[12.5px] leading-6 text-[color:var(--ink-4)]">
-                    {MOCK_CUSTOMER.priority_reason}
-                  </p>
-                </div>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone="ok">{MOCK_CUSTOMER.ai_status}</StatusPill>
+              <StatusPill tone="neutral" dot={false}>{MOCK_CUSTOMER.ai_model}</StatusPill>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <InfoTile label="Follow-up date" value={MOCK_CUSTOMER.recommended_followup_date} />
-              <InfoTile label="Urgency" value={<StatusPill tone={urgencyTone(MOCK_CUSTOMER.credit_urgency_level)}>{MOCK_CUSTOMER.credit_urgency_level}</StatusPill>} />
-              <InfoTile label="Lifecycle" value={MOCK_CUSTOMER.lifecycle_stage} />
-              <InfoTile label="Ever paid" value={MOCK_CUSTOMER.ever_paid ? "Yes" : "No"} />
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <ActionBtn icon={Phone}>Log call</ActionBtn>
-              <ActionBtn icon={Mail}>Send email</ActionBtn>
-              <ActionBtn icon={Send} primary>Trigger campaign</ActionBtn>
-            </div>
-          </div>
-        </Panel>
-      </section>
-
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
-        <Panel eyebrow="Credit forecast" title="Top-up timing">
-          <div className="space-y-4">
-            <BrandMeter
-              label="30d usage"
-              value={MOCK_CUSTOMER.predicted_credit_usage_30d}
-              max={MOCK_CUSTOMER.predicted_credit_usage_90d}
-              gradient={BLUE_GRADIENT}
-              formatValue={(value) => value.toLocaleString()}
-            />
-            <BrandMeter
-              label="90d usage"
-              value={MOCK_CUSTOMER.predicted_credit_usage_90d}
-              max={MOCK_CUSTOMER.predicted_credit_usage_90d}
-              gradient={BRAND_GRADIENT}
-              formatValue={(value) => value.toLocaleString()}
-            />
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3 text-[12.5px] leading-6 text-[color:var(--ink-4)]">
-              เหลือประมาณ <b className="num text-[color:var(--ink-1)]">{MOCK_CUSTOMER.estimated_days_until_topup} วัน</b> ก่อนถึงรอบเติมเครดิตถัดไป ควรติดต่อก่อน usage ลดลงต่อเนื่อง
-            </div>
-          </div>
-        </Panel>
-
-        <Panel eyebrow="AI assist" title="Explanation and suggested message">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <StatusPill tone="ok">{MOCK_CUSTOMER.ai_status}</StatusPill>
-                <StatusPill tone="neutral" dot={false}>{MOCK_CUSTOMER.ai_model}</StatusPill>
-              </div>
               <p className="text-[13px] leading-6 text-[color:var(--ink-3)]">
                 {MOCK_CUSTOMER.ai_explanation}
               </p>
             </div>
+
             <div className="rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
               <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-700)]">
                 <MessageSquareText size={14} /> Suggested message
@@ -292,33 +184,73 @@ export default function Customer360Mockup() {
         </Panel>
       </section>
 
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <Panel eyebrow="Credit forecast" title="Top-up timing">
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+                  30d usage
+                </p>
+                <p className="num mt-1 text-[24px] font-semibold text-[color:var(--ink-1)]">
+                  {MOCK_CUSTOMER.predicted_credit_usage_30d.toLocaleString()}
+                </p>
+                <div className="mt-3">
+                  <BrandMeter
+                    value={MOCK_CUSTOMER.predicted_credit_usage_30d}
+                    max={MOCK_CUSTOMER.predicted_credit_usage_90d}
+                    gradient={BLUE_GRADIENT}
+                    hideValue
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+                  90d usage
+                </p>
+                <p className="num mt-1 text-[24px] font-semibold text-[color:var(--ink-1)]">
+                  {MOCK_CUSTOMER.predicted_credit_usage_90d.toLocaleString()}
+                </p>
+                <div className="mt-3">
+                  <BrandMeter
+                    value={MOCK_CUSTOMER.predicted_credit_usage_90d}
+                    max={MOCK_CUSTOMER.predicted_credit_usage_90d}
+                    gradient={BRAND_GRADIENT}
+                    hideValue
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4 text-[12.5px] leading-6 text-[color:var(--ink-4)]">
+              เหลือประมาณ <b className="num text-[color:var(--ink-1)]">{MOCK_CUSTOMER.estimated_days_until_topup} วัน</b> ก่อนถึงรอบเติมเครดิตถัดไป จาก forecast credit usage ปัจจุบัน
+            </div>
+          </div>
+        </Panel>
+
+        <Panel eyebrow="Customer data" title="Snapshot">
+          <div className="grid grid-cols-2 gap-3">
+            <FactCard label="Lifecycle" value={MOCK_CUSTOMER.lifecycle_stage} />
+            <FactCard label="Ever paid" value={MOCK_CUSTOMER.ever_paid ? "Yes" : "No"} />
+            <FactCard label="Purchases" value={MOCK_CUSTOMER.n_purchases.toLocaleString()} />
+            <FactCard label="Inactive" value={`${MOCK_CUSTOMER.days_since_last_activity}d`} />
+            <FactCard label="Total revenue" value={formatCurrency(MOCK_CUSTOMER.total_revenue)} />
+            <FactCard label="Avg txn" value={formatCurrency(MOCK_CUSTOMER.avg_transaction_value)} />
+          </div>
+        </Panel>
+      </section>
+
       <section className="surface p-4">
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)]">
           <ShieldCheck size={12} /> Mockup from ML v2 prediction output fields
           <span className="opacity-50">·</span>
-          lifecycle / churn / clv / credit / action / ai
+          lifecycle / churn / clv / credit / ai
           <span className="opacity-50">·</span>
           API not connected
         </div>
       </section>
     </main>
-  );
-}
-
-function ActionBtn({ icon: Icon, children, primary }: { icon: ElementType; children: ReactNode; primary?: boolean }) {
-  return (
-    <button
-      disabled
-      title="Mockup only"
-      className={`inline-flex h-10 flex-1 cursor-not-allowed items-center justify-center gap-1.5 rounded-2xl px-3 text-[13px] font-semibold opacity-75 sm:flex-none ${
-        primary
-          ? "text-white shadow-[0_14px_30px_rgba(0,107,255,0.14)]"
-          : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)]"
-      }`}
-      style={primary ? { background: BLUE_GRADIENT } : undefined}
-    >
-      <Icon size={14} /> {children}
-    </button>
   );
 }
 
@@ -495,11 +427,15 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function InfoTile({ label, value }: { label: string; value: ReactNode }) {
+function FactCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[color:var(--line)] bg-white p-3">
-      <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">{label}</p>
-      <div className="num mt-1 text-[13px] font-semibold text-[color:var(--ink-1)]">{value}</div>
+      <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+        {label}
+      </p>
+      <p className="num mt-1 text-[13px] font-semibold text-[color:var(--ink-1)]">
+        {value}
+      </p>
     </div>
   );
 }
