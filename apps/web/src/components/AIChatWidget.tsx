@@ -1,12 +1,12 @@
 /**
  * AIChatWidget — Floating AI chat bubble (bottom-right)
  *
- * Layout pattern adapted from:
- *   https://github.com/Wolox/react-chat-widget
- *   (MIT License — Wolox Engineering)
+ * Layout pattern follows common open-source messenger widgets such as
+ * Wolox/react-chat-widget: a fixed shell with non-shrinking header/footer
+ * and one scrollable message viewport.
  *
  * Structure:
- *   [wrapper: fixed, flex-col, h-[520px]]
+ *   [wrapper: fixed, flex-col, responsive width/height]
  *     ├── [header:   flex-shrink-0           ]  ← always visible, never shrinks
  *     ├── [messages: flex-1, min-h-0,
  *     │              overflow-y-auto          ]  ← fills remaining space, scrolls
@@ -74,6 +74,12 @@ const fmt = (d: Date) => d.toLocaleTimeString("th-TH", TIME_FORMAT);
 ───────────────────────────────────────────── */
 const CHIPS = ["ดู churn risk", "ดู CLV", "ดู lifecycle", "Model health"];
 
+const PANEL_SIZE =
+  "w-[calc(100vw-24px)] h-[min(620px,calc(100dvh-24px))] sm:w-[390px] sm:h-[min(640px,calc(100dvh-48px))]";
+
+const TEXT_WRAP =
+  "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
+
 /* ─────────────────────────────────────────────
    Sub-components
 ───────────────────────────────────────────── */
@@ -90,12 +96,13 @@ function Avatar() {
 function MessageRow({ msg }: { msg: Msg }) {
   const isUser = msg.role === "user";
   return (
-    <div className={`flex items-end gap-2 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`flex items-end gap-2 min-w-0 ${isUser ? "flex-row-reverse" : ""}`}>
       {!isUser && <Avatar />}
-      <div className={`flex flex-col gap-1 max-w-[76%] ${isUser ? "items-end" : "items-start"}`}>
+      <div className={`flex flex-col gap-1 min-w-0 max-w-[82%] ${isUser ? "items-end" : "items-start"}`}>
         <div
           className={[
-            "px-3.5 py-2.5 text-[13px] leading-relaxed",
+            "max-w-full px-3.5 py-2.5 text-[13px] leading-relaxed",
+            TEXT_WRAP,
             isUser
               ? "rounded-2xl rounded-br-none bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-700)] text-white"
               : "rounded-2xl rounded-bl-none bg-white border border-[color:var(--line)] text-[color:var(--ink-2)] shadow-sm",
@@ -193,7 +200,7 @@ export default function AIChatWidget() {
         aria-label="Open Moby AI"
         onClick={() => setOpen(v => !v)}
         className={[
-          "fixed bottom-6 right-6 z-50",
+          "fixed bottom-3 right-3 z-50 sm:bottom-6 sm:right-6",
           "w-14 h-14 rounded-full",
           "bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)]",
           "text-white shadow-xl",
@@ -215,7 +222,7 @@ export default function AIChatWidget() {
       </button>
 
       {/* ══ Chat panel ═══════════════════════════════════════
-          Layout rules (from Wolox/react-chat-widget pattern):
+          Layout rules (common messenger widget pattern):
             • wrapper   → flex flex-col, FIXED size, overflow-hidden
             • header    → flex-shrink-0  (never shrinks)
             • messages  → flex-1 min-h-0 overflow-y-auto  (fills gap, scrolls)
@@ -224,8 +231,8 @@ export default function AIChatWidget() {
       <div
         aria-label="Moby AI chat panel"
         className={[
-          "fixed bottom-6 right-6 z-50",
-          "w-[360px] h-[520px]",
+          "fixed inset-x-3 bottom-3 z-50 sm:inset-x-auto sm:right-6 sm:bottom-6",
+          PANEL_SIZE,
           "flex flex-col",
           "rounded-2xl overflow-hidden bg-white",
           "border border-[color:var(--line)]",
@@ -238,19 +245,19 @@ export default function AIChatWidget() {
       >
 
         {/* ── HEADER (flex-shrink-0) ─────────────────────── */}
-        <header className="flex-shrink-0 flex items-center gap-3 px-4 py-3
+        <header className="flex-shrink-0 flex items-center gap-3 min-w-0 px-4 py-3
           bg-gradient-to-r from-[color:var(--moby-600)] to-[color:var(--moby-800)]">
           <div className="flex items-center justify-center shrink-0">
             <Sparkles size={14} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13.5px] font-semibold text-white leading-tight">Moby AI</p>
-            <p className="text-[10.5px] text-blue-200 flex items-center gap-1.5 mt-0.5">
+            <p className="truncate text-[13.5px] font-semibold text-white leading-tight">Moby AI</p>
+            <p className="truncate text-[10.5px] text-blue-200 flex items-center gap-1.5 mt-0.5">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
               Not connected · no mock insights
             </p>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <Link
               href="/ai-chat"
               title="เปิดเต็มจอ"
@@ -284,7 +291,7 @@ export default function AIChatWidget() {
         ─────────────────────────────────────────────────────── */}
         <div
           ref={scrollRef}
-          className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-3 bg-[#f8fafc]"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-3 bg-[#f8fafc] sm:px-4"
         >
           {msgs.map(msg => (
             <MessageRow key={msg.id} msg={msg} />
@@ -294,7 +301,7 @@ export default function AIChatWidget() {
           {busy && (
             <div className="flex items-end gap-2">
               <Avatar />
-              <div className="bg-white border border-[color:var(--line)] rounded-2xl rounded-bl-none
+              <div className="max-w-[82%] bg-white border border-[color:var(--line)] rounded-2xl rounded-bl-none
                 px-4 py-3 shadow-sm flex items-center gap-[5px]">
                 {[0, 150, 300].map(d => (
                   <span
@@ -335,12 +342,9 @@ export default function AIChatWidget() {
 
           {/* Composer row */}
           <div className="flex items-end gap-2 px-3 py-3">
-            <div className="flex-1 flex items-end gap-2
+            <div className="flex-1 min-w-0 flex items-end gap-2
               bg-[color:var(--surface-2)] border border-[color:var(--line)]
-              rounded-xl px-3 py-2
-              focus-within:border-[color:var(--moby-400)]
-              focus-within:bg-white
-              transition-colors">
+              rounded-xl px-3 py-2">
               <textarea
                 ref={textareaRef}
                 id="ai-chat-input"
@@ -352,8 +356,9 @@ export default function AIChatWidget() {
                 className="flex-1 resize-none bg-transparent
                   text-[13px] text-[color:var(--ink-2)]
                   placeholder:text-[color:var(--ink-5)]
-                  outline-none leading-[1.5]
-                  min-h-[20px] max-h-[96px]"
+                  outline-none focus:outline-none focus:ring-0 focus-visible:outline-none leading-[1.5]
+                  min-h-[20px] max-h-[96px]
+                  whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
                 style={{ overflowY: "auto" }}
               />
             </div>
