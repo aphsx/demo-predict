@@ -181,11 +181,6 @@ export default function Dashboard() {
         <div className="relative">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusPill tone="info">Prediction overview</StatusPill>
-                <StatusPill tone="neutral" dot={false}>Mock data</StatusPill>
-              </div>
-
               <div className="max-w-3xl">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
                   ML v2 output summary
@@ -200,23 +195,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 xl:items-end">
-              <div className="rounded-2xl border border-white/16 bg-white/12 px-4 py-3 text-right backdrop-blur">
-                <div className="text-[11px] font-semibold uppercase tracking-[.14em] text-white/60">
-                  Cutoff
-                </div>
-                <div className="num mt-1 text-[18px] font-semibold">{overview.run.cutoff_date}</div>
-                <div className="mt-1 text-[11px] text-white/62">{overview.run.name}</div>
-              </div>
-              <div className="flex flex-wrap gap-3 xl:justify-end">
-                <Link
-                  href="/customers"
-                  className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/20 bg-white/96 px-4 text-[13px] font-semibold text-slate-900"
-                >
-                  Customers <ArrowRight size={13} />
-                </Link>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -427,7 +405,7 @@ function LifecycleFact({
           <div className="num mt-1 text-[11px] text-[color:var(--ink-5)]">{pct.toFixed(1)}%</div>
         </div>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full" style={{ background: BRAND_TRACK }}>
+      <div className="mt-3 h-3 overflow-hidden rounded-full" style={{ background: BRAND_TRACK }}>
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
@@ -646,9 +624,6 @@ function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
           <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
             รายได้รายเดือนจนถึงข้อมูลล่าสุด
           </h2>
-          <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
-            Production source: group `Backend_payment.amount` by `payment_date` month.
-          </p>
         </div>
         <div className="rounded-[22px] border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-right">
           <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
