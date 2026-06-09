@@ -74,6 +74,7 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
         let sql: string | null = null;
         let queryResult: QueryResultPreview | null = null;
         const warnings: string[] = [...safety.warnings];
+        if (plan.warning) warnings.push(plan.warning);
         let blockedReason: string | null = null;
 
         if (plan.should_query && plan.sql) {

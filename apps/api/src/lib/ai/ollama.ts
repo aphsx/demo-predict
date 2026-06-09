@@ -20,6 +20,7 @@ export type TextToSqlPlan = {
   sql: string | null;
   reasoning: string;
   answer_without_query?: string;
+  warning?: string;
 };
 
 type OllamaMessage = {
@@ -79,7 +80,11 @@ export function mapOllamaErrorCode(message: string): string {
   return "ollama_request_failed";
 }
 
-async function callOllama(config: OllamaConfig, messages: OllamaMessage[]): Promise<string> {
+async function callOllama(
+  config: OllamaConfig,
+  messages: OllamaMessage[],
+  options: { format?: "json" } = {}
+): Promise<string> {
   const response = await fetch(`${config.host}/api/chat`, {
     method: "POST",
     headers: {
@@ -90,6 +95,7 @@ async function callOllama(config: OllamaConfig, messages: OllamaMessage[]): Prom
       model: config.model,
       messages,
       stream: false,
+      ...(options.format ? { format: options.format } : {}),
     }),
   });
 
@@ -106,15 +112,42 @@ async function callOllama(config: OllamaConfig, messages: OllamaMessage[]): Prom
   return data.message.content;
 }
 
-function extractJsonObject(text: string): unknown {
+export function extractJsonObject(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
   const candidate = fenced ?? text;
   const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start < 0 || end <= start) {
+  if (start < 0) {
     throw new Error("Model did not return a JSON object.");
   }
-  return JSON.parse(candidate.slice(start, end + 1)) as unknown;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < candidate.length; index += 1) {
+    const char = candidate[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+    } else if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return JSON.parse(candidate.slice(start, index + 1)) as unknown;
+      }
+    }
+  }
+
+  throw new Error("Model returned incomplete JSON.");
 }
 
 function isTextToSqlPlan(value: unknown): value is TextToSqlPlan {
@@ -160,19 +193,38 @@ export async function generateTextToSqlPlan(params: {
         "If the question is conceptual, greeting, or not answerable from the schema, set should_query=false.",
         "For Thai questions, infer business intent but do not invent unavailable columns.",
         "",
-        "JSON shape:",
-        "{\"should_query\": boolean, \"sql\": string | null, \"reasoning\": string, \"answer_without_query\": string | undefined}",
+        "Return exactly this JSON shape with concrete values:",
+        "{\"should_query\":false,\"sql\":null,\"reasoning\":\"short reason\",\"answer_without_query\":\"short answer when no query is needed\"}",
         "",
         "Semantic layer:",
         semanticLayer,
       ].join("\n"),
     },
     { role: "user", content: conversation },
-  ]);
+  ], { format: "json" });
 
-  const parsed = extractJsonObject(content);
+  let parsed: unknown;
+  try {
+    parsed = extractJsonObject(content);
+  } catch {
+    return {
+      should_query: false,
+      sql: null,
+      reasoning: "text_to_sql_planner_returned_invalid_json",
+      answer_without_query:
+        "Text-to-SQL planner returned invalid JSON, so no database query was executed. Please answer only from available company knowledge and explain that the data query should be retried.",
+      warning: "Text-to-SQL planner returned invalid JSON and was safely skipped.",
+    };
+  }
   if (!isTextToSqlPlan(parsed)) {
-    throw new Error("Model returned an invalid Text-to-SQL plan.");
+    return {
+      should_query: false,
+      sql: null,
+      reasoning: "text_to_sql_planner_returned_invalid_shape",
+      answer_without_query:
+        "Text-to-SQL planner returned an invalid plan shape, so no database query was executed. Please answer only from available company knowledge and explain that the data query should be retried.",
+      warning: "Text-to-SQL planner returned an invalid shape and was safely skipped.",
+    };
   }
   return parsed;
 }
