@@ -138,10 +138,10 @@ a {
 .num { font-family: var(--font-num); font-feature-settings: "tnum" 1, "lnum" 1; letter-spacing: -.01em; color: inherit; }
 
 /* surfaces */
-.surface       { @apply border border-gray-200 bg-white; border-radius: var(--r-lg); }
-.surface-flat  { @apply border border-gray-200 bg-white; border-radius: var(--r-md); }
-.surface-soft  { @apply border border-gray-100 bg-gray-50; border-radius: var(--r-md); }
-.surface-elev  { @apply border border-gray-200 bg-white; border-radius: var(--r-lg); box-shadow: var(--shadow-2); }
+.surface       { @apply rounded-lg border-none bg-white shadow-none; }
+.surface-flat  { @apply rounded-lg border-none bg-white shadow-none; }
+.surface-soft  { @apply rounded-lg border-none bg-gray-50 shadow-none; }
+.surface-elev  { @apply rounded-lg border-none bg-white shadow-none; }
 
 /* dividers */
 .hairline { @apply border-gray-200; }

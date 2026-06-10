@@ -19,28 +19,29 @@ export function MetricCard({
   href?: string;
 }) {
   const toneClass = tone === "danger"
-    ? "text-[color:var(--danger)] bg-[color:var(--danger-bg)]"
+    ? "text-rose-500"
     : tone === "warn"
-      ? "text-[color:var(--warn)] bg-[color:var(--warn-bg)]"
-      : "text-[color:var(--moby-600)] bg-[color:var(--moby-50)]";
+      ? "text-orange-500"
+      : "text-blue-500";
 
   const content = (
-    <div className="relative flex h-full min-w-0 flex-col pr-11">
-      <div className={`min-w-0 text-[11px] font-normal leading-tight text-gray-600 ${TEXT_SAFE}`}>
-          {label}
+    <div className="flex h-full min-w-0 flex-col justify-between text-left">
+      <div className="space-y-1">
+        <div className="flex w-full min-w-0 items-start justify-between gap-3 text-left">
+          <p className={`min-w-0 text-left text-[11px] font-normal leading-tight text-gray-600 ${TEXT_SAFE}`}>
+            {label}
+          </p>
+          <Icon className={`h-[18px] w-[18px] shrink-0 ${toneClass}`} />
+        </div>
+        <h3 className={`num text-left text-[24px] font-bold leading-none text-gray-700 tabular-nums ${TEXT_SAFE}`}>
+          {value}
+        </h3>
       </div>
-      <span className={`absolute right-0 top-0 grid h-9 w-9 place-items-center rounded-2xl ${toneClass}`}>
-        <Icon size={17} />
-      </span>
 
-      <div className={`num mt-3 text-[24px] font-bold leading-none tracking-[-0.02em] text-gray-700 tabular-nums ${TEXT_SAFE}`}>
-        {value}
-      </div>
-
-      <div className="mt-auto flex min-w-0 items-start justify-between gap-3 pt-5 text-[11px] font-normal text-gray-500">
+      <p className={`text-left text-[11px] font-normal ${toneClass} ${TEXT_SAFE}`}>
         <span className={TEXT_SAFE}>{hint}</span>
-        {href ? <ArrowRight size={12} className="shrink-0 text-gray-400" /> : null}
-      </div>
+        {href ? <ArrowRight size={12} className="ml-1 inline-block align-[-2px] text-gray-400" /> : null}
+      </p>
     </div>
   );
 
@@ -48,7 +49,7 @@ export function MetricCard({
     return (
       <Link
         href={href}
-        className="block min-h-[96px] min-w-0 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-none transition-colors hover:bg-gray-50"
+        className="block h-[140px] min-w-0 rounded-lg border-none bg-white p-4 text-left shadow-none transition-colors hover:bg-gray-50"
       >
         {content}
       </Link>
@@ -56,7 +57,7 @@ export function MetricCard({
   }
 
   return (
-    <div className="min-h-[96px] min-w-0 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-none">
+    <div className="h-[140px] min-w-0 rounded-lg border-none bg-white p-4 text-left shadow-none">
       {content}
     </div>
   );

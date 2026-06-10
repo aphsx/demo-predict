@@ -31,40 +31,9 @@ export function DashboardView({
 
   return (
     <main className="min-w-0 px-4 py-5 pb-12 sm:px-6 lg:px-8">
-      <section
-        className="relative min-w-0 overflow-hidden rounded-[26px] border border-white/20 px-4 py-6 text-white sm:rounded-[30px] sm:px-7 lg:px-8"
-        style={{
-          backgroundImage: [
-            "radial-gradient(rgba(7, 29, 126, 0.52) 0%, transparent 42%)",
-            "url(/assets/intro/about_bg.webp)",
-            "linear-gradient(180deg, rgba(0,0,0,0.24) 0%, rgba(0,0,0,0.04) 38%, rgba(0,0,0,0.16) 100%)",
-            `linear-gradient(140deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blue} 56%, ${MOBY_BRAND.blueLight} 82%, ${MOBY_BRAND.blue} 100%)`,
-          ].join(", "),
-          backgroundRepeat: "no-repeat, no-repeat, no-repeat, no-repeat",
-          backgroundSize: "140% 150%, cover, 100% 100%, 100% 100%",
-          backgroundPosition: "center, center, center, center",
-        }}
-      >
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.10),transparent_45%)]" />
-        <div className="relative">
-          <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-            <div className="min-w-0 space-y-5">
-              <div className="min-w-0 max-w-3xl">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
-                  ML v2 output summary
-                </p>
-                <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-[42px]">
-                  Dashboard
-                </h1>
+      
 
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           icon={Gem}
           label="Avg monthly value"
