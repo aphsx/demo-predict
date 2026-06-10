@@ -1,7 +1,5 @@
-import { CreditCard } from "lucide-react";
 import type { DashboardOverview } from "@/mocks/dashboard";
 import { formatCredits, formatNumber } from "@/lib/format";
-import { PanelHeader } from "./PanelHeader";
 import { RiskListRow } from "./RiskCard";
 import { CREDIT_PALETTE, TEXT_SAFE } from "./palette";
 
@@ -15,18 +13,12 @@ export function CreditUrgencyCard({ overview }: { overview: DashboardOverview })
 
   return (
     <div className="surface-elev flex h-full flex-col overflow-hidden">
-      <PanelHeader
-        eyebrow="Credit"
-        title="Top-up urgency"
-        hint="Accounts grouped by expected credit top-up timing."
-        icon={CreditCard}
-      />
-      <div className="flex-1 border-t border-gray-100 p-4 sm:p-5">
-        <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-[inset_0_1px_4px_rgba(0,0,0,0.04)]">
+      <div className="flex-1 p-4 sm:p-5">
+        <div className="mb-4 flex h-[76px] flex-col justify-center rounded-2xl border border-gray-100 bg-white p-4 shadow-[inset_0_1px_4px_rgba(0,0,0,0.04)]">
           <div className={`text-[11px] font-normal text-[color:var(--warn)] ${TEXT_SAFE}`}>
             Next top-up 7d
           </div>
-          <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
+          <div className="mt-2 flex min-w-0 items-end justify-between gap-3">
             <div className="num text-[24px] leading-none text-[color:var(--ink-1)] tabular-nums">
               {formatNumber(overview.credit.next_topup_7d)}
             </div>

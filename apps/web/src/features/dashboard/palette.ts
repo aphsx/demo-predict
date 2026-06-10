@@ -23,10 +23,10 @@ export const CHURN_PALETTE = {
 };
 
 export const CREDIT_PALETTE = {
-  Critical: BRAND_ORANGE_GRADIENT,
-  Warning: BRAND_YELLOW_ORANGE_GRADIENT,
-  Monitor: BRAND_YELLOW_GRADIENT,
-  Stable: BRAND_BLUE_GRADIENT,
+  Critical: MOBY_BRAND.orange,
+  Warning: MOBY_BRAND.orangeWarm,
+  Monitor: MOBY_BRAND.blue,
+  Stable: "#9ca3af",
 };
 
 /** Low → blue, mid → warm orange, high → orange band coloring for revenue values. */
