@@ -133,3 +133,10 @@ Check model status:
 ```bash
 curl http://localhost:8001/health
 ```
+---
+
+## Documentation
+
+- [PROJECT.md](./PROJECT.md) — เอกสารโปรเจคฉบับเต็ม (architecture, schema, ML pipeline)
+- [AI-CHAT.md](./AI-CHAT.md) — ระบบ AI Chat: สถาปัตยกรรมปัจจุบัน + แนวทางขยายเป็น enterprise assistant (RAG, function calling, text-to-SQL)
+- [DESIGN.md](./DESIGN.md) — design system ของ frontend
