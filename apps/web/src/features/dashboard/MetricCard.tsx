@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ElementType } from "react";
 import { ArrowRight } from "lucide-react";
+import { MOBY_BRAND } from "@/lib/login-brand-colors";
 import { TEXT_SAFE } from "./palette";
 
 export function MetricCard({
@@ -18,16 +19,18 @@ export function MetricCard({
   tone?: "brand" | "danger" | "warn";
   href?: string;
 }) {
-  const iconClass = "text-[color:var(--moby-600)]";
   const toneStyles = {
     brand: {
-      accent: "bg-[color:var(--moby-600)]",
+      color: MOBY_BRAND.blue,
+      softBg: "rgba(0, 107, 255, 0.08)",
     },
     danger: {
-      accent: "bg-[color:var(--danger)]",
+      color: MOBY_BRAND.orange,
+      softBg: "rgba(252, 76, 2, 0.08)",
     },
     warn: {
-      accent: "bg-[color:var(--warn)]",
+      color: MOBY_BRAND.orangeWarm,
+      softBg: "rgba(255, 164, 0, 0.10)",
     },
   }[tone];
 
@@ -37,7 +40,10 @@ export function MetricCard({
         <p className={`type-label min-w-0 truncate ${TEXT_SAFE}`}>
           {label}
         </p>
-        <span className={`flex h-6 w-6 shrink-0 items-center justify-center ${iconClass}`}>
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+          style={{ backgroundColor: toneStyles.softBg, color: toneStyles.color }}
+        >
           <Icon className="h-4 w-4" />
         </span>
       </div>
@@ -46,7 +52,10 @@ export function MetricCard({
         <h3 className={`num truncate text-left text-[30px] leading-none text-[color:var(--ink-1)] tabular-nums ${TEXT_SAFE}`}>
           {value}
         </h3>
-        <div className={`mt-4 h-px w-full ${toneStyles.accent} opacity-15`} />
+        <div
+          className="mt-4 h-px w-full opacity-25"
+          style={{ backgroundColor: toneStyles.color }}
+        />
       </div>
 
       <div className="mt-auto flex min-w-0 items-center justify-between gap-3 pt-3">
@@ -54,7 +63,10 @@ export function MetricCard({
           {hint}
         </p>
         {href ? (
-          <span className={`flex h-6 w-6 shrink-0 items-center justify-center ${iconClass}`}>
+          <span
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: toneStyles.softBg, color: toneStyles.color }}
+          >
             <ArrowRight size={13} />
           </span>
         ) : null}

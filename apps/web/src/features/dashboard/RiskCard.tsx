@@ -22,7 +22,7 @@ export function RiskCard({ overview }: { overview: DashboardOverview }) {
               {formatNumber(overview.active_churn.high)}
             </div>
             <div className="type-meta num pb-0.5 text-right text-[11px] font-normal">
-              {highPct.toFixed(1)}% of active customers
+              {highPct.toFixed(1)}% จากลูกค้าทั้งหมดที่ใช้งาน
             </div>
           </div>
         </div>

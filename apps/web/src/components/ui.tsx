@@ -131,17 +131,16 @@ export function DeltaPill({ value, label }: { value: number; label?: string }) {
 /* ────────────────────────────────────────── */
 /*  StatusPill                                */
 /* ────────────────────────────────────────── */
-const PILL_TONES: Record<string, { fg: string; bg: string }> = {
-  ok:       { fg: "var(--ok)",       bg: "var(--ok-bg)" },
-  warn:     { fg: "var(--warn)",     bg: "var(--warn-bg)" },
-  danger:   { fg: "var(--danger)",   bg: "var(--danger-bg)" },
-  info:     { fg: "var(--info)",     bg: "var(--info-bg)" },
-  neutral:  { fg: "#4b5563",          bg: "#f9fafb" },
-  brand:    { fg: "var(--moby-700)", bg: "var(--moby-50)" },
-  violet:   { fg: "#6d28d9",         bg: "#f5f3ff" },
-  /* 1Moby brand warm tones — readable equivalents of #FFA400 / #FC4C02 */
-  warm:     { fg: "#b45309",         bg: "#fff8eb" },
-  orange:   { fg: "#c2410c",         bg: "#fff4ed" },
+const PILL_TONES: Record<string, { fg: string; border: string }> = {
+  ok:       { fg: "var(--ok)",       border: "#bbf7d0" },
+  warn:     { fg: "var(--warn)",     border: "#fde68a" },
+  danger:   { fg: "var(--danger)",   border: "#fecaca" },
+  info:     { fg: "var(--info)",     border: "#bae6fd" },
+  neutral:  { fg: "#9ca3af",         border: "#e5e7eb" },
+  brand:    { fg: "var(--moby-600)", border: "var(--moby-100)" },
+  violet:   { fg: "#6d28d9",         border: "#ddd6fe" },
+  warm:     { fg: "#ffa400",         border: "#fde68a" },
+  orange:   { fg: "#fc4c02",         border: "#fed7aa" },
 };
 
 export function StatusPill({
@@ -149,7 +148,7 @@ export function StatusPill({
 }: { tone?: keyof typeof PILL_TONES; icon?: any; children: ReactNode; dot?: boolean }) {
   const t = PILL_TONES[tone];
   return (
-    <span className="pill" style={{ color: t.fg, background: t.bg }}>
+    <span className="pill" style={{ color: t.fg, background: "transparent", borderColor: t.border }}>
       {dot && !Icon && <span className="dot" />}
       {Icon && <Icon size={11} />}
       {children}

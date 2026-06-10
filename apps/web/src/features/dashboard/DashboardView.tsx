@@ -46,21 +46,21 @@ export function DashboardView({
           icon={TrendingDown}
           label="Active high risk"
           value={formatNumber(overview.active_churn.high)}
-          hint={`${activeHighRiskPct.toFixed(1)}% of active customers`}
+          hint={`${activeHighRiskPct.toFixed(1)}% จากลูกค้าทั้งหมดที่ใช้งาน`}
           tone="danger"
         />
         <MetricCard
           icon={CreditCard}
           label="Revenue at risk"
           value={formatCurrency(overview.totals.revenue_at_risk)}
-          hint="estimated loss if high-risk customers churn"
+          hint="การสูญเสียที่คาดการณ์ไว้หากลูกค้าที่มีความเสี่ยงสูงละลาย"
           tone="warn"
         />
         <MetricCard
           icon={CalendarClock}
           label="30d credit demand"
           value={formatCredits(overview.credit.predicted_usage_30d)}
-          hint="forecast from SMS/Email usage history"
+          hint="การคาดการณ์ความต้องการในการใช้งาน SMS/Email"
           tone="brand"
         />
       </section>
