@@ -17,7 +17,7 @@ export function RiskCard({ overview }: { overview: DashboardOverview }) {
       <PanelHeader
         eyebrow="Churn"
         title="Active customer risk"
-        hint="ไม่นับ churned และ ghost เพื่อไม่ให้ตัวเลข churn active ปน lifecycle อื่น"
+        hint="Active accounts grouped by churn probability."
         icon={TrendingDown}
       />
       <div className="flex-1 border-t border-gray-100 p-4 sm:p-5">
@@ -71,8 +71,11 @@ export function RiskListRow({
 
   return (
     <div className="flex min-w-0 items-center justify-between gap-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+      <div className="flex min-w-0 items-center gap-3.5">
+        <span
+          className="h-4 w-4 shrink-0 rounded-full shadow-[0_0_0_4px_rgba(0,0,0,0.04)]"
+          style={{ background: color }}
+        />
         <div className="min-w-0">
           <div className="truncate text-[12px] font-medium leading-tight text-[color:var(--ink-2)]">
             {label}

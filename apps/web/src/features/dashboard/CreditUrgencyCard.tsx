@@ -18,7 +18,7 @@ export function CreditUrgencyCard({ overview }: { overview: DashboardOverview })
       <PanelHeader
         eyebrow="Credit"
         title="Top-up urgency"
-        hint="เฉพาะ active customers ที่ forecast credit ได้"
+        hint="Accounts grouped by expected credit top-up timing."
         icon={CreditCard}
       />
       <div className="flex-1 border-t border-gray-100 p-4 sm:p-5">

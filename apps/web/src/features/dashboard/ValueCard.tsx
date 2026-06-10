@@ -34,7 +34,7 @@ export function ValueCard({ overview }: { overview: DashboardOverview }) {
       <PanelHeader
         eyebrow="Value"
         title="CLV concentration"
-        hint="ใช้ดูว่าความเสี่ยงกระทบลูกค้ากลุ่มมูลค่าสูงแค่ไหน"
+        hint="Predicted value concentration across active accounts."
         icon={Gem}
       />
       <div className="flex-1 border-t border-gray-100 p-4 sm:p-5">
