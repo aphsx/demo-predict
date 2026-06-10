@@ -15,19 +15,19 @@ export function TrainingResultCards({ run }: { run: TrainingRun }) {
     <section className="surface-elev overflow-hidden">
       <div className="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
             Latest training result
           </p>
-          <h2 className="mt-1 text-[16px] font-semibold tracking-[-0.02em] text-gray-900">
+          <h2 className="mt-1 text-[16px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
             {run.dataset_name} · cutoff <span className="num">{run.cutoff_date}</span>
           </h2>
-          <p className="mt-0.5 text-[12px] text-gray-400">
+          <p className="mt-0.5 text-[12px] text-[color:var(--ink-5)]">
             เสร็จเมื่อ {formatDate(run.finished_at)}
           </p>
         </div>
         <Link
           href="/model-performance"
-          className="inline-flex items-center gap-1 text-[12.5px] font-medium text-gray-600 hover:text-[color:var(--moby-600)] hover:underline underline-offset-2"
+          className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[color:var(--ink-3)] hover:text-[color:var(--moby-600)] hover:underline underline-offset-2"
         >
           ดูรายละเอียด
           <ArrowRight size={12} />
@@ -49,7 +49,7 @@ function ResultCard({ result }: { result: TrainingRunResult }) {
   return (
     <div className="rounded-[22px] border border-gray-200 bg-white p-4 shadow-[var(--shadow-1)]">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[14px] font-semibold text-gray-900">
+        <h3 className="text-[14px] font-semibold text-[color:var(--ink-1)]">
           {MODEL_TYPE_LABELS[result.model_type]}
         </h3>
         {result.promoted ? (
@@ -63,7 +63,7 @@ function ResultCard({ result }: { result: TrainingRunResult }) {
         )}
       </div>
 
-      <p className="mt-2.5 text-[13px] leading-6 text-gray-700">
+      <p className="mt-2.5 text-[13px] leading-6 text-[color:var(--ink-2)]">
         <span className="font-semibold">
           {result.primary_metric_name}{" "}
           <span className="num">{formatMetric(result.primary_metric_value)}</span>
@@ -72,7 +72,7 @@ function ResultCard({ result }: { result: TrainingRunResult }) {
         <span className="num">{formatMetric(result.baseline_value)}</span>
       </p>
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-gray-500">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[color:var(--ink-4)]">
         {result.calibration_ece !== null && (
           <span>
             calibration ECE <span className="num">{formatMetric(result.calibration_ece)}</span>
@@ -83,7 +83,7 @@ function ResultCard({ result }: { result: TrainingRunResult }) {
         </span>
       </div>
 
-      <p className="mt-2.5 border-t border-gray-100 pt-2.5 text-[12px] leading-5 text-gray-500">
+      <p className="mt-2.5 border-t border-gray-100 pt-2.5 text-[12px] leading-5 text-[color:var(--ink-4)]">
         {result.promote_reason}
       </p>
     </div>

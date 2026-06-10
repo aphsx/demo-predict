@@ -26,14 +26,14 @@ export function ProgressCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-[13px] font-semibold text-gray-900">{label}</p>
+            <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</p>
             {!training && (
               <span className="num text-[13px] font-semibold text-[#fc4c02]">
                 {progress}%
               </span>
             )}
           </div>
-          <p className="mt-0.5 truncate text-[12px] text-gray-500">
+          <p className="mt-0.5 truncate text-[12px] text-[color:var(--ink-4)]">
             {training
               ? "Refreshing active models after training completes."
               : step || "Processing..."}

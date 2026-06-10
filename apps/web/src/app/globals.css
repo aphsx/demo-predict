@@ -80,11 +80,11 @@
   --line:     #e5e7eb;
   --line-2:   #f3f4f6;
 
-  --ink-1: #111827;     /* gray-900: titles / names */
-  --ink-2: #374151;     /* gray-700: values / strong text */
-  --ink-3: #4b5563;     /* gray-600: body */
-  --ink-4: #6b7280;     /* gray-500: hints */
-  --ink-5: #9ca3af;     /* gray-400: labels */
+  --ink-1: #1D1F2A;     /* 1Moby headline dark */
+  --ink-2: #242424;     /* strong text */
+  --ink-3: #3a3e53;     /* body */
+  --ink-4: #6B6B6B;     /* meta / secondary copy */
+  --ink-5: #999999;     /* labels */
   --ink-6: #d1d5db;     /* gray-300: disabled */
 
   /* Semantic */
@@ -115,14 +115,17 @@
   --shadow-3: 0 8px 24px rgba(15,23,42,.08);
 
   /* Type */
-  --font-ui: 'Geometrica', 'merothai', 'Sarabun', 'Noto Sans Thai', sans-serif;
+  --font-display: 'merothai', 'MeroThai', 'Sarabun', 'Noto Sans Thai', sans-serif;
+  --font-body: 'Sarabun', 'merothai', 'Noto Sans Thai', sans-serif;
+  --font-ui: 'Sarabun', 'merothai', 'Noto Sans Thai', sans-serif;
   --font-num: 'Geometrica', 'merothai', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
 }
 
 html, body { height: 100%; }
 body {
   font-family: var(--font-ui);
-  @apply bg-slate-50 text-gray-700;
+  @apply bg-slate-50;
+  color: var(--ink-3);
   font-synthesis-weight: none;
   -webkit-font-smoothing: auto;
   -moz-osx-font-smoothing: auto;
@@ -137,11 +140,35 @@ a {
 /* numerals */
 .num { font-family: var(--font-num); font-feature-settings: "tnum" 1, "lnum" 1; letter-spacing: -.01em; color: inherit; }
 
+/* typography patterns from 1moby.com article pages */
+.type-display {
+  font-family: var(--font-display);
+  color: var(--ink-1);
+  font-weight: 500;
+  letter-spacing: -.03em;
+}
+.type-section-title {
+  font-family: var(--font-display);
+  color: var(--ink-1);
+  font-weight: 500;
+  letter-spacing: -.02em;
+}
+.type-label {
+  color: var(--ink-4);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.type-meta { color: var(--ink-4); }
+.type-muted { color: var(--ink-5); }
+.type-body { font-family: var(--font-body); color: var(--ink-3); }
+
 /* surfaces */
-.surface       { @apply rounded-lg border-none bg-white shadow-none; }
-.surface-flat  { @apply rounded-lg border-none bg-white shadow-none; }
-.surface-soft  { @apply rounded-lg border-none bg-gray-50 shadow-none; }
-.surface-elev  { @apply rounded-lg border-none bg-white shadow-none; }
+.surface       { @apply rounded-lg border border-gray-200 bg-white shadow-none; }
+.surface-flat  { @apply rounded-lg border border-gray-200 bg-white shadow-none; }
+.surface-soft  { @apply rounded-lg border border-gray-200 bg-gray-50 shadow-none; }
+.surface-elev  { @apply rounded-lg border border-gray-200 bg-white shadow-none; }
 
 /* dividers */
 .hairline { @apply border-gray-200; }
@@ -174,11 +201,11 @@ hr.hairline { @apply border-t border-gray-200; border-bottom: none; }
 .table-base { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .table-base thead th {
   position: sticky; top: 0; z-index: 1;
-  @apply bg-gray-50 text-gray-500;
+  @apply bg-gray-50 text-[color:var(--ink-4)];
   font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
   text-align: left; padding: 10px 14px; @apply border-b border-gray-200;
 }
-.table-base tbody td { padding: 10px 14px; @apply border-b border-gray-100 text-gray-700; }
+.table-base tbody td { padding: 10px 14px; @apply border-b border-gray-100 text-[color:var(--ink-2)]; }
 .table-base tbody tr:hover { @apply bg-gray-50; }
 
 /* card hover lift */
@@ -200,10 +227,10 @@ hr.hairline { @apply border-t border-gray-200; border-bottom: none; }
 /* segmented control */
 .segmented { @apply inline-flex border border-gray-200 bg-gray-100; padding: 3px; border-radius: 8px; }
 .segmented button {
-  @apply text-gray-600;
+  @apply text-[color:var(--ink-3)];
   font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 6px;
 }
-.segmented button.active { @apply bg-white text-gray-900; box-shadow: var(--shadow-1); }
+.segmented button.active { @apply bg-white text-[color:var(--ink-1)]; box-shadow: var(--shadow-1); }
 
 /* sparkline track */
 .spark-track { stroke: #e5e7eb; fill: none; stroke-width: 1; }

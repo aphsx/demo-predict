@@ -63,7 +63,7 @@ export function MonthlyRevenueChart({
   return (
     <div className="min-w-0 overflow-hidden rounded-[24px] border border-gray-200 bg-white p-4">
       {hint && (
-        <div className={`mb-2 text-[11px] text-gray-400 ${TEXT_SAFE}`}>{hint}</div>
+        <div className={`mb-2 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>{hint}</div>
       )}
       <div ref={scrollRef} className="min-w-0 overflow-x-auto overscroll-x-contain pb-1">
         <svg

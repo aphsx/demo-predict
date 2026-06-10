@@ -74,12 +74,12 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
           <div className="border-b border-gray-100 p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
               <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 focus-within:border-[color:var(--moby-200)]">
-                <Search size={15} className="text-gray-400" />
+                <Search size={15} className="text-[color:var(--ink-5)]" />
                 <input
                   value={filters.search}
                   onChange={event => setFilter("search", event.target.value)}
                   placeholder="Search account ID, lifecycle, or sub-stage..."
-                  className="h-11 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-gray-400"
+                  className="h-11 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[color:var(--ink-5)]"
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -99,7 +99,7 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                   <button
                     type="button"
                     onClick={clearAll}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold text-gray-500 hover:bg-gray-50 hover:text-[color:var(--danger)]"
+                    className="inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold text-[color:var(--ink-4)] hover:bg-gray-50 hover:text-[color:var(--danger)]"
                   >
                     <RotateCcw size={13} /> Reset
                   </button>
@@ -108,7 +108,7 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_150px_150px_120px] gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-gray-400 max-xl:hidden">
+          <div className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_150px_150px_120px] gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] max-xl:hidden">
             <div>Account</div>
             <div>Lifecycle</div>
             <div>Churn</div>
@@ -137,15 +137,15 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                   }}
                 >
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-gray-400 xl:hidden">Account</p>
-                    <p className="num text-[18px] font-semibold text-gray-700">{r.acc_id}</p>
-                    <p className="mt-0.5 text-[11.5px] text-gray-400">
+                    <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">Account</p>
+                    <p className="num text-[18px] font-semibold text-[color:var(--ink-2)]">{r.acc_id}</p>
+                    <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
                       {r.n_purchases ?? 0} purchases
                     </p>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <StatusPill tone={lifecycleTone(r.lifecycle_stage ?? "")}>{r.lifecycle_stage ?? "—"}</StatusPill>
-                    {r.sub_stage && <span className="truncate text-[12px] text-gray-500">{r.sub_stage}</span>}
+                    {r.sub_stage && <span className="truncate text-[12px] text-[color:var(--ink-4)]">{r.sub_stage}</span>}
                   </div>
                   <MetricCell label="Churn" value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"} />
                   <MetricCell label="CLV 6m" value={r.predicted_clv_6m != null ? formatCurrency(r.predicted_clv_6m) : "—"} alignRight />
@@ -170,17 +170,17 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
             })}
             {!pendingRows && rows.length === 0 && (
               <div className="px-5 py-12 text-center">
-                <p className="text-[15px] font-semibold text-gray-700">No customers match this view</p>
-                <p className="mt-1 text-[13px] text-gray-500">Reset filters or search another account ID.</p>
+                <p className="text-[15px] font-semibold text-[color:var(--ink-2)]">No customers match this view</p>
+                <p className="mt-1 text-[13px] text-[color:var(--ink-4)]">Reset filters or search another account ID.</p>
               </div>
             )}
           </div>
 
           <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-5 py-3">
-            <div className="num text-[12px] text-gray-500">
+            <div className="num text-[12px] text-[color:var(--ink-4)]">
               {pendingRows ? "Preparing prediction output..." : `${total.toLocaleString()} shown of ${allRows.length.toLocaleString()}`}
             </div>
-            <div className="num text-[12px] text-gray-500">Page {page} / {pages}</div>
+            <div className="num text-[12px] text-[color:var(--ink-4)]">Page {page} / {pages}</div>
           </div>
         </section>
 
@@ -214,7 +214,7 @@ function MetricCell({
 }) {
   return (
     <div className={alignRight ? "xl:text-right" : undefined}>
-      <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-gray-400 xl:hidden">
+      <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">
         {label}
       </p>
       <p className="num mt-0.5 text-[14px] font-semibold xl:mt-0">
@@ -240,7 +240,7 @@ function FilterChip({
       className={`inline-flex h-10 items-center rounded-xl border px-3 text-[12px] font-semibold transition-colors ${
         active
           ? "border-[color:var(--moby-100)] bg-[color:var(--moby-50)] text-[color:var(--moby-600)]"
-          : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+          : "border-gray-200 bg-white text-[color:var(--ink-4)] hover:bg-gray-50 hover:text-[color:var(--ink-2)]"
       }`}
     >
       {children}
@@ -250,7 +250,7 @@ function FilterChip({
 
 export function CustomersView({ rows }: { rows: CustomerRow[] }) {
   return (
-    <Suspense fallback={<div className="p-8 text-gray-400">Loading…</div>}>
+    <Suspense fallback={<div className="p-8 text-[color:var(--ink-5)]">Loading…</div>}>
       <Inner rows={rows} />
     </Suspense>
   );

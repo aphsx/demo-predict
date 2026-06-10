@@ -16,10 +16,10 @@ export function TrainingHistoryTable({ runs }: { runs: TrainingRun[] }) {
   return (
     <section className="surface-elev overflow-hidden">
       <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
           Training history
         </p>
-        <h2 className="mt-1 text-[16px] font-semibold tracking-[-0.02em] text-gray-900">
+        <h2 className="mt-1 text-[16px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
           ครั้งที่แล้วเทรนเมื่อไหร่ ด้วย data ไหน
         </h2>
       </div>
@@ -66,11 +66,11 @@ function HistoryRow({ run }: { run: TrainingRun }) {
 
   return (
     <tr>
-      <td className="whitespace-nowrap text-[12px] text-gray-600">
+      <td className="whitespace-nowrap text-[12px] text-[color:var(--ink-3)]">
         {formatDate(run.started_at)}
       </td>
       <td>
-        <span className="font-semibold text-gray-900">{run.dataset_name}</span>
+        <span className="font-semibold text-[color:var(--ink-1)]">{run.dataset_name}</span>
       </td>
       <td className="num whitespace-nowrap">{run.cutoff_date}</td>
       <td className="num text-right">{run.horizon_days}d</td>
@@ -94,17 +94,17 @@ function HistoryRow({ run }: { run: TrainingRun }) {
         ) : summary ? (
           <span className="num text-[12.5px]">{summary}</span>
         ) : (
-          <span className="text-[12px] text-gray-400">—</span>
+          <span className="text-[12px] text-[color:var(--ink-5)]">—</span>
         )}
       </td>
       <td>
         {promoted ? (
           <span className="num text-[12.5px]">{promoted}</span>
         ) : (
-          <span className="text-[12px] text-gray-400">—</span>
+          <span className="text-[12px] text-[color:var(--ink-5)]">—</span>
         )}
       </td>
-      <td className="text-[12px] text-gray-500">{run.created_by ?? "—"}</td>
+      <td className="text-[12px] text-[color:var(--ink-4)]">{run.created_by ?? "—"}</td>
     </tr>
   );
 }

@@ -33,16 +33,16 @@ export function TrainRunPanel({
       <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
               ML v2 training
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h2 className="text-[22px] font-semibold tracking-[-0.035em] text-gray-900">
+              <h2 className="text-[22px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
                 Train models
               </h2>
               <MockBadge />
             </div>
-            <p className="mt-1 max-w-2xl text-[13px] leading-6 text-gray-500">
+            <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
               ใช้ dataset ที่เลือกจากตารางด้านบน (เฉพาะสถานะ Ready) — กด Train เพื่อสร้าง training run
               ใหม่ผ่าน pipeline: gates → labels → features → baselines → tuning → promotion gate
             </p>
@@ -73,16 +73,16 @@ export function TrainRunPanel({
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
               Cutoff date
             </span>
             <input
               type="date"
               value={cutoffDate}
               onChange={(e) => setCutoffDate(e.target.value)}
-              className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-gray-700 shadow-[var(--shadow-1)]"
+              className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
             />
-            <span className="mt-1.5 block text-[12px] leading-5 text-gray-500">
+            <span className="mt-1.5 block text-[12px] leading-5 text-[color:var(--ink-4)]">
               {CUTOFF_HELPER}
             </span>
           </label>
@@ -91,14 +91,14 @@ export function TrainRunPanel({
             <button
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:bg-gray-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:bg-gray-50"
             >
               <SlidersHorizontal size={13} />
               Advanced
             </button>
             {showAdvanced && (
               <label className="mt-3 block">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
                   Horizon (days)
                 </span>
                 <input
@@ -107,9 +107,9 @@ export function TrainRunPanel({
                   step={1}
                   value={Number.isNaN(horizonDays) ? "" : horizonDays}
                   onChange={(e) => setHorizonDays(Number.parseInt(e.target.value, 10))}
-                  className="mt-1.5 h-11 w-full max-w-[200px] rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-gray-700 shadow-[var(--shadow-1)]"
+                  className="mt-1.5 h-11 w-full max-w-[200px] rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
                 />
-                <span className="mt-1.5 block text-[12px] leading-5 text-gray-500">
+                <span className="mt-1.5 block text-[12px] leading-5 text-[color:var(--ink-4)]">
                   default {DEFAULT_HORIZON_DAYS} วัน — เปลี่ยนเฉพาะเมื่อรู้ว่าทำอะไรอยู่
                 </span>
                 {!horizonValid && (

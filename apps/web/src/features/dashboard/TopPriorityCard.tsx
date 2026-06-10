@@ -11,16 +11,16 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
     <section className="surface-elev overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 sm:px-5">
         <div>
-          <h2 className={`text-[18px] font-medium leading-tight text-gray-900 ${TEXT_SAFE}`}>
+          <h2 className={`text-[18px] font-medium leading-tight text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
             Top priority customers
           </h2>
-          <p className="mt-0.5 text-[11.5px] text-gray-400">
+          <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
             priority score = 50×ความเสี่ยง churn + 30×มูลค่า (CLV) + 20×เครดิตใกล้หมด
           </p>
         </div>
         <Link
           href={`/customers?run=${runId}`}
-          className="shrink-0 text-[12px] font-medium text-gray-600 hover:text-[color:var(--moby-600)] hover:underline underline-offset-2"
+          className="shrink-0 text-[12px] font-medium text-[color:var(--ink-3)] hover:text-[color:var(--moby-600)] hover:underline underline-offset-2"
         >
           ดูทั้งหมด →
         </Link>
@@ -28,7 +28,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
       <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
           <thead>
-            <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-[.08em] text-gray-400">
+            <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-[.08em] text-[color:var(--ink-5)]">
               <th className="px-4 py-2.5 sm:px-5">Account</th>
               <th className="px-3 py-2.5">Lifecycle</th>
               <th className="px-3 py-2.5 text-right">Churn</th>
@@ -43,7 +43,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
                 <td className="px-4 py-2.5 sm:px-5">
                   <Link
                     href={`/customers/${c.acc_id}?run=${runId}`}
-                    className="num font-medium text-gray-700 hover:underline underline-offset-2"
+                    className="num font-medium text-[color:var(--ink-2)] hover:underline underline-offset-2"
                   >
                     {c.acc_id}
                   </Link>
@@ -60,7 +60,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
                 <td className="num px-3 py-2.5 text-right font-semibold">
                   {c.priority_score.toFixed(0)}
                 </td>
-                <td className={`px-3 py-2.5 text-gray-500 ${TEXT_SAFE}`}>{c.priority_reason}</td>
+                <td className={`px-3 py-2.5 text-[color:var(--ink-4)] ${TEXT_SAFE}`}>{c.priority_reason}</td>
               </tr>
             ))}
           </tbody>

@@ -15,7 +15,7 @@ import type { MonthlyRevenuePoint } from "@/mocks/monthly-revenue";
 import { TEXT_SAFE } from "./palette";
 
 const SMS_COLOR = MOBY_BRAND.blue;
-const EMAIL_COLOR = MOBY_BRAND.orange;
+const EMAIL_COLOR = MOBY_BRAND.orangeWarm;
 const FOCUSED_MONTHS = 6;
 
 export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
@@ -31,11 +31,11 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
     <section className="surface-elev flex h-full min-w-0 flex-col overflow-hidden">
       <header className="flex min-w-0 items-start justify-between gap-4 border-b border-gray-100 px-4 py-3 sm:px-5">
         <div className="min-w-0">
-          <h2 className={`text-[18px] font-medium leading-tight text-gray-900 ${TEXT_SAFE}`}>
+          <h2 className={`type-section-title text-[20px] leading-tight ${TEXT_SAFE}`}>
             Credit usage monthly
           </h2>
         </div>
-        <span className="shrink-0 rounded-full bg-gray-50 px-3 py-1 text-[11px] font-normal text-gray-600">
+        <span className="type-meta shrink-0 rounded-full bg-gray-50 px-3 py-1 text-[11px] font-normal">
           2 channels
         </span>
       </header>
@@ -44,31 +44,31 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
         <div className="flex min-w-0 flex-1 flex-col rounded-2xl border border-gray-100 bg-white p-3 shadow-[inset_0_1px_4px_rgba(0,0,0,0.04)] sm:p-4">
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className={`text-[11px] font-normal text-gray-500 ${TEXT_SAFE}`}>
+              <p className={`type-label ${TEXT_SAFE}`}>
                 Monthly usage
               </p>
               <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
-                <span className="num text-[24px] font-bold leading-none tracking-tight text-gray-700 tabular-nums">
+                <span className="num text-[26px] font-bold leading-none tracking-tight text-[color:var(--ink-1)] tabular-nums">
                   {formatCompactCredits(latestTotal)}
                 </span>
-                <span className="text-[14px] font-medium leading-none text-gray-400">
+                <span className="type-muted text-[14px] font-medium leading-none">
                   credits
                 </span>
               </div>
-              <p className="mt-1 text-[11px] font-normal text-gray-500">
+              <p className="type-meta mt-1 text-[11px] font-normal">
                 latest total · {latest.month}
               </p>
             </div>
             <div className="flex shrink-0 items-start justify-end gap-2">
-              <div className={`flex items-center justify-end gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-[10px] font-normal uppercase tracking-[.08em] text-gray-500 ${TEXT_SAFE}`}>
+              <div className={`type-meta flex items-center justify-end gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-[10px] font-normal uppercase tracking-[.08em] ${TEXT_SAFE}`}>
                 <LegendDot color={SMS_COLOR} label="SMS" />
                 <LegendDot color={EMAIL_COLOR} label="Email" />
               </div>
               <div className="flex items-center gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-right">
-                <div className="text-[10px] font-normal uppercase tracking-[.10em] text-gray-400">
+                <div className="type-label !text-[10px]">
                   Scale
                 </div>
-                <div className="num text-[12px] font-bold text-gray-700 tabular-nums">
+                <div className="num text-[12px] font-bold text-[color:var(--ink-1)] tabular-nums">
                   {formatCompactCredits(chartMinUsage)}-{formatCompactCredits(chartMaxUsage)}
                 </div>
               </div>
@@ -109,7 +109,7 @@ function MonthlyUsageChart({
   return (
     <div className="mt-4 min-h-0 min-w-0 flex-1">
       <div className="grid h-full min-h-[228px] min-w-0 grid-cols-[42px_minmax(0,1fr)] gap-2">
-        <div className="grid h-[calc(100%-28px)] min-h-[200px] grid-rows-[auto_1fr_auto] pt-1 text-right text-[10px] font-normal text-gray-400">
+        <div className="type-muted grid h-[calc(100%-28px)] min-h-[200px] grid-rows-[auto_1fr_auto] pt-1 text-right text-[10px] font-normal">
           <span>{formatCompactCredits(maxUsage)}</span>
           <span className="self-center">{formatCompactCredits(midUsage)}</span>
           <span>{formatCompactCredits(minUsage)}</span>
@@ -131,7 +131,7 @@ function MonthlyUsageChart({
                   tickMargin={8}
                   interval={0}
                   tickFormatter={formatMonth}
-                  stroke="#9ca3af"
+                  stroke="#999999"
                   fontSize={10}
                 />
                 <YAxis

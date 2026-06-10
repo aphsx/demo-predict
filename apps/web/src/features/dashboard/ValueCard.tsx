@@ -41,10 +41,10 @@ export function ValueCard({ overview }: { overview: DashboardOverview }) {
         <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-[inset_0_1px_4px_rgba(0,0,0,0.04)]">
           <div className={`text-[11px] font-normal text-[color:var(--moby-600)] ${TEXT_SAFE}`}>Predicted CLV</div>
           <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
-            <div className={`num text-[24px] font-bold leading-none tracking-tight text-gray-700 tabular-nums ${TEXT_SAFE}`}>
+            <div className={`num text-[24px] font-bold leading-none tracking-tight text-[color:var(--ink-1)] tabular-nums ${TEXT_SAFE}`}>
               {formatCurrency(overview.value.predicted_clv_6m)}
             </div>
-            <div className="pb-0.5 text-right text-[11px] font-normal text-gray-500">6-month forecast</div>
+            <div className="type-meta pb-0.5 text-right text-[11px] font-normal">6-month forecast</div>
           </div>
         </div>
         <div className="space-y-3">

@@ -29,7 +29,7 @@ export function RiskCard({ overview }: { overview: DashboardOverview }) {
             <div className="num text-[24px] font-bold leading-none tracking-tight text-[color:var(--danger)] tabular-nums">
               {formatNumber(overview.active_churn.high)}
             </div>
-            <div className="num pb-0.5 text-right text-[11px] font-normal text-gray-500">
+            <div className="type-meta num pb-0.5 text-right text-[11px] font-normal">
               {highPct.toFixed(1)}% of active customers
             </div>
           </div>
@@ -74,15 +74,15 @@ export function RiskListRow({
       <div className="flex min-w-0 items-center gap-3">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
         <div className="min-w-0">
-          <div className="truncate text-[11px] font-medium leading-tight text-gray-700">
+          <div className="truncate text-[12px] font-medium leading-tight text-[color:var(--ink-2)]">
             {label}
           </div>
-          <div className={`num mt-1 text-[11px] font-normal text-gray-500 ${TEXT_SAFE}`}>
+          <div className={`type-meta num mt-1 text-[11px] font-normal ${TEXT_SAFE}`}>
             {pct !== null ? `${pct.toFixed(1)}% of ${totalLabel ?? "total"}` : hint}
           </div>
         </div>
       </div>
-      <div className="num text-[22px] font-bold text-gray-700 tabular-nums">
+      <div className="num text-[22px] font-bold text-[color:var(--ink-1)] tabular-nums">
         {formatNumber(value)}
       </div>
     </div>

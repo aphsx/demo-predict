@@ -58,11 +58,11 @@ export function StatusDialog({
             <Image src={style.icon} alt={style.alt} width={105} height={105} priority />
 
             <div>
-              <h3 className="max-w-[400px] text-[18px] font-bold leading-7 text-gray-900">
+              <h3 className="max-w-[400px] text-[18px] font-bold leading-7 text-[color:var(--ink-1)]">
                 {title}
               </h3>
               {message && (
-                <p className="mt-3 max-w-[420px] text-[13px] leading-6 text-gray-500">
+                <p className="mt-3 max-w-[420px] text-[13px] leading-6 text-[color:var(--ink-4)]">
                   {message}
                 </p>
               )}
@@ -75,7 +75,7 @@ export function StatusDialog({
                 type="button"
                 disabled={loading}
                 onClick={onCancel}
-                className="inline-flex h-[47px] min-w-[102px] items-center justify-center rounded-2xl border border-gray-200 bg-white px-5 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="inline-flex h-[47px] min-w-[102px] items-center justify-center rounded-2xl border border-gray-200 bg-white px-5 text-[13px] font-semibold text-[color:var(--ink-2)] hover:bg-gray-50 disabled:opacity-50"
               >
                 {cancelLabel}
               </button>

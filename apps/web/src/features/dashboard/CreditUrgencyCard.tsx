@@ -27,14 +27,14 @@ export function CreditUrgencyCard({ overview }: { overview: DashboardOverview })
             Next top-up 7d
           </div>
           <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
-            <div className="num text-[24px] font-bold leading-none tracking-tight text-gray-700 tabular-nums">
+            <div className="num text-[24px] font-bold leading-none tracking-tight text-[color:var(--ink-1)] tabular-nums">
               {formatNumber(overview.credit.next_topup_7d)}
             </div>
             <div className="min-w-0 pb-1 text-right">
-              <div className="text-[10px] font-normal uppercase tracking-[.10em] text-gray-400">
+              <div className="type-label !text-[10px]">
                 30d usage
               </div>
-              <div className={`num mt-1 text-[12px] font-bold text-gray-700 tabular-nums ${TEXT_SAFE}`}>
+              <div className={`num mt-1 text-[12px] font-bold text-[color:var(--ink-1)] tabular-nums ${TEXT_SAFE}`}>
                 {formatCredits(overview.credit.predicted_usage_30d)}
               </div>
             </div>

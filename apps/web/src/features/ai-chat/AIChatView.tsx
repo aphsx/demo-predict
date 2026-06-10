@@ -78,7 +78,7 @@ export function AIChatView() {
           <button
             onClick={reset}
             className="h-9 px-3 rounded-lg border border-gray-200 bg-white
-              text-[13px] text-gray-700 hover:bg-gray-50
+              text-[13px] text-[color:var(--ink-2)] hover:bg-gray-50
               inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
           >
             <RotateCcw size={13} />
@@ -109,8 +109,8 @@ export function AIChatView() {
                     <Sparkles size={15} className="text-white" />
                   </div>
                 ) : (
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm ring-1 ring-gray-200">
-                    <User size={15} className="text-gray-600" />
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[color:var(--ink-3)] shadow-sm ring-1 ring-gray-200">
+                    <User size={15} className="text-[color:var(--ink-3)]" />
                   </div>
                 )}
 
@@ -122,11 +122,11 @@ export function AIChatView() {
                   ].join(" ")}
                 >
                   <div className="flex max-w-full min-w-0 items-center gap-2 px-1">
-                    <span className="truncate text-[11px] text-gray-400">
+                    <span className="truncate text-[11px] text-[color:var(--ink-5)]">
                       {msg.role === "assistant" ? "Moby AI" : "You"}
                     </span>
-                    <span className="shrink-0 text-[11px] text-gray-300">·</span>
-                    <span className="shrink-0 text-[11px] text-gray-400">{formatTime(msg.ts)}</span>
+                    <span className="shrink-0 text-[11px] text-[color:var(--ink-6)]">·</span>
+                    <span className="shrink-0 text-[11px] text-[color:var(--ink-5)]">{formatTime(msg.ts)}</span>
                   </div>
                   <div
                     className={[
@@ -135,12 +135,12 @@ export function AIChatView() {
                       "max-h-[min(420px,58dvh)] overflow-y-auto overscroll-contain",
                       msg.role === "user"
                         ? "rounded-tr-sm bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-700)] text-white"
-                        : "rounded-tl-sm border border-gray-200 bg-white text-gray-700 shadow-sm",
+                        : "rounded-tl-sm border border-gray-200 bg-white text-[color:var(--ink-2)] shadow-sm",
                     ].join(" ")}
                   >
                     <MarkdownLite
                       text={msg.content}
-                      strongClassName={msg.role === "user" ? "font-semibold text-white" : "font-semibold text-gray-900"}
+                      strongClassName={msg.role === "user" ? "font-semibold text-white" : "font-semibold text-[color:var(--ink-1)]"}
                     />
                   </div>
                 </div>
@@ -155,7 +155,7 @@ export function AIChatView() {
                   <Sparkles size={15} className="text-white animate-pulse" />
                 </div>
                 <div className="flex max-w-[min(78%,46rem)] items-center gap-2 rounded-2xl rounded-tl-sm border border-gray-200 bg-white px-4 py-3.5 shadow-sm">
-                  <span className="text-[12px] text-gray-500">กำลังวิเคราะห์</span>
+                  <span className="text-[12px] text-[color:var(--ink-4)]">กำลังวิเคราะห์</span>
                   <TypingDots />
                 </div>
               </div>
@@ -174,12 +174,12 @@ export function AIChatView() {
                   onKeyDown={handleKey}
                   rows={1}
                   placeholder="ถามข้อมูลบริษัทหรือฐานข้อมูลด้วยภาษาไทย (Enter เพื่อส่ง, Shift+Enter ขึ้นบรรทัด)"
-                  className={`max-h-[160px] min-h-[42px] w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-gray-700
-                    placeholder:text-gray-400 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none ${TEXT_WRAP}`}
+                  className={`max-h-[160px] min-h-[42px] w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-[color:var(--ink-2)]
+                    placeholder:text-[color:var(--ink-5)] outline-none focus:outline-none focus:ring-0 focus-visible:outline-none ${TEXT_WRAP}`}
                   style={{ overflowY: "auto" }}
                 />
                 <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-gray-200 pt-2">
-                  <span className={`flex-1 text-[11px] text-gray-400 ${TEXT_WRAP}`}>
+                  <span className={`flex-1 text-[11px] text-[color:var(--ink-5)] ${TEXT_WRAP}`}>
                     {runId ? `Ollama Cloud · Text-to-SQL · Run ${runId.slice(0, 8)}` : "Ollama Cloud · Text-to-SQL · knowledge evidence"}
                   </span>
                   <button
@@ -189,7 +189,7 @@ export function AIChatView() {
                     className={`flex h-9 shrink-0 items-center gap-2 rounded-xl px-4 text-[13px] font-medium transition-all
                       ${input.trim() && !sending
                         ? "bg-[color:var(--moby-600)] text-white shadow-sm hover:bg-[color:var(--moby-700)] active:scale-95"
-                        : "cursor-not-allowed bg-gray-200 text-gray-400"
+                        : "cursor-not-allowed bg-gray-200 text-[color:var(--ink-5)]"
                       }`}
                   >
                     <Send size={13} />

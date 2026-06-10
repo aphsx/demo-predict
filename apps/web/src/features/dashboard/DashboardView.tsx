@@ -30,10 +30,10 @@ export function DashboardView({
   const ghostPct = (overview.totals.ghost_customers / overview.totals.customers) * 100;
 
   return (
-    <main className="min-w-0 px-4 py-5 pb-12 sm:px-6 lg:px-8">
+    <main className="min-w-0 px-4 py-6 pb-12 sm:px-6 lg:px-8">
       
 
-      <section className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           icon={Gem}
           label="Avg monthly value"
@@ -65,20 +65,20 @@ export function DashboardView({
         />
       </section>
 
-      <section className="mt-5 space-y-5">
-        <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)]">
+      <section className="mt-6 space-y-6">
+        <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-[minmax(340px,0.8fr)_minmax(0,1.2fr)]">
           <LifecycleMixCard overview={overview} />
           <MonthlyRevenueCard data={monthlyRevenue} />
         </div>
-        <div className="grid grid-cols-1 items-stretch gap-5 xl:grid-cols-3">
+        <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-3">
           <RiskCard overview={overview} />
           <ValueCard overview={overview} />
           <CreditUrgencyCard overview={overview} />
         </div>
       </section>
 
-      <section className="surface mt-5 p-4">
-        <div className={`flex min-w-0 flex-wrap items-center gap-3 text-[11px] text-gray-400 ${TEXT_SAFE}`}>
+      <section className="surface mt-6 p-4">
+        <div className={`flex min-w-0 flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
           <ShieldCheck size={12} />
           Mock dashboard data is isolated in `src/mocks/dashboard.ts`
           <span className="opacity-50">·</span>

@@ -69,12 +69,12 @@ function MessageRow({ msg }: { msg: ChatMsg }) {
             TEXT_WRAP,
             isUser
               ? "rounded-2xl rounded-br-none bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-700)] text-white"
-              : "rounded-2xl rounded-bl-none bg-white border border-gray-200 text-gray-700 shadow-sm",
+              : "rounded-2xl rounded-bl-none bg-white border border-gray-200 text-[color:var(--ink-2)] shadow-sm",
           ].join(" ")}
         >
           <MarkdownLite text={msg.content} />
         </div>
-        <span className="text-[9.5px] text-gray-400 px-1">
+        <span className="text-[9.5px] text-[color:var(--ink-5)] px-1">
           {formatTime(msg.ts)}
         </span>
       </div>
@@ -297,8 +297,8 @@ export default function AIChatWidget() {
                 onKeyDown={onKey}
                 placeholder="ถาม Moby AI"
                 className="flex-1 resize-none bg-transparent
-                  text-[13px] text-gray-700
-                  placeholder:text-gray-400
+                  text-[13px] text-[color:var(--ink-2)]
+                  placeholder:text-[color:var(--ink-5)]
                   outline-none focus:outline-none focus:ring-0 focus-visible:outline-none leading-[1.5]
                   min-h-[20px] max-h-[96px]
                   whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
@@ -315,7 +315,7 @@ export default function AIChatWidget() {
                 "transition-all duration-150",
                 input.trim() && !sending
                   ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-700)] shadow-md active:scale-95"
-                  : "bg-gray-200 text-gray-400 cursor-not-allowed",
+                  : "bg-gray-200 text-[color:var(--ink-5)] cursor-not-allowed",
               ].join(" ")}
             >
               <Send size={14} strokeWidth={2} />
@@ -323,7 +323,7 @@ export default function AIChatWidget() {
           </div>
 
           {/* Disclaimer */}
-          <p className="text-[9.5px] text-gray-300 text-center pb-2 px-4 leading-tight">
+          <p className="text-[9.5px] text-[color:var(--ink-6)] text-center pb-2 px-4 leading-tight">
             Chat API connected · no mock prediction data ·{" "}
             <Link
               href="/ai-chat"

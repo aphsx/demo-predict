@@ -15,11 +15,11 @@ export function PageHeader({
     <div className="px-8 pt-6 pb-2 flex items-end justify-between gap-4 flex-wrap">
       <div>
         {eyebrow && (
-          <div className="text-[11px] font-semibold uppercase tracking-[.16em] text-gray-400 mb-1">
+          <div className="type-label mb-1">
             {eyebrow}
           </div>
         )}
-        <h2 className="text-[20px] font-semibold text-gray-900 leading-tight">{title}</h2>
+        <h2 className="type-display text-[24px] leading-tight">{title}</h2>
       </div>
       <div className="flex items-center gap-2">{actions}</div>
     </div>
@@ -37,8 +37,8 @@ export function SectionCard({
       {(title || right) && (
         <header className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100">
           <div>
-            {title && <h3 className="text-[13px] font-semibold text-gray-900">{title}</h3>}
-            {hint && <p className="text-[11.5px] text-gray-400 mt-0.5">{hint}</p>}
+            {title && <h3 className="type-section-title text-[15px]">{title}</h3>}
+            {hint && <p className="type-meta text-[12px] mt-0.5">{hint}</p>}
           </div>
           {right}
         </header>
@@ -82,13 +82,13 @@ export function KpiCard({
       />
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-gray-400">
+          <div className="type-label">
             {label}
           </div>
-          <div className="num text-[28px] font-semibold mt-1.5">
+          <div className="num mt-1.5 text-[28px] font-semibold text-[color:var(--ink-1)]">
             {formatted}
           </div>
-          {hint && <div className="text-[11.5px] text-gray-500 mt-0.5">{hint}</div>}
+          {hint && <div className="type-meta text-[12px] mt-0.5">{hint}</div>}
         </div>
         {delta !== undefined && <DeltaPill value={delta} label={deltaLabel} />}
       </div>
@@ -116,7 +116,7 @@ const ACCENTS = {
 export function DeltaPill({ value, label }: { value: number; label?: string }) {
   const up = value > 0, flat = value === 0;
   const Icon = flat ? Minus : up ? TrendingUp : TrendingDown;
-  const color = flat ? "text-gray-500 bg-gray-50"
+  const color = flat ? "text-[color:var(--ink-4)] bg-gray-50"
     : up ? "text-[color:var(--ok)] bg-[color:var(--ok-bg)]"
     : "text-[color:var(--danger)] bg-[color:var(--danger-bg)]";
   return (
@@ -177,7 +177,7 @@ export function StackBar({
   data, palette, height = 8,
 }: { data: Record<string, number>; palette: Record<string, string>; height?: number }) {
   const total = Object.values(data).reduce((a, b) => a + b, 0);
-  if (!total) return <div className="text-[11.5px] text-gray-400">No data</div>;
+  if (!total) return <div className="text-[11.5px] text-[color:var(--ink-5)]">No data</div>;
   return (
     <div>
       <div className="flex w-full overflow-hidden rounded-full" style={{ height }}>
@@ -191,12 +191,12 @@ export function StackBar({
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
         {Object.entries(data).map(([k, v]) => (
-          <span key={k} className="text-[11.5px] text-gray-600 flex items-center gap-1.5">
+          <span key={k} className="text-[11.5px] text-[color:var(--ink-3)] flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full" style={{ background: palette[k] || "#cbd5e1" }} />
-            <span className="text-gray-700">{k}</span>
-            <span className="num text-gray-500">{v.toLocaleString()}</span>
-            <span className="text-gray-400">·</span>
-            <span className="num text-gray-400">{((v / total) * 100).toFixed(1)}%</span>
+            <span className="text-[color:var(--ink-2)]">{k}</span>
+            <span className="num text-[color:var(--ink-4)]">{v.toLocaleString()}</span>
+            <span className="text-[color:var(--ink-5)]">·</span>
+            <span className="num text-[color:var(--ink-5)]">{((v / total) * 100).toFixed(1)}%</span>
           </span>
         ))}
       </div>
@@ -241,7 +241,7 @@ export function ProgressMeter({
     <div>
       {(label || showValue) && (
         <div className="flex items-baseline justify-between mb-1">
-          {label && <span className="text-[11.5px] text-gray-500">{label}</span>}
+          {label && <span className="text-[11.5px] text-[color:var(--ink-4)]">{label}</span>}
           {showValue && <span className="num text-[12px]">{pct.toFixed(0)}%</span>}
         </div>
       )}
@@ -260,11 +260,11 @@ export function EmptyState({
 }: { title: string; hint?: string; icon?: any; action?: ReactNode }) {
   return (
     <div className="surface-soft py-10 px-6 text-center">
-      <div className="inline-flex items-center justify-center text-gray-500 mb-3">
+      <div className="inline-flex items-center justify-center text-[color:var(--ink-4)] mb-3">
         <Icon size={18} />
       </div>
-      <div className="text-[13.5px] font-medium text-gray-700">{title}</div>
-      {hint && <div className="text-[12px] text-gray-400 mt-1 max-w-md mx-auto">{hint}</div>}
+      <div className="text-[13.5px] font-medium text-[color:var(--ink-2)]">{title}</div>
+      {hint && <div className="text-[12px] text-[color:var(--ink-5)] mt-1 max-w-md mx-auto">{hint}</div>}
       {action && <div className="mt-3">{action}</div>}
     </div>
   );
@@ -284,7 +284,7 @@ export function ActionChip({ children, onClick }: { children: ReactNode; onClick
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-[12px] font-medium text-gray-600 hover:text-[color:var(--moby-600)] hover:underline underline-offset-2"
+      className="inline-flex items-center gap-1 text-[12px] font-medium text-[color:var(--ink-3)] hover:text-[color:var(--moby-600)] hover:underline underline-offset-2"
     >
       {children}
       <ArrowRight size={12} />
@@ -311,14 +311,14 @@ export function AlertItem({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-3">
-          <div className="text-[13px] font-medium text-gray-900 truncate">{title}</div>
+          <div className="text-[13px] font-medium text-[color:var(--ink-1)] truncate">{title}</div>
           {time && (
-            <div className="text-[11px] text-gray-400 flex items-center gap-1 shrink-0">
+            <div className="text-[11px] text-[color:var(--ink-5)] flex items-center gap-1 shrink-0">
               <Clock size={10} /> {time}
             </div>
           )}
         </div>
-        {children && <div className="text-[12px] text-gray-500 mt-0.5">{children}</div>}
+        {children && <div className="text-[12px] text-[color:var(--ink-4)] mt-0.5">{children}</div>}
       </div>
     </div>
   );

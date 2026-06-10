@@ -22,7 +22,7 @@ export function MonthlyValueView({ data }: { data: MonthlyRevenuePoint[] }) {
         actions={
           <Link
             href="/"
-            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 text-[12px] font-semibold text-gray-700"
+            className="inline-flex h-10 items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 text-[12px] font-semibold text-[color:var(--ink-2)]"
           >
             <ArrowLeft size={13} /> Dashboard
           </Link>
@@ -55,17 +55,17 @@ export function MonthlyValueView({ data }: { data: MonthlyRevenuePoint[] }) {
           <header className="flex flex-wrap items-start justify-between gap-4 px-5 py-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
                   Monthly value
                 </p>
                 <StatusPill tone={trendPct >= 0 ? "ok" : "warn"} dot={false}>
                   {trendPct >= 0 ? "+" : ""}{trendPct.toFixed(1)}% vs first month
                 </StatusPill>
               </div>
-              <h2 className="mt-1 text-[17px] font-semibold tracking-[-0.02em] text-gray-900">
+              <h2 className="mt-1 text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
                 มูลค่ารายเดือนย้อนหลัง
               </h2>
-              <p className="mt-1 text-[12px] leading-5 text-gray-500">
+              <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
                 Production source: group `Backend_payment.amount` by `payment_date` month.
               </p>
             </div>
@@ -82,13 +82,13 @@ export function MonthlyValueView({ data }: { data: MonthlyRevenuePoint[] }) {
             <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
               {data.slice(-4).map((point) => (
                 <div key={point.month} className="rounded-2xl border border-gray-200 bg-white px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-gray-400">
+                  <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
                     {point.month}
                   </div>
                   <div className="num mt-1 text-[20px] font-semibold">
                     {formatCurrency(point.revenue)}
                   </div>
-                  <div className="mt-1 text-[11px] text-gray-400">
+                  <div className="mt-1 text-[11px] text-[color:var(--ink-5)]">
                     {point.payments} payments
                   </div>
                 </div>
@@ -98,7 +98,7 @@ export function MonthlyValueView({ data }: { data: MonthlyRevenuePoint[] }) {
         </section>
 
         <section className="surface p-4">
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-400">
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)]">
             <Database size={12} />
             Mock chart data is isolated in `src/mocks/monthly-revenue.ts`
             <span className="opacity-50">·</span>
@@ -125,7 +125,7 @@ function SummaryCard({
     <section className="surface p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-gray-400">
+          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
             {label}
           </div>
           <div className="num mt-2 text-[30px] font-semibold tracking-[-0.035em]">
@@ -136,7 +136,7 @@ function SummaryCard({
           <Icon size={17} />
         </span>
       </div>
-      <div className="mt-3 text-[11.5px] text-gray-400">{hint}</div>
+      <div className="mt-3 text-[11.5px] text-[color:var(--ink-5)]">{hint}</div>
     </section>
   );
 }

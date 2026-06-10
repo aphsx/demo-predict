@@ -200,13 +200,13 @@ export function TrainingView() {
           <div className="p-5 sm:p-6">
               <div className="flex flex-col gap-3 border-b border-gray-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
                     New dataset
                   </p>
-                  <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] text-gray-900">
+                  <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
                     Import new workbook
                   </h2>
-                  <p className="mt-1 max-w-2xl text-[13px] leading-6 text-gray-500">
+                  <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
                     ตั้งชื่อ dataset, เลือก Excel fixed-schema แล้วให้ระบบ import raw และ clean data อัตโนมัติ
                   </p>
                 </div>
@@ -230,7 +230,7 @@ export function TrainingView() {
                 <div className="flex flex-col rounded-[24px] border border-gray-200 bg-gray-50 p-4">
                   <div className="grid grid-cols-1 gap-4">
                     <label className="block">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
                         Dataset name
                       </span>
                       <input
@@ -238,12 +238,12 @@ export function TrainingView() {
                         value={importName}
                         onChange={(e) => setImportName(e.target.value)}
                         placeholder="e.g. Bangkok University Q1"
-                        className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-gray-700 shadow-[var(--shadow-1)]"
+                        className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
                       />
                     </label>
 
                     <label className="block">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
                         Client label
                       </span>
                       <input
@@ -251,13 +251,13 @@ export function TrainingView() {
                         value={importClient}
                         onChange={(e) => setImportClient(e.target.value)}
                         placeholder="optional"
-                        className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-gray-700 shadow-[var(--shadow-1)]"
+                        className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
                       />
                     </label>
                   </div>
 
                   <div className="mt-5 rounded-2xl bg-white p-3">
-                    <div className="flex items-center gap-3 text-[12px] text-gray-500">
+                    <div className="flex items-center gap-3 text-[12px] text-[color:var(--ink-4)]">
                       <span className="shrink-0 text-[color:var(--moby-600)]">
                         <Layers3 size={15} />
                       </span>

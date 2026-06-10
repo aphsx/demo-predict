@@ -33,10 +33,10 @@ export function FilePickerPanel({
           <FileSpreadsheet size={20} />
         </span>
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold text-gray-900">
+          <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">
             Source workbook
           </p>
-          <p className="mt-1 text-[12px] leading-5 text-gray-500">
+          <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
             One `.xlsx` file with the required 8 sheets.
           </p>
         </div>
@@ -44,7 +44,7 @@ export function FilePickerPanel({
 
       <div className="mt-5 overflow-hidden rounded-[22px] border border-gray-100">
         <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
             Selected file
           </p>
         </div>
@@ -56,10 +56,10 @@ export function FilePickerPanel({
                 <FileSpreadsheet size={18} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-gray-900">
+                <p className="truncate text-[13px] font-semibold text-[color:var(--ink-1)]">
                   {pendingFile.name}
                 </p>
-                <p className="mt-1 text-[12px] text-gray-500">
+                <p className="mt-1 text-[12px] text-[color:var(--ink-4)]">
                   {formatFileSize(pendingFile.size)}
                 </p>
               </div>
@@ -67,8 +67,8 @@ export function FilePickerPanel({
           </div>
         ) : (
           <div className="px-4 py-7 text-center">
-            <p className="text-[13px] font-medium text-gray-700">No file selected</p>
-            <p className="mt-1 text-[12px] text-gray-400">
+            <p className="text-[13px] font-medium text-[color:var(--ink-2)]">No file selected</p>
+            <p className="mt-1 text-[12px] text-[color:var(--ink-5)]">
               Choose a workbook before uploading.
             </p>
           </div>
