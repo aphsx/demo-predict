@@ -27,7 +27,7 @@ export function ValueRiskMatrixCard({ summary, runId }: { summary: RunSummary; r
   return (
     <section className="surface-elev h-full overflow-hidden">
       <div className="border-b border-gray-100 px-4 py-4 sm:px-5">
-        <h2 className={`text-[18px] font-medium leading-tight text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
+        <h2 className={`type-section-title text-[20px] leading-tight ${TEXT_SAFE}`}>
           Value × Risk
         </h2>
         <p className="mt-1 text-[11px] font-normal leading-5 text-[color:var(--ink-4)]">
@@ -38,7 +38,7 @@ export function ValueRiskMatrixCard({ summary, runId }: { summary: RunSummary; r
         <div className="grid min-w-0 grid-cols-[88px_repeat(4,minmax(0,1fr))] gap-1.5">
           <div />
           {RISKS.map((r) => (
-            <div key={r} className="text-center text-[11px] font-semibold uppercase tracking-[.08em] text-[color:var(--ink-5)]">
+            <div key={r} className="type-label text-center">
               {RISK_LABEL[r]}
             </div>
           ))}
@@ -62,7 +62,7 @@ function FragmentRow({
 }) {
   return (
     <>
-      <div className="flex items-center text-[11px] font-semibold uppercase tracking-[.08em] text-[color:var(--ink-5)]">
+      <div className="type-label flex items-center">
         {TIER_LABEL[tier]}
       </div>
       {RISKS.map((risk) => {
@@ -82,7 +82,7 @@ function FragmentRow({
                   : "border-gray-200 bg-white"
             }`}
           >
-            <div className={`num text-[18px] font-semibold leading-none ${hot ? "text-[#b91c1c]" : ""}`}>
+            <div className={`num text-[18px] leading-none ${hot ? "text-[#b91c1c]" : ""}`}>
               {(c?.count ?? 0).toLocaleString()}
             </div>
             <div className="num mt-1 text-[10.5px] text-[color:var(--ink-5)]">

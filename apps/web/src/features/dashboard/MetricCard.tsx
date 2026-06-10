@@ -34,7 +34,7 @@ export function MetricCard({
   const content = (
     <div className="flex h-full min-w-0 flex-col text-left">
       <div className="flex min-w-0 items-start justify-between gap-3">
-        <p className={`min-w-0 truncate text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
+        <p className={`type-label min-w-0 truncate ${TEXT_SAFE}`}>
           {label}
         </p>
         <span className={`flex h-6 w-6 shrink-0 items-center justify-center ${iconClass}`}>
@@ -43,7 +43,7 @@ export function MetricCard({
       </div>
 
       <div className="mt-4 min-w-0">
-        <h3 className={`num truncate text-left text-[30px] font-bold leading-none tracking-[-0.035em] text-[color:var(--ink-1)] tabular-nums ${TEXT_SAFE}`}>
+        <h3 className={`num truncate text-left text-[30px] leading-none text-[color:var(--ink-1)] tabular-nums ${TEXT_SAFE}`}>
           {value}
         </h3>
         <div className={`mt-4 h-px w-full ${toneStyles.accent} opacity-15`} />

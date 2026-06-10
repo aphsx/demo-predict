@@ -36,7 +36,7 @@ export function LifecycleMixCard({ overview }: { overview: DashboardOverview }) 
               <p className={`type-label ${TEXT_SAFE}`}>
                 Lifecycle distribution
               </p>
-              <div className="num mt-1 text-[26px] font-bold leading-none tracking-tight text-[color:var(--ink-1)] tabular-nums">
+              <div className="num mt-1 text-[26px] leading-none text-[color:var(--ink-1)] tabular-nums">
                 {formatNumber(totalCustomers)}
               </div>
               <p className="type-meta mt-1 text-[11px] font-normal">total customers</p>
@@ -45,7 +45,7 @@ export function LifecycleMixCard({ overview }: { overview: DashboardOverview }) 
               <div className="type-label !text-[10px]">
                 Scale
               </div>
-              <div className="num mt-1 text-[14px] font-bold text-[color:var(--ink-1)] tabular-nums">
+              <div className="num mt-1 text-[14px] text-[color:var(--ink-1)] tabular-nums">
                 0-{chartMaxPct}%
               </div>
             </div>
@@ -67,7 +67,7 @@ export function LifecycleMixCard({ overview }: { overview: DashboardOverview }) 
                 {lifecycleStats.map(({ stage, count, pct }) => (
                   <div key={stage} className="flex h-full min-w-0 flex-col items-center justify-end">
                     <div className="mb-2 rounded-full bg-gray-50 px-2 py-1 text-center">
-                      <div className="num text-[11px] font-bold leading-none text-[color:var(--ink-1)] tabular-nums">
+                      <div className="num text-[11px] leading-none text-[color:var(--ink-1)] tabular-nums">
                         {formatNumber(count)}
                       </div>
                     </div>
@@ -93,7 +93,7 @@ export function LifecycleMixCard({ overview }: { overview: DashboardOverview }) 
                 <div className={`type-muted truncate text-[10px] font-normal uppercase tracking-[.08em] ${TEXT_SAFE}`}>
                   {stage}
                 </div>
-                <div className="num mt-1 text-[13px] font-bold text-[color:var(--ink-1)] tabular-nums">
+                <div className="num mt-1 text-[13px] text-[color:var(--ink-1)] tabular-nums">
                   {pct.toFixed(1)}%
                 </div>
               </div>

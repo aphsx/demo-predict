@@ -7,6 +7,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-Light.otf") format("opentype");
   font-weight: 300;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -14,6 +15,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-Regular.otf") format("opentype");
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -21,6 +23,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-Medium.otf") format("opentype");
   font-weight: 500;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -28,6 +31,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-Bold.otf") format("opentype");
   font-weight: 700;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -35,6 +39,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-ExtraBold.otf") format("opentype");
   font-weight: 800;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -42,6 +47,7 @@
   src: url("/fonts/MeroTH/MeroThai-Regular.otf") format("opentype");
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -49,6 +55,7 @@
   src: url("/fonts/MeroTH/MeroThai-Medium.otf") format("opentype");
   font-weight: 500;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -56,6 +63,7 @@
   src: url("/fonts/MeroTH/MeroThai-Bold.otf") format("opentype");
   font-weight: 700;
   font-style: normal;
+  font-display: swap;
 }
 
 /* ───────────────────────────────────────────────────────────
@@ -97,11 +105,11 @@
   --info:     #0369a1;
   --info-bg:  #f0f9ff;
 
-  /* Lifecycle palette */
-  --c-paid:    #2563eb;
-  --c-free:    #7c3aed;
-  --c-churn:   #f97316;
-  --c-ghost:   #94a3b8;
+  /* Lifecycle palette — 1Moby brand (must match dashboard LIFECYCLE_PALETTE) */
+  --c-paid:    #006bff;
+  --c-free:    #ffa400;
+  --c-churn:   #fc4c02;
+  --c-ghost:   #9ca3af;
 
   /* Shape */
   --r-sm: 6px;
@@ -114,16 +122,19 @@
   --shadow-2: 0 1px 0 rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.06);
   --shadow-3: 0 8px 24px rgba(15,23,42,.08);
 
-  /* Type */
+  /* Type — 1moby.com stacks:
+     UI/default + headings = merothai, long-form copy = Sarabun,
+     Latin labels & numerals = "Geometrica, merothai" (never monospace) */
   --font-display: 'merothai', 'MeroThai', 'Sarabun', 'Noto Sans Thai', sans-serif;
   --font-body: 'Sarabun', 'merothai', 'Noto Sans Thai', sans-serif;
-  --font-ui: 'Sarabun', 'merothai', 'Noto Sans Thai', sans-serif;
-  --font-num: 'Geometrica', 'merothai', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  --font-ui: 'merothai', 'Sarabun', 'Noto Sans Thai', sans-serif;
+  --font-num: 'Geometrica', 'merothai', 'Sarabun', 'Noto Sans Thai', sans-serif;
 }
 
 html, body { height: 100%; }
 body {
   font-family: var(--font-ui);
+  font-weight: 400;
   @apply bg-slate-50;
   color: var(--ink-3);
   font-synthesis-weight: none;
@@ -137,8 +148,15 @@ a {
   text-decoration: none;
 }
 
-/* numerals */
-.num { font-family: var(--font-num); font-feature-settings: "tnum" 1, "lnum" 1; letter-spacing: -.01em; color: inherit; }
+/* numerals — 1moby never goes heavier than Medium (500); this wins over
+   stray font-bold/font-semibold utilities so every number shares one pattern */
+.num {
+  font-family: var(--font-num);
+  font-weight: 500;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  letter-spacing: -.01em;
+  color: inherit;
+}
 
 /* typography patterns from 1moby.com article pages */
 .type-display {
@@ -153,16 +171,19 @@ a {
   font-weight: 500;
   letter-spacing: -.02em;
 }
+/* small uppercase tag — 1moby blog-tag pattern (Geometrica, light) */
 .type-label {
+  font-family: var(--font-num);
   color: var(--ink-4);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 400;
   letter-spacing: .08em;
   text-transform: uppercase;
 }
 .type-meta { color: var(--ink-4); }
 .type-muted { color: var(--ink-5); }
-.type-body { font-family: var(--font-body); color: var(--ink-3); }
+/* long-form copy — 1moby blog-content pattern (Sarabun, #6b6b6b, 1.6) */
+.type-body { font-family: var(--font-body); color: var(--ink-4); line-height: 1.6; }
 
 /* surfaces */
 .surface       { @apply rounded-lg border border-gray-200 bg-white shadow-none; }
@@ -235,7 +256,7 @@ hr.hairline { @apply border-t border-gray-200; border-bottom: none; }
 /* sparkline track */
 .spark-track { stroke: #e5e7eb; fill: none; stroke-width: 1; }
 .spark-line  { stroke: var(--moby-600); fill: none; stroke-width: 1.5; }
-.spark-area  { fill: rgba(37,99,235,.10); }
+.spark-area  { fill: rgba(0,107,255,.10); }
 
 /* anim */
 @keyframes pulse-soft { 0%,100% { opacity: 1 } 50% { opacity: .6 } }

@@ -26,7 +26,7 @@ export function RiskCard({ overview }: { overview: DashboardOverview }) {
             High-risk active
           </div>
           <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
-            <div className="num text-[24px] font-bold leading-none tracking-tight text-[color:var(--danger)] tabular-nums">
+            <div className="num text-[24px] leading-none text-[color:var(--danger)] tabular-nums">
               {formatNumber(overview.active_churn.high)}
             </div>
             <div className="type-meta num pb-0.5 text-right text-[11px] font-normal">
@@ -82,7 +82,7 @@ export function RiskListRow({
           </div>
         </div>
       </div>
-      <div className="num text-[22px] font-bold text-[color:var(--ink-1)] tabular-nums">
+      <div className="num text-[22px] text-[color:var(--ink-1)] tabular-nums">
         {formatNumber(value)}
       </div>
     </div>

@@ -85,7 +85,7 @@ export function KpiCard({
           <div className="type-label">
             {label}
           </div>
-          <div className="num mt-1.5 text-[28px] font-semibold text-[color:var(--ink-1)]">
+          <div className="num mt-1.5 text-[28px] text-[color:var(--ink-1)]">
             {formatted}
           </div>
           {hint && <div className="type-meta text-[12px] mt-0.5">{hint}</div>}
@@ -139,6 +139,9 @@ const PILL_TONES: Record<string, { fg: string; bg: string }> = {
   neutral:  { fg: "#4b5563",          bg: "#f9fafb" },
   brand:    { fg: "var(--moby-700)", bg: "var(--moby-50)" },
   violet:   { fg: "#6d28d9",         bg: "#f5f3ff" },
+  /* 1Moby brand warm tones — readable equivalents of #FFA400 / #FC4C02 */
+  warm:     { fg: "#b45309",         bg: "#fff8eb" },
+  orange:   { fg: "#c2410c",         bg: "#fff4ed" },
 };
 
 export function StatusPill({
@@ -157,18 +160,20 @@ export function StatusPill({
 /* ────────────────────────────────────────── */
 /*  Lifecycle / churn / urgency mappers     */
 /* ────────────────────────────────────────── */
+/* Tone mapping follows the dashboard brand palettes (palette.ts):
+   Paid/Low/Stable = blue, Free/Medium/Warning = #FFA400, Churned/High/Critical = #FC4C02 */
 export const lifecycleTone = (s: string): keyof typeof PILL_TONES =>
   s === "Active Paid" ? "brand"
-  : s === "Active Free" ? "violet"
-  : s === "Churned" ? "warn"
+  : s === "Active Free" ? "warm"
+  : s === "Churned" ? "orange"
   : s === "Ghost" ? "neutral"
   : "neutral";
 
 export const churnTone = (t: string): keyof typeof PILL_TONES =>
-  t === "High" ? "danger" : t === "Medium" ? "warn" : t === "Low" ? "ok" : "neutral";
+  t === "High" ? "orange" : t === "Medium" ? "warm" : t === "Low" ? "brand" : "neutral";
 
 export const urgencyTone = (u: string): keyof typeof PILL_TONES =>
-  u === "Critical" ? "danger" : u === "Warning" ? "warn" : u === "Monitor" ? "info" : u === "Stable" ? "ok" : "neutral";
+  u === "Critical" ? "orange" : u === "Warning" ? "warm" : u === "Monitor" ? "neutral" : u === "Stable" ? "brand" : "neutral";
 
 /* ────────────────────────────────────────── */
 /*  StackBar — compact horizontal stack      */

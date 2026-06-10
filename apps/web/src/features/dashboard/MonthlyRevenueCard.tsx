@@ -48,7 +48,7 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
                 Monthly usage
               </p>
               <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
-                <span className="num text-[26px] font-bold leading-none tracking-tight text-[color:var(--ink-1)] tabular-nums">
+                <span className="num text-[26px] leading-none text-[color:var(--ink-1)] tabular-nums">
                   {formatCompactCredits(latestTotal)}
                 </span>
                 <span className="type-muted text-[14px] font-medium leading-none">
@@ -68,7 +68,7 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
                 <div className="type-label !text-[10px]">
                   Scale
                 </div>
-                <div className="num text-[12px] font-bold text-[color:var(--ink-1)] tabular-nums">
+                <div className="num text-[12px] text-[color:var(--ink-1)] tabular-nums">
                   {formatCompactCredits(chartMinUsage)}-{formatCompactCredits(chartMaxUsage)}
                 </div>
               </div>

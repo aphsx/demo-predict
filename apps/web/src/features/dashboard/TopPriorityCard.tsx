@@ -11,7 +11,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
     <section className="surface-elev overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 sm:px-5">
         <div>
-          <h2 className={`text-[18px] font-medium leading-tight text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
+          <h2 className={`type-section-title text-[20px] leading-tight ${TEXT_SAFE}`}>
             Top priority customers
           </h2>
           <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
@@ -57,7 +57,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
                 <td className="num px-3 py-2.5 text-right">
                   {c.predicted_clv_6m === null ? "—" : formatCurrency(c.predicted_clv_6m)}
                 </td>
-                <td className="num px-3 py-2.5 text-right font-semibold">
+                <td className="num px-3 py-2.5 text-right">
                   {c.priority_score.toFixed(0)}
                 </td>
                 <td className={`px-3 py-2.5 text-[color:var(--ink-4)] ${TEXT_SAFE}`}>{c.priority_reason}</td>
