@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
-import { useRunStore } from "@/lib/runStore";
+import { useRunStore } from "@/stores/runStore";
+import { RunUrlSync } from "@/stores/RunUrlSync";
 
 /* ── types ──────────────────────────────────────────────── */
 interface Message {
@@ -226,6 +227,7 @@ export default function AIChatPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[color:var(--bg)]">
+      <RunUrlSync />
       <PageHeader
         eyebrow={runId ? `AI · Run ${runId.slice(0, 8)}…` : "AI · ไม่มี run"}
         title="Moby AI Assistant"
