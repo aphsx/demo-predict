@@ -38,7 +38,7 @@ export function DashboardView({
             "radial-gradient(rgba(7, 29, 126, 0.52) 0%, transparent 42%)",
             "url(/assets/intro/about_bg.webp)",
             "linear-gradient(180deg, rgba(0,0,0,0.24) 0%, rgba(0,0,0,0.04) 38%, rgba(0,0,0,0.16) 100%)",
-            `linear-gradient(140deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blue} 56%, ${MOBY_BRAND.orangeWarm} 82%, ${MOBY_BRAND.orange} 100%)`,
+            `linear-gradient(140deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blue} 56%, ${MOBY_BRAND.blueLight} 82%, ${MOBY_BRAND.blue} 100%)`,
           ].join(", "),
           backgroundRepeat: "no-repeat, no-repeat, no-repeat, no-repeat",
           backgroundSize: "140% 150%, cover, 100% 100%, 100% 100%",
@@ -116,7 +116,7 @@ export function DashboardView({
           <ShieldCheck size={12} />
           Mock dashboard data is isolated in `src/mocks/dashboard.ts`
           <span className="opacity-50">·</span>
-          API-ready shape: totals / lifecycle / active_churn / value / credit / monthly_revenue
+          API-ready shape: totals / lifecycle / active_churn / value / credit / monthly_usage
           <span className="opacity-50">·</span>
           Ghost share: {ghostPct.toFixed(1)}%
         </div>
