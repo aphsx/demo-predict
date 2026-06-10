@@ -92,14 +92,14 @@ function HistoryRow({ run }: { run: TrainingRun }) {
             />
           </div>
         ) : summary ? (
-          <span className="num text-[12.5px] text-[color:var(--ink-2)]">{summary}</span>
+          <span className="num text-[12.5px]">{summary}</span>
         ) : (
           <span className="text-[12px] text-[color:var(--ink-5)]">—</span>
         )}
       </td>
       <td>
         {promoted ? (
-          <span className="num text-[12.5px] text-[color:var(--ink-2)]">{promoted}</span>
+          <span className="num text-[12.5px]">{promoted}</span>
         ) : (
           <span className="text-[12px] text-[color:var(--ink-5)]">—</span>
         )}

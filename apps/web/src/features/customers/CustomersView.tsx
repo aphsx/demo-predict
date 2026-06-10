@@ -138,7 +138,7 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                 >
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">Account</p>
-                    <p className="num text-[18px] font-semibold text-[color:var(--moby-700)]">{r.acc_id}</p>
+                    <p className="num text-[18px] font-semibold text-gray-700">{r.acc_id}</p>
                     <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
                       {r.n_purchases ?? 0} purchases
                     </p>
@@ -217,7 +217,7 @@ function MetricCell({
       <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">
         {label}
       </p>
-      <p className="num mt-0.5 text-[14px] font-semibold text-[color:var(--ink-2)] xl:mt-0">
+      <p className="num mt-0.5 text-[14px] font-semibold xl:mt-0">
         {value}
       </p>
     </div>

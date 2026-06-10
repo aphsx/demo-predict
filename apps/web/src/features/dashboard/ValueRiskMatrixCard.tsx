@@ -26,11 +26,11 @@ export function ValueRiskMatrixCard({ summary, runId }: { summary: RunSummary; r
 
   return (
     <section className="surface-elev h-full overflow-hidden">
-      <div className="border-b border-[color:var(--line-2)] px-4 py-4 sm:px-5">
-        <h2 className={`text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
+      <div className="border-b border-gray-100 px-4 py-4 sm:px-5">
+        <h2 className={`text-[18px] font-medium leading-tight text-[#08060d] ${TEXT_SAFE}`}>
           Value × Risk
         </h2>
-        <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
+        <p className="mt-1 text-[11px] font-normal leading-5 text-gray-500">
           เฉพาะ Active Paid · มุมขวาบน = มูลค่าสูง + เสี่ยงสูง ต้องรีบจัดการ · คลิกเพื่อดูรายชื่อ
         </p>
       </div>
@@ -82,7 +82,7 @@ function FragmentRow({
                   : "border-[color:var(--line)] bg-white"
             }`}
           >
-            <div className={`num text-[18px] font-semibold leading-none ${hot ? "text-[#b91c1c]" : "text-[color:var(--ink-1)]"}`}>
+            <div className={`num text-[18px] font-semibold leading-none ${hot ? "text-[#b91c1c]" : ""}`}>
               {(c?.count ?? 0).toLocaleString()}
             </div>
             <div className="num mt-1 text-[10.5px] text-[color:var(--ink-5)]">

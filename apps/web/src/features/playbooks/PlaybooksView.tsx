@@ -175,7 +175,7 @@ function Lane({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between gap-3">
                     <Link href={`/customers/${r.acc_id}`}
-                      className={`text-[13px] font-medium num text-[color:var(--moby-700)] hover:underline ${isDone ? "line-through" : ""}`}>
+                      className={`text-[13px] font-medium num text-gray-700 hover:underline ${isDone ? "line-through" : ""}`}>
                       {r.acc_id}
                     </Link>
                     <div className="flex items-center gap-1.5">
@@ -204,7 +204,7 @@ function Lane({
                   {Number(r.predicted_clv_6m ?? 0) > 0 && (
                     <>
                       <div className="text-[10px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">CLV</div>
-                      <div className="num text-[13px] font-semibold text-[color:var(--ink-1)]">
+                      <div className="num text-[13px] font-semibold">
                         {Number(r.predicted_clv_6m).toLocaleString()} ฿
                       </div>
                     </>

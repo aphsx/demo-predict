@@ -79,7 +79,7 @@ function CalibrationPanel({
             <div className="text-[10.5px] font-semibold uppercase tracking-[.08em] text-[color:var(--ink-5)]" title={metricInfo("ece").tooltip}>
               ECE
             </div>
-            <div className="num text-[18px] font-semibold text-[color:var(--ink-1)]">
+            <div className="num text-[18px] font-semibold">
               {calibration.ece.toFixed(3)}
             </div>
           </div>
@@ -133,7 +133,7 @@ function Cell({ cell }: { cell: { key: string; value: number; hint: string; fg: 
       title={cell.hint}
     >
       <div className="text-[10px] font-semibold" style={{ color: cell.fg }}>{cell.key}</div>
-      <div className="num text-[16px] font-semibold text-[color:var(--ink-1)]">
+      <div className="num text-[16px] font-semibold">
         {cell.value.toLocaleString()}
       </div>
     </div>
@@ -168,10 +168,10 @@ function LiftPanel({
           {liftTable.map((row) => (
             <tr key={row.decile} className="border-t border-[color:var(--line-2)]">
               <td className="py-1.5 text-[color:var(--ink-3)]">#{row.decile}</td>
-              <td className="num py-1.5 text-right text-[color:var(--ink-1)]">
+              <td className="num py-1.5 text-right">
                 {(row.share_of_churners * 100).toFixed(1)}%
               </td>
-              <td className="num py-1.5 text-right text-[color:var(--ink-1)]">
+              <td className="num py-1.5 text-right">
                 {row.lift.toFixed(2)}×
               </td>
             </tr>
@@ -181,10 +181,10 @@ function LiftPanel({
       {recallAtTop10 !== undefined && topDecile && (
         <p className="mt-3 text-[11.5px] leading-5 text-[color:var(--ink-3)] rounded-lg bg-[color:var(--surface)] border border-[color:var(--line-2)] px-3 py-2">
           โทรหา top 10% = เจอ churner จริง{" "}
-          <span className="num font-semibold text-[color:var(--ink-1)]">
+          <span className="num font-semibold">
             {(recallAtTop10 * 100).toFixed(1)}%
           </span>{" "}
-          (lift <span className="num font-semibold text-[color:var(--ink-1)]">{topDecile.lift.toFixed(2)}×</span>)
+          (lift <span className="num font-semibold">{topDecile.lift.toFixed(2)}×</span>)
         </p>
       )}
     </div>

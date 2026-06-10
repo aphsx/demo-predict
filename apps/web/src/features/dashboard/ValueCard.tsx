@@ -37,19 +37,19 @@ export function ValueCard({ overview }: { overview: DashboardOverview }) {
         hint="ใช้ดูว่าความเสี่ยงกระทบลูกค้ากลุ่มมูลค่าสูงแค่ไหน"
         icon={Gem}
       />
-      <div className="flex-1 border-t border-[color:var(--line-2)] p-4 sm:p-5">
-        <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
-          <div className={`text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--moby-700)] ${TEXT_SAFE}`}>Predicted CLV</div>
+      <div className="flex-1 border-t border-gray-100 p-4 sm:p-5">
+        <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-[inset_0_1px_4px_rgba(0,0,0,0.04)]">
+          <div className={`text-[11px] font-normal text-[#006BFF] ${TEXT_SAFE}`}>Predicted CLV</div>
           <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
-            <div className={`num text-[clamp(24px,6vw,28px)] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
+            <div className={`num text-[24px] font-bold leading-none tracking-tight text-gray-700 tabular-nums ${TEXT_SAFE}`}>
               {formatCurrency(overview.value.predicted_clv_6m)}
             </div>
-            <div className="pb-1 text-right text-[12px] text-[color:var(--ink-4)]">6-month forecast</div>
+            <div className="pb-0.5 text-right text-[11px] font-normal text-gray-500">6-month forecast</div>
           </div>
         </div>
         <div className="space-y-3">
           {valueData.map(([label, value, hint, color]) => (
-            <div key={label} className="min-w-0 rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+            <div key={label} className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4">
               <RiskListRow
                 label={label}
                 value={value}

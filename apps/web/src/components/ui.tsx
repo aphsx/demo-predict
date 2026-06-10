@@ -85,7 +85,7 @@ export function KpiCard({
           <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
             {label}
           </div>
-          <div className="num text-[28px] font-semibold text-[color:var(--ink-1)] mt-1.5">
+          <div className="num text-[28px] font-semibold mt-1.5">
             {formatted}
           </div>
           {hint && <div className="text-[11.5px] text-[color:var(--ink-4)] mt-0.5">{hint}</div>}
@@ -242,7 +242,7 @@ export function ProgressMeter({
       {(label || showValue) && (
         <div className="flex items-baseline justify-between mb-1">
           {label && <span className="text-[11.5px] text-[color:var(--ink-4)]">{label}</span>}
-          {showValue && <span className="num text-[12px] text-[color:var(--ink-2)]">{pct.toFixed(0)}%</span>}
+          {showValue && <span className="num text-[12px]">{pct.toFixed(0)}%</span>}
         </div>
       )}
       <div className="w-full h-1.5 rounded-full bg-[color:var(--surface-2)] overflow-hidden">

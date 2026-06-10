@@ -56,10 +56,7 @@ export function DashboardView({
                 <h1 className="mt-2 text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-[42px]">
                   Dashboard
                 </h1>
-                <p className={`mt-3 max-w-2xl text-sm leading-6 text-white/78 sm:text-[15px] ${TEXT_SAFE}`}>
-                  ภาพรวมผล prediction ที่ควรเห็นก่อนเริ่มทำงาน: portfolio ทั้งหมด,
-                  high-value risk, active churn risk, value at risk, credit urgency และรายได้รายเดือนล่าสุด
-                </p>
+
               </div>
             </div>
 

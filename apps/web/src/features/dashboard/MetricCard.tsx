@@ -25,32 +25,30 @@ export function MetricCard({
       : "text-[color:var(--moby-600)] bg-[color:var(--moby-50)]";
 
   const content = (
-    <>
-      <div className="flex min-w-0 items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className={`text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
-            {label}
-          </div>
-          <div className={`num mt-1 text-[clamp(22px,5vw,26px)] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
-            {value}
-          </div>
-        </div>
-        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl ${toneClass}`}>
-          <Icon size={17} />
-        </span>
+    <div className="relative flex h-full min-w-0 flex-col pr-11">
+      <div className={`min-w-0 text-[11px] font-normal leading-tight text-gray-600 ${TEXT_SAFE}`}>
+          {label}
       </div>
-      <div className="mt-1.5 flex min-w-0 items-start justify-between gap-3 text-[11.5px] text-[color:var(--ink-4)]">
+      <span className={`absolute right-0 top-0 grid h-9 w-9 place-items-center rounded-2xl ${toneClass}`}>
+        <Icon size={17} />
+      </span>
+
+      <div className={`num mt-3 text-[24px] font-bold leading-none tracking-[-0.02em] text-gray-700 tabular-nums ${TEXT_SAFE}`}>
+        {value}
+      </div>
+
+      <div className="mt-auto flex min-w-0 items-start justify-between gap-3 pt-5 text-[11px] font-normal text-gray-500">
         <span className={TEXT_SAFE}>{hint}</span>
-        {href ? <ArrowRight size={12} className="shrink-0 text-[color:var(--ink-4)]" /> : null}
+        {href ? <ArrowRight size={12} className="shrink-0 text-gray-400" /> : null}
       </div>
-    </>
+    </div>
   );
 
   if (href) {
     return (
       <Link
         href={href}
-        className="block min-w-0 rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)] transition-colors hover:bg-[color:var(--surface-2)]"
+        className="block min-h-[96px] min-w-0 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-none transition-colors hover:bg-gray-50"
       >
         {content}
       </Link>
@@ -58,7 +56,7 @@ export function MetricCard({
   }
 
   return (
-    <div className="min-w-0 rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)]">
+    <div className="min-h-[96px] min-w-0 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-none">
       {content}
     </div>
   );

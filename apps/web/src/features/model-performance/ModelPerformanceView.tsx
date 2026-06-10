@@ -40,13 +40,13 @@ function MetricSummaryCard({ metric }: { metric: SummaryMetric }) {
       </div>
 
       <p className="mt-5 text-[12px] font-semibold text-[color:var(--ink-5)]">{metric.primaryMetric.label}</p>
-      <p className="num mt-1 text-[34px] font-semibold leading-none text-[color:var(--ink-1)]">{metric.primaryMetric.value}</p>
+      <p className="num mt-1 text-[34px] font-semibold leading-none">{metric.primaryMetric.value}</p>
 
       <div className="mt-5 space-y-3">
         {metric.metrics.map((item) => (
           <div key={item.label} className="grid grid-cols-[1fr_auto] gap-4 rounded-xl bg-[color:var(--surface-2)] px-3 py-2.5">
             <p className="text-[12px] font-semibold text-[color:var(--ink-2)]">{item.label}</p>
-            <p className="num text-[15px] font-semibold text-[color:var(--ink-1)]">{item.value}</p>
+            <p className="num text-[15px] font-semibold">{item.value}</p>
           </div>
         ))}
       </div>

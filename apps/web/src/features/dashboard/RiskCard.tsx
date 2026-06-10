@@ -20,23 +20,23 @@ export function RiskCard({ overview }: { overview: DashboardOverview }) {
         hint="ไม่นับ churned และ ghost เพื่อไม่ให้ตัวเลข churn active ปน lifecycle อื่น"
         icon={TrendingDown}
       />
-      <div className="flex-1 border-t border-[color:var(--line-2)] p-4 sm:p-5">
-        <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
-          <div className={`text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--danger)] ${TEXT_SAFE}`}>
+      <div className="flex-1 border-t border-gray-100 p-4 sm:p-5">
+        <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-[inset_0_1px_4px_rgba(0,0,0,0.04)]">
+          <div className={`text-[11px] font-normal text-[color:var(--danger)] ${TEXT_SAFE}`}>
             High-risk active
           </div>
           <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
-            <div className="num text-[34px] font-semibold tracking-[-0.04em] text-[color:var(--danger)]">
+            <div className="num text-[24px] font-bold leading-none tracking-tight text-[color:var(--danger)] tabular-nums">
               {formatNumber(overview.active_churn.high)}
             </div>
-            <div className="num pb-1 text-right text-[12px] text-[color:var(--ink-4)]">
+            <div className="num pb-0.5 text-right text-[11px] font-normal text-gray-500">
               {highPct.toFixed(1)}% of active customers
             </div>
           </div>
         </div>
         <div className="space-y-3">
           {churnData.map(([label, value]) => (
-            <div key={label} className="min-w-0 rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+            <div key={label} className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4">
               <RiskListRow
                 label={label}
                 value={value}
@@ -74,15 +74,15 @@ export function RiskListRow({
       <div className="flex min-w-0 items-center gap-3">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
         <div className="min-w-0">
-          <div className="truncate text-[12px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-2)]">
+          <div className="truncate text-[11px] font-medium leading-tight text-gray-700">
             {label}
           </div>
-          <div className={`num mt-1 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
+          <div className={`num mt-1 text-[11px] font-normal text-gray-500 ${TEXT_SAFE}`}>
             {pct !== null ? `${pct.toFixed(1)}% of ${totalLabel ?? "total"}` : hint}
           </div>
         </div>
       </div>
-      <div className="num text-[22px] font-semibold text-[color:var(--ink-1)]">
+      <div className="num text-[22px] font-bold text-gray-700 tabular-nums">
         {formatNumber(value)}
       </div>
     </div>

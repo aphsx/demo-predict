@@ -21,20 +21,20 @@ export function CreditUrgencyCard({ overview }: { overview: DashboardOverview })
         hint="เฉพาะ active customers ที่ forecast credit ได้"
         icon={CreditCard}
       />
-      <div className="flex-1 border-t border-[color:var(--line-2)] p-4 sm:p-5">
-        <div className="mb-4 rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
-          <div className={`text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--warn)] ${TEXT_SAFE}`}>
+      <div className="flex-1 border-t border-gray-100 p-4 sm:p-5">
+        <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-[inset_0_1px_4px_rgba(0,0,0,0.04)]">
+          <div className={`text-[11px] font-normal text-[color:var(--warn)] ${TEXT_SAFE}`}>
             Next top-up 7d
           </div>
           <div className="mt-2 flex min-w-0 flex-wrap items-end justify-between gap-3">
-            <div className="num text-[30px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
+            <div className="num text-[24px] font-bold leading-none tracking-tight text-gray-700 tabular-nums">
               {formatNumber(overview.credit.next_topup_7d)}
             </div>
             <div className="min-w-0 pb-1 text-right">
-              <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+              <div className="text-[10px] font-normal uppercase tracking-[.10em] text-gray-400">
                 30d usage
               </div>
-              <div className={`num mt-1 text-[12px] font-semibold text-[color:var(--ink-2)] ${TEXT_SAFE}`}>
+              <div className={`num mt-1 text-[12px] font-bold text-gray-700 tabular-nums ${TEXT_SAFE}`}>
                 {formatCredits(overview.credit.predicted_usage_30d)}
               </div>
             </div>
@@ -42,7 +42,7 @@ export function CreditUrgencyCard({ overview }: { overview: DashboardOverview })
         </div>
         <div className="space-y-3">
           {creditData.map(([label, value]) => (
-            <div key={label} className="min-w-0 rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+            <div key={label} className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4">
               <RiskListRow
                 label={label}
                 value={value}

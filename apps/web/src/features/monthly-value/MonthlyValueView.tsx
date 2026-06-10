@@ -85,7 +85,7 @@ export function MonthlyValueView({ data }: { data: MonthlyRevenuePoint[] }) {
                   <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
                     {point.month}
                   </div>
-                  <div className="num mt-1 text-[20px] font-semibold text-[color:var(--ink-1)]">
+                  <div className="num mt-1 text-[20px] font-semibold">
                     {formatCurrency(point.revenue)}
                   </div>
                   <div className="mt-1 text-[11px] text-[color:var(--ink-5)]">
@@ -128,7 +128,7 @@ function SummaryCard({
           <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
             {label}
           </div>
-          <div className="num mt-2 text-[30px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+          <div className="num mt-2 text-[30px] font-semibold tracking-[-0.035em]">
             {value}
           </div>
         </div>

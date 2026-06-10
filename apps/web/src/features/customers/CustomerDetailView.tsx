@@ -167,7 +167,7 @@ function HeroMetric({ label, value, hint }: { label: string; value: string; hint
         </p>
         <p className="mt-1 truncate text-[11.5px] text-[color:var(--ink-4)]">{hint}</p>
       </div>
-      <p className="num shrink-0 whitespace-nowrap text-right text-[22px] font-semibold tracking-[-0.03em] text-[color:var(--ink-1)]">
+      <p className="num shrink-0 whitespace-nowrap text-right text-[22px] font-semibold tracking-[-0.03em]">
         {value}
       </p>
     </div>
@@ -282,7 +282,7 @@ function SignalRow({
       <div className="mb-4 flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-[12px] font-semibold text-[color:var(--ink-1)]">{label}</p>
-          <p className="num mt-2 whitespace-nowrap text-[26px] font-semibold tracking-[-0.04em] text-[color:var(--ink-1)]">
+          <p className="num mt-2 whitespace-nowrap text-[26px] font-semibold tracking-[-0.04em]">
             {value}
           </p>
         </div>
@@ -301,7 +301,7 @@ function MiniStatCard({ label, value, hint }: { label: string; value: string; hi
       <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
         {label}
       </p>
-      <p className="num mt-1 text-[20px] font-semibold text-[color:var(--ink-1)]">
+      <p className="num mt-1 text-[20px] font-semibold">
         {value}
       </p>
       <p className="mt-1 text-[11.5px] text-[color:var(--ink-4)]">
@@ -335,7 +335,7 @@ function BrandMeter({
         <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
           {label && <span className="font-medium text-[color:var(--ink-4)]">{label}</span>}
           {!hideValue && (
-            <span className="num font-semibold text-[color:var(--ink-2)]">
+            <span className="num font-semibold">
               {formatValue ? formatValue(value) : `${pct.toFixed(0)}%`}
             </span>
           )}
@@ -367,7 +367,7 @@ function FactCard({ label, value }: { label: string; value: string }) {
       <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
         {label}
       </p>
-      <p className="num mt-1 text-[13px] font-semibold text-[color:var(--ink-1)]">
+      <p className="num mt-1 text-[13px] font-semibold">
         {value}
       </p>
     </div>
