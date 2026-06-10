@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { INTRO_ASSETS } from "@/lib/login-brand-colors";
 import {
-  LayoutDashboard, Users, ListChecks, Database,
+  LayoutDashboard, Users, Database,
   Activity, ShieldCheck, MessageSquareMore,
 } from "lucide-react";
 
@@ -15,12 +15,6 @@ const PRIMARY_GROUPS: { title: string; items: Item[] }[] = [
     items: [
       { href: "/",          label: "Dashboard", icon: LayoutDashboard },
       { href: "/customers", label: "Customers",      icon: Users },
-    ],
-  },
-  {
-    title: "Actions",
-    items: [
-      { href: "/playbooks", label: "Action Queue", icon: ListChecks },
     ],
   },
   {

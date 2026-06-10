@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, TrendingUp, Users, AlertTriangle, Zap } from "lucide-react";
+import { ChevronRight, TrendingUp, Users, AlertTriangle } from "lucide-react";
 
 const TEXT_WRAP = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
 
@@ -9,7 +9,6 @@ const QUICK_PROMPTS = [
   { icon: TrendingUp, label: "วิเคราะห์ churn risk ของพอร์ต" },
   { icon: Users, label: "สรุป lifecycle distribution" },
   { icon: AlertTriangle, label: "บัญชีที่มีความเสี่ยงสูงสุด" },
-  { icon: Zap, label: "แนะนำ action เร่งด่วน" },
 ];
 
 export function QuickPromptsAside({
@@ -46,7 +45,6 @@ export function QuickPromptsAside({
         <div className="space-y-1">
           {[
             { href: "/customers", label: "Customers" },
-            { href: "/playbooks", label: "Action Queue" },
             { href: "/model-performance", label: "Model Health" },
           ].map(({ href, label }) => (
             <Link key={href} href={href}
@@ -67,7 +65,6 @@ export function QuickPromptsAside({
             "คำนวณ CLV",
             "ติดตาม lifecycle",
             "ตรวจ model drift",
-            "แนะนำ playbook",
           ].map(cap => (
             <li key={cap} className="flex min-w-0 items-start gap-2 text-[11.5px] text-[color:var(--ink-3)]">
               <span className="w-1 h-1 rounded-full bg-[color:var(--moby-500)] mt-1.5 shrink-0" />

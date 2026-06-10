@@ -34,53 +34,35 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
           <h2 className={`type-section-title text-[20px] leading-tight ${TEXT_SAFE}`}>
             Credit usage monthly
           </h2>
+          <div className="mt-2 flex min-w-0 items-baseline gap-1.5">
+            <span className="num text-[26px] leading-none text-[color:var(--ink-1)] tabular-nums">
+              {formatCompactCredits(latestTotal)}
+            </span>
+            <span className="type-muted text-[12px] font-medium leading-none">
+              credits
+            </span>
+          </div>
+          <p className="type-meta mt-1 text-[11px] font-normal">
+            latest total · {latest.month}
+          </p>
         </div>
-        <span className="type-meta shrink-0 rounded-full bg-gray-50 px-3 py-1 text-[11px] font-normal">
-          2 channels
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className={`type-meta flex items-center justify-end gap-2 rounded-full bg-gray-50 px-3 py-1 text-[10px] font-normal uppercase tracking-[.08em] ${TEXT_SAFE}`}>
+            <LegendDot color={SMS_COLOR} label="SMS" />
+            <LegendDot color={EMAIL_COLOR} label="Email" />
+          </div>
+          <span className="type-meta rounded-full bg-gray-50 px-3 py-1 text-[11px] font-normal">
+            {formatCompactCredits(chartMinUsage)}-{formatCompactCredits(chartMaxUsage)}
+          </span>
+        </div>
       </header>
 
-      <div className="flex flex-1 p-3 sm:p-4">
-        <div className="flex min-w-0 flex-1 flex-col rounded-2xl border border-gray-100 bg-white p-3 shadow-[inset_0_1px_4px_rgba(0,0,0,0.04)] sm:p-4">
-          <div className="flex min-w-0 items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className={`type-label ${TEXT_SAFE}`}>
-                Monthly usage
-              </p>
-              <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
-                <span className="num text-[26px] leading-none text-[color:var(--ink-1)] tabular-nums">
-                  {formatCompactCredits(latestTotal)}
-                </span>
-                <span className="type-muted text-[14px] font-medium leading-none">
-                  credits
-                </span>
-              </div>
-              <p className="type-meta mt-1 text-[11px] font-normal">
-                latest total · {latest.month}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-start justify-end gap-2">
-              <div className={`type-meta flex items-center justify-end gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-[10px] font-normal uppercase tracking-[.08em] ${TEXT_SAFE}`}>
-                <LegendDot color={SMS_COLOR} label="SMS" />
-                <LegendDot color={EMAIL_COLOR} label="Email" />
-              </div>
-              <div className="flex items-center gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-right">
-                <div className="type-label !text-[10px]">
-                  Scale
-                </div>
-                <div className="num text-[12px] text-[color:var(--ink-1)] tabular-nums">
-                  {formatCompactCredits(chartMinUsage)}-{formatCompactCredits(chartMaxUsage)}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <MonthlyUsageChart
-            data={data}
-            maxUsage={chartMaxUsage}
-            minUsage={chartMinUsage}
-          />
-        </div>
+      <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-5">
+        <MonthlyUsageChart
+          data={data}
+          maxUsage={chartMaxUsage}
+          minUsage={chartMinUsage}
+        />
       </div>
     </section>
   );
@@ -107,7 +89,7 @@ function MonthlyUsageChart({
   }, [data.length]);
 
   return (
-    <div className="mt-4 min-h-0 min-w-0 flex-1">
+    <div className="min-h-0 min-w-0 flex-1">
       <div className="grid h-full min-h-[228px] min-w-0 grid-cols-[42px_minmax(0,1fr)] gap-2">
         <div className="type-muted grid h-[calc(100%-28px)] min-h-[200px] grid-rows-[auto_1fr_auto] pt-1 text-right text-[10px] font-normal">
           <span>{formatCompactCredits(maxUsage)}</span>

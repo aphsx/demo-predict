@@ -25,7 +25,6 @@
 | `/login` | Login | — | ใช้งานได้แล้ว |
 
 **เอาออก:**
-- `/playbooks` (Action Queue) — **ตัดออกจาก scope** ยังไม่ชัดว่าทีมจะใช้ workflow แบบไหน — งาน "ใครต้องถูกติดต่อก่อน" ใช้ quick presets + sort `priority_score` ใน `/customers` แทนได้ครบ; field `recommended_action` / `priority_score` ยังเก็บใน output ตามเดิม (OUTPUT-CONTRACT §5.2–5.3) ถ้าอนาคตชัดค่อยสร้างหน้าใหม่
 - `/alerts` — โฟลเดอร์ว่าง ไม่มี page.tsx ลบทิ้ง (สัญญาณเตือนใช้ quick presets ใน `/customers` แทน)
 - `/monthly-value` — ยุบเป็น drill-down/modal ของกราฟ revenue ใน Overview (ข้อมูลเดียวกัน ไม่ควรเป็น route แยก)
 - ฟังก์ชัน stub ทั้งหมดใน `apps/web/src/lib/api.ts` (`fetchRuns`→`[]`, `streamChat` ฯลฯ) — แทนด้วย client ของ API ใหม่ (§7)
@@ -33,7 +32,7 @@
 
 ## §2.0 Layout กลาง (ทุกหน้า)
 
-**Sidebar (รายการสุดท้ายหลังตัด playbooks/alerts/monthly-value):**
+**Sidebar (รายการสุดท้ายหลังตัด routes ที่ไม่อยู่ใน scope):**
 
 ```
 📊 Dashboard          /
@@ -187,7 +186,7 @@ name · status pill (pending / in_progress / completed / failed) · predict sour
 ## §2.7 หน้า AI Assistant (`/ai-chat`)
 
 ฟีเจอร์แยก — spec หลักอยู่ `AI-ASSISTANT-ARCHITECTURE.md` สิ่งที่ต้องแก้ให้สอดคล้อง ML v2:
-- ลบ quick link ที่ชี้ `/playbooks` (หน้าโดนลบ) — เหลือ Customers / Model Performance
+- Quick links เหลือ Customers / Model Performance
 - Quick prompts ปรับเป็นคำถามที่ตอบได้จริงจาก `ml_prediction_outputs` (เช่น "ลูกค้าเสี่ยงสูงที่ CLV เกิน 10k มีใครบ้าง")
 - Evidence panel แสดง SQL ที่รันจริง (มีอยู่แล้ว — คงไว้)
 
@@ -306,13 +305,12 @@ KPI "Active high risk" = count(*) WHERE lifecycle_stage='Active Paid'
 | `/` Overview | KPI 4 ใบ, lifecycle mix, revenue chart, risk + CLV + top-up widgets — **mock ทั้งหมด** | ต่อ `/summary` จริง; เพิ่ม Total customers KPI, Value×Risk matrix, Top 10 priority, run selector; แยก label actual vs forecast |
 | `/customers` | ตาราง acc_id / stage / churn / CLV / revenue + filter lifecycle | คอลัมน์ risk level, revenue_at_risk, value tier, credit urgency, last activity, action; filter risk/tier/urgency; quick presets; sort ฝั่ง server; export CSV |
 | `/customers/[id]` | hero metrics, usage chart, profile ย่อ | churn factors (SHAP) — หัวใจของหน้า, profile snapshot (เครดิต/expire), payment timeline, แถบ p10–p90 credit, เหตุผล not eligible, ซ่อน AI card ที่เป็น Mockup |
-| `/playbooks` | lane + การ์ด + done checkbox | **ลบ route ทั้งหน้า** (ตัดออกจาก scope — ดู §2) |
 | `/model-performance` | การ์ด 4 โมเดล — **ตัวเลข hardcode** | อ่านจาก `ml_model_evaluations`; แยก split, เทียบ baseline, calibration curve, lift table, threshold ที่ใช้ |
 | `/runs` | โครงหน้า + ตาราง — fetch เป็น stub คืน `[]` | ทำตาม §2.5: ย้าย predict import มารวม, create run (เลือก source + cutoff ที่ API แนะนำ), progress steps, open→เลือก run บน dashboard, retry/delete |
 | `/training` | import + เลือก dataset ใช้งานได้จริง | ทำตาม §2.6: Train panel จริง (cutoff แนะนำจาก Gate 3), การ์ดสรุปผล+เหตุผล promote/ไม่ promote, training history |
-| `/ai-chat` | chat + evidence panel ใช้งานได้ | ลบ quick link `/playbooks`, ปรับ quick prompts ให้ถามจาก `ml_prediction_outputs` ได้จริง (§2.7) |
-| Layout/nav | sidebar มีลิงก์ครบทุกหน้าเก่า | ตัดเมนู playbooks / alerts / monthly-value, เพิ่ม run selector ใน header (§2.0) |
-| `/alerts`, `/monthly-value`, `/playbooks` | — | ลบ route (§2) |
+| `/ai-chat` | chat + evidence panel ใช้งานได้ | ปรับ quick prompts ให้ถามจาก `ml_prediction_outputs` ได้จริง (§2.7) |
+| Layout/nav | sidebar มีลิงก์ครบทุกหน้าเก่า | ตัดเมนู routes ที่ไม่อยู่ใน scope, เพิ่ม run selector ใน header (§2.0) |
+| `/alerts`, `/monthly-value` | — | ลบ route (§2) |
 
 ## §7 API ที่หน้าเว็บต้องใช้ (Elysia — ทุก key เป็น snake_case)
 
