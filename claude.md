@@ -77,6 +77,17 @@ Cursor skill (`.cursor/skills/ml-contract-review/`) and the specs under `docs/ML
 - **Storage:** Local filesystem (`./models` volume) in dev; R2 deferred
 - **Monorepo:** Turborepo + Bun workspaces
 
+## Canonical ML v2 Documentation
+
+The single source of truth for ML v2 design lives in `docs/` (older ML/design docs were deleted):
+
+- `docs/ML-V2-OVERVIEW.md` — system overview, scope, build phases
+- `docs/ML-V2-DASHBOARD-SPEC.md` — what every web page/widget shows, field-by-field
+- `docs/ML-V2-OUTPUT-CONTRACT.md` — `ml_prediction_outputs` field contract + derived-field formulas
+- `docs/ML-V2-TRAINING-PIPELINE.md` — training pipeline, anti-leakage suite, metrics, promotion gate, retraining policy
+
+When implementing anything ML- or dashboard-related, follow these docs over any legacy code.
+
 ## Repository Structure
 
 ```
