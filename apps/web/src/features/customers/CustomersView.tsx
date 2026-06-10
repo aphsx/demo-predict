@@ -9,7 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { StatusDialog } from "@/components/StatusDialog";
-import { StatusPill, Skeleton, lifecycleTone } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { STAGES, type CustomerRow } from "@/mocks/customers";
 
@@ -144,10 +144,14 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                     </p>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <StatusPill tone={lifecycleTone(r.lifecycle_stage ?? "")}>{r.lifecycle_stage ?? "—"}</StatusPill>
+                    <LifecycleRowPill stage={r.lifecycle_stage ?? "—"} />
                     {r.sub_stage && <span className="truncate text-[12px] text-[color:var(--ink-4)]">{r.sub_stage}</span>}
                   </div>
-                  <MetricCell label="Churn" value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"} />
+                  <MetricCell
+                    label="Churn"
+                    value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
+                    valueClassName="text-[#fc4c02]"
+                  />
                   <MetricCell label="CLV 6m" value={r.predicted_clv_6m != null ? formatCurrency(r.predicted_clv_6m) : "—"} alignRight />
                   <MetricCell label="Revenue" value={r.total_revenue != null ? formatCurrency(r.total_revenue) : "—"} alignRight />
                   <div className="flex justify-start xl:justify-end">
@@ -155,7 +159,7 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                       type="button"
                       disabled={aiStatus === "generating"}
                       onClick={(event) => generateReason(event, r.acc_id)}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] px-3 text-[12px] font-semibold text-[color:var(--moby-600)] hover:border-[color:var(--moby-200)] hover:bg-white"
+                      className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[color:var(--moby-600)] px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-[color:var(--moby-800)] disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {aiStatus === "generating" ? (
                         <Loader2 size={13} className="animate-spin" />
@@ -207,21 +211,42 @@ function MetricCell({
   label,
   value,
   alignRight = false,
+  valueClassName = "",
 }: {
   label: string;
   value: string;
   alignRight?: boolean;
+  valueClassName?: string;
 }) {
   return (
     <div className={alignRight ? "xl:text-right" : undefined}>
       <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">
         {label}
       </p>
-      <p className="num mt-0.5 text-[14px] font-semibold xl:mt-0">
+      <p className={`num mt-0.5 text-[14px] font-semibold xl:mt-0 ${valueClassName}`}>
         {value}
       </p>
     </div>
   );
+}
+
+function LifecycleRowPill({ stage }: { stage: string }) {
+  return (
+    <span
+      className="inline-flex h-[26px] w-[92px] items-center justify-center rounded-full text-[11px] font-semibold text-white"
+      style={{ backgroundColor: lifecycleButtonColor(stage) }}
+    >
+      {stage}
+    </span>
+  );
+}
+
+function lifecycleButtonColor(stage: string): string {
+  if (stage === "Active Paid") return "#006bff";
+  if (stage === "Active Free") return "#ffa400";
+  if (stage === "Churned") return "#fc4c02";
+  if (stage === "Ghost") return "#9ca3af";
+  return "#9ca3af";
 }
 
 function FilterChip({

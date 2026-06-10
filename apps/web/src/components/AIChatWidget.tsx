@@ -49,8 +49,7 @@ const TEXT_WRAP =
 ───────────────────────────────────────────── */
 function Avatar() {
   return (
-    <div className="w-7 h-7 rounded-full shrink-0
-      bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)]
+    <div className="w-7 h-7 rounded-full shrink-0 bg-[color:var(--moby-600)]
       flex items-center justify-center mb-0.5">
       <Bot size={13} className="text-white" />
     </div>
@@ -68,8 +67,8 @@ function MessageRow({ msg }: { msg: ChatMsg }) {
             "max-w-full px-3.5 py-2.5 text-[13px] leading-relaxed",
             TEXT_WRAP,
             isUser
-              ? "rounded-2xl rounded-br-none bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-700)] text-white"
-              : "rounded-2xl rounded-bl-none bg-white border border-gray-200 text-[color:var(--ink-2)] shadow-sm",
+              ? "rounded-2xl rounded-br-none bg-[color:var(--moby-600)] text-white"
+              : "rounded-2xl rounded-bl-none bg-white border border-gray-200 text-[color:var(--ink-2)]",
           ].join(" ")}
         >
           <MarkdownLite text={msg.content} />
@@ -149,12 +148,12 @@ export default function AIChatWidget() {
         className={[
           "fixed bottom-3 right-3 z-50 sm:bottom-6 sm:right-6",
           "w-14 h-14 rounded-full",
-          "bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)]",
-          "text-white shadow-xl",
+          "bg-[color:var(--moby-600)]",
+          "text-white",
           "flex items-center justify-center",
           "transition-all duration-200",
           "hover:scale-110 active:scale-95",
-          "ring-[3px] ring-white/25",
+          "hover:bg-[color:var(--moby-800)]",
           open ? "opacity-0 pointer-events-none scale-90" : "opacity-100",
         ].join(" ")}
       >
@@ -188,19 +187,17 @@ export default function AIChatWidget() {
             ? "opacity-100 scale-100 pointer-events-auto"
             : "opacity-0 scale-90 pointer-events-none",
         ].join(" ")}
-        style={{ boxShadow: "0 20px 60px rgba(15,23,42,.18), 0 4px 12px rgba(15,23,42,.08)" }}
       >
 
         {/* ── HEADER (flex-shrink-0) ─────────────────────── */}
-        <header className="flex-shrink-0 flex items-center gap-3 min-w-0 px-4 py-3
-          bg-gradient-to-r from-[color:var(--moby-600)] to-[color:var(--moby-800)]">
+        <header className="flex-shrink-0 flex items-center gap-3 min-w-0 px-4 py-3 bg-[color:var(--moby-600)]">
           <div className="flex items-center justify-center shrink-0">
             <Sparkles size={14} className="text-white" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="truncate text-[13.5px] font-semibold text-white leading-tight">Moby AI</p>
-            <p className="truncate text-[10.5px] text-blue-200 flex items-center gap-1.5 mt-0.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            <p className="truncate text-[10.5px] text-white/75 flex items-center gap-1.5 mt-0.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#ffa400]" />
               Ollama Cloud · no mock insights
             </p>
           </div>
@@ -209,7 +206,7 @@ export default function AIChatWidget() {
               href="/ai-chat"
               title="เปิดเต็มจอ"
               onClick={() => setOpen(false)}
-              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/25
+              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20
                 flex items-center justify-center text-white/80 hover:text-white transition-colors"
             >
               <ExternalLink size={12} />
@@ -217,7 +214,7 @@ export default function AIChatWidget() {
             <button
               onClick={resetChat}
               title="รีเซ็ต"
-              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/25
+              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20
                 flex items-center justify-center text-white/80 hover:text-white transition-colors"
             >
               <RotateCcw size={12} />
@@ -225,7 +222,7 @@ export default function AIChatWidget() {
             <button
               onClick={() => setOpen(false)}
               title="ปิด"
-              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/25
+              className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20
                 flex items-center justify-center text-white/80 hover:text-white transition-colors"
             >
               <X size={14} />
@@ -238,7 +235,7 @@ export default function AIChatWidget() {
         ─────────────────────────────────────────────────────── */}
         <div
           ref={scrollRef}
-          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-3 bg-[#f8fafc] sm:px-4"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-3 bg-white sm:px-4"
         >
           {messages
             .filter((msg) => !(msg.role === "assistant" && (msg.pending || msg.content.trim() === "")))
@@ -251,7 +248,7 @@ export default function AIChatWidget() {
             <div className="flex items-end gap-2">
               <Avatar />
               <div className="max-w-[82%] bg-white border border-gray-200 rounded-2xl rounded-bl-none
-                px-4 py-3 shadow-sm flex items-center gap-[5px]">
+                px-4 py-3 flex items-center gap-[5px]">
                 <TypingDots />
               </div>
             </div>
@@ -272,10 +269,10 @@ export default function AIChatWidget() {
                   key={chip}
                   onClick={() => send(chip)}
                   className="shrink-0 px-2.5 py-1.5 rounded-full
-                    border border-gray-200
+                    border border-[color:var(--moby-100)]
                     bg-white text-[color:var(--moby-600)]
                     text-[11px] font-medium whitespace-nowrap
-                    hover:bg-gray-50 transition-colors"
+                    hover:border-[color:var(--moby-200)] transition-colors"
                 >
                   {chip}
                 </button>
@@ -286,7 +283,7 @@ export default function AIChatWidget() {
           {/* Composer row */}
           <div className="flex items-end gap-2 px-3 py-3">
             <div className="flex-1 min-w-0 flex items-end gap-2
-              bg-gray-50 border border-gray-200
+              bg-white border border-gray-200 focus-within:border-[color:var(--moby-200)]
               rounded-xl px-3 py-2">
               <textarea
                 ref={textareaRef}
@@ -314,7 +311,7 @@ export default function AIChatWidget() {
                 "shrink-0 w-9 h-9 rounded-xl flex items-center justify-center",
                 "transition-all duration-150",
                 input.trim() && !sending
-                  ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-700)] shadow-md active:scale-95"
+                  ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-800)] active:scale-95"
                   : "bg-gray-200 text-[color:var(--ink-5)] cursor-not-allowed",
               ].join(" ")}
             >
