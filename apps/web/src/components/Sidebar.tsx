@@ -54,10 +54,10 @@ export default function Sidebar() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <aside className="w-[248px] shrink-0 bg-white border-r border-[color:var(--line)] flex flex-col">
+    <aside className="w-[248px] shrink-0 bg-white border-r border-gray-200 flex flex-col">
       {/* Brand */}
       <div
-        className="px-5 pt-5 pb-4 border-b border-[color:var(--line)]"
+        className="px-5 pt-5 pb-4 border-b border-gray-200"
         style={{
           backgroundImage: [
             "radial-gradient(rgba(7, 29, 126, 0.42) 0%, transparent 42%)",
@@ -81,7 +81,7 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-3">
         {PRIMARY_GROUPS.map(g => (
           <div key={g.title} className="mb-4">
-            <div className="px-5 mb-2 text-[11px] font-semibold tracking-[.16em] text-[color:var(--ink-5)] uppercase">
+            <div className="px-5 mb-2 text-[11px] font-semibold tracking-[.16em] text-gray-400 uppercase">
               {g.title}
             </div>
             <ul className="px-3 space-y-1">
@@ -94,11 +94,11 @@ export default function Sidebar() {
                       href={it.href}
                       className={`group flex min-h-[44px] items-center gap-3 px-4 py-2.5 rounded-xl text-[15px] transition-colors
                         ${active
-                          ? "bg-[color:var(--moby-50)] text-[color:var(--moby-700)] font-medium"
-                          : "text-[color:var(--ink-3)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-1)]"}`}
+                          ? "bg-[color:var(--moby-50)] text-[color:var(--moby-600)] font-medium"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
                     >
                       <Icon size={17} strokeWidth={active ? 2.2 : 1.9}
-                        className={active ? "text-[color:var(--moby-600)]" : "text-[color:var(--ink-4)]"} />
+                        className={active ? "text-[color:var(--moby-600)]" : "text-gray-500"} />
                       <span>{it.label}</span>
                       {it.href === "/ai-chat" && !active && (
                         <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide
@@ -119,7 +119,7 @@ export default function Sidebar() {
       <div className="py-3">
         {FOOTER_GROUPS.map(g => (
           <div key={g.title} className="mb-4 last:mb-0">
-            <div className="px-5 mb-2 text-[11px] font-semibold tracking-[.16em] text-[color:var(--ink-5)] uppercase">
+            <div className="px-5 mb-2 text-[11px] font-semibold tracking-[.16em] text-gray-400 uppercase">
               {g.title}
             </div>
             <ul className="px-3 space-y-1">
@@ -132,11 +132,11 @@ export default function Sidebar() {
                       href={it.href}
                       className={`group flex min-h-[44px] items-center gap-3 px-4 py-2.5 rounded-xl text-[15px] transition-colors
                         ${active
-                          ? "bg-[color:var(--moby-50)] text-[color:var(--moby-700)] font-medium"
-                          : "text-[color:var(--ink-3)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-1)]"}`}
+                          ? "bg-[color:var(--moby-50)] text-[color:var(--moby-600)] font-medium"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
                     >
                       <Icon size={17} strokeWidth={active ? 2.2 : 1.9}
-                        className={active ? "text-[color:var(--moby-600)]" : "text-[color:var(--ink-4)]"} />
+                        className={active ? "text-[color:var(--moby-600)]" : "text-gray-500"} />
                       <span>{it.label}</span>
                       {active && <span className="ml-auto w-1.5 h-5 rounded-full bg-[color:var(--moby-600)]" />}
                     </Link>
@@ -149,7 +149,7 @@ export default function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-3 flex items-center gap-2 text-[11.5px] text-[color:var(--ink-4)]">
+      <div className="px-4 py-3 flex items-center gap-2 text-[11.5px] text-gray-500">
         <ShieldCheck size={13} className="text-[color:var(--ok)]" />
         <span>5 models · point-in-time safe</span>
       </div>

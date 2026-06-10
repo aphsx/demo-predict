@@ -71,7 +71,7 @@ export function PlaybooksView({ data }: { data: Partial<Record<LaneId, QueueRow[
         eyebrow="Today · Sales floor"
         title="Action queue"
         actions={
-          <Link href="/customers" className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]">
+          <Link href="/customers" className="h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 hover:bg-gray-50">
             Browse all customers
           </Link>
         }
@@ -147,7 +147,7 @@ function Lane({
       right={
         <Link
           href={`/customers?${new URLSearchParams(lane.filters).toString()}`}
-          className="text-[12px] text-[color:var(--moby-700)] hover:underline inline-flex items-center"
+          className="inline-flex items-center text-[12px] text-gray-600 hover:text-[color:var(--moby-600)] hover:underline"
         >
           See all <ChevronRight size={11} />
         </Link>
@@ -155,18 +155,18 @@ function Lane({
     >
       {(loading || rows.length === 0) && <div className="space-y-2"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /></div>}
       {!loading && rows.length > 0 && (
-        <ul className="-mx-5 -my-5 divide-y divide-[color:var(--line-2)]">
+        <ul className="-mx-5 -my-5 divide-y divide-gray-100">
           {sortByPriority(rows).map((r) => {
             const isDone = done.has(String(r.acc_id));
             return (
-              <li key={r.acc_id} className={`flex gap-3 p-4 items-start hover:bg-[color:var(--surface-2)] ${isDone ? "opacity-50" : ""}`}>
+              <li key={r.acc_id} className={`flex gap-3 p-4 items-start hover:bg-gray-50 ${isDone ? "opacity-50" : ""}`}>
                 {/* Check */}
                 <button
                   onClick={() => onToggle(String(r.acc_id))}
                   className={`mt-0.5 w-5 h-5 rounded-md border grid place-items-center transition-colors ${
                     isDone
                       ? "bg-[color:var(--ok)] border-[color:var(--ok)]"
-                      : "bg-white border-[color:var(--line)] hover:border-[color:var(--ok)]"
+                      : "bg-white border-gray-200 hover:border-[color:var(--ok)]"
                   }`}
                 >
                   {isDone && <Check size={12} className="text-white" />}
@@ -175,20 +175,20 @@ function Lane({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between gap-3">
                     <Link href={`/customers/${r.acc_id}`}
-                      className={`text-[13px] font-medium num text-gray-700 hover:underline ${isDone ? "line-through" : ""}`}>
+                      className={`num text-[13px] font-medium text-gray-700 hover:underline ${isDone ? "line-through" : ""}`}>
                       {r.acc_id}
                     </Link>
                     <div className="flex items-center gap-1.5">
                       <StatusPill tone={lifecycleTone(r.lifecycle_stage ?? "")}>{r.lifecycle_stage ?? "—"}</StatusPill>
                     </div>
                   </div>
-                  <div className="text-[11.5px] text-[color:var(--ink-4)] mt-1.5">
+                  <div className="text-[11.5px] text-gray-500 mt-1.5">
                     {r.recommended_action || r.priority_reason || (
                       <>Churn {r.churn_probability != null ? `${(r.churn_probability * 100).toFixed(1)}%` : "—"}</>
                     )}
                   </div>
                   {r.recommended_followup_date && (
-                    <div className="text-[11px] text-[color:var(--ink-5)] mt-1">
+                    <div className="text-[11px] text-gray-400 mt-1">
                       Follow up: {r.recommended_followup_date}
                     </div>
                   )}
@@ -203,7 +203,7 @@ function Lane({
                 <div className="text-right shrink-0">
                   {Number(r.predicted_clv_6m ?? 0) > 0 && (
                     <>
-                      <div className="text-[10px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">CLV</div>
+                      <div className="text-[10px] uppercase tracking-[.10em] text-gray-400">CLV</div>
                       <div className="num text-[13px] font-semibold">
                         {Number(r.predicted_clv_6m).toLocaleString()} ฿
                       </div>
@@ -224,7 +224,7 @@ function ChipBtn({ icon: Icon, children }: { icon: ElementType; children: ReactN
     <button
       disabled
       title="Action workflow is not wired yet"
-      className="h-7 px-2 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-3)] inline-flex items-center gap-1 cursor-not-allowed opacity-55"
+      className="h-7 px-2 rounded-md border border-gray-200 bg-white text-[11.5px] text-gray-600 inline-flex items-center gap-1 cursor-not-allowed opacity-55"
     >
       <Icon size={11} /> {children}
     </button>
@@ -247,9 +247,9 @@ function KpiTile({
   const col = { blue: "var(--moby-700)", emerald: "var(--ok)", violet: "#6d28d9" }[tone];
   return (
     <div className="surface p-5">
-      <div className="text-[11px] uppercase tracking-[.10em] text-[color:var(--ink-5)]">{label}</div>
+      <div className="text-[11px] uppercase tracking-[.10em] text-gray-400">{label}</div>
       <div className="num text-[28px] font-semibold mt-1.5" style={{ color: col }}>{raw ? value : Number(value).toLocaleString()}</div>
-      <div className="text-[11.5px] text-[color:var(--ink-5)] mt-0.5">{hint}</div>
+      <div className="text-[11.5px] text-gray-400 mt-0.5">{hint}</div>
     </div>
   );
 }

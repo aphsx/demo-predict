@@ -15,7 +15,7 @@ export function FilePickerPanel({
   onFileChange: (file: File) => void;
 }) {
   return (
-    <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4 shadow-[var(--shadow-1)]">
+    <div className="rounded-[24px] border border-gray-200 bg-white p-4 shadow-[var(--shadow-1)]">
       <input
         ref={fileInputRef}
         type="file"
@@ -29,22 +29,22 @@ export function FilePickerPanel({
       />
 
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 shrink-0 text-[color:var(--moby-700)]">
+        <span className="mt-0.5 shrink-0 text-[color:var(--moby-600)]">
           <FileSpreadsheet size={20} />
         </span>
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">
+          <p className="text-[13px] font-semibold text-gray-900">
             Source workbook
           </p>
-          <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
+          <p className="mt-1 text-[12px] leading-5 text-gray-500">
             One `.xlsx` file with the required 8 sheets.
           </p>
         </div>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-[22px] border border-[color:var(--line-2)]">
-        <div className="border-b border-[color:var(--line-2)] bg-[color:var(--surface-2)] px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+      <div className="mt-5 overflow-hidden rounded-[22px] border border-gray-100">
+        <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">
             Selected file
           </p>
         </div>
@@ -52,14 +52,14 @@ export function FilePickerPanel({
         {pendingFile ? (
           <div className="bg-white px-4 py-4">
             <div className="flex items-center gap-3">
-              <span className="shrink-0 text-[color:var(--moby-700)]">
+              <span className="shrink-0 text-[color:var(--moby-600)]">
                 <FileSpreadsheet size={18} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-[color:var(--ink-1)]">
+                <p className="truncate text-[13px] font-semibold text-gray-900">
                   {pendingFile.name}
                 </p>
-                <p className="mt-1 text-[12px] text-[color:var(--ink-4)]">
+                <p className="mt-1 text-[12px] text-gray-500">
                   {formatFileSize(pendingFile.size)}
                 </p>
               </div>
@@ -67,8 +67,8 @@ export function FilePickerPanel({
           </div>
         ) : (
           <div className="px-4 py-7 text-center">
-            <p className="text-[13px] font-medium text-[color:var(--ink-2)]">No file selected</p>
-            <p className="mt-1 text-[12px] text-[color:var(--ink-5)]">
+            <p className="text-[13px] font-medium text-gray-700">No file selected</p>
+            <p className="mt-1 text-[12px] text-gray-400">
               Choose a workbook before uploading.
             </p>
           </div>

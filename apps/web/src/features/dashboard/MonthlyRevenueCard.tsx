@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatCredits, formatMonth } from "@/lib/format";
+import { formatMonth } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 import type { MonthlyRevenuePoint } from "@/mocks/monthly-revenue";
 import { TEXT_SAFE } from "./palette";
@@ -31,7 +31,7 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
     <section className="surface-elev flex h-full min-w-0 flex-col overflow-hidden">
       <header className="flex min-w-0 items-start justify-between gap-4 border-b border-gray-100 px-4 py-3 sm:px-5">
         <div className="min-w-0">
-          <h2 className={`text-[18px] font-medium leading-tight text-[#08060d] ${TEXT_SAFE}`}>
+          <h2 className={`text-[18px] font-medium leading-tight text-gray-900 ${TEXT_SAFE}`}>
             Credit usage monthly
           </h2>
         </div>
@@ -47,8 +47,13 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
               <p className={`text-[11px] font-normal text-gray-500 ${TEXT_SAFE}`}>
                 Monthly usage
               </p>
-              <div className="num mt-1 text-[24px] font-bold leading-none tracking-tight text-gray-700 tabular-nums">
-                {formatCredits(latestTotal)}
+              <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
+                <span className="num text-[24px] font-bold leading-none tracking-tight text-gray-700 tabular-nums">
+                  {formatCompactCredits(latestTotal)}
+                </span>
+                <span className="text-[14px] font-medium leading-none text-gray-400">
+                  credits
+                </span>
               </div>
               <p className="mt-1 text-[11px] font-normal text-gray-500">
                 latest total · {latest.month}
@@ -118,7 +123,7 @@ function MonthlyUsageChart({
           <div className="h-full min-h-[228px] min-w-full" style={{ width: chartWidthPct }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--line-2)" />
+                <CartesianGrid vertical={false} stroke="#f3f4f6" />
                 <XAxis
                   dataKey="month"
                   axisLine={false}
@@ -126,7 +131,7 @@ function MonthlyUsageChart({
                   tickMargin={8}
                   interval={0}
                   tickFormatter={formatMonth}
-                  stroke="var(--ink-5)"
+                  stroke="#9ca3af"
                   fontSize={10}
                 />
                 <YAxis

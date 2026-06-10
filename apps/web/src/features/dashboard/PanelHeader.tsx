@@ -18,13 +18,13 @@ export function PanelHeader({
         <p className="text-[11px] font-normal text-gray-500">
           {eyebrow}
         </p>
-        <h2 className={`mt-1 text-[18px] font-medium leading-tight text-[#08060d] ${TEXT_SAFE}`}>
+        <h2 className={`mt-1 text-[18px] font-medium leading-tight text-gray-900 ${TEXT_SAFE}`}>
           {title}
         </h2>
         <p className={`mt-1 text-[11px] font-normal leading-5 text-gray-500 ${TEXT_SAFE}`}>{hint}</p>
       </div>
       {Icon && (
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gray-50 text-[#006BFF]">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gray-50 text-[color:var(--moby-600)]">
           <Icon size={16} />
         </span>
       )}

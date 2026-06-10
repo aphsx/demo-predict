@@ -18,7 +18,7 @@ import { formatDate, formatDateTime, runStatusLabel, runStatusTone } from "./run
 const COLUMNS = 8;
 
 const actionBtnCls =
-  "h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1 disabled:opacity-40";
+  "h-7 px-2.5 rounded-md border border-gray-200 bg-white text-[11.5px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-40";
 
 export function RunsTable({
   runs,
@@ -144,7 +144,7 @@ function RunRow({
   return (
     <>
       <tr>
-        <td className="font-medium text-[color:var(--ink-1)]">{run.name}</td>
+        <td className="font-medium text-gray-900">{run.name}</td>
         <td>
           <div className="flex items-center gap-2">
             <StatusPill
@@ -163,11 +163,11 @@ function RunRow({
             )}
           </div>
         </td>
-        <td className="text-[color:var(--ink-3)]">{run.predict_source_name}</td>
+        <td className="text-gray-600">{run.predict_source_name}</td>
         <td className="num">{formatDate(run.cutoff_date)}</td>
         <td className="text-right num">{run.total_customers?.toLocaleString() ?? "—"}</td>
-        <td className="text-[11.5px] text-[color:var(--ink-4)]">{run.created_by ?? "—"}</td>
-        <td className="text-[11.5px] text-[color:var(--ink-4)]">
+        <td className="text-[11.5px] text-gray-500">{run.created_by ?? "—"}</td>
+        <td className="text-[11.5px] text-gray-500">
           {formatDateTime(run.finished_at)}
         </td>
         <td className="text-right">
@@ -176,7 +176,7 @@ function RunRow({
               <button
                 type="button"
                 onClick={onOpen}
-                className={`${actionBtnCls} text-[color:var(--moby-700)]`}
+                className={`${actionBtnCls} text-gray-600 hover:text-[color:var(--moby-600)]`}
               >
                 Open <ChevronRight size={11} />
               </button>
@@ -191,7 +191,7 @@ function RunRow({
               type="button"
               onClick={onDelete}
               disabled={deleting}
-              className="h-7 w-7 grid place-items-center rounded-md text-[color:var(--ink-4)] hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] disabled:opacity-40"
+              className="h-7 w-7 grid place-items-center rounded-md text-gray-500 hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] disabled:opacity-40"
               title="Delete run"
             >
               {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
@@ -201,7 +201,7 @@ function RunRow({
       </tr>
       {inProgress && run.progress && (
         <tr>
-          <td colSpan={COLUMNS} className="!py-2 bg-[color:var(--surface-2)]">
+          <td colSpan={COLUMNS} className="!py-2 bg-gray-50">
             <div className="max-w-md">
               <ProgressMeter value={run.progress.pct} label={run.progress.step} />
             </div>

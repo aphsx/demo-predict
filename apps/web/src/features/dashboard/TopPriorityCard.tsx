@@ -9,18 +9,18 @@ import { TEXT_SAFE } from "./palette";
 export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId: string }) {
   return (
     <section className="surface-elev overflow-hidden">
-      <div className="flex items-center justify-between gap-3 border-b border-[color:var(--line-2)] px-4 py-4 sm:px-5">
+      <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 sm:px-5">
         <div>
-          <h2 className={`text-[18px] font-medium leading-tight text-[#08060d] ${TEXT_SAFE}`}>
+          <h2 className={`text-[18px] font-medium leading-tight text-gray-900 ${TEXT_SAFE}`}>
             Top priority customers
           </h2>
-          <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
+          <p className="mt-0.5 text-[11.5px] text-gray-400">
             priority score = 50×ความเสี่ยง churn + 30×มูลค่า (CLV) + 20×เครดิตใกล้หมด
           </p>
         </div>
         <Link
           href={`/customers?run=${runId}`}
-          className="shrink-0 text-[12px] font-medium text-[color:var(--moby-700)] hover:underline underline-offset-2"
+          className="shrink-0 text-[12px] font-medium text-gray-600 hover:text-[color:var(--moby-600)] hover:underline underline-offset-2"
         >
           ดูทั้งหมด →
         </Link>
@@ -28,7 +28,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
       <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
           <thead>
-            <tr className="border-b border-[color:var(--line-2)] text-left text-[11px] uppercase tracking-[.08em] text-[color:var(--ink-5)]">
+            <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-[.08em] text-gray-400">
               <th className="px-4 py-2.5 sm:px-5">Account</th>
               <th className="px-3 py-2.5">Lifecycle</th>
               <th className="px-3 py-2.5 text-right">Churn</th>
@@ -39,7 +39,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
           </thead>
           <tbody>
             {summary.top_priority.map((c) => (
-              <tr key={c.acc_id} className="border-b border-[color:var(--line-2)] last:border-0 hover:bg-[color:var(--surface-2)]">
+              <tr key={c.acc_id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                 <td className="px-4 py-2.5 sm:px-5">
                   <Link
                     href={`/customers/${c.acc_id}?run=${runId}`}
@@ -60,7 +60,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
                 <td className="num px-3 py-2.5 text-right font-semibold">
                   {c.priority_score.toFixed(0)}
                 </td>
-                <td className={`px-3 py-2.5 text-[color:var(--ink-4)] ${TEXT_SAFE}`}>{c.priority_reason}</td>
+                <td className={`px-3 py-2.5 text-gray-500 ${TEXT_SAFE}`}>{c.priority_reason}</td>
               </tr>
             ))}
           </tbody>

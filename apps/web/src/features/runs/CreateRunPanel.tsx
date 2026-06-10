@@ -16,8 +16,8 @@ import { getDisplayError } from "@/lib/ui-error";
 import { defaultRunName, todayISO } from "./runs-utils";
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] disabled:opacity-50";
-const labelCls = "text-[11px] font-medium text-[color:var(--ink-4)] block mb-1";
+  "w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 disabled:opacity-50";
+const labelCls = "text-[11px] font-medium text-gray-500 block mb-1";
 
 export function CreateRunPanel({
   sources,
@@ -122,7 +122,7 @@ export function CreateRunPanel({
             disabled={creating || readySources.length === 0}
             className={inputCls}
           />
-          <p className="text-[11px] text-[color:var(--ink-5)] mt-1">
+          <p className="text-[11px] text-gray-400 mt-1">
             ควรเป็นวันที่ข้อมูลล่าสุดของ source
           </p>
         </div>

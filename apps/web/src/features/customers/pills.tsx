@@ -22,7 +22,7 @@ function capitalize(value: string): string {
 
 /** Churn risk pill — low blue / medium amber / high orange / critical red. */
 export function RiskPill({ level }: { level: RiskLevel | null }) {
-  if (!level) return <span className="text-[color:var(--ink-5)]">—</span>;
+  if (!level) return <span className="text-gray-400">—</span>;
   const s = RISK_STYLES[level];
   return (
     <span className="pill" style={{ color: s.fg, background: s.bg, border: `1px solid ${s.border}` }}>
@@ -41,7 +41,7 @@ const TIER_TONES: Record<ValueTier, "brand" | "violet" | "neutral"> = {
 
 /** Customer value tier pill (quantile of CLV within the run). */
 export function TierPill({ tier }: { tier: ValueTier }) {
-  if (tier === "none") return <span className="text-[color:var(--ink-5)]">—</span>;
+  if (tier === "none") return <span className="text-gray-400">—</span>;
   return (
     <StatusPill tone={TIER_TONES[tier]} dot={false}>
       {capitalize(tier)}
@@ -58,6 +58,6 @@ const URGENCY_TONES: Record<UrgencyLevel, "danger" | "warn" | "info" | "ok"> = {
 
 /** Credit top-up urgency pill (critical ≤14d / warning ≤30d / monitor ≤90d). */
 export function UrgencyPill({ level }: { level: UrgencyLevel | null }) {
-  if (!level) return <span className="text-[color:var(--ink-5)]">—</span>;
+  if (!level) return <span className="text-gray-400">—</span>;
   return <StatusPill tone={URGENCY_TONES[level]}>{capitalize(level)}</StatusPill>;
 }

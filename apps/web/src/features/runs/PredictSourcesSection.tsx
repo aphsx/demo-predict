@@ -18,8 +18,8 @@ import {
 } from "./runs-utils";
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)]";
-const labelCls = "text-[11px] font-medium text-[color:var(--ink-4)] block mb-1";
+  "w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700";
+const labelCls = "text-[11px] font-medium text-gray-500 block mb-1";
 
 function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -58,13 +58,13 @@ function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={busy}
-              className="h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[12.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1.5 disabled:opacity-40 shrink-0"
+              className="h-9 px-3 rounded-lg border border-gray-200 bg-white text-[12.5px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1.5 disabled:opacity-40 shrink-0"
             >
               <FileSpreadsheet size={13} />
               เลือกไฟล์
             </button>
             <span
-              className="text-[12px] text-[color:var(--ink-4)] truncate"
+              className="text-[12px] text-gray-500 truncate"
               title={file?.name ?? undefined}
             >
               {file ? file.name : "ยังไม่ได้เลือกไฟล์"}
@@ -170,8 +170,8 @@ export function PredictSourcesSection({
                   const counts = getCleanCounts(s);
                   return (
                     <tr key={s.id}>
-                      <td className="font-medium text-[color:var(--ink-1)]">{s.name}</td>
-                      <td className="text-[color:var(--ink-3)]">{s.client_label ?? "—"}</td>
+                      <td className="font-medium text-gray-900">{s.name}</td>
+                      <td className="text-gray-600">{s.client_label ?? "—"}</td>
                       <td>
                         <div className="flex items-center gap-2">
                           <StatusPill tone={importStatusTone(s.import_status)}>
@@ -196,10 +196,10 @@ export function PredictSourcesSection({
                       <td className="text-right num">
                         {counts ? counts.usage.toLocaleString() : "—"}
                       </td>
-                      <td className="text-[11.5px] text-[color:var(--ink-4)]">
+                      <td className="text-[11.5px] text-gray-500">
                         {formatDateTime(s.imported_at)}
                       </td>
-                      <td className="text-[11.5px] text-[color:var(--ink-4)]">
+                      <td className="text-[11.5px] text-gray-500">
                         {s.importer_name ?? "—"}
                       </td>
                     </tr>

@@ -6,7 +6,7 @@ export const BRAND_ORANGE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orange
 export const BRAND_BLUE_YELLOW_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.orangeWarm} 100%)`;
 export const BRAND_YELLOW_ORANGE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
 export const BRAND_TRACK = "rgba(0, 107, 255, 0.08)";
-export const NEUTRAL_GHOST_GRADIENT = "linear-gradient(90deg, var(--ink-6) 0%, var(--ink-5) 100%)";
+export const NEUTRAL_GHOST_GRADIENT = "linear-gradient(90deg, #d1d5db 0%, #9ca3af 100%)";
 export const TEXT_SAFE = "min-w-0 break-words [overflow-wrap:anywhere]";
 
 export const LIFECYCLE_PALETTE = {

@@ -109,7 +109,7 @@ export function DashboardView({
       </section>
 
       <section className="surface mt-5 p-4">
-        <div className={`flex min-w-0 flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
+        <div className={`flex min-w-0 flex-wrap items-center gap-3 text-[11px] text-gray-400 ${TEXT_SAFE}`}>
           <ShieldCheck size={12} />
           Mock dashboard data is isolated in `src/mocks/dashboard.ts`
           <span className="opacity-50">·</span>

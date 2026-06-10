@@ -80,7 +80,7 @@ function LoginForm() {
           <button
             onClick={() => handle("google")}
             disabled={busy !== null}
-            className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-2xl px-4 text-sm font-semibold text-[color:var(--ink-2)] transition disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-2xl px-4 text-sm font-semibold text-gray-700 transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
               background: "rgba(255,255,255,0.96)",
               border: "1px solid rgba(255,255,255,0.5)",

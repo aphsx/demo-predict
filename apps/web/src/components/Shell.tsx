@@ -32,7 +32,7 @@ export default function Shell({ children }: { children: ReactNode }) {
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <main className="flex-1 overflow-y-auto">
-            <Suspense fallback={<div className="p-8 text-[color:var(--ink-5)]">Loading…</div>}>
+            <Suspense fallback={<div className="p-8 text-gray-400">Loading…</div>}>
               {children}
             </Suspense>
           </main>

@@ -32,7 +32,7 @@ export function CustomerDetailView({
     <main className="px-8 py-6 pb-12">
       <Link
         href="/customers"
-        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[.16em] text-[color:var(--ink-5)] hover:text-[color:var(--moby-700)]"
+        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[.16em] text-gray-400 hover:text-[color:var(--moby-600)]"
       >
         <ArrowLeft size={11} /> Customers
       </Link>
@@ -77,20 +77,20 @@ export function CustomerDetailView({
                 <StatusPill tone="neutral" dot={false}>Mockup</StatusPill>
               </div>
 
-              <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
-                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--ink-1)]">
+              <div className="rounded-[24px] border border-gray-200 bg-white p-4">
+                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-gray-900">
                   <Sparkles size={14} /> Why now
                 </div>
-                <p className="text-[13px] leading-6 text-[color:var(--ink-3)]">
+                <p className="text-[13px] leading-6 text-gray-600">
                   {customer.ai_explanation}
                 </p>
               </div>
 
               <div className="rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
-                <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-700)]">
+                <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-600)]">
                   <MessageSquareText size={14} /> Suggested message
                 </div>
-                <p className="text-[12.5px] leading-6 text-[color:var(--ink-3)]">
+                <p className="text-[12.5px] leading-6 text-gray-600">
                   {customer.ai_recommended_message}
                 </p>
               </div>
@@ -148,8 +148,8 @@ function Panel({
 }) {
   return (
     <section className="surface-elev overflow-hidden">
-      <div className="border-b border-[color:var(--line-2)] px-5 py-4">
-        <h2 className="text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+      <div className="border-b border-gray-100 px-5 py-4">
+        <h2 className="text-[20px] font-semibold tracking-[-0.035em] text-gray-900">
           {title}
         </h2>
       </div>
@@ -160,12 +160,12 @@ function Panel({
 
 function HeroMetric({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[22px] border border-[color:var(--line)] bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)]">
+    <div className="flex items-center justify-between gap-4 rounded-[22px] border border-gray-200 bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)]">
       <div className="min-w-0">
-        <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+        <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-gray-400">
           {label}
         </p>
-        <p className="mt-1 truncate text-[11.5px] text-[color:var(--ink-4)]">{hint}</p>
+        <p className="mt-1 truncate text-[11.5px] text-gray-500">{hint}</p>
       </div>
       <p className="num shrink-0 whitespace-nowrap text-right text-[22px] font-semibold tracking-[-0.03em]">
         {value}
@@ -203,7 +203,7 @@ function UsageLineChart({
   const areaPath = `${path} L ${points[points.length - 1]?.x ?? paddingX} ${height - paddingY} L ${paddingX} ${height - paddingY} Z`;
 
   return (
-    <div className="overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+    <div className="overflow-hidden rounded-[24px] border border-gray-200 bg-white p-4">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className={`${compact ? "h-[220px]" : "h-[280px]"} w-full`}
@@ -251,10 +251,10 @@ function UsageLineChart({
               stroke={usageOrangeColor((point.usage - min) / range)}
               strokeWidth="3"
             />
-            <text x={point.x} y={height - 6} textAnchor="middle" className="fill-[color:var(--ink-5)] text-[11px] font-semibold">
+            <text x={point.x} y={height - 6} textAnchor="middle" className="fill-gray-400 text-[11px] font-semibold">
               {point.month}
             </text>
-            <text x={point.x} y={point.y - 14} textAnchor="middle" className="fill-[color:var(--ink-3)] text-[11px] font-semibold">
+            <text x={point.x} y={point.y - 14} textAnchor="middle" className="fill-gray-600 text-[11px] font-semibold">
               {(point.usage / 1000).toFixed(0)}k
             </text>
           </g>
@@ -278,15 +278,15 @@ function SignalRow({
   gradient: string;
 }) {
   return (
-    <div className="rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+    <div className="rounded-[24px] border border-gray-200 bg-white p-4">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-[color:var(--ink-1)]">{label}</p>
+          <p className="text-[12px] font-semibold text-gray-900">{label}</p>
           <p className="num mt-2 whitespace-nowrap text-[26px] font-semibold tracking-[-0.04em]">
             {value}
           </p>
         </div>
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[color:var(--surface-2)] text-[color:var(--moby-700)]">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gray-50 text-[color:var(--moby-600)]">
           <Icon size={17} />
         </span>
       </div>
@@ -297,14 +297,14 @@ function SignalRow({
 
 function MiniStatCard({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
-    <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
-      <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+      <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-gray-400">
         {label}
       </p>
       <p className="num mt-1 text-[20px] font-semibold">
         {value}
       </p>
-      <p className="mt-1 text-[11.5px] text-[color:var(--ink-4)]">
+      <p className="mt-1 text-[11.5px] text-gray-500">
         {hint}
       </p>
     </div>
@@ -333,7 +333,7 @@ function BrandMeter({
     <div>
       {(label || !hideValue) && (
         <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
-          {label && <span className="font-medium text-[color:var(--ink-4)]">{label}</span>}
+          {label && <span className="font-medium text-gray-500">{label}</span>}
           {!hideValue && (
             <span className="num font-semibold">
               {formatValue ? formatValue(value) : `${pct.toFixed(0)}%`}
@@ -363,8 +363,8 @@ function BrandMeter({
 
 function FactCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-[color:var(--line)] bg-white p-3">
-      <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+    <div className="rounded-2xl border border-gray-200 bg-white p-3">
+      <p className="text-[10.5px] font-semibold uppercase tracking-[.12em] text-gray-400">
         {label}
       </p>
       <p className="num mt-1 text-[13px] font-semibold">

@@ -20,10 +20,10 @@ export function QuickPromptsAside({
   onPrompt: (label: string) => void;
 }) {
   return (
-    <aside className="hidden w-[240px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-[color:var(--line)] p-5 xl:flex">
+    <aside className="hidden w-[240px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-200 p-5 xl:flex">
       {showQuick && (
         <div>
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.12em] text-gray-400">
             ตัวอย่างคำถาม
           </p>
           <div className="space-y-2.5">
@@ -31,8 +31,8 @@ export function QuickPromptsAside({
               <button
                 key={label}
                 onClick={() => onPrompt(label)}
-                className={`block w-full text-left text-[12px] leading-5 text-[color:var(--ink-3)]
-                  transition-colors hover:text-[color:var(--moby-700)] ${TEXT_WRAP}`}
+                className={`block w-full text-left text-[12px] leading-5 text-gray-600
+                  transition-colors hover:text-[color:var(--moby-600)] ${TEXT_WRAP}`}
               >
                 {label}
               </button>
@@ -42,7 +42,7 @@ export function QuickPromptsAside({
       )}
 
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-3">ลิงก์ด่วน</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-gray-400 mb-3">ลิงก์ด่วน</p>
         <div className="space-y-1">
           {[
             { href: "/customers", label: "Customers" },
@@ -51,16 +51,16 @@ export function QuickPromptsAside({
           ].map(({ href, label }) => (
             <Link key={href} href={href}
               className="flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-[12.5px]
-                text-[color:var(--ink-3)] hover:bg-[color:var(--surface-2)] hover:text-[color:var(--ink-1)] transition-colors group">
-              <ChevronRight size={12} className="text-[color:var(--ink-5)] group-hover:text-[color:var(--moby-600)]" />
+                text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors group">
+              <ChevronRight size={12} className="text-gray-400 group-hover:text-[color:var(--moby-600)]" />
               <span className={TEXT_WRAP}>{label}</span>
             </Link>
           ))}
         </div>
       </div>
 
-      <div className="border-t border-[color:var(--line)] pt-4">
-        <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] mb-3">เมื่อ API พร้อม</p>
+      <div className="border-t border-gray-200 pt-4">
+        <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-gray-400 mb-3">เมื่อ API พร้อม</p>
         <ul className="space-y-2.5">
           {[
             "วิเคราะห์ churn risk",
@@ -69,7 +69,7 @@ export function QuickPromptsAside({
             "ตรวจ model drift",
             "แนะนำ playbook",
           ].map(cap => (
-            <li key={cap} className="flex min-w-0 items-start gap-2 text-[11.5px] text-[color:var(--ink-3)]">
+            <li key={cap} className="flex min-w-0 items-start gap-2 text-[11.5px] text-gray-600">
               <span className="w-1 h-1 rounded-full bg-[color:var(--moby-500)] mt-1.5 shrink-0" />
               <span className={TEXT_WRAP}>{cap}</span>
             </li>
@@ -77,10 +77,10 @@ export function QuickPromptsAside({
         </ul>
       </div>
 
-      <div className="border-t border-[color:var(--line)] pt-4 mt-auto">
-        <div className="min-w-0 rounded-lg border border-[color:var(--line)] bg-white p-3">
-          <p className="text-[11px] font-semibold text-[color:var(--moby-700)] mb-1">Real insights only</p>
-          <p className={`text-[10.5px] text-[color:var(--ink-4)] leading-relaxed ${TEXT_WRAP}`}>
+      <div className="border-t border-gray-200 pt-4 mt-auto">
+        <div className="min-w-0 rounded-lg border border-gray-200 bg-white p-3">
+          <p className="text-[11px] font-semibold text-[color:var(--moby-600)] mb-1">Real insights only</p>
+          <p className={`text-[10.5px] text-gray-500 leading-relaxed ${TEXT_WRAP}`}>
             ไม่มี fallback เป็นข้อมูลจำลอง หาก backend ยังไม่พร้อมจะแสดงสถานะรอเชื่อมต่อ
           </p>
         </div>

@@ -30,7 +30,7 @@ function UploadButton({ runId, uploading, onUpload }: {
       <button
         onClick={() => ref.current?.click()}
         disabled={uploading}
-        className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1 disabled:opacity-40"
+        className="h-7 px-2.5 rounded-md border border-gray-200 bg-white text-[11.5px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-40"
       >
         {uploading ? <RefreshCw size={11} className="animate-spin" /> : <Image src="/icons/upload-icon.svg" alt="" width={14} height={14} aria-hidden />}
         Upload
@@ -151,24 +151,24 @@ export function RunsView() {
 
         {/* Create panel */}
         {creating && (
-          <SectionCard title="New run" right={<button onClick={() => setCreating(false)} className="text-[12px] text-[color:var(--ink-4)] hover:underline">cancel</button>}>
+          <SectionCard title="New run" right={<button onClick={() => setCreating(false)} className="text-[12px] text-gray-500 hover:underline">cancel</button>}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-[11px] font-medium text-[color:var(--ink-4)] block mb-1">Run name</label>
+                <label className="text-[11px] font-medium text-gray-500 block mb-1">Run name</label>
                 <input
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Q3-2025"
-                  className="w-full h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px]"
+                  className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px]"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-[color:var(--ink-4)] block mb-1">Cutoff date</label>
+                <label className="text-[11px] font-medium text-gray-500 block mb-1">Cutoff date</label>
                 <input
                   type="date"
                   value={cutoff}
                   onChange={e => setCutoff(e.target.value)}
-                  className="w-full h-9 px-3 rounded-lg border border-[color:var(--line)] bg-white text-[13px]"
+                  className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px]"
                 />
               </div>
             </div>
@@ -207,7 +207,7 @@ export function RunsView() {
                   const Icon = statusIcon[run.status];
                   return (
                     <tr key={run.id}>
-                      <td className="font-medium text-[color:var(--ink-1)]">{run.name}</td>
+                      <td className="font-medium text-gray-900">{run.name}</td>
                       <td>
                         <div className="flex items-center gap-2">
                           <StatusPill tone={statusToTone[run.status] || "neutral"} icon={Icon}>
@@ -223,7 +223,7 @@ export function RunsView() {
                       <td className="num">{run.cutoff_date}</td>
                       <td className="text-right num">{run.total_customers?.toLocaleString() ?? "—"}</td>
                       <td className="text-right num">{run.active_customers?.toLocaleString() ?? "—"}</td>
-                      <td className="text-[11.5px] text-[color:var(--ink-4)]">
+                      <td className="text-[11.5px] text-gray-500">
                         {new Date(run.created_at).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" })}
                       </td>
                       <td className="text-right">
@@ -239,7 +239,7 @@ export function RunsView() {
                             <button
                               onClick={() => retryPipeline(run.id)}
                               disabled={retrying === run.id}
-                              className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1 disabled:opacity-40"
+                              className="h-7 px-2.5 rounded-md border border-gray-200 bg-white text-[11.5px] text-gray-700 hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-40"
                             >
                               {retrying === run.id
                                 ? <RefreshCw size={11} className="animate-spin" />
@@ -250,14 +250,14 @@ export function RunsView() {
                           {run.status === "done" && (
                             <a
                               href={`/customers?run=${run.id}`}
-                              className="h-7 px-2.5 rounded-md border border-[color:var(--line)] bg-white text-[11.5px] text-[color:var(--moby-700)] hover:bg-[color:var(--surface-2)] inline-flex items-center gap-1"
+                              className="h-7 px-2.5 rounded-md border border-gray-200 bg-white text-[11.5px] text-gray-600 hover:bg-gray-50 hover:text-[color:var(--moby-600)] inline-flex items-center gap-1"
                             >
                               Open <ChevronRight size={11} />
                             </a>
                           )}
                           <button
                             onClick={() => deleteRun(run.id)}
-                            className="h-7 w-7 grid place-items-center rounded-md text-[color:var(--ink-4)] hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)]"
+                            className="h-7 w-7 grid place-items-center rounded-md text-gray-500 hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)]"
                           >
                             <Trash2 size={13} />
                           </button>

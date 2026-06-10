@@ -20,7 +20,7 @@ export function LifecycleMixCard({ overview }: { overview: DashboardOverview }) 
     <section className="surface-elev flex h-full flex-col overflow-hidden">
       <div className="flex min-w-0 items-start justify-between gap-4 border-b border-gray-100 px-4 py-3 sm:px-5">
         <div className="min-w-0">
-          <h2 className={`text-[18px] font-medium leading-tight text-[#08060d] ${TEXT_SAFE}`}>
+          <h2 className={`text-[18px] font-medium leading-tight text-gray-900 ${TEXT_SAFE}`}>
             Customer lifecycle
           </h2>
         </div>
@@ -59,9 +59,9 @@ export function LifecycleMixCard({ overview }: { overview: DashboardOverview }) 
             </div>
 
             <div className="relative min-w-0" aria-label="Lifecycle distribution vertical bar chart">
-              <div className="absolute inset-x-0 top-0 h-px bg-[color:var(--line-2)]" />
-              <div className="absolute inset-x-0 top-1/2 h-px bg-[color:var(--line-2)]" />
-              <div className="absolute inset-x-0 bottom-0 h-px bg-[color:var(--line)]" />
+              <div className="absolute inset-x-0 top-0 h-px bg-gray-100" />
+              <div className="absolute inset-x-0 top-1/2 h-px bg-gray-100" />
+              <div className="absolute inset-x-0 bottom-0 h-px bg-gray-200" />
 
               <div className="relative z-10 grid h-[228px] grid-cols-4 items-end gap-3 sm:gap-4">
                 {lifecycleStats.map(({ stage, count, pct }) => (

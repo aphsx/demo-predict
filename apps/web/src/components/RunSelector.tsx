@@ -58,9 +58,9 @@ export default function RunSelector() {
     return (
       <Link
         href="/runs"
-        className="h-9 px-3 inline-flex items-center gap-2 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-3)] hover:border-[color:var(--moby-200)]"
+        className="h-9 px-3 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-600 hover:border-[color:var(--moby-200)]"
       >
-        <Calendar size={14} className="text-[color:var(--ink-4)]" />
+        <Calendar size={14} className="text-gray-500" />
         ยังไม่มี prediction run — สร้างที่หน้า Runs
       </Link>
     );
@@ -74,7 +74,7 @@ export default function RunSelector() {
           value={runId}
           onChange={(e) => setRunId(e.target.value)}
           disabled={loading}
-          className="appearance-none h-9 pl-9 pr-9 rounded-lg border border-[color:var(--line)] bg-white text-[13px] text-[color:var(--ink-2)] hover:border-[color:var(--moby-200)] cursor-pointer min-w-[230px]"
+          className="appearance-none h-9 pl-9 pr-9 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 hover:border-[color:var(--moby-200)] cursor-pointer min-w-[230px]"
         >
           {loading && <option value="">Loading runs…</option>}
           {runs.map((r) => (
@@ -83,11 +83,11 @@ export default function RunSelector() {
             </option>
           ))}
         </select>
-        <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
-        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
+        <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
       </div>
       {run && (
-        <span className="hidden xl:inline text-[11.5px] text-[color:var(--ink-5)]">
+        <span className="hidden xl:inline text-[11.5px] text-gray-400">
           {run.total_customers?.toLocaleString()} customers
         </span>
       )}

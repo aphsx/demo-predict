@@ -32,16 +32,16 @@ export function ModelTrainingPanel({
 }) {
   return (
     <section className="surface-elev overflow-hidden">
-      <div className="border-b border-[color:var(--line-2)] px-5 py-4 sm:px-6">
+      <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
               Model training
             </p>
-            <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+            <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] text-gray-900">
               Select dataset and train
             </h2>
-            <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
+            <p className="mt-1 max-w-2xl text-[13px] leading-6 text-gray-500">
               เลือก clean dataset ที่ import ไว้ใน DB แล้วกด train จากพื้นที่นี้ ไม่ใช้ card เลือก dataset แล้ว
             </p>
           </div>
@@ -78,7 +78,7 @@ export function ModelTrainingPanel({
             hint="Upload one Excel file above. The system will import raw data and clean it automatically."
           />
         ) : (
-          <div className="overflow-x-auto rounded-[22px] border border-[color:var(--line)]">
+          <div className="overflow-x-auto rounded-[22px] border border-gray-200">
             <table className="table-base">
               <thead>
                 <tr>
@@ -134,13 +134,13 @@ function DatasetTableRow({
         <div className="flex items-start gap-3">
           <span
             className={`mt-0.5 h-3 w-3 shrink-0 rounded-full border ${
-              selected ? "border-[color:var(--moby-600)] bg-[color:var(--moby-600)]" : "border-[color:var(--ink-6)] bg-white"
+              selected ? "border-[color:var(--moby-600)] bg-[color:var(--moby-600)]" : "border-gray-300 bg-white"
             }`}
             aria-hidden
           />
           <div className="min-w-[220px]">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-[color:var(--ink-1)]">{source.name}</span>
+              <span className="font-semibold text-gray-900">{source.name}</span>
               {selected && (
                 <StatusPill tone="neutral" dot={false}>
                   Selected
@@ -152,7 +152,7 @@ function DatasetTableRow({
                 </StatusPill>
               )}
             </div>
-            <div className="mt-1 max-w-[360px] break-all text-[12px] text-[color:var(--ink-4)]">
+            <div className="mt-1 max-w-[360px] break-all text-[12px] text-gray-500">
               {source.original_filename}
             </div>
             {source.error_message && (
@@ -170,10 +170,10 @@ function DatasetTableRow({
       <td className="num text-right">{counts?.payments.toLocaleString() ?? "-"}</td>
       <td className="num text-right">{counts?.usage.toLocaleString() ?? "-"}</td>
       <td>
-        <div className="text-[12px] text-[color:var(--ink-4)]">
+        <div className="text-[12px] text-gray-500">
           {formatDate(source.imported_at || source.created_at)}
         </div>
-        <div className="mt-0.5 text-[11px] text-[color:var(--ink-5)]">{importer}</div>
+        <div className="mt-0.5 text-[11px] text-gray-400">{importer}</div>
       </td>
       <td>
         <div className="flex justify-end gap-2">
@@ -183,8 +183,8 @@ function DatasetTableRow({
             onClick={onSelect}
             className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-[12px] font-semibold disabled:opacity-45 ${
               selected
-                ? "bg-[color:var(--moby-50)] text-[color:var(--moby-700)]"
-                : "border border-[color:var(--line)] bg-white text-[color:var(--ink-2)] hover:bg-[color:var(--surface-2)]"
+                ? "bg-[color:var(--moby-50)] text-[color:var(--moby-600)]"
+                : "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
             }`}
           >
             {selected ? "Selected" : selectable ? "Select" : "Not ready"}
@@ -193,7 +193,7 @@ function DatasetTableRow({
             type="button"
             disabled={deleting}
             onClick={onDelete}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[color:var(--line)] bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-50"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600 hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-50"
           >
             {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
             Remove

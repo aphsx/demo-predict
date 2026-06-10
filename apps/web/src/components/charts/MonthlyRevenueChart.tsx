@@ -61,9 +61,9 @@ export function MonthlyRevenueChart({
   }, []);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-[24px] border border-[color:var(--line)] bg-white p-4">
+    <div className="min-w-0 overflow-hidden rounded-[24px] border border-gray-200 bg-white p-4">
       {hint && (
-        <div className={`mb-2 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>{hint}</div>
+        <div className={`mb-2 text-[11px] text-gray-400 ${TEXT_SAFE}`}>{hint}</div>
       )}
       <div ref={scrollRef} className="min-w-0 overflow-x-auto overscroll-x-contain pb-1">
         <svg
@@ -88,10 +88,10 @@ export function MonthlyRevenueChart({
                   x2={width - padding.right}
                   y1={y}
                   y2={y}
-                  stroke="var(--line-2)"
+                  stroke="#f3f4f6"
                   strokeDasharray="5 7"
                 />
-                <text x={16} y={y + 4} className="fill-[color:var(--ink-5)] text-[11px]">
+                <text x={16} y={y + 4} className="fill-gray-400 text-[11px]">
                   {formatCompactCurrency(value)}
                 </text>
               </g>
@@ -116,7 +116,7 @@ export function MonthlyRevenueChart({
                 x={point.x}
                 y={point.y - 12}
                 textAnchor="middle"
-                className="fill-[color:var(--ink-2)] text-[10px] font-semibold"
+                className="fill-gray-700 text-[10px] font-semibold"
               >
                 {formatCompactCurrency(point.revenue)}
               </text>
@@ -132,7 +132,7 @@ export function MonthlyRevenueChart({
                 x={point.x}
                 y={height - 14}
                 textAnchor="middle"
-                className="fill-[color:var(--ink-5)] text-[10px]"
+                className="fill-gray-400 text-[10px]"
               >
                 {formatMonth(point.month)}
               </text>
