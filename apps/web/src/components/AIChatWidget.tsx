@@ -5,6 +5,9 @@
  * Wolox/react-chat-widget: a fixed shell with non-shrinking header/footer
  * and one scrollable message viewport.
  *
+ * The conversation itself lives in the shared chat store, so the widget
+ * and the /ai-chat full page continue the same thread.
+ *
  * Structure:
  *   [wrapper: fixed, flex-col, responsive width/height]
  *     ├── [header:   flex-shrink-0           ]  ← always visible, never shrinks
@@ -17,7 +20,7 @@
 "use client";
 
 import {
-  useState, useRef, useEffect, useCallback,
+  useState, useRef, useEffect,
   type KeyboardEvent, type ChangeEvent,
 } from "react";
 import {
@@ -25,67 +28,10 @@ import {
   RotateCcw, ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
-
-/* ─────────────────────────────────────────────
-   Types
-───────────────────────────────────────────── */
-interface Msg {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  ts: Date;
-}
-
-type ChatApiResponse = {
-  model?: string;
-  message?: {
-    role: "assistant";
-    content: string;
-  } | string;
-  code?: string;
-  detail?: string;
-};
-
-type ChatApiSuccess = {
-  model?: string;
-  message?: {
-    role: "assistant";
-    content: string;
-  };
-};
-
-const WELCOME_REPLY =
-  "Moby AI พร้อมรับคำถามผ่าน Chat API แล้ว แต่ยังไม่มี prediction context จาก run จริงใน widget นี้ จึงจะไม่แต่งตัวเลขหรือ insight จำลอง";
-
-/* ─────────────────────────────────────────────
-   Tiny markdown renderer  (**bold** only)
-───────────────────────────────────────────── */
-function Md({ text }: { text: string }) {
-  return (
-    <>
-      {text.split("\n").map((line, li) => (
-        <span key={li} className={li > 0 ? "block mt-1" : "block"}>
-          {line.split(/(\*\*[^*]+\*\*)/g).map((part, pi) =>
-            part.startsWith("**") && part.endsWith("**")
-              ? <strong key={pi}>{part.slice(2, -2)}</strong>
-              : <span key={pi}>{part}</span>
-          )}
-        </span>
-      ))}
-    </>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   Timestamp
-───────────────────────────────────────────── */
-const TIME_FORMAT: Intl.DateTimeFormatOptions = {
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Asia/Bangkok",
-};
-
-const fmt = (d: Date) => d.toLocaleTimeString("th-TH", TIME_FORMAT);
+import { MarkdownLite } from "@/components/chat/MarkdownLite";
+import { TypingDots } from "@/components/chat/TypingDots";
+import { formatTime } from "@/lib/format";
+import { useChatStore, type ChatMsg } from "@/stores/chatStore";
 
 /* ─────────────────────────────────────────────
    Suggested chips  (only shown on first load)
@@ -111,7 +57,7 @@ function Avatar() {
   );
 }
 
-function MessageRow({ msg }: { msg: Msg }) {
+function MessageRow({ msg }: { msg: ChatMsg }) {
   const isUser = msg.role === "user";
   return (
     <div className={`flex items-end gap-2 min-w-0 ${isUser ? "flex-row-reverse" : ""}`}>
@@ -126,10 +72,10 @@ function MessageRow({ msg }: { msg: Msg }) {
               : "rounded-2xl rounded-bl-none bg-white border border-[color:var(--line)] text-[color:var(--ink-2)] shadow-sm",
           ].join(" ")}
         >
-          <Md text={msg.text} />
+          <MarkdownLite text={msg.content} />
         </div>
         <span className="text-[9.5px] text-[color:var(--ink-5)] px-1">
-          {fmt(msg.ts)}
+          {formatTime(msg.ts)}
         </span>
       </div>
     </div>
@@ -140,33 +86,28 @@ function MessageRow({ msg }: { msg: Msg }) {
    AIChatWidget
 ═══════════════════════════════════════════════════════════ */
 export default function AIChatWidget() {
-  const INIT: Msg = {
-    id: "init",
-    role: "assistant",
-    text: WELCOME_REPLY,
-    ts: new Date(),
-  };
+  const messages = useChatStore((s) => s.messages);
+  const sending = useChatStore((s) => s.sending);
+  const unread = useChatStore((s) => s.unread);
+  const open = useChatStore((s) => s.widgetOpen);
+  const setOpen = useChatStore((s) => s.setWidgetOpen);
+  const sendMessage = useChatStore((s) => s.send);
+  const resetChat = useChatStore((s) => s.reset);
 
-  const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState<Msg[]>([INIT]);
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [unread, setUnread] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const cancelRef = useRef<(() => void) | null>(null);
 
   /* auto-scroll to bottom */
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [msgs, busy]);
+  }, [messages, sending]);
 
-  /* focus & clear badge on open */
+  /* focus on open (badge clears in the store) */
   useEffect(() => {
     if (open) {
-      setUnread(0);
       setTimeout(() => textareaRef.current?.focus(), 80);
     }
   }, [open]);
@@ -184,82 +125,19 @@ export default function AIChatWidget() {
     resizeTA();
   };
 
-  /* send message */
-  const send = useCallback(async (override?: string) => {
+  const send = (override?: string) => {
     const text = (override ?? input).trim();
-    if (!text || busy) return;
-
+    if (!text || sending) return;
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-
-    const userMsg: Msg = { id: `u-${Date.now()}`, role: "user", text, ts: new Date() };
-    const nextMsgs = [...msgs, userMsg];
-    const controller = new AbortController();
-
-    setMsgs(prev => [...prev, userMsg]);
-    setBusy(true);
-    cancelRef.current = () => controller.abort();
-
-    try {
-      const res = await fetch("/api/ai-chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: nextMsgs
-            .filter((msg) => msg.id !== "init")
-            .map((msg) => ({
-              role: msg.role,
-              content: msg.text,
-            })),
-        }),
-        signal: controller.signal,
-      });
-
-      const data = (await res.json().catch(() => null)) as ChatApiResponse | null;
-      const success = data as ChatApiSuccess | null;
-      if (!res.ok || !success?.message?.content) {
-        const apiMessage = typeof data?.message === "string" ? data.message : null;
-        throw new Error(apiMessage ?? data?.detail ?? data?.code ?? "chat_api_failed");
-      }
-
-      const botMsg: Msg = {
-        id: `b-${Date.now()}`,
-        role: "assistant",
-        text: success.message.content,
-        ts: new Date(),
-      };
-      setMsgs(prev => [...prev, botMsg]);
-      if (!open) setUnread(n => n + 1);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      const message = error instanceof Error ? error.message : "chat_api_failed";
-      const botMsg: Msg = {
-        id: `b-${Date.now()}`,
-        role: "assistant",
-        text: `เชื่อมต่อ Chat API ไม่สำเร็จ: ${message}`,
-        ts: new Date(),
-      };
-      setMsgs(prev => [...prev, botMsg]);
-      if (!open) setUnread(n => n + 1);
-    } finally {
-      setBusy(false);
-      cancelRef.current = null;
-    }
-  }, [input, busy, open, msgs]);
+    void sendMessage(text);
+  };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  const reset = () => {
-    cancelRef.current?.();
-    setMsgs([{ ...INIT, id: `init-${Date.now()}`, ts: new Date() }]);
-    setBusy(false);
-  };
-
-  const firstLoad = msgs.length <= 1 && !busy;
+  const firstLoad = messages.length <= 1 && !sending;
 
   return (
     <>
@@ -267,7 +145,7 @@ export default function AIChatWidget() {
       <button
         id="ai-chat-bubble"
         aria-label="Open Moby AI"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen(!open)}
         className={[
           "fixed bottom-3 right-3 z-50 sm:bottom-6 sm:right-6",
           "w-14 h-14 rounded-full",
@@ -337,7 +215,7 @@ export default function AIChatWidget() {
               <ExternalLink size={12} />
             </Link>
             <button
-              onClick={reset}
+              onClick={resetChat}
               title="รีเซ็ต"
               className="w-7 h-7 rounded-lg bg-white/10 hover:bg-white/25
                 flex items-center justify-center text-white/80 hover:text-white transition-colors"
@@ -362,23 +240,19 @@ export default function AIChatWidget() {
           ref={scrollRef}
           className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-3 bg-[#f8fafc] sm:px-4"
         >
-          {msgs.map(msg => (
-            <MessageRow key={msg.id} msg={msg} />
-          ))}
+          {messages
+            .filter((msg) => !(msg.role === "assistant" && (msg.pending || msg.content.trim() === "")))
+            .map((msg) => (
+              <MessageRow key={msg.id} msg={msg} />
+            ))}
 
           {/* Typing indicator */}
-          {busy && (
+          {sending && (
             <div className="flex items-end gap-2">
               <Avatar />
               <div className="max-w-[82%] bg-white border border-[color:var(--line)] rounded-2xl rounded-bl-none
                 px-4 py-3 shadow-sm flex items-center gap-[5px]">
-                {[0, 150, 300].map(d => (
-                  <span
-                    key={d}
-                    className="w-1.5 h-1.5 rounded-full bg-[color:var(--moby-500)] animate-bounce"
-                    style={{ animationDelay: `${d}ms` }}
-                  />
-                ))}
+                <TypingDots />
               </div>
             </div>
           )}
@@ -435,11 +309,11 @@ export default function AIChatWidget() {
             <button
               id="ai-chat-send"
               onClick={() => send()}
-              disabled={!input.trim() || busy}
+              disabled={!input.trim() || sending}
               className={[
                 "shrink-0 w-9 h-9 rounded-xl flex items-center justify-center",
                 "transition-all duration-150",
-                input.trim() && !busy
+                input.trim() && !sending
                   ? "bg-[color:var(--moby-600)] text-white hover:bg-[color:var(--moby-700)] shadow-md active:scale-95"
                   : "bg-[color:var(--line)] text-[color:var(--ink-5)] cursor-not-allowed",
               ].join(" ")}
