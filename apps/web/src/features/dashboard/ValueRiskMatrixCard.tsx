@@ -1,0 +1,96 @@
+"use client";
+import Link from "next/link";
+import { formatCompactCurrency } from "@/lib/format";
+import type { RunSummary } from "@/lib/mlApi";
+import { TEXT_SAFE } from "./palette";
+
+const RISKS = ["low", "medium", "high", "critical"] as const;
+const TIERS = ["high", "mid", "low"] as const;
+
+const RISK_LABEL: Record<(typeof RISKS)[number], string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
+const TIER_LABEL: Record<(typeof TIERS)[number], string> = {
+  high: "High value",
+  mid: "Mid value",
+  low: "Low value",
+};
+
+/** Value × Risk matrix (spec §2.1) — มุม high value × high risk คือกลุ่มที่ต้อง save ก่อน */
+export function ValueRiskMatrixCard({ summary, runId }: { summary: RunSummary; runId: string }) {
+  const cell = (tier: string, risk: string) =>
+    summary.value_risk_matrix.find((c) => c.value_tier === tier && c.risk_level === risk);
+
+  return (
+    <section className="surface-elev h-full overflow-hidden">
+      <div className="border-b border-[color:var(--line-2)] px-4 py-4 sm:px-5">
+        <h2 className={`text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)] ${TEXT_SAFE}`}>
+          Value × Risk
+        </h2>
+        <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
+          เฉพาะ Active Paid · มุมขวาบน = มูลค่าสูง + เสี่ยงสูง ต้องรีบจัดการ · คลิกเพื่อดูรายชื่อ
+        </p>
+      </div>
+      <div className="p-4 sm:p-5">
+        <div className="grid min-w-0 grid-cols-[88px_repeat(4,minmax(0,1fr))] gap-1.5">
+          <div />
+          {RISKS.map((r) => (
+            <div key={r} className="text-center text-[11px] font-semibold uppercase tracking-[.08em] text-[color:var(--ink-5)]">
+              {RISK_LABEL[r]}
+            </div>
+          ))}
+          {TIERS.map((tier) => (
+            <FragmentRow key={tier} tier={tier} cell={cell} runId={runId} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FragmentRow({
+  tier,
+  cell,
+  runId,
+}: {
+  tier: (typeof TIERS)[number];
+  cell: (t: string, r: string) => RunSummary["value_risk_matrix"][number] | undefined;
+  runId: string;
+}) {
+  return (
+    <>
+      <div className="flex items-center text-[11px] font-semibold uppercase tracking-[.08em] text-[color:var(--ink-5)]">
+        {TIER_LABEL[tier]}
+      </div>
+      {RISKS.map((risk) => {
+        const c = cell(tier, risk);
+        const hot = tier === "high" && (risk === "high" || risk === "critical");
+        const warm = (tier === "mid" && (risk === "high" || risk === "critical")) || (tier === "high" && risk === "medium");
+        return (
+          <Link
+            key={risk}
+            href={`/customers?run=${runId}&customer_value_tier=${tier}&churn_risk_level=${risk}`}
+            title={`CLV รวม ${formatCompactCurrency(c?.clv_sum ?? 0)} ฿`}
+            className={`rounded-xl border px-2 py-3 text-center transition-colors hover:border-[color:var(--moby-300)] ${
+              hot
+                ? "border-[#fecaca] bg-[#fef2f2]"
+                : warm
+                  ? "border-[#fde68a] bg-[#fffbeb]"
+                  : "border-[color:var(--line)] bg-white"
+            }`}
+          >
+            <div className={`num text-[18px] font-semibold leading-none ${hot ? "text-[#b91c1c]" : "text-[color:var(--ink-1)]"}`}>
+              {(c?.count ?? 0).toLocaleString()}
+            </div>
+            <div className="num mt-1 text-[10.5px] text-[color:var(--ink-5)]">
+              {formatCompactCurrency(c?.clv_sum ?? 0)}
+            </div>
+          </Link>
+        );
+      })}
+    </>
+  );
+}
