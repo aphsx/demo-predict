@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Moby Analytics — Project Context
 
 ## Project Overview
@@ -8,14 +12,68 @@ by CLV/RFM, and forecast credit consumption.
 
 **Deployment target:** Local Docker first. Production decision deferred.
 
+## Commands
+
+Package manager is **Bun** (`packageManager: bun@1.0.0`); the monorepo is driven by **Turborepo**. Run from repo root unless noted.
+
+```bash
+# Install all workspaces
+bun install
+
+# Full stack via Docker (recommended) — db, redis, ml, api, web.
+# ml entrypoint runs migrate_or_repair.py (Alembic + moby-data-prep SQL) before serving.
+docker compose up --build
+docker compose up -d db redis        # just the backing services for local dev
+
+# Run everything in dev via Turbo (web :3000, api :3001)
+bun run dev
+bun run build                        # turbo build (web: next build; api: none)
+bun run lint                         # turbo lint — NOTE: no per-app lint scripts defined yet, so this is currently a no-op
+
+# Per-app dev (cd into the app)
+cd apps/web && bun run dev           # Next.js on :3000
+cd apps/api && bun run dev           # Elysia, hot-reload (bun --watch) on :3001
+cd apps/api && bun run db:introspect # Drizzle reflects current PG schema into src/db/schema.ts (never `generate`)
+
+# ML service (Python 3.11). Run inside the container or a venv with apps/ml/requirements.txt installed.
+cd apps/ml
+uvicorn api.main:app --port 8000 --reload      # FastAPI health/internal surface only
+python scripts/migrate_or_repair.py            # apply Alembic + moby-data-prep migrations / repair partial dev volumes
+alembic revision --autogenerate -m "msg"       # ml_* / Better-Auth schema only — Alembic owns these
+alembic upgrade head
+```
+
+### Tests / verification
+
+There is **no unit-test framework** (no jest/vitest/pytest config). ML correctness is checked by the
+`apps/ml/scripts/verify_*.py` "contract" scripts — run them against a populated DB after changing the
+matching pipeline module:
+
+```bash
+cd apps/ml
+python scripts/verify_clean_data_access.py     # train_clean_* / predict_clean_* loaders
+python scripts/verify_feature_builder.py       # deterministic 24-feature contract + feature_code_hash
+python scripts/verify_preprocessing.py         # fit-on-train-only preprocessing artifact
+python scripts/profile_training_dataset.py     # dataset profiling / label viability
+```
+
+When asked whether an ML rebuild task is "good enough / complete / ready", use the `ml-contract-review`
+Cursor skill (`.cursor/skills/ml-contract-review/`) and the specs under `docs/ML-*.md`.
+
 ## Tech Stack
 
+<<<<<<< Updated upstream
 - **Frontend:** Next.js 14 (App Router) + TypeScript + Tailwind CSS + Better Auth client
+- **API:** Elysia.js on Bun + Better Auth (server) + Drizzle ORM + ioredis
+- **ML Worker:** Python + Arq consumer + FastAPI (internal routes only: `/health`, `/internal/explain`, `/internal/train`)
+=======
+- **Frontend:** Next.js 16 (App Router) + React 18 + TypeScript + Tailwind CSS + Better Auth client (`recharts` for charts, `gsap` for animation). Note: prose in this repo sometimes says "Next.js 14" — `apps/web/package.json` is the source of truth.
 - **API:** Elysia.js on Bun + Better Auth (server) + Drizzle ORM
 - **ML Runtime:** Python + FastAPI health/internal surface; ML v2 training/prediction runner is being rebuilt
+>>>>>>> Stashed changes
 - **ML libs:** LightGBM, XGBoost, SHAP, lifetimes (BG-NBD/Gamma-Gamma), scikit-learn, Optuna
 - **Database:** PostgreSQL 15
-- **Progress:** Redis Streams for train import progress events
+- **Queue:** Arq (Python-native Redis task queue) for job dispatch; Redis Streams for progress events
 - **Storage:** Local filesystem (`./models` volume) in dev; R2 deferred
 - **Monorepo:** Turborepo + Bun workspaces
 
@@ -35,11 +93,23 @@ When implementing anything ML- or dashboard-related, follow these docs over any 
 ```
 moby-analytics/
 ├── apps/
+<<<<<<< Updated upstream
 │   ├── web/           # Next.js 14 — frontend + proxy rewrite to Elysia
-│   ├── api/           # Elysia.js (Bun) — auth + import/clean REST
+│   ├── api/           # Elysia.js (Bun) — REST + auth + orchestration + SSE
+│   └── ml/            # Python — FastAPI (internal) + Arq worker + train CLI
+=======
+│   ├── web/           # Next.js — frontend + proxy rewrite to Elysia (src/app/* routes)
+│   ├── api/           # Elysia.js (Bun) — auth + import/clean REST (src/routes/{train,predict}-data.ts)
 │   └── ml/            # Python — FastAPI health + ML v2 rebuild modules
+│       ├── api/       #   FastAPI app (main.py = health only; keep tiny)
+│       ├── src/training/  # Active ML v2 rebuild: data, features, labels, preprocessing, validation, repository
+│       ├── scripts/   #   verify_*.py contract checks + migrate_or_repair.py + profile_training_dataset.py
+│       └── alembic/   #   Owns the ml_* / Better-Auth schema migrations
+├── moby-data-prep/    # Owns raw+clean table SQL (migrations/00X_*.sql) + Excel import contract docs/config
+>>>>>>> Stashed changes
 ├── packages/
 │   └── types/         # Shared TypeScript types (stub; populate as routes solidify)
+├── docs/              # ML-*.md specs (SRS, FEATURE-SPEC, QUALITY-GATES, TASKS, EXPERIMENT-PLAN, DB-REBUILD-PLAN)
 ├── models/            # ML model artifacts (.pkl, metrics.json, training_log.txt)
 ├── data/              # Training Excel files
 ├── docker-compose.yml
@@ -48,15 +118,20 @@ moby-analytics/
 └── CLAUDE.md
 ```
 
+Note: schema is owned by **two** migration sources, both applied at `ml` container startup by
+`apps/ml/scripts/migrate_or_repair.py` (see `apps/ml/entrypoint.sh`): Alembic (`apps/ml/alembic/versions/`)
+for `ml_*`/Better-Auth tables, and `moby-data-prep/migrations/*.sql` (mounted at `/app/train-migrations`)
+for the `*_raw_sheet_*` / `*_clean_*` tables. Drizzle only introspects; never run `drizzle-kit generate`.
+
 ## Service Ports
 
 | Service | Internal | External | Notes |
 |---|---|---|---|
 | Next.js (`web`) | `:3000` | `:3000` | Proxy rewrites `/api/*` → Elysia |
-| Elysia (`api`) | `:3001` | `:3001` | REST + Better Auth |
+| Elysia (`api`) | `:3001` | `:3001` | REST + Better Auth + SSE |
 | FastAPI (`ml`) | `:8000` | `:8001` | Internal routes only |
 | PostgreSQL (`db`) | `:5432` | `:5433` | Alembic manages schema |
-| Redis | `:6379` | — | Train import progress Streams |
+| Redis | `:6379` | — | Arq queue + progress Streams |
 
 ## Traffic Flow
 
@@ -67,11 +142,12 @@ Browser → Next.js :3000
 
 Elysia :3001
   → PostgreSQL (Drizzle)
-  → Redis Streams (train import progress)
-  → mounted routes: /train-data-sources, /predict-data-sources
+  → Redis (Arq enqueue + progress XREAD)
+  → FastAPI :8000/internal/explain  (SHAP, token-gated)
+  → FastAPI :8000/internal/train    (training trigger, token-gated)
 
 FastAPI :8000/health  ← Docker healthcheck
-ML v2 training/prediction runner is not wired to Elysia yet
+Arq worker            ← arq:queue (Redis), writes results to PostgreSQL
 ```
 
 ## Data Model
@@ -94,22 +170,20 @@ The user uploads a **fixed-schema Excel file with exactly 8 sheets**. Schema is 
 Tables:
 
 - `user`, `session`, `account`, `verification` — Better Auth (camelCase column names)
-- `train_data_sources`, `train_raw_sheet_*`, `train_clean_*` — training import/clean foundation
-- `predict_data_sources`, `predict_raw_sheet_*`, `predict_clean_*` — prediction import/clean foundation
-- `ml_training_runs`, `ml_feature_sets`, `ml_model_versions`, `ml_model_aliases`, `ml_model_evaluations` — ML v2 training/model registry
-- `ml_prediction_runs`, `ml_prediction_outputs` — ML v2 prediction runs/output
-- `ml_data_validation_reports` — structured quality-gate reports
+- `model_versions` — trained model registry
+- `prediction_runs` — one run per "Run Analysis" click
+- `raw_customers`, `raw_payments`, `raw_usage` — parsed Excel rows (scoped per run)
+- `predictions` — all ML output per customer per run (flat wide table)
 
 Key design decisions:
 
-- Train and predict imports are separate. Training uses `train_clean_*`; prediction uses `predict_clean_*`.
-- Legacy `raw_customers`, `raw_payments`, `raw_usage`, `prediction_runs`, `predictions`, and `model_versions` are dropped/replaced.
-- Observed lifecycle/status is separate from predicted scores. `lifecycle_stage` is rule-based, not a model score.
-- All prediction output goes into `ml_prediction_outputs`, one row per customer per prediction run.
+- Raw data is scoped per run (`run_id` FK with CASCADE). Re-uploading clears and re-inserts.
+- All ML output goes into a single `predictions` table (not split by model type).
+- `model_version_id` on `prediction_runs` is present but currently not set by the pipeline.
 - Better Auth tables use camelCase column names (quoted identifiers in PG) — Drizzle schema
   preserves this in `apps/api/src/db/schema.ts`.
 
-## ML v2 Components
+## The Five ML Models + Lifecycle Engine
 
 | Component           | Type                       | Output                                               |
 | ------------------- | -------------------------- | ---------------------------------------------------- |
@@ -117,36 +191,26 @@ Key design decisions:
 | **Churn**           | LightGBM + Optuna + SHAP   | `churn_probability`, per-customer SHAP factors       |
 | **CLV + RFM**       | BG-NBD + Gamma-Gamma       | `predicted_clv_6m`, `p_alive`, `n_purchases`         |
 | **Credit Forecast** | Quantile regression        | `credit_p10` … `credit_p90`                          |
+| **Winback**         | LightGBM                   | `comeback_probability` (for Churned stage only)      |
+| **Conversion**      | LightGBM                   | `conversion_probability` (for Active Free only)      |
 
-Removed from ML v2 scope: win-back/conversion models and `comeback_probability` / `conversion_probability`.
+## Job Flow
 
-## Current ML Rebuild Status
-
-Implemented and verified:
-
-- Clean data loaders for `train_clean_*` and `predict_clean_*`
-- Gate 1-5 validation reports and persistence into `ml_data_validation_reports`
-- Label builders and label viability checks
-- Tier A feature builder with deterministic 24-feature contract
-- `FeatureBuildResult.feature_df` for model inputs and `FeatureBuildResult.lifecycle_df` for observed lifecycle/status
-- `ml_feature_sets` persistence with `feature_code_hash`
-- Preprocessing contract: fit on train split only, transform validation/test/predict, save/load JSON artifact
-
-Not built yet:
-
-- Dataset builders (`features + labels + lifecycle_df`)
-- Churn baseline/candidate training
-- Champion/challenger alias activation
-- Prediction runner writing `ml_prediction_outputs`
+1. User creates a run (`POST /runs`) — status: `pending`
+2. User uploads Excel (`POST /runs/:id/upload`) — Elysia parses, batch-inserts raw rows, sets status `processing`, enqueues Arq job
+3. Arq worker consumes `arq:queue`, runs the full 5-model pipeline via `MobyPredictor`
+4. Worker writes progress to Redis Stream `progress:{run_id}` (XADD)
+5. Elysia's SSE endpoint (`GET /runs/:id/stream`) XREADs from that stream and pushes to browser
+6. Worker saves predictions to `predictions` table, updates run status to `done`/`failed`
 
 ## Architectural Decisions
 
 | Decision | Rationale |
 |---|---|
 | **Elysia (not FastAPI) owns REST** | Single process boundaries: ML pipeline code is Python-only; Elysia handles TypeScript-native concerns (typed API, SSE, Drizzle). |
-| **No legacy Arq API enqueue** | Old `/runs` prediction runtime is removed; do not reintroduce `arq:queue` job producer for ML v2. |
-| **Redis Streams for import progress** | Train import writes structured events that the API polls for progress. |
-| **FastAPI is internal-only** | Python ML code stays behind the API boundary. Browser routes should go through Elysia/Next.js. |
+| **Arq for jobs** | Python-native queue; the only consumer is Python. No need for cross-language Streams protocol. |
+| **Redis Streams for progress** | Worker pushes structured events; SSE endpoint XREADs without polling. |
+| **FastAPI is internal-only** | SHAP and training require Python. Elysia proxies these via X-Internal-Token. FastAPI never serves the browser directly. |
 | **Drizzle in introspect mode** | Alembic owns schema; Drizzle reflects it. `drizzle-kit generate` is never run. |
 | **SSE not WebSockets** | Server pushes only. Auto-reconnect built-in. Works behind any proxy. |
 | **PostgreSQL not MongoDB** | Data is relational. All ML output is tabular. |
@@ -157,18 +221,31 @@ Not built yet:
 Auth (Better Auth)
   /api/auth/*                     Better Auth native handler
 
-Train Import
-  GET    /train-data-sources
-  POST   /train-data-sources/import
-  GET    /train-data-sources/:id/import/progress
+Runs
+  GET    /runs                    list user's runs
+  POST   /runs                    create run
+  GET    /runs/:id                get run
+  DELETE /runs/:id                delete run + cascade
 
-Predict Import
-  GET    /predict-data-sources
-  POST   /predict-data-sources/import
-  GET    /predict-data-sources/:id/import/progress
+Upload
+  POST   /runs/:id/upload         parse Excel, batch-insert, enqueue Arq job
 
-Legacy prediction routes are not the ML v2 target. Prediction output should be rebuilt on
-`ml_prediction_runs` + `ml_prediction_outputs`.
+Predictions
+  GET    /runs/:id/predictions    paginated list (filters: lifecycle_stage, search)
+  GET    /runs/:id/predictions/:acc_id   single customer
+  GET    /runs/:id/predictions/:acc_id/explain   SHAP (proxied to FastAPI)
+  GET    /runs/:id/summary        dashboard aggregates
+  GET    /runs/:id/export         CSV download
+
+SSE
+  GET    /runs/:id/stream         Redis Streams XREAD → text/event-stream
+
+Training / Admin
+  GET    /model-metrics           metrics.json from models volume
+  GET    /training-log            training_log.txt from models volume
+  GET    /model-versions          model version history
+  GET    /model-versions/active   latest active version per model type
+  POST   /model-versions/train    trigger training (proxied to FastAPI)
 
 Health
   GET    /health                  model file check + DB ping
@@ -232,24 +309,22 @@ NEXT_PUBLIC_AUTH_URL     # http://localhost:3001 (browser-visible)
 
 ## What To Build Next (Phase 2)
 
-- **LLM / Gemini insights** — rebuild after ML v2 prediction outputs exist; do not reuse legacy `/runs/:id/explanation`.
+- **LLM / Gemini insights** — `GET /runs/:id/explanation`, Gemini API call after ML pipeline completes, persisted in a new `explanations` table. The AI Chat page currently returns hardcoded demo responses; replace with real streaming.
 - **R2 integration** — store `.pkl` files in Cloudflare R2 keyed by `dataset_id` (currently local filesystem)
 - **Eden Treaty** — typed API client from web → Elysia (currently plain `fetch` + manual types in `web/src/lib/api.ts`)
 - **Real email notifications** on pipeline completion
 
 ## What NOT to Change
 
-- Legacy `apps/ml/src/models/` model code — replace only after the corresponding ML v2 model is implemented and verified.
-- `apps/ml/src/training/` is the active ML v2 rebuild area.
-- Legacy Arq worker/API enqueue path — do not extend it for ML v2 prediction. Build the new prediction runner separately.
+- `apps/ml/src/` — ML pipeline code. Belongs to the original author. Touch only to fix bugs, never to refactor style.
+- `apps/ml/worker/predict_worker.py` — Arq worker. Same constraint.
 - `apps/ml/alembic/` — Do not add migrations from Drizzle. Alembic owns the schema.
-- Legacy `apps/ml/train.py` — do not revive old filesystem-Excel training; ML v2 trains from `train_clean_*`.
+- `apps/ml/train.py` — Training CLI.
 
 ## Always Check
 
 - Is the run status updated to `running`/`done`/`failed` at the right points?
-- Are all Elysia routes using `requireUser`?
-- Are run/source read routes shared across all authenticated internal users?
-- Are run/source mutation routes restricted to the owner/importer (or future admin role), with null owner denied?
+- Are all Elysia routes using `requireUser` and scoped by `userId`?
+- Does `verifyRunOwnership` return 403 (not bypass) when `run.userId` is null?
 - Are uploaded files validated (size, MIME, required sheet presence) before inserting?
 - Are batch inserts used (never row-by-row `for` loops)?
