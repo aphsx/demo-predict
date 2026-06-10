@@ -17,9 +17,9 @@ export const LIFECYCLE_PALETTE = {
 };
 
 export const CHURN_PALETTE = {
-  High: BRAND_ORANGE_GRADIENT,
-  Medium: BRAND_YELLOW_ORANGE_GRADIENT,
-  Low: BRAND_BLUE_GRADIENT,
+  High: MOBY_BRAND.orange,
+  Medium: MOBY_BRAND.orangeWarm,
+  Low: MOBY_BRAND.blue,
 };
 
 export const CREDIT_PALETTE = {
