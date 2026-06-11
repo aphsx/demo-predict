@@ -35,21 +35,21 @@ export function ModelTrainingPanel({
       <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
+            <p className="type-label">
               Model training
             </p>
-            <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+            <h2 className="type-section-title mt-1 text-[22px]">
               Select dataset and train
             </h2>
             <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
-              เลือก clean dataset ที่ import ไว้ใน DB แล้วกด train จากพื้นที่นี้ ไม่ใช้ card เลือก dataset แล้ว
+              เลือก clean dataset ที่ import สำเร็จแล้ว เพื่อใช้เป็น source สำหรับ training รอบถัดไป.
             </p>
           </div>
           <button
             type="button"
             disabled={!canTrain || training}
             onClick={onTrain}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.14)] disabled:opacity-50 xl:min-w-[190px]"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 xl:min-w-[190px]"
             style={{ background: IMPORT_ACCENT }}
           >
             {training ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
@@ -78,7 +78,7 @@ export function ModelTrainingPanel({
             hint="Upload one Excel file above. The system will import raw data and clean it automatically."
           />
         ) : (
-          <div className="overflow-x-auto rounded-[22px] border border-gray-200">
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
             <table className="table-base">
               <thead>
                 <tr>
@@ -181,7 +181,7 @@ function DatasetTableRow({
             type="button"
             disabled={!selectable}
             onClick={onSelect}
-            className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-[12px] font-semibold disabled:opacity-45 ${
+            className={`inline-flex h-9 items-center justify-center rounded-lg px-3 text-[12px] font-semibold disabled:opacity-45 ${
               selected
                 ? "bg-[color:var(--moby-50)] text-[color:var(--moby-600)]"
                 : "border border-gray-200 bg-white text-[color:var(--ink-2)] hover:bg-gray-50"
@@ -193,7 +193,7 @@ function DatasetTableRow({
             type="button"
             disabled={deleting}
             onClick={onDelete}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-50"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-50"
           >
             {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
             Remove

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Layers3 } from "lucide-react";
 import { notifyStatusDialog } from "@/components/GlobalStatusDialogHost";
 import { StatusDialog } from "@/components/StatusDialog";
-import { PageHeader, Skeleton, StatusPill } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 import {
   deleteTrainDataSource,
   fetchTrainDataSources,
@@ -17,7 +17,12 @@ import { getDisplayError } from "@/lib/ui-error";
 import { FilePickerPanel } from "./FilePickerPanel";
 import { ModelTrainingPanel } from "./ModelTrainingPanel";
 import { ProgressCard } from "./ProgressCard";
-import { IMPORT_ACCENT, getTimestamp, wait, waitForTrainingHealth } from "./training-utils";
+import {
+  IMPORT_ACCENT,
+  getTimestamp,
+  wait,
+  waitForTrainingHealth,
+} from "./training-utils";
 
 export function TrainingView() {
   const [trainSources, setTrainSources] = useState<TrainDataSource[]>([]);
@@ -55,14 +60,21 @@ export function TrainingView() {
     void load();
   }, []);
 
-  const readySources = trainSources.filter((source) => source.import_status === "ready");
-  const sortedSources = trainSources
-    .slice()
-    .sort(
-      (a, b) =>
-        getTimestamp(b.imported_at || b.created_at) -
-        getTimestamp(a.imported_at || a.created_at)
-    );
+  const readySources = useMemo(
+    () => trainSources.filter((source) => source.import_status === "ready"),
+    [trainSources]
+  );
+  const sortedSources = useMemo(
+    () =>
+      trainSources
+        .slice()
+        .sort(
+          (a, b) =>
+            getTimestamp(b.imported_at || b.created_at) -
+            getTimestamp(a.imported_at || a.created_at)
+        ),
+    [trainSources]
+  );
   const selectedSource =
     sortedSources.find((source) => source.id === selectedSourceId) ?? readySources[0] ?? null;
   const canTrain = Boolean(selectedSource && selectedSource.import_status === "ready");
@@ -170,26 +182,19 @@ export function TrainingView() {
 
   if (loading) {
     return (
-      <div className="pb-12">
-        <PageHeader eyebrow="Data pipeline" title="Training data workspace" />
-        <div className="px-8 mt-4 space-y-5">
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_420px]">
-            <Skeleton className="h-[360px]" />
-            <div className="space-y-5">
-              <Skeleton className="h-[180px]" />
-              <Skeleton className="h-[210px]" />
-            </div>
-          </div>
-          <Skeleton className="h-[260px]" />
+      <main className="min-w-0 px-4 py-6 pb-12 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <Skeleton className="h-[360px]" />
+          <Skeleton className="h-[360px]" />
         </div>
-      </div>
+        <Skeleton className="mt-6 h-[280px]" />
+      </main>
     );
   }
 
   return (
-    <div className="pb-12">
-
-      <div className="px-8 mt-4 space-y-6">
+    <main className="min-w-0 px-4 py-6 pb-12 sm:px-6 lg:px-8">
+      <div className="space-y-6">
         {loadError && (
           <div className="rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
             {loadError}
@@ -197,92 +202,85 @@ export function TrainingView() {
         )}
 
         <section className="surface-elev overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
+            <p className="type-label">New dataset</p>
+            <h2 className="type-section-title mt-1 text-[22px]">
+              Upload and clean dataset
+            </h2>
+           
+          </div>
           <div className="p-5 sm:p-6">
-              <div className="flex flex-col gap-3 border-b border-gray-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-                    New dataset
-                  </p>
-                  
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+              <FilePickerPanel
+                pendingFile={pendingFile}
+                importing={importing}
+                fileInputRef={fileInputRef}
+                onFileChange={(file) => {
+                  setPendingFile(file);
+                  setImportError(null);
+                  setImportSuccess(null);
+                }}
+              />
+
+              <div className="flex flex-col rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="grid grid-cols-1 gap-4">
+                  <label className="block">
+                    <span className="type-label">Dataset name</span>
+                    <input
+                      type="text"
+                      value={importName}
+                      onChange={(e) => setImportName(e.target.value)}
+                      placeholder="e.g. Bangkok University Q1"
+                      className="mt-1.5 h-11 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)]"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="type-label">Client label</span>
+                    <input
+                      type="text"
+                      value={importClient}
+                      onChange={(e) => setImportClient(e.target.value)}
+                      placeholder="optional"
+                      className="mt-1.5 h-11 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)]"
+                    />
+                  </label>
                 </div>
-                
-              </div>
 
-              <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                <FilePickerPanel
-                  pendingFile={pendingFile}
-                  importing={importing}
-                  fileInputRef={fileInputRef}
-                  onFileChange={(file) => {
-                    setPendingFile(file);
-                    setImportError(null);
-                    setImportSuccess(null);
-                  }}
-                />
-
-                <div className="flex flex-col rounded-[24px] border border-gray-200 bg-gray-50 p-4">
-                  <div className="grid grid-cols-1 gap-4">
-                    <label className="block">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-                        Dataset name
-                      </span>
-                      <input
-                        type="text"
-                        value={importName}
-                        onChange={(e) => setImportName(e.target.value)}
-                        placeholder="e.g. Bangkok University Q1"
-                        className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
-                      />
-                    </label>
-
-                    <label className="block">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-                        Client label
-                      </span>
-                      <input
-                        type="text"
-                        value={importClient}
-                        onChange={(e) => setImportClient(e.target.value)}
-                        placeholder="optional"
-                        className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mt-5 rounded-2xl bg-white p-3">
-                    <div className="flex items-center gap-3 text-[12px] text-[color:var(--ink-4)]">
-                      <span className="shrink-0 text-[color:var(--moby-600)]">
-                        <Layers3 size={15} />
-                      </span>
-                      <span>
-                        Import raw rows first, then clean customers, payments, and usage rows for training.
-                      </span>
-                    </div>
+                <div className="mt-5 rounded-lg border border-gray-200 bg-white p-3">
+                  <div className="flex items-center gap-3 text-[12px] text-[color:var(--ink-4)]">
+                    <span className="shrink-0 text-[color:var(--moby-600)]">
+                      <Layers3 size={15} />
+                    </span>
+                    <span>
+                      Import raw rows first, then clean customers, payments, and usage rows for training.
+                    </span>
                   </div>
                 </div>
               </div>
+            </div>
 
-              {(importing || training) && (
-                <ProgressCard
-                  training={training}
-                  progress={importProgress}
-                  step={importStep}
-                  phase={importPhase}
-                />
-              )}
+            {(importing || training) && (
+              <ProgressCard
+                training={training}
+                progress={importProgress}
+                step={importStep}
+                phase={importPhase}
+              />
+            )}
 
-              <div className="mt-5 flex flex-col gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:items-center sm:justify-end">
-                <button
-                  type="button"
-                  disabled={importing || !pendingFile}
-                  onClick={() => pendingFile && void handleImportFile(pendingFile)}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.18)] disabled:opacity-50 sm:min-w-[170px]"
-                  style={{ background: IMPORT_ACCENT }}
-                >
-                  <Image src="/icons/import.svg" alt="" width={16} height={17} aria-hidden />
-                  Upload and clean
-                </button>
-              </div>
+            <div className="mt-5 flex flex-col gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:items-center sm:justify-end">
+              <button
+                type="button"
+                disabled={importing || !pendingFile}
+                onClick={() => pendingFile && void handleImportFile(pendingFile)}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 sm:min-w-[170px]"
+                style={{ background: IMPORT_ACCENT }}
+              >
+                <Image src="/icons/import.svg" alt="" width={16} height={17} aria-hidden />
+                Upload and clean
+              </button>
+            </div>
           </div>
         </section>
 
@@ -334,6 +332,6 @@ export function TrainingView() {
           }}
         />
       )}
-    </div>
+    </main>
   );
 }

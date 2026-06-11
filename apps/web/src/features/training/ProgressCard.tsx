@@ -19,7 +19,7 @@ export function ProgressCard({
       : "Importing raw data";
 
   return (
-    <div className="mt-5 rounded-[24px] border border-[rgba(252,76,2,0.14)] bg-white p-4 shadow-[var(--shadow-1)]">
+    <div className="mt-5 rounded-lg border border-[rgba(252,76,2,0.22)] bg-white p-4">
       <div className="flex items-center gap-3">
         <span className="shrink-0 text-[#fc4c02]">
           <RefreshCw size={15} className="animate-spin" />
@@ -59,7 +59,7 @@ function GradientProgressBar({
   indeterminate?: boolean;
 }) {
   return (
-    <div className="relative h-3 overflow-hidden rounded-full bg-[rgba(13,17,35,0.08)]">
+    <div className="relative h-2 overflow-hidden rounded-full bg-[rgba(13,17,35,0.08)]">
       <div
         className={`h-full rounded-full transition-[width,opacity] duration-300 ease-out ${indeterminate ? "animate-pulse" : ""}`}
         style={{

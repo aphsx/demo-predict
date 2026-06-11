@@ -15,7 +15,7 @@ export function FilePickerPanel({
   onFileChange: (file: File) => void;
 }) {
   return (
-    <div className="rounded-[24px] border border-gray-200 bg-white p-4 shadow-[var(--shadow-1)]">
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
       <input
         ref={fileInputRef}
         type="file"
@@ -42,9 +42,9 @@ export function FilePickerPanel({
         </div>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-[22px] border border-gray-100">
+      <div className="mt-5 overflow-hidden rounded-lg border border-gray-200">
         <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+          <p className="type-label">
             Selected file
           </p>
         </div>
@@ -79,7 +79,7 @@ export function FilePickerPanel({
         type="button"
         disabled={importing}
         onClick={() => fileInputRef.current?.click()}
-        className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_12px_28px_rgba(0,107,255,0.12)] disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: BRAND_BLUE }}
       >
         <Image src="/icons/upload-icon.svg" alt="" width={14} height={14} aria-hidden />
