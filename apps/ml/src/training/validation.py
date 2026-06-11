@@ -18,7 +18,7 @@ from src.training.data import (
     database_url,
     load_clean_dataset,
 )
-from src.training.features import MINIMUM_TIER_A_FEATURES, build_all_features
+from src.training.features import CREDIT_TIER_A_FEATURES, build_all_features
 from src.training.labels import LabelConfig, build_label_set
 
 
@@ -531,16 +531,18 @@ def _feature_leakage_checks(
             },
         ),
         ValidationCheck(
-            name="minimum_tier_a_feature_set_only",
+            # The builder emits the full Tier A superset (base 24 + credit 3);
+            # each model then selects its own contract subset downstream.
+            name="tier_a_feature_superset_only",
             severity="blocker",
-            passed=feature_names == MINIMUM_TIER_A_FEATURES,
+            passed=feature_names == CREDIT_TIER_A_FEATURES,
             message=(
-                "Feature names match the minimum Tier A baseline contract."
-                if feature_names == MINIMUM_TIER_A_FEATURES
-                else "Feature names differ from the minimum Tier A baseline contract."
+                "Feature names match the Tier A builder contract."
+                if feature_names == CREDIT_TIER_A_FEATURES
+                else "Feature names differ from the Tier A builder contract."
             ),
             details={
-                "expected": MINIMUM_TIER_A_FEATURES,
+                "expected": CREDIT_TIER_A_FEATURES,
                 "actual": feature_names,
             },
         ),
