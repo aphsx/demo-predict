@@ -143,6 +143,14 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
         set.status = 400;
         return { message: "No clean activity data for this source yet" };
       }
+      if (!cutoffDate.endsWith("-01")) {
+        set.status = 400;
+        return {
+          message:
+            "cutoff_date must be the first day of a month — usage data is monthly, so a mid-month cutoff leaks post-cutoff usage into features. Use the suggested cutoff.",
+          suggested_cutoff: suggested?.cutoff_date ?? null,
+        };
+      }
 
       const [cutoffCheck] = await db.execute<{
         min_activity_date: string | null;

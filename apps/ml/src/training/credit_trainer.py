@@ -42,6 +42,7 @@ QUANTILES = [0.10, 0.25, 0.50, 0.75, 0.90]
 HORIZONS = {30: "future_credit_usage_30d", 90: "future_credit_usage_90d"}
 CREDIT_TRIALS = 30
 TARGET_COVERAGE = 0.80
+URGENT_TOPUP_DAYS = 14
 # Cap on the learned log-ratio correction (≈ ×0.22 – ×4.5 of the carryover
 # anchor). Uncapped corrections extrapolate badly on whale customers at older
 # backtest cutoffs and blow up MAE.
@@ -193,16 +194,25 @@ def train_credit(
             horizon_days=horizon_days, n_trials=n_trials,
         )
 
+    predictions = {
+        split: {
+            horizon: horizons[horizon].predict_quantiles(x[split], anchors[horizon][split])
+            for horizon in HORIZONS
+        }
+        for split in ("validation", "test")
+    }
     validation_metrics = credit_metrics(
-        y[30]["validation"],
-        horizons[30].predict_quantiles(x["validation"], anchors[30]["validation"]),
-        y[90]["validation"],
-        horizons[90].predict_quantiles(x["validation"], anchors[90]["validation"]),
+        y[30]["validation"], predictions["validation"][30],
+        y[90]["validation"], predictions["validation"][90],
+    )
+    validation_metrics.update(
+        urgent_topup_metrics(dataset, "validation", predictions["validation"][30][0.50])
     )
     test_metrics = credit_metrics(
-        y[30]["test"], horizons[30].predict_quantiles(x["test"], anchors[30]["test"]),
-        y[90]["test"], horizons[90].predict_quantiles(x["test"], anchors[90]["test"]),
+        y[30]["test"], predictions["test"][30],
+        y[90]["test"], predictions["test"][90],
     )
+    test_metrics.update(urgent_topup_metrics(dataset, "test", predictions["test"][30][0.50]))
 
     baseline_metrics = _evaluate_baselines(dataset, y)
 
@@ -255,6 +265,7 @@ def backtest_credit(
     champion_metrics = credit_metrics(
         y_test[30], predictions[30], y_test[90], predictions[90]
     )
+    champion_metrics.update(urgent_topup_metrics(dataset, "test", predictions[30][0.50]))
     baseline_metrics = _evaluate_baselines(
         dataset, {h: {"test": y_test[h]} for h in HORIZONS}, splits=("test",)
     )
@@ -383,6 +394,53 @@ def _widen_interval(
         else:
             widened[alpha] = np.clip(p50 + (values - p50) * factor, 0, None)
     return widened
+
+
+def urgent_topup_metrics(
+    dataset: SplitFrame,
+    split: str,
+    p50_30d: np.ndarray,
+) -> dict[str, Any]:
+    """Quality of the "must top up within ≤14 days" alert (TRAINING §11).
+
+    Mirrors the prediction-side derivation (`estimated_days_until_topup` =
+    ceil(balance / (p50_30d / 30))) but with the PIT-safe
+    `credit_balance_proxy` feature in place of the export-time snapshot
+    balance, which does not exist for historical cutoffs. Actual urgency =
+    the customer really topped up within 14 days after the cutoff
+    (`days_until_next_topup` label; censored rows count as not urgent).
+    """
+
+    rows = dataset.split(split)
+    days_label = pd.to_numeric(rows["days_until_next_topup"], errors="coerce")
+    observed = (
+        rows["topup_observed"].fillna(False).astype(bool)
+        if "topup_observed" in rows.columns
+        else days_label.notna()
+    )
+    actual = (observed & (days_label <= URGENT_TOPUP_DAYS)).to_numpy()
+
+    balance = (
+        pd.to_numeric(rows["credit_balance_proxy"], errors="coerce")
+        .fillna(0.0)
+        .clip(lower=0.0)
+        .to_numpy()
+    )
+    daily_burn = np.asarray(p50_30d, dtype=float) / 30.0
+    est_days = np.full(len(rows), np.inf)
+    burning = daily_burn > 0
+    est_days[burning] = np.ceil(balance[burning] / daily_burn[burning])
+    predicted = est_days <= URGENT_TOPUP_DAYS
+
+    tp = int(np.sum(predicted & actual))
+    fp = int(np.sum(predicted & ~actual))
+    fn = int(np.sum(~predicted & actual))
+    return {
+        "urgent_topup_precision": round(tp / (tp + fp), 4) if tp + fp else None,
+        "urgent_topup_recall": round(tp / (tp + fn), 4) if tp + fn else None,
+        "urgent_topup_actual_n": tp + fn,
+        "urgent_topup_flagged_n": tp + fp,
+    }
 
 
 def _evaluate_baselines(

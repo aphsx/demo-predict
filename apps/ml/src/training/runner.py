@@ -41,7 +41,7 @@ from src.training.datasets import (
 )
 from src.training.features import build_feature_set_contract
 from src.training.labels import LabelConfig
-from src.training.leakage import run_leakage_suite
+from src.training.leakage import run_leakage_suite, run_regression_leakage_suite
 from src.training.metrics import churn_metrics, round_metrics
 from src.training.preprocessing import fit_preprocessor
 from src.training.registry import (
@@ -120,6 +120,12 @@ def _run_training_inner(training_run_id: str, log_buffer: io.StringIO) -> None:
     run = load_training_run(training_run_id)
     source_id = run["source_id"]
     cutoff = pd.Timestamp(run["cutoff_date"])
+    if cutoff != month_start(cutoff):
+        raise ValueError(
+            f"cutoff_date {cutoff.date()} ไม่ตรงต้นเดือน — usage มี granularity รายเดือน "
+            "cutoff กลางเดือนทำให้ feature เห็น usage หลัง cutoff (leak) — "
+            "ใช้ suggested cutoff จาก API หรือ snap เป็นวันที่ 1 ของเดือน"
+        )
     horizon_days = int(run["horizon_days"])
     created_by = run.get("created_by")
     label_config = LabelConfig(cutoff_date=cutoff, horizon_days=horizon_days)
@@ -393,7 +399,10 @@ def _train_and_register_churn(
     beats_baselines = selected["beats_baselines"]
     calibration_ok = selected["calibration_ok"]
     champion_check = selected["champion_check"]
-    _save_leakage_report(training_run_id, source_id, datasets, leakage)
+    _save_leakage_report(
+        training_run_id, source_id, datasets.cutoff_date, "churn",
+        int(len(dataset.frame)), leakage,
+    )
 
     progress("churn: artifacts + registry", 48)
     # Headline baseline = best baseline of a DIFFERENT algorithm. When the
@@ -628,6 +637,14 @@ def _train_and_register_clv(
         )
         print(f"clv backtest {bt.cutoff_date.date()}: spearman {champion_metrics['spearman']}")
 
+    progress("clv: leakage tests", 68)
+    leakage = run_regression_leakage_suite(dataset, preprocessor, ["future_revenue_6m"])
+    _save_leakage_report(
+        training_run_id, source_id_of(training_run_id), datasets.cutoff_date, "clv",
+        int(len(dataset.frame)), leakage,
+    )
+    print(f"clv: leakage suite passed={leakage['passed']}")
+
     baseline_best_test = max(
         result.baseline_metrics[name]["test"]["spearman"] for name in CLV_BASELINE_NAMES
     )
@@ -765,7 +782,7 @@ def _train_and_register_clv(
     artifact_ok = verify_artifact_load(artifact_path, dataset.features("test").head(5))
     promote, reason = _promotion_decision(
         beats_baselines=beats_baselines,
-        leakage_passed=True,
+        leakage_passed=leakage["passed"],
         calibration_ok=True,
         calibration_label="ไม่มีเกณฑ์ calibration สำหรับ CLV",
         artifact_ok=artifact_ok,
@@ -784,7 +801,7 @@ def _train_and_register_clv(
         "baseline_name": baseline_best_name,
         "baseline_value": baseline_best_test,
         "calibration_ece": None,
-        "leakage_passed": True,
+        "leakage_passed": bool(leakage["passed"]),
         "promoted": promote,
         "promote_reason": reason,
         "new_version": version if promote else None,
@@ -833,6 +850,16 @@ def _train_and_register_credit(
             }
         )
         print(f"credit backtest {bt.cutoff_date.date()}: coverage {champion_metrics['coverage_p10_p90']}")
+
+    progress("credit: leakage tests", 88)
+    leakage = run_regression_leakage_suite(
+        dataset, preprocessor, ["future_credit_usage_30d", "future_credit_usage_90d"]
+    )
+    _save_leakage_report(
+        training_run_id, source_id_of(training_run_id), datasets.cutoff_date, "credit",
+        int(len(dataset.frame)), leakage,
+    )
+    print(f"credit: leakage suite passed={leakage['passed']}")
 
     # Gate per TRAINING §11: the credit PRIMARY metric is interval coverage —
     # baselines are point forecasts with no interval, so gate №3 compares MAE
@@ -981,7 +1008,7 @@ def _train_and_register_credit(
     artifact_ok = verify_artifact_load(artifact_path, dataset.features("test").head(5))
     promote, reason = _promotion_decision(
         beats_baselines=beats_baselines,
-        leakage_passed=True,
+        leakage_passed=leakage["passed"],
         calibration_ok=coverage_ok,
         calibration_label=f"coverage {coverage:.3f} (เป้า 0.75–0.90, zero-heavy target)",
         artifact_ok=artifact_ok,
@@ -1000,7 +1027,7 @@ def _train_and_register_credit(
         "baseline_name": baseline_best_name,
         "baseline_value": 0.0,
         "calibration_ece": None,
-        "leakage_passed": True,
+        "leakage_passed": bool(leakage["passed"]),
         "promoted": promote,
         "promote_reason": reason,
         "new_version": version if promote else None,
@@ -1098,7 +1125,9 @@ def source_id_of(training_run_id: str) -> str:
 def _save_leakage_report(
     training_run_id: str,
     source_id: str,
-    datasets: CutoffDatasets,
+    cutoff_date: pd.Timestamp,
+    model_type: str,
+    row_count: int,
     leakage: dict[str, Any],
 ) -> None:
     checks = [
@@ -1116,8 +1145,8 @@ def _save_leakage_report(
         source_kind="train",
         validation_type="leakage",
         status="passed" if leakage["passed"] else "failed",
-        row_count=int(len(datasets.churn.frame)),
-        stats={"cutoff_date": str(datasets.cutoff_date.date())},
+        row_count=row_count,
+        stats={"cutoff_date": str(cutoff_date.date()), "model_type": model_type},
         anomalies=[
             {"check": check["name"], "message": check["message"]}
             for check in leakage["checks"]
