@@ -138,7 +138,10 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                 >
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">Account</p>
-                    <p className="num text-[18px] font-semibold text-[color:var(--ink-2)]">{r.acc_id}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="num text-[18px] font-semibold text-[color:var(--ink-2)]">{r.acc_id}</p>
+                      {isHighValueTier(r.customer_value_tier) ? <HighValueMedal /> : null}
+                    </div>
                     <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
                       {r.n_purchases ?? 0} purchases
                     </p>
@@ -150,7 +153,7 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                   <MetricCell
                     label="Churn"
                     value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
-                    valueClassName="text-[#fc4c02]"
+                    valueColor="#fc4c02"
                   />
                   <MetricCell label="CLV 6m" value={r.predicted_clv_6m != null ? formatCurrency(r.predicted_clv_6m) : "—"} alignRight />
                   <MetricCell label="Revenue" value={r.total_revenue != null ? formatCurrency(r.total_revenue) : "—"} alignRight />
@@ -211,19 +214,22 @@ function MetricCell({
   label,
   value,
   alignRight = false,
-  valueClassName = "",
+  valueColor,
 }: {
   label: string;
   value: string;
   alignRight?: boolean;
-  valueClassName?: string;
+  valueColor?: string;
 }) {
   return (
     <div className={alignRight ? "xl:text-right" : undefined}>
       <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">
         {label}
       </p>
-      <p className={`num mt-0.5 text-[14px] font-semibold xl:mt-0 ${valueClassName}`}>
+      <p
+        className="num mt-0.5 text-[14px] font-semibold xl:mt-0"
+        style={valueColor ? { color: valueColor } : undefined}
+      >
         {value}
       </p>
     </div>
@@ -247,6 +253,20 @@ function lifecycleButtonColor(stage: string): string {
   if (stage === "Churned") return "#fc4c02";
   if (stage === "Ghost") return "#9ca3af";
   return "#9ca3af";
+}
+
+function isHighValueTier(tier: string | null): boolean {
+  return (tier ?? "").toLowerCase().includes("high");
+}
+
+function HighValueMedal() {
+  return (
+    <img
+      src="/assets/images/achievement-award-medal-icon.svg"
+      alt="High value customer"
+      className="h-5 w-5 shrink-0"
+    />
+  );
 }
 
 function FilterChip({

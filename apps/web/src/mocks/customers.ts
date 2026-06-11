@@ -10,6 +10,7 @@ export type CustomerRow = Pick<
   | "sub_stage"
   | "churn_probability"
   | "predicted_clv_6m"
+  | "customer_value_tier"
   | "n_purchases"
   | "total_revenue"
 >;
@@ -21,6 +22,7 @@ const MOCK_ROWS: CustomerRow[] = [
     sub_stage: "At-risk paid",
     churn_probability: 0.68,
     predicted_clv_6m: 42800,
+    customer_value_tier: "high",
     n_purchases: 7,
     total_revenue: 126400,
   },
@@ -30,6 +32,7 @@ const MOCK_ROWS: CustomerRow[] = [
     sub_stage: "Engaged free",
     churn_probability: null,
     predicted_clv_6m: null,
+    customer_value_tier: "none",
     n_purchases: 0,
     total_revenue: 0,
   },
@@ -39,6 +42,7 @@ const MOCK_ROWS: CustomerRow[] = [
     sub_stage: "Paid churned",
     churn_probability: null,
     predicted_clv_6m: 0,
+    customer_value_tier: "none",
     n_purchases: 3,
     total_revenue: 48500,
   },
@@ -48,6 +52,7 @@ const MOCK_ROWS: CustomerRow[] = [
     sub_stage: "Never activated",
     churn_probability: null,
     predicted_clv_6m: null,
+    customer_value_tier: "none",
     n_purchases: 0,
     total_revenue: 0,
   },

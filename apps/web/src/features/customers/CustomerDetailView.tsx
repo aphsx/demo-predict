@@ -10,7 +10,6 @@ import {
   Sparkles,
   TrendingDown,
 } from "lucide-react";
-import { StatusPill, lifecycleTone } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 import type { CustomerDetail, UsageTrendPoint } from "@/mocks/customer-detail";
@@ -42,11 +41,14 @@ export function CustomerDetailView({
           <Panel title={`Account ${accId}`}>
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
-                <StatusPill tone={lifecycleTone(customer.lifecycle_stage)}>
-                  {customer.lifecycle_stage}
-                </StatusPill>
-                <StatusPill tone="neutral" dot={false}>{customer.sub_stage}</StatusPill>
-                <StatusPill tone="danger">{customer.churn_risk_level} churn risk</StatusPill>
+                {isHighValueTier(customer.customer_value_tier) ? <HighValueMedal /> : null}
+                <LifecycleDetailPill stage={customer.lifecycle_stage} />
+                <SolidDetailPill color="#9ca3af">
+                  {customer.sub_stage}
+                </SolidDetailPill>
+                <SolidDetailPill color="#fc4c02" dot>
+                  {customer.churn_risk_level} churn risk
+                </SolidDetailPill>
               </div>
 
               <div className="space-y-3">
@@ -72,9 +74,9 @@ export function CustomerDetailView({
           <Panel title="Reason and message">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
-                <StatusPill tone="ok">{customer.ai_status}</StatusPill>
-                <StatusPill tone="neutral" dot={false}>{customer.ai_model}</StatusPill>
-                <StatusPill tone="neutral" dot={false}>Mockup</StatusPill>
+                <SolidDetailPill color="#006bff" dot>{customer.ai_status}</SolidDetailPill>
+                <SolidDetailPill color="#9ca3af">{customer.ai_model}</SolidDetailPill>
+                <SolidDetailPill color="#9ca3af">Mockup</SolidDetailPill>
               </div>
 
               <div className="rounded-[24px] border border-gray-200 bg-white p-4">
@@ -86,14 +88,7 @@ export function CustomerDetailView({
                 </p>
               </div>
 
-              <div className="rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
-                <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-600)]">
-                  <MessageSquareText size={14} /> Suggested message
-                </div>
-                <p className="text-[12.5px] leading-6 text-[color:var(--ink-3)]">
-                  {customer.ai_recommended_message}
-                </p>
-              </div>
+             
             </div>
           </Panel>
         </div>
@@ -239,17 +234,17 @@ function UsageLineChart({
         })}
 
         <path d={areaPath} fill="url(#usageAreaGradient)" />
-        <path d={path} fill="none" stroke="url(#usageLineGradient)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" />
+        <path d={path} fill="none" stroke="url(#usageLineGradient)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
 
         {points.map((point) => (
           <g key={point.month}>
             <circle
               cx={point.x}
               cy={point.y}
-              r="7"
+              r="4"
               fill="white"
               stroke={usageOrangeColor((point.usage - min) / range)}
-              strokeWidth="3"
+              strokeWidth="2.5"
             />
             <text x={point.x} y={height - 6} textAnchor="middle" className="fill-gray-400 text-[11px] font-semibold">
               {point.month}
@@ -371,6 +366,59 @@ function FactCard({ label, value }: { label: string; value: string }) {
         {value}
       </p>
     </div>
+  );
+}
+
+function LifecycleDetailPill({ stage }: { stage: string }) {
+  return (
+    <span
+      className="inline-flex h-[26px] w-[92px] items-center justify-center rounded-full text-[11px] font-semibold text-white"
+      style={{ backgroundColor: lifecycleColor(stage) }}
+    >
+      {stage}
+    </span>
+  );
+}
+
+function SolidDetailPill({
+  children,
+  color,
+  dot = false,
+}: {
+  children: ReactNode;
+  color: string;
+  dot?: boolean;
+}) {
+  return (
+    <span
+      className="inline-flex h-[26px] items-center justify-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold text-white"
+      style={{ backgroundColor: color }}
+    >
+      {dot ? <span className="h-1.5 w-1.5 rounded-full bg-white/90" /> : null}
+      {children}
+    </span>
+  );
+}
+
+function lifecycleColor(stage: string): string {
+  if (stage === "Active Paid") return "#006bff";
+  if (stage === "Active Free") return "#ffa400";
+  if (stage === "Churned") return "#fc4c02";
+  if (stage === "Ghost") return "#9ca3af";
+  return "#9ca3af";
+}
+
+function isHighValueTier(tier: string | null): boolean {
+  return (tier ?? "").toLowerCase().includes("high");
+}
+
+function HighValueMedal() {
+  return (
+    <img
+      src="/assets/images/achievement-award-medal-icon.svg"
+      alt="High value customer"
+      className="h-6 w-6 shrink-0"
+    />
   );
 }
 
