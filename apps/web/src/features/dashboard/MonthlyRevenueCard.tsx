@@ -2,9 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   XAxis,
   YAxis,
@@ -104,7 +105,17 @@ function MonthlyUsageChart({
         >
           <div className="h-full min-h-[228px] min-w-full" style={{ width: chartWidthPct }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+              <ComposedChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="smsUsageArea" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor={SMS_COLOR} stopOpacity="0.22" />
+                    <stop offset="100%" stopColor={SMS_COLOR} stopOpacity="0" />
+                  </linearGradient>
+                  <linearGradient id="emailUsageArea" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor={EMAIL_COLOR} stopOpacity="0.24" />
+                    <stop offset="100%" stopColor={EMAIL_COLOR} stopOpacity="0" />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid vertical={false} stroke="#f3f4f6" />
                 <XAxis
                   dataKey="month"
@@ -120,25 +131,39 @@ function MonthlyUsageChart({
                   hide
                   domain={[minUsage, maxUsage]}
                 />
+                <Area
+                  type="linear"
+                  dataKey="sms_usage"
+                  stroke="none"
+                  fill="url(#smsUsageArea)"
+                  isAnimationActive={false}
+                />
+                <Area
+                  type="linear"
+                  dataKey="email_usage"
+                  stroke="none"
+                  fill="url(#emailUsageArea)"
+                  isAnimationActive={false}
+                />
                 <Line
                   type="linear"
                   dataKey="sms_usage"
                   stroke={SMS_COLOR}
-                  strokeWidth={4}
-                  dot={{ r: 4, strokeWidth: 2.5, fill: "white" }}
-                  activeDot={{ r: 6 }}
+                  strokeWidth={5}
+                  dot={{ r: 7, strokeWidth: 3, fill: "white" }}
+                  activeDot={{ r: 8 }}
                   isAnimationActive={false}
                 />
                 <Line
                   type="linear"
                   dataKey="email_usage"
                   stroke={EMAIL_COLOR}
-                  strokeWidth={4}
-                  dot={{ r: 4, strokeWidth: 2.5, fill: "white" }}
-                  activeDot={{ r: 6 }}
+                  strokeWidth={5}
+                  dot={{ r: 7, strokeWidth: 3, fill: "white" }}
+                  activeDot={{ r: 8 }}
                   isAnimationActive={false}
                 />
-              </LineChart>
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>

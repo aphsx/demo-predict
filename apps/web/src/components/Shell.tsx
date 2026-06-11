@@ -31,6 +31,13 @@ export default function Shell({ children }: { children: ReactNode }) {
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
+          <header className="flex h-16 shrink-0 items-center justify-end border-b border-gray-200 bg-white px-8">
+            <img
+              src="/assets/images/1moby.png"
+              alt="1Moby"
+              className="block h-12 w-auto"
+            />
+          </header>
           <main className="flex-1 overflow-y-auto">
             <Suspense fallback={<div className="p-8 text-[color:var(--ink-5)]">Loading…</div>}>
               {children}

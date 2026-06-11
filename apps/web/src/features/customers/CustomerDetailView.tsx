@@ -14,6 +14,8 @@ import { formatCurrency } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 import type { CustomerDetail, UsageTrendPoint } from "@/mocks/customer-detail";
 
+const CHURN_COLOR = "#fc4c02";
+const CHURN_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${CHURN_COLOR} 100%)`;
 const BLUE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 100%)`;
 
 export function CustomerDetailView({
@@ -46,13 +48,13 @@ export function CustomerDetailView({
                 <SolidDetailPill color="#9ca3af">
                   {customer.sub_stage}
                 </SolidDetailPill>
-                <SolidDetailPill color="#fc4c02" dot>
+                <SolidDetailPill color={CHURN_COLOR} dot>
                   {customer.churn_risk_level} churn risk
                 </SolidDetailPill>
               </div>
 
               <div className="space-y-3">
-                <HeroMetric label="Churn" value={`${churnPct.toFixed(1)}%`} hint={customer.churn_risk_level} />
+                <HeroMetric label="Churn" value={`${churnPct.toFixed(1)}%`} hint={customer.churn_risk_level} valueColor={CHURN_COLOR} />
                 <HeroMetric label="CLV 6m" value={formatCurrency(customer.predicted_clv_6m)} hint={customer.customer_value_tier} />
                 <HeroMetric label="Revenue risk" value={formatCurrency(customer.revenue_at_risk)} hint="at risk" />
                 <HeroMetric label="Top-up risk" value={`${customer.estimated_days_until_topup}d`} hint={customer.credit_urgency_level} />
@@ -60,7 +62,7 @@ export function CustomerDetailView({
             </div>
           </Panel>
 
-          <Panel title="Declining activity is the main warning">
+          <Panel title="การใช้งาน Credit">
             <div className="space-y-4">
               <UsageLineChart data={usageTrend} compact />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -110,7 +112,8 @@ export function CustomerDetailView({
                 label="Churn pressure"
                 value={`${churnPct.toFixed(1)}%`}
                 meterValue={churnPct}
-                gradient={BLUE_GRADIENT}
+                gradient={CHURN_GRADIENT}
+                accentColor={CHURN_COLOR}
               />
               <SignalRow
                 icon={Gem}
@@ -153,7 +156,17 @@ function Panel({
   );
 }
 
-function HeroMetric({ label, value, hint }: { label: string; value: string; hint: string }) {
+function HeroMetric({
+  label,
+  value,
+  hint,
+  valueColor,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  valueColor?: string;
+}) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-[22px] border border-gray-200 bg-white/80 px-4 py-3.5 shadow-[var(--shadow-1)]">
       <div className="min-w-0">
@@ -162,7 +175,10 @@ function HeroMetric({ label, value, hint }: { label: string; value: string; hint
         </p>
         <p className="mt-1 truncate text-[11.5px] text-[color:var(--ink-4)]">{hint}</p>
       </div>
-      <p className="num shrink-0 whitespace-nowrap text-right text-[22px] font-semibold tracking-[-0.03em]">
+      <p
+        className="num shrink-0 whitespace-nowrap text-right text-[22px] font-semibold tracking-[-0.03em]"
+        style={valueColor ? { color: valueColor } : undefined}
+      >
         {value}
       </p>
     </div>
@@ -234,17 +250,17 @@ function UsageLineChart({
         })}
 
         <path d={areaPath} fill="url(#usageAreaGradient)" />
-        <path d={path} fill="none" stroke="url(#usageLineGradient)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
+        <path d={path} fill="none" stroke="url(#usageLineGradient)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" />
 
         {points.map((point) => (
           <g key={point.month}>
             <circle
               cx={point.x}
               cy={point.y}
-              r="4"
+              r="7"
               fill="white"
               stroke={usageOrangeColor((point.usage - min) / range)}
-              strokeWidth="2.5"
+              strokeWidth="3"
             />
             <text x={point.x} y={height - 6} textAnchor="middle" className="fill-gray-400 text-[11px] font-semibold">
               {point.month}
@@ -265,12 +281,14 @@ function SignalRow({
   value,
   meterValue,
   gradient,
+  accentColor = MOBY_BRAND.blue,
 }: {
   icon: ElementType;
   label: string;
   value: string;
   meterValue: number;
   gradient: string;
+  accentColor?: string;
 }) {
   return (
     <div className="rounded-[24px] border border-gray-200 bg-white p-4">
@@ -281,7 +299,10 @@ function SignalRow({
             {value}
           </p>
         </div>
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gray-50 text-[color:var(--moby-600)]">
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gray-50"
+          style={{ color: accentColor }}
+        >
           <Icon size={17} />
         </span>
       </div>
