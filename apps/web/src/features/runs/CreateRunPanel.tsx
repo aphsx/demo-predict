@@ -2,8 +2,8 @@
 /**
  * Spec §2.5 — create-run section. Source dropdown is limited to
  * import_status === "ready"; run name defaults to `{source.name} — {today}`;
- * cutoff defaults to today (the API-suggested cutoff is not exposed yet —
- * helper text tells the user what to pick).
+ * cutoff defaults to the API-suggested cutoff of the selected source
+ * (latest observed activity — the user can still override it).
  */
 
 import { useEffect, useState } from "react";
@@ -11,7 +11,7 @@ import { Play, RefreshCw } from "lucide-react";
 import { MockBadge } from "@/components/RunSelector";
 import { SectionCard } from "@/components/ui";
 import type { PredictDataSource } from "@/lib/api";
-import { createPredictionRun } from "@/lib/mlApi";
+import { createPredictionRun, fetchPredictSuggestedCutoff } from "@/lib/mlApi";
 import { getDisplayError } from "@/lib/ui-error";
 import { defaultRunName, todayISO } from "./runs-utils";
 
@@ -32,6 +32,7 @@ export function CreateRunPanel({
   const [name, setName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
   const [cutoff, setCutoff] = useState(todayISO());
+  const [cutoffTouched, setCutoffTouched] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +50,30 @@ export function CreateRunPanel({
     setName(selected ? defaultRunName(selected.name) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, nameTouched]);
+
+  // Default cutoff = API-suggested cutoff of the selected source (spec §2.5).
+  // The user can still override it; switching source re-applies the suggestion.
+  useEffect(() => {
+    if (!selected) return;
+    setCutoffTouched(false);
+    let alive = true;
+    fetchPredictSuggestedCutoff(selected.id)
+      .then(({ suggested_cutoff }) => {
+        if (!alive) return;
+        // apply unless the user already edited the cutoff for this source
+        setCutoffTouched((touched) => {
+          if (!touched) setCutoff(suggested_cutoff);
+          return touched;
+        });
+      })
+      .catch(() => {
+        // keep the "today" fallback if the suggestion is unavailable
+      });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   const canCreate = Boolean(sourceId && name.trim() && cutoff && !creating);
 
@@ -118,12 +143,15 @@ export function CreateRunPanel({
           <input
             type="date"
             value={cutoff}
-            onChange={(e) => setCutoff(e.target.value)}
+            onChange={(e) => {
+              setCutoff(e.target.value);
+              setCutoffTouched(true);
+            }}
             disabled={creating || readySources.length === 0}
             className={inputCls}
           />
           <p className="text-[11px] text-[color:var(--ink-5)] mt-1">
-            ควรเป็นวันที่ข้อมูลล่าสุดของ source
+            ค่าแนะนำจากวันที่ข้อมูลล่าสุดของ source — แก้ไขได้
           </p>
         </div>
         <div className="md:pt-5">

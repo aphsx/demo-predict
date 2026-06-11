@@ -1,5 +1,5 @@
 import { TrendingDown } from "lucide-react";
-import type { DashboardOverview } from "@/mocks/dashboard";
+import type { DashboardOverview } from "./types";
 import { formatNumber } from "@/lib/format";
 import { PanelHeader } from "./PanelHeader";
 import { CHURN_PALETTE, TEXT_SAFE } from "./palette";

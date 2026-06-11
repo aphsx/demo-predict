@@ -11,32 +11,36 @@ import {
 } from "recharts";
 import { formatMonth } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
-import type { MonthlyRevenuePoint } from "@/mocks/monthly-revenue";
+import type { MonthlyRevenuePoint } from "./types";
 import { TEXT_SAFE } from "./palette";
 
-const SMS_COLOR = MOBY_BRAND.blue;
-const EMAIL_COLOR = MOBY_BRAND.orangeWarm;
+const REVENUE_COLOR = MOBY_BRAND.blue;
 const FOCUSED_MONTHS = 6;
 
+/**
+ * Monthly revenue — actual data (spec §2.1): sum of `predict_clean_payments`
+ * per month from the run summary. 100% observed, no model involved.
+ */
 export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
   const latest = data[data.length - 1];
-  const latestTotal = latest.sms_usage + latest.email_usage;
-  const usageValues = data.flatMap((point) => [point.sms_usage, point.email_usage]);
-  const maxUsage = Math.max(...usageValues);
-  const minUsage = Math.min(...usageValues);
-  const chartMaxUsage = Math.ceil(maxUsage / 100_000) * 100_000;
-  const chartMinUsage = Math.max(0, Math.floor(minUsage / 100_000) * 100_000);
+  const revenueValues = data.map((point) => point.revenue);
+  const maxRevenue = Math.max(...revenueValues, 0);
+  const minRevenue = Math.min(...revenueValues, maxRevenue);
+  const chartMaxRevenue = Math.max(100_000, Math.ceil(maxRevenue / 100_000) * 100_000);
+  const chartMinRevenue = Math.max(0, Math.floor(minRevenue / 100_000) * 100_000);
+  const avgRevenue =
+    data.length > 0 ? data.reduce((sum, point) => sum + point.revenue, 0) / data.length : 0;
 
   return (
     <section className="surface-elev flex h-full min-w-0 flex-col overflow-hidden">
       <header className="flex min-w-0 items-start justify-between gap-4 border-b border-gray-100 px-4 py-3 sm:px-5">
         <div className="min-w-0">
           <h2 className={`type-section-title text-[20px] leading-tight ${TEXT_SAFE}`}>
-            Credit usage monthly
+            Monthly revenue
           </h2>
         </div>
         <span className="type-meta shrink-0 rounded-full bg-gray-50 px-3 py-1 text-[11px] font-normal">
-          2 channels
+          actual · ไม่ผ่านโมเดล
         </span>
       </header>
 
@@ -45,40 +49,34 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
           <div className="flex min-w-0 items-start justify-between gap-4">
             <div className="min-w-0">
               <p className={`type-label ${TEXT_SAFE}`}>
-                Monthly usage
+                Latest month
               </p>
               <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
                 <span className="num text-[26px] leading-none text-[color:var(--ink-1)] tabular-nums">
-                  {formatCompactCredits(latestTotal)}
+                  ฿{formatCompactAmount(latest?.revenue ?? 0)}
                 </span>
                 <span className="type-muted text-[14px] font-medium leading-none">
-                  credits
+                  {latest ? `· ${latest.payments} payments` : ""}
                 </span>
               </div>
               <p className="type-meta mt-1 text-[11px] font-normal">
-                latest total · {latest.month}
+                {latest ? `${latest.month} · avg ฿${formatCompactAmount(avgRevenue)}/mo` : "ไม่มีข้อมูลการจ่ายเงิน"}
               </p>
             </div>
-            <div className="flex shrink-0 items-start justify-end gap-2">
-              <div className={`type-meta flex items-center justify-end gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-[10px] font-normal uppercase tracking-[.08em] ${TEXT_SAFE}`}>
-                <LegendDot color={SMS_COLOR} label="SMS" />
-                <LegendDot color={EMAIL_COLOR} label="Email" />
+            <div className="flex items-center gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-right">
+              <div className="type-label !text-[10px]">
+                Scale
               </div>
-              <div className="flex items-center gap-2 rounded-full bg-gray-50 px-3 py-1.5 text-right">
-                <div className="type-label !text-[10px]">
-                  Scale
-                </div>
-                <div className="num text-[12px] text-[color:var(--ink-1)] tabular-nums">
-                  {formatCompactCredits(chartMinUsage)}-{formatCompactCredits(chartMaxUsage)}
-                </div>
+              <div className="num text-[12px] text-[color:var(--ink-1)] tabular-nums">
+                ฿{formatCompactAmount(chartMinRevenue)}-{formatCompactAmount(chartMaxRevenue)}
               </div>
             </div>
           </div>
 
-          <MonthlyUsageChart
+          <MonthlyRevenueChart
             data={data}
-            maxUsage={chartMaxUsage}
-            minUsage={chartMinUsage}
+            maxRevenue={chartMaxRevenue}
+            minRevenue={chartMinRevenue}
           />
         </div>
       </div>
@@ -86,18 +84,18 @@ export function MonthlyRevenueCard({ data }: { data: MonthlyRevenuePoint[] }) {
   );
 }
 
-function MonthlyUsageChart({
+function MonthlyRevenueChart({
   data,
-  maxUsage,
-  minUsage,
+  maxRevenue,
+  minRevenue,
 }: {
   data: MonthlyRevenuePoint[];
-  maxUsage: number;
-  minUsage: number;
+  maxRevenue: number;
+  minRevenue: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const chartWidthPct = `${Math.max(1, data.length / FOCUSED_MONTHS) * 100}%`;
-  const midUsage = Math.round((maxUsage + minUsage) / 2);
+  const midRevenue = Math.round((maxRevenue + minRevenue) / 2);
 
   useEffect(() => {
     const viewport = scrollRef.current;
@@ -110,15 +108,15 @@ function MonthlyUsageChart({
     <div className="mt-4 min-h-0 min-w-0 flex-1">
       <div className="grid h-full min-h-[228px] min-w-0 grid-cols-[42px_minmax(0,1fr)] gap-2">
         <div className="type-muted grid h-[calc(100%-28px)] min-h-[200px] grid-rows-[auto_1fr_auto] pt-1 text-right text-[10px] font-normal">
-          <span>{formatCompactCredits(maxUsage)}</span>
-          <span className="self-center">{formatCompactCredits(midUsage)}</span>
-          <span>{formatCompactCredits(minUsage)}</span>
+          <span>{formatCompactAmount(maxRevenue)}</span>
+          <span className="self-center">{formatCompactAmount(midRevenue)}</span>
+          <span>{formatCompactAmount(minRevenue)}</span>
         </div>
 
         <div
           ref={scrollRef}
           className="min-w-0 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          aria-label="Scrollable 6-month SMS and Email usage trend"
+          aria-label="Scrollable monthly actual revenue trend"
         >
           <div className="h-full min-h-[228px] min-w-full" style={{ width: chartWidthPct }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -136,21 +134,12 @@ function MonthlyUsageChart({
                 />
                 <YAxis
                   hide
-                  domain={[minUsage, maxUsage]}
+                  domain={[minRevenue, maxRevenue]}
                 />
                 <Line
                   type="linear"
-                  dataKey="sms_usage"
-                  stroke={SMS_COLOR}
-                  strokeWidth={4}
-                  dot={{ r: 4, strokeWidth: 2.5, fill: "white" }}
-                  activeDot={{ r: 6 }}
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="linear"
-                  dataKey="email_usage"
-                  stroke={EMAIL_COLOR}
+                  dataKey="revenue"
+                  stroke={REVENUE_COLOR}
                   strokeWidth={4}
                   dot={{ r: 4, strokeWidth: 2.5, fill: "white" }}
                   activeDot={{ r: 6 }}
@@ -165,16 +154,7 @@ function MonthlyUsageChart({
   );
 }
 
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-      {label}
-    </span>
-  );
-}
-
-function formatCompactCredits(value: number): string {
+function formatCompactAmount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
   return Math.round(value).toLocaleString();

@@ -5,7 +5,7 @@
  * (summary KPIs, matrix, top priority) is DERIVED from those rows with the
  * same formulas the real prediction runner will use
  * (docs/ML-V2-OUTPUT-CONTRACT.md §5), so numbers agree across pages.
- * Served by lib/mlApi.ts while NEXT_PUBLIC_ML_API_READY !== "1".
+ * Served by lib/mlApi.ts while NEXT_PUBLIC_ML_USE_MOCK === "1" (offline dev).
  */
 
 import type {
@@ -140,6 +140,29 @@ export function mockCreatePredictionRun(input: {
     run.finished_at = new Date().toISOString();
   }, 6000);
   return run;
+}
+
+/** Same shape as GET /predict-data-sources/:id/suggested-cutoff. */
+export function mockPredictSuggestedCutoff(_sourceId: string): { suggested_cutoff: string } {
+  return { suggested_cutoff: new Date().toISOString().slice(0, 10) };
+}
+
+/** Same shape as GET /train-data-sources/:id/suggested-cutoff (Gate 3). */
+export function mockTrainSuggestedCutoff(_sourceId: string): {
+  suggested_cutoff: string;
+  latest_data_date: string;
+  horizon_days: number;
+} {
+  const horizonDays = 180;
+  const latest = new Date();
+  const cutoff = new Date(latest);
+  // suggested = (latest activity + 1 day) - horizon, mirroring the API SQL
+  cutoff.setDate(cutoff.getDate() + 1 - horizonDays);
+  return {
+    suggested_cutoff: cutoff.toISOString().slice(0, 10),
+    latest_data_date: latest.toISOString().slice(0, 10),
+    horizon_days: horizonDays,
+  };
 }
 
 export function mockDeletePredictionRun(id: string): void {

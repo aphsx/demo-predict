@@ -2,14 +2,16 @@
  * ML v2 API client — contract per docs/ML-V2-DASHBOARD-SPEC.md §4/§7 and
  * docs/ML-V2-OUTPUT-CONTRACT.md.
  *
- * The Elysia prediction/training routes are not mounted yet. Until
- * NEXT_PUBLIC_ML_API_READY=1, every function serves from the deterministic
- * mock in src/mocks/ml.ts (single source — summary numbers are derived from
- * the same customer rows the table pages show). Views must surface IS_ML_MOCK
- * as a "Demo data" badge.
+ * The Elysia routes ARE mounted: /prediction-runs, /training-runs,
+ * /model-performance, plus /predict-data-sources/:id/suggested-cutoff and
+ * /train-data-sources/:id/suggested-cutoff — the real API is the default.
+ * Set NEXT_PUBLIC_ML_USE_MOCK=1 for offline dev: every function then serves
+ * from the deterministic mock in src/mocks/ml.ts (single source — summary
+ * numbers are derived from the same customer rows the table pages show).
+ * Views must surface IS_ML_MOCK as a "Demo data" badge.
  */
 
-export const IS_ML_MOCK = process.env.NEXT_PUBLIC_ML_API_READY !== "1";
+export const IS_ML_MOCK = process.env.NEXT_PUBLIC_ML_USE_MOCK === "1";
 
 // ── Contract types ──────────────────────────────────────────────
 
@@ -344,6 +346,22 @@ export async function fetchCustomerPayments(
 ): Promise<PaymentEvent[]> {
   if (IS_ML_MOCK) return (await mock()).mockPayments(runId, Number(accId));
   return getJson(`/api/prediction-runs/${runId}/customers/${accId}/payments`);
+}
+
+/** GET /predict-data-sources/:id/suggested-cutoff — day after latest observed activity (spec §2.5). */
+export async function fetchPredictSuggestedCutoff(
+  sourceId: string
+): Promise<{ suggested_cutoff: string }> {
+  if (IS_ML_MOCK) return (await mock()).mockPredictSuggestedCutoff(sourceId);
+  return getJson(`/api/predict-data-sources/${sourceId}/suggested-cutoff`);
+}
+
+/** GET /train-data-sources/:id/suggested-cutoff — Gate 3 suggestion (spec §2.6). */
+export async function fetchTrainSuggestedCutoff(
+  sourceId: string
+): Promise<{ suggested_cutoff: string; latest_data_date: string; horizon_days: number }> {
+  if (IS_ML_MOCK) return (await mock()).mockTrainSuggestedCutoff(sourceId);
+  return getJson(`/api/train-data-sources/${sourceId}/suggested-cutoff`);
 }
 
 export async function fetchModelPerformance(): Promise<ModelPerfEntry[]> {

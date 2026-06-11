@@ -13,7 +13,36 @@ import {
 import { StatusPill, lifecycleTone } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
-import type { CustomerDetail, UsageTrendPoint } from "@/mocks/customer-detail";
+
+/** Subset of ML output fields shown on /customers/[id] (nullable = model not eligible). */
+export type CustomerDetail = {
+  lifecycle_stage: string;
+  sub_stage: string;
+  churn_probability: number | null;
+  churn_risk_level: string | null;
+  predicted_clv_6m: number | null;
+  customer_value_tier: string;
+  revenue_at_risk: number | null;
+  predicted_credit_usage_30d: number | null;
+  predicted_credit_usage_90d: number | null;
+  estimated_days_until_topup: number | null;
+  credit_urgency_level: string | null;
+  usage_trend: string;
+  days_since_last_activity: number | null;
+  n_purchases: number;
+  total_revenue: number;
+  avg_transaction_value: number | null;
+  ever_paid: boolean;
+  ai_status: string;
+  ai_explanation: string | null;
+  ai_recommended_message: string | null;
+  output_status: string;
+};
+
+export type UsageTrendPoint = {
+  month: string;
+  usage: number;
+};
 
 const BLUE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 100%)`;
 
@@ -26,7 +55,9 @@ export function CustomerDetailView({
   customer: CustomerDetail;
   usageTrend: UsageTrendPoint[];
 }) {
-  const churnPct = customer.churn_probability * 100;
+  const churnPct = customer.churn_probability != null ? customer.churn_probability * 100 : null;
+  // Spec §5: render the AI card only when ai_status === 'completed' — never an empty/mock card.
+  const showAiPanel = customer.ai_status === "completed" && customer.ai_explanation != null;
 
   return (
     <main className="px-8 py-6 pb-12">
@@ -38,7 +69,13 @@ export function CustomerDetailView({
       </Link>
 
       <section className="mt-4 space-y-5">
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)_340px]">
+        <div
+          className={`grid grid-cols-1 gap-5 ${
+            showAiPanel
+              ? "xl:grid-cols-[390px_minmax(0,1fr)_340px]"
+              : "xl:grid-cols-[390px_minmax(0,1fr)]"
+          }`}
+        >
           <Panel title={`Account ${accId}`}>
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -46,56 +83,98 @@ export function CustomerDetailView({
                   {customer.lifecycle_stage}
                 </StatusPill>
                 <StatusPill tone="neutral" dot={false}>{customer.sub_stage}</StatusPill>
-                <StatusPill tone="danger">{customer.churn_risk_level} churn risk</StatusPill>
+                {customer.churn_risk_level && (
+                  <StatusPill tone="danger">{customer.churn_risk_level} churn risk</StatusPill>
+                )}
               </div>
 
               <div className="space-y-3">
-                <HeroMetric label="Churn" value={`${churnPct.toFixed(1)}%`} hint={customer.churn_risk_level} />
-                <HeroMetric label="CLV 6m" value={formatCurrency(customer.predicted_clv_6m)} hint={customer.customer_value_tier} />
-                <HeroMetric label="Revenue risk" value={formatCurrency(customer.revenue_at_risk)} hint="at risk" />
-                <HeroMetric label="Top-up risk" value={`${customer.estimated_days_until_topup}d`} hint={customer.credit_urgency_level} />
+                <HeroMetric
+                  label="Churn"
+                  value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
+                  hint={customer.churn_risk_level ?? "not eligible"}
+                />
+                <HeroMetric
+                  label="CLV 6m"
+                  value={customer.predicted_clv_6m != null ? formatCurrency(customer.predicted_clv_6m) : "—"}
+                  hint={customer.customer_value_tier}
+                />
+                <HeroMetric
+                  label="Revenue risk"
+                  value={customer.revenue_at_risk != null ? formatCurrency(customer.revenue_at_risk) : "—"}
+                  hint="at risk"
+                />
+                <HeroMetric
+                  label="Top-up risk"
+                  value={
+                    customer.estimated_days_until_topup != null
+                      ? `${customer.estimated_days_until_topup}d`
+                      : "—"
+                  }
+                  hint={customer.credit_urgency_level ?? "ข้อมูลไม่พอประเมิน"}
+                />
               </div>
             </div>
           </Panel>
 
-          <Panel title="Declining activity is the main warning">
+          <Panel title="Usage trend (actual)">
             <div className="space-y-4">
-              <UsageLineChart data={usageTrend} compact />
+              {usageTrend.length > 0 ? (
+                <UsageLineChart data={usageTrend} compact />
+              ) : (
+                <p className="rounded-[24px] border border-gray-200 bg-white p-4 text-[13px] text-[color:var(--ink-4)]">
+                  ไม่มีข้อมูล usage ของลูกค้ารายนี้
+                </p>
+              )}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <MiniStatCard label="Latest usage" value={usageTrend.at(-1)?.usage.toLocaleString() ?? "—"} hint={`${usageTrend.at(-1)?.month ?? ""} credits`} />
-                <MiniStatCard label="Peak usage" value={Math.max(...usageTrend.map((point) => point.usage)).toLocaleString()} hint="last 6 months" />
-                <MiniStatCard label="Inactive" value={`${customer.days_since_last_activity}d`} hint="since last activity" />
+                <MiniStatCard
+                  label="Peak usage"
+                  value={
+                    usageTrend.length > 0
+                      ? Math.max(...usageTrend.map((point) => point.usage)).toLocaleString()
+                      : "—"
+                  }
+                  hint="last 12 months"
+                />
+                <MiniStatCard
+                  label="Inactive"
+                  value={customer.days_since_last_activity != null ? `${customer.days_since_last_activity}d` : "—"}
+                  hint="since last activity (นับจาก cutoff)"
+                />
               </div>
             </div>
           </Panel>
 
-          <Panel title="Reason and message">
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusPill tone="ok">{customer.ai_status}</StatusPill>
-                <StatusPill tone="neutral" dot={false}>{customer.ai_model}</StatusPill>
-                <StatusPill tone="neutral" dot={false}>Mockup</StatusPill>
-              </div>
-
-              <div className="rounded-[24px] border border-gray-200 bg-white p-4">
-                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--ink-1)]">
-                  <Sparkles size={14} /> Why now
+          {showAiPanel && (
+            <Panel title="Reason and message">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill tone="ok">{customer.ai_status}</StatusPill>
                 </div>
-                <p className="text-[13px] leading-6 text-[color:var(--ink-3)]">
-                  {customer.ai_explanation}
-                </p>
-              </div>
 
-              <div className="rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
-                <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-600)]">
-                  <MessageSquareText size={14} /> Suggested message
+                <div className="rounded-[24px] border border-gray-200 bg-white p-4">
+                  <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--ink-1)]">
+                    <Sparkles size={14} /> Why now
+                  </div>
+                  <p className="text-[13px] leading-6 text-[color:var(--ink-3)]">
+                    {customer.ai_explanation}
+                  </p>
                 </div>
-                <p className="text-[12.5px] leading-6 text-[color:var(--ink-3)]">
-                  {customer.ai_recommended_message}
-                </p>
+
+                {customer.ai_recommended_message && (
+                  <div className="rounded-[24px] border border-[color:var(--moby-100)] bg-[color:var(--moby-50)] p-4">
+                    <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--moby-600)]">
+                      <MessageSquareText size={14} /> Suggested message
+                    </div>
+                    <p className="text-[12.5px] leading-6 text-[color:var(--ink-3)]">
+                      {customer.ai_recommended_message}
+                    </p>
+                  </div>
+                )}
               </div>
-            </div>
-          </Panel>
+            </Panel>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -104,7 +183,10 @@ export function CustomerDetailView({
               <FactCard label="Lifecycle" value={customer.lifecycle_stage} />
               <FactCard label="Purchases" value={customer.n_purchases.toLocaleString()} />
               <FactCard label="Total revenue" value={formatCurrency(customer.total_revenue)} />
-              <FactCard label="Avg txn" value={formatCurrency(customer.avg_transaction_value)} />
+              <FactCard
+                label="Avg txn"
+                value={customer.avg_transaction_value != null ? formatCurrency(customer.avg_transaction_value) : "—"}
+              />
             </div>
           </Panel>
 
@@ -113,22 +195,26 @@ export function CustomerDetailView({
               <SignalRow
                 icon={TrendingDown}
                 label="Churn pressure"
-                value={`${churnPct.toFixed(1)}%`}
-                meterValue={churnPct}
+                value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
+                meterValue={churnPct ?? 0}
                 gradient={BLUE_GRADIENT}
               />
               <SignalRow
                 icon={Gem}
                 label="Commercial value"
-                value={formatCurrency(customer.predicted_clv_6m)}
-                meterValue={78}
+                value={customer.predicted_clv_6m != null ? formatCurrency(customer.predicted_clv_6m) : "—"}
+                meterValue={customer.predicted_clv_6m != null ? 78 : 0}
                 gradient={BLUE_GRADIENT}
               />
               <SignalRow
                 icon={CreditCard}
                 label="Credit demand"
-                value={customer.predicted_credit_usage_90d.toLocaleString()}
-                meterValue={100}
+                value={
+                  customer.predicted_credit_usage_90d != null
+                    ? customer.predicted_credit_usage_90d.toLocaleString()
+                    : "—"
+                }
+                meterValue={customer.predicted_credit_usage_90d != null ? 100 : 0}
                 gradient={BLUE_GRADIENT}
               />
             </div>

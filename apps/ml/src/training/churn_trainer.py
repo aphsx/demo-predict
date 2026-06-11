@@ -200,7 +200,9 @@ def finalize_churn_candidate(
     high_threshold = float(np.clip(f2_threshold, 0.35, 0.85))
     thresholds = risk_thresholds_from_high(high_threshold)
 
-    validation_metrics = churn_metrics(training.y_trval, calibrated_oof, threshold=thresholds["high"])
+    validation_metrics = churn_metrics(
+        training.y_trval, calibrated_oof, threshold=thresholds["high"], ranking_scores=oof
+    )
 
     # ── Final model: refit candidate config on train∪validation ───
     final_model = clone_candidate_model(candidate, training.y_trval)
@@ -208,8 +210,11 @@ def finalize_churn_candidate(
     candidate.model = final_model
 
     # ── Test split (§6) ───────────────────────────────────────────
-    calibrated_test = calibrator.transform(candidate.predict_raw(training.x_test))
-    test_metrics = churn_metrics(training.y_test, calibrated_test, threshold=thresholds["high"])
+    raw_test = candidate.predict_raw(training.x_test)
+    calibrated_test = calibrator.transform(raw_test)
+    test_metrics = churn_metrics(
+        training.y_test, calibrated_test, threshold=thresholds["high"], ranking_scores=raw_test
+    )
 
     # ── Baselines evaluated with the same harness (§12) ──────────
     baseline_metrics = _evaluate_baselines(
@@ -230,7 +235,7 @@ def finalize_churn_candidate(
         test_metrics=test_metrics,
         calibration_json=calibration_curve_points(training.y_test, calibrated_test),
         confusion_json=confusion_at_threshold(training.y_test, calibrated_test, thresholds["high"]),
-        lift_table_json=lift_table(training.y_test, calibrated_test),
+        lift_table_json=lift_table(training.y_test, raw_test),
         feature_importance=_feature_importance(candidate, training.x_trval),
         baseline_metrics=baseline_metrics,
         preprocessor=training.preprocessor,
@@ -257,8 +262,11 @@ def refit_for_backtest(
     champion: ChurnCandidate,
     dataset: SplitFrame,
     preprocessor: PreprocessorConfig,
-) -> tuple[np.ndarray, np.ndarray, float]:
-    """Refit champion config at an older cutoff with the same OOF protocol."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Refit champion config at an older cutoff with the same OOF protocol.
+
+    Returns (y_test, calibrated_probs, raw_scores, high_threshold).
+    """
 
     x_train = transform_features(dataset.features("train"), preprocessor)
     x_val = transform_features(dataset.features("validation"), preprocessor)
@@ -277,8 +285,9 @@ def refit_for_backtest(
 
     model = clone_candidate_model(champion, y_trval)
     model.fit(x_trval, y_trval)
-    probs = calibrator.transform(model.predict_proba(x_test)[:, 1])
-    return y_test, probs, high_threshold
+    raw_scores = model.predict_proba(x_test)[:, 1]
+    probs = calibrator.transform(raw_scores)
+    return y_test, probs, raw_scores, high_threshold
 
 
 def _cv_oof(

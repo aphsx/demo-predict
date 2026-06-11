@@ -1,4 +1,4 @@
-import type { DashboardOverview } from "@/mocks/dashboard";
+import type { DashboardOverview } from "./types";
 import { formatNumber } from "@/lib/format";
 import { LIFECYCLE_PALETTE, TEXT_SAFE } from "./palette";
 

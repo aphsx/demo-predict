@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Play, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { MockBadge } from "@/components/RunSelector";
 import { StatusPill } from "@/components/ui";
@@ -9,21 +9,35 @@ import { IMPORT_ACCENT } from "./training-utils";
 import { DEFAULT_HORIZON_DAYS, defaultCutoffDate } from "./training-run-utils";
 
 const CUTOFF_HELPER =
-  "ค่าแนะนำ: วันล่าสุดที่ horizon 180 วันยังครบ — ระบบจริงจะคำนวณจาก Gate 3";
+  "ค่าแนะนำจาก Gate 3: วันล่าสุดที่ horizon 180 วันยังครบ — แก้ไขได้";
 
 export function TrainRunPanel({
   selectedSource,
+  suggestedCutoff,
   creating,
   onTrain,
 }: {
   /** dataset chosen in the table above — null until a "ready" dataset is selected */
   selectedSource: TrainDataSource | null;
+  /** Gate 3 suggestion from the API for the selected dataset (null while loading / unavailable) */
+  suggestedCutoff: string | null;
   creating: boolean;
   onTrain: (input: { cutoff_date: string; horizon_days: number }) => void;
 }) {
   const [cutoffDate, setCutoffDate] = useState<string>(defaultCutoffDate);
+  const [cutoffTouched, setCutoffTouched] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [horizonDays, setHorizonDays] = useState<number>(DEFAULT_HORIZON_DAYS);
+
+  // Selecting another dataset re-applies that dataset's suggestion.
+  useEffect(() => {
+    setCutoffTouched(false);
+  }, [selectedSource?.id]);
+
+  // Default cutoff = API (Gate 3) suggestion, until the user edits the field.
+  useEffect(() => {
+    if (suggestedCutoff && !cutoffTouched) setCutoffDate(suggestedCutoff);
+  }, [suggestedCutoff, cutoffTouched]);
 
   const horizonValid = Number.isInteger(horizonDays) && horizonDays > 0;
   const canTrain = Boolean(selectedSource) && Boolean(cutoffDate) && horizonValid && !creating;
@@ -79,7 +93,10 @@ export function TrainRunPanel({
             <input
               type="date"
               value={cutoffDate}
-              onChange={(e) => setCutoffDate(e.target.value)}
+              onChange={(e) => {
+                setCutoffDate(e.target.value);
+                setCutoffTouched(true);
+              }}
               className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
             />
             <span className="mt-1.5 block text-[12px] leading-5 text-[color:var(--ink-4)]">

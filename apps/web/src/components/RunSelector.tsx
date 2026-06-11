@@ -43,7 +43,7 @@ export function MockBadge() {
     <span
       className="pill"
       style={{ color: "#9a3412", background: "#fff7ed", border: "1px solid #fed7aa" }}
-      title="Prediction API ยังไม่เปิดใช้ — ตัวเลขทั้งหมดเป็นข้อมูลตัวอย่างรูปแบบเดียวกับ contract จริง"
+      title="โหมด mock (NEXT_PUBLIC_ML_USE_MOCK=1) — ตัวเลขทั้งหมดเป็นข้อมูลตัวอย่างรูปแบบเดียวกับ contract จริง"
     >
       <FlaskConical size={11} />
       Demo data

@@ -1,5 +1,5 @@
 import { CreditCard } from "lucide-react";
-import type { DashboardOverview } from "@/mocks/dashboard";
+import type { DashboardOverview } from "./types";
 import { formatCredits, formatNumber } from "@/lib/format";
 import { PanelHeader } from "./PanelHeader";
 import { RiskListRow } from "./RiskCard";

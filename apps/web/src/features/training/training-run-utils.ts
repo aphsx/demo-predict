@@ -8,7 +8,7 @@ export const MODEL_TYPE_LABELS: Record<TrainingRunResult["model_type"], string> 
   credit: "Credit",
 };
 
-/** Default cutoff = today minus the default horizon (placeholder for Gate 3 suggestion). */
+/** Fallback cutoff = today minus the default horizon (used until the Gate 3 suggestion loads). */
 export function defaultCutoffDate(): string {
   const d = new Date();
   d.setDate(d.getDate() - DEFAULT_HORIZON_DAYS);

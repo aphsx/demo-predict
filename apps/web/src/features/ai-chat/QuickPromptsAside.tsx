@@ -46,8 +46,7 @@ export function QuickPromptsAside({
         <div className="space-y-1">
           {[
             { href: "/customers", label: "Customers" },
-            { href: "/playbooks", label: "Action Queue" },
-            { href: "/model-performance", label: "Model Health" },
+            { href: "/model-performance", label: "Model Performance" },
           ].map(({ href, label }) => (
             <Link key={href} href={href}
               className="flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-[12.5px]
@@ -67,7 +66,7 @@ export function QuickPromptsAside({
             "คำนวณ CLV",
             "ติดตาม lifecycle",
             "ตรวจ model drift",
-            "แนะนำ playbook",
+            "แนะนำ action เร่งด่วน",
           ].map(cap => (
             <li key={cap} className="flex min-w-0 items-start gap-2 text-[11.5px] text-[color:var(--ink-3)]">
               <span className="w-1 h-1 rounded-full bg-[color:var(--moby-500)] mt-1.5 shrink-0" />

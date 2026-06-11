@@ -31,21 +31,30 @@ def churn_metrics(
     y_prob: np.ndarray,
     *,
     threshold: float,
+    ranking_scores: np.ndarray | None = None,
 ) -> dict[str, float]:
-    """All churn metrics at a given operating threshold."""
+    """All churn metrics at a given operating threshold.
+
+    `y_prob` must be the calibrated probabilities (Brier/ECE/threshold
+    metrics). Pass the model's RAW scores as `ranking_scores` for the ranking
+    metrics — isotonic calibration flattens scores into plateaus and the
+    resulting ties artificially depress PR-AUC/lift, which would make the
+    candidate look worse than the uncalibrated baselines it is gated against.
+    """
 
     y_true = np.asarray(y_true, dtype=int)
     y_prob = np.asarray(y_prob, dtype=float)
+    ranking = y_prob if ranking_scores is None else np.asarray(ranking_scores, dtype=float)
     y_pred = (y_prob >= threshold).astype(int)
 
     return {
-        "pr_auc": float(average_precision_score(y_true, y_prob)),
-        "roc_auc": float(roc_auc_score(y_true, y_prob)) if len(np.unique(y_true)) > 1 else float("nan"),
+        "pr_auc": float(average_precision_score(y_true, ranking)),
+        "roc_auc": float(roc_auc_score(y_true, ranking)) if len(np.unique(y_true)) > 1 else float("nan"),
         "f1": float(f1_score(y_true, y_pred, zero_division=0)),
         "precision": float(precision_score(y_true, y_pred, zero_division=0)),
         "recall": float(recall_score(y_true, y_pred, zero_division=0)),
-        "recall_at_top10pct": recall_at_top_k(y_true, y_prob, 0.10),
-        "lift_at_top10pct": lift_at_top_k(y_true, y_prob, 0.10),
+        "recall_at_top10pct": recall_at_top_k(y_true, ranking, 0.10),
+        "lift_at_top10pct": lift_at_top_k(y_true, ranking, 0.10),
         "brier": float(brier_score_loss(y_true, np.clip(y_prob, 0.0, 1.0))),
         "ece": expected_calibration_error(y_true, y_prob),
         "threshold": float(threshold),

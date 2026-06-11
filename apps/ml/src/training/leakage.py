@@ -101,12 +101,14 @@ def _target_shuffle(
     model = clone_candidate_model(champion, shuffled)
     model = _fit_quiet(model, x_train, shuffled, x_val, y_val)
     auc = float(roc_auc_score(y_val, model.predict_proba(x_val)[:, 1]))
-    passed = abs(auc - 0.5) <= SHUFFLE_AUC_TOLERANCE
+    # One-sided: pipeline leakage shows up as the shuffled model STILL scoring
+    # well. AUC below 0.5 is chance anti-correlation, not leakage.
+    passed = auc <= 0.5 + SHUFFLE_AUC_TOLERANCE
     return {
         "name": "target_shuffle",
         "passed": passed,
         "severity": "fail",
-        "message": f"shuffled-label validation AUC = {auc:.4f} (expected ≈ 0.50 ± {SHUFFLE_AUC_TOLERANCE})",
+        "message": f"shuffled-label validation AUC = {auc:.4f} (leak ถ้า > {0.5 + SHUFFLE_AUC_TOLERANCE})",
         "details": {"auc": round(auc, 4)},
     }
 

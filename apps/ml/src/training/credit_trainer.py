@@ -37,6 +37,10 @@ QUANTILES = [0.10, 0.25, 0.50, 0.75, 0.90]
 HORIZONS = {30: "future_credit_usage_30d", 90: "future_credit_usage_90d"}
 CREDIT_TRIALS = 30
 TARGET_COVERAGE = 0.80
+# Cap on the learned log-ratio correction (≈ ×0.22 – ×4.5 of the carryover
+# anchor). Uncapped corrections extrapolate badly on whale customers at older
+# backtest cutoffs and blow up MAE.
+CORRECTION_CLIP = 1.5
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -60,7 +64,14 @@ class CreditHorizonModels:
         anchor_log: np.ndarray,
     ) -> dict[float, np.ndarray]:
         raw = {
-            alpha: np.clip(np.expm1(self.models[alpha].predict(x) + anchor_log), 0, None)
+            alpha: np.clip(
+                np.expm1(
+                    np.clip(self.models[alpha].predict(x), -CORRECTION_CLIP, CORRECTION_CLIP)
+                    + anchor_log
+                ),
+                0,
+                None,
+            )
             for alpha in QUANTILES
         }
         stacked = np.sort(np.vstack([raw[alpha] for alpha in QUANTILES]), axis=0)
@@ -275,7 +286,14 @@ def _calibrate_widening(
     """Pick a widening multiplier so validation p10–p90 coverage ≈ 80% (§11)."""
 
     raw = {
-        alpha: np.clip(np.expm1(models[alpha].predict(x_val) + anchor_val), 0, None)
+        alpha: np.clip(
+            np.expm1(
+                np.clip(models[alpha].predict(x_val), -CORRECTION_CLIP, CORRECTION_CLIP)
+                + anchor_val
+            ),
+            0,
+            None,
+        )
         for alpha in QUANTILES
     }
     stacked = np.sort(np.vstack([raw[alpha] for alpha in QUANTILES]), axis=0)
