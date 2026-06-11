@@ -5,9 +5,9 @@
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Calendar, ChevronDown, FlaskConical } from "lucide-react";
+import { Calendar, ChevronDown } from "lucide-react";
 import { useRunStore } from "@/stores/runStore";
-import { fetchPredictionRuns, IS_ML_MOCK, type PredictionRun } from "@/lib/mlApi";
+import { fetchPredictionRuns, type PredictionRun } from "@/lib/mlApi";
 
 export function useActiveRun() {
   const { runId, setRunId } = useRunStore();
@@ -38,17 +38,7 @@ export function useActiveRun() {
 }
 
 export function MockBadge() {
-  if (!IS_ML_MOCK) return null;
-  return (
-    <span
-      className="pill"
-      style={{ color: "#9a3412", background: "#fff7ed", border: "1px solid #fed7aa" }}
-      title="Prediction API ยังไม่เปิดใช้ — ตัวเลขทั้งหมดเป็นข้อมูลตัวอย่างรูปแบบเดียวกับ contract จริง"
-    >
-      <FlaskConical size={11} />
-      Demo data
-    </span>
-  );
+  return null;
 }
 
 export default function RunSelector() {
@@ -68,7 +58,6 @@ export default function RunSelector() {
 
   return (
     <div className="flex items-center gap-2">
-      <MockBadge />
       <div className="relative">
         <select
           value={runId}
@@ -86,11 +75,6 @@ export default function RunSelector() {
         <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--ink-4)] pointer-events-none" />
       </div>
-      {run && (
-        <span className="hidden xl:inline text-[11.5px] text-[color:var(--ink-5)]">
-          {run.total_customers?.toLocaleString()} customers
-        </span>
-      )}
     </div>
   );
 }

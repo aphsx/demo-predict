@@ -42,7 +42,7 @@ export function MetricCard({
         </p>
         <span
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-          style={{ backgroundColor: toneStyles.softBg, color: toneStyles.color }}
+          style={{ backgroundColor: toneStyles.color, color: "#ffffff" }}
         >
           <Icon className="h-4 w-4" />
         </span>
@@ -52,10 +52,6 @@ export function MetricCard({
         <h3 className={`num truncate text-left text-[30px] leading-none text-[color:var(--ink-1)] tabular-nums ${TEXT_SAFE}`}>
           {value}
         </h3>
-        <div
-          className="mt-4 h-px w-full opacity-25"
-          style={{ backgroundColor: toneStyles.color }}
-        />
       </div>
 
       <div className="mt-auto flex min-w-0 items-center justify-between gap-3 pt-3">
@@ -65,7 +61,7 @@ export function MetricCard({
         {href ? (
           <span
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-            style={{ backgroundColor: toneStyles.softBg, color: toneStyles.color }}
+            style={{ backgroundColor: toneStyles.color, color: "#ffffff" }}
           >
             <ArrowRight size={13} />
           </span>

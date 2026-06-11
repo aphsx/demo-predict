@@ -8,7 +8,6 @@
 
 import { useEffect, useState } from "react";
 import { Play, RefreshCw } from "lucide-react";
-import { MockBadge } from "@/components/RunSelector";
 import { SectionCard } from "@/components/ui";
 import type { PredictDataSource } from "@/lib/api";
 import { createPredictionRun } from "@/lib/mlApi";
@@ -16,7 +15,7 @@ import { getDisplayError } from "@/lib/ui-error";
 import { defaultRunName, todayISO } from "./runs-utils";
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px] text-[color:var(--ink-2)] disabled:opacity-50";
+  "w-full h-9 px-3 rounded-lg border border-[color:var(--moby-100)] bg-white text-[13px] text-[color:var(--ink-2)] outline-none transition-colors focus:border-[color:var(--moby-500)] disabled:opacity-50";
 const labelCls = "text-[11px] font-medium text-[color:var(--ink-4)] block mb-1";
 
 export function CreateRunPanel({
@@ -74,12 +73,7 @@ export function CreateRunPanel({
 
   return (
     <SectionCard
-      title={
-        <span className="inline-flex items-center gap-2">
-          Create prediction run
-          <MockBadge />
-        </span>
-      }
+      title="Create prediction run"
       hint="เลือก source ที่ import เสร็จแล้ว ระบบจะรัน lifecycle / churn / CLV / credit forecast ให้ทุกลูกค้า"
     >
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_auto] gap-3 items-start">
@@ -131,7 +125,7 @@ export function CreateRunPanel({
             type="button"
             onClick={() => void create()}
             disabled={!canCreate}
-            className="h-9 px-3.5 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] inline-flex items-center gap-1.5 disabled:opacity-50"
+            className="h-9 px-3.5 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-800)] inline-flex items-center gap-1.5 disabled:opacity-50"
           >
             {creating ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
             {creating ? "Creating…" : "Create run"}

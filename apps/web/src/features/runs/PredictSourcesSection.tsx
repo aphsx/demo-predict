@@ -18,7 +18,7 @@ import {
 } from "./runs-utils";
 
 const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px] text-[color:var(--ink-2)]";
+  "w-full h-9 px-3 rounded-lg border border-[color:var(--moby-100)] bg-white text-[13px] text-[color:var(--ink-2)] outline-none transition-colors focus:border-[color:var(--moby-500)]";
 const labelCls = "text-[11px] font-medium text-[color:var(--ink-4)] block mb-1";
 
 function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
@@ -49,7 +49,7 @@ function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
   };
 
   return (
-    <div className="surface-soft p-4">
+    <div className="rounded-lg border border-[color:var(--moby-100)] bg-[color:var(--moby-50)]/50 p-4">
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
         <div>
           <label className={labelCls}>Excel file (.xlsx)</label>
@@ -58,7 +58,7 @@ function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={busy}
-              className="h-9 px-3 rounded-lg border border-gray-200 bg-white text-[12.5px] text-[color:var(--ink-2)] hover:bg-gray-50 inline-flex items-center gap-1.5 disabled:opacity-40 shrink-0"
+              className="h-9 px-3 rounded-lg border border-[color:var(--moby-100)] bg-white text-[12.5px] text-[color:var(--moby-600)] hover:border-[color:var(--moby-200)] inline-flex items-center gap-1.5 disabled:opacity-40 shrink-0"
             >
               <FileSpreadsheet size={13} />
               เลือกไฟล์
@@ -106,7 +106,7 @@ function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
           type="button"
           onClick={() => void doImport()}
           disabled={busy || !file}
-          className="h-9 px-3.5 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-700)] inline-flex items-center gap-1.5 disabled:opacity-50"
+          className="h-9 px-3.5 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-800)] inline-flex items-center gap-1.5 disabled:opacity-50"
         >
           {busy ? <RefreshCw size={13} className="animate-spin" /> : <UploadCloud size={13} />}
           {busy ? "Importing…" : "Import"}

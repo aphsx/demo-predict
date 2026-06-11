@@ -203,16 +203,9 @@ export function TrainingView() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
                     New dataset
                   </p>
-                  <h2 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
-                    Import new workbook
-                  </h2>
-                  <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
-                    ตั้งชื่อ dataset, เลือก Excel fixed-schema แล้วให้ระบบ import raw และ clean data อัตโนมัติ
-                  </p>
+                  
                 </div>
-                <StatusPill tone={canTrain ? "ok" : "neutral"}>
-                  {canTrain ? `${readySources.length} ready` : "No ready dataset"}
-                </StatusPill>
+                
               </div>
 
               <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

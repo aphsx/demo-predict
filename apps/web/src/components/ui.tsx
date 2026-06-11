@@ -9,16 +9,11 @@ import {
 /*  PageHeader (in-page sub header)          */
 /* ────────────────────────────────────────── */
 export function PageHeader({
-  eyebrow, title, actions,
+  title, actions,
 }: { eyebrow?: ReactNode; title: ReactNode; actions?: ReactNode }) {
   return (
     <div className="px-8 pt-6 pb-2 flex items-end justify-between gap-4 flex-wrap">
       <div>
-        {eyebrow && (
-          <div className="type-label mb-1">
-            {eyebrow}
-          </div>
-        )}
         <h2 className="type-display text-[24px] leading-tight">{title}</h2>
       </div>
       <div className="flex items-center gap-2">{actions}</div>

@@ -8,17 +8,24 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, ListChecks, RefreshCw, Trash2 } from "lucide-react";
 import {
-  EmptyState, ProgressMeter, SectionCard, Skeleton, StatusPill,
+  EmptyState, ProgressMeter, SectionCard, Skeleton,
 } from "@/components/ui";
 import { deletePredictionRun, retryPredictionRun, type PredictionRun } from "@/lib/mlApi";
 import { getDisplayError } from "@/lib/ui-error";
 import { useRunStore } from "@/stores/runStore";
-import { formatDate, formatDateTime, runStatusLabel, runStatusTone } from "./runs-utils";
+import { formatDate, formatDateTime, runStatusLabel } from "./runs-utils";
 
 const COLUMNS = 8;
 
 const actionBtnCls =
-  "h-7 px-2.5 rounded-md border border-gray-200 bg-white text-[11.5px] text-[color:var(--ink-2)] hover:bg-gray-50 inline-flex items-center gap-1 disabled:opacity-40";
+  "h-7 px-2.5 rounded-md border border-[color:var(--moby-100)] bg-white text-[11.5px] text-[color:var(--moby-600)] hover:border-[color:var(--moby-200)] inline-flex items-center gap-1 disabled:opacity-40";
+
+const RUN_STATUS_COLOR: Record<PredictionRun["status"], string> = {
+  pending: "#ffa400",
+  in_progress: "#1893f0",
+  completed: "#059669",
+  failed: "#fc4c02",
+};
 
 export function RunsTable({
   runs,
@@ -147,12 +154,7 @@ function RunRow({
         <td className="font-medium text-[color:var(--ink-1)]">{run.name}</td>
         <td>
           <div className="flex items-center gap-2">
-            <StatusPill
-              tone={runStatusTone[run.status]}
-              icon={inProgress ? SpinnerIcon : undefined}
-            >
-              {runStatusLabel[run.status]}
-            </StatusPill>
+            <RunStatusBadge status={run.status} />
             {run.status === "failed" && run.error_message && (
               <span
                 className="text-[11px] text-[color:var(--danger)] truncate max-w-[220px]"
@@ -176,7 +178,7 @@ function RunRow({
               <button
                 type="button"
                 onClick={onOpen}
-                className={`${actionBtnCls} text-[color:var(--ink-3)] hover:text-[color:var(--moby-600)]`}
+                className={actionBtnCls}
               >
                 Open <ChevronRight size={11} />
               </button>
@@ -201,7 +203,7 @@ function RunRow({
       </tr>
       {inProgress && run.progress && (
         <tr>
-          <td colSpan={COLUMNS} className="!py-2 bg-gray-50">
+          <td colSpan={COLUMNS} className="!py-2 bg-[color:var(--moby-50)]">
             <div className="max-w-md">
               <ProgressMeter value={run.progress.pct} label={run.progress.step} />
             </div>
@@ -212,6 +214,16 @@ function RunRow({
   );
 }
 
-function SpinnerIcon({ size }: { size?: number }) {
-  return <RefreshCw size={size ?? 11} className="animate-spin" />;
+function RunStatusBadge({ status }: { status: PredictionRun["status"] }) {
+  const inProgress = status === "in_progress";
+
+  return (
+    <span
+      className="inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold text-white"
+      style={{ backgroundColor: RUN_STATUS_COLOR[status] }}
+    >
+      {inProgress ? <RefreshCw size={12} className="animate-spin" /> : null}
+      {runStatusLabel[status]}
+    </span>
+  );
 }

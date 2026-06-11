@@ -25,6 +25,7 @@ import type {
   UrgencyLevel,
   ValueTier,
 } from "@/lib/mlApi";
+import type { PredictDataSource, PredictImportDone } from "@/lib/api";
 
 // ── Seeded PRNG (mulberry32) — stable across reloads ───────────
 
@@ -105,11 +106,129 @@ const BASE_RUNS: PredictionRun[] = [
   },
 ];
 
+const SOURCE_MANIFEST = {
+  raw: {
+    users_user_profile: 1284,
+    backend_payment: 6420,
+    sms_usage_bc: 9384,
+    sms_usage_api: 7421,
+    sms_usage_otp: 8162,
+    email_usage_bc: 5128,
+    email_usage_api: 4330,
+    email_usage_otp: 2984,
+  },
+  clean: {
+    customers: 1284,
+    payments: 6411,
+    usage: 37409,
+  },
+  skipped: {
+    customers_no_acc_id: 0,
+    payments_no_acc_id: 6,
+    payments_no_date: 3,
+    usage_no_acc_id: 0,
+  },
+  warnings: [],
+};
+
+const BASE_PREDICT_SOURCES: PredictDataSource[] = [
+  {
+    id: "psrc-2026-06",
+    name: "predict-export-2026-06",
+    client_label: "1Moby demo",
+    original_filename: "predict-export-2026-06.xlsx",
+    file_checksum_sha256: "demo-psrc-2026-06",
+    file_size_bytes: 2_840_112,
+    import_status: "ready",
+    imported_at: "2026-06-02T03:05:00+07:00",
+    sheet_manifest: SOURCE_MANIFEST.raw,
+    clean_manifest: SOURCE_MANIFEST,
+    cleaned_at: "2026-06-02T03:07:00+07:00",
+    notes: "Demo source generated from ML v2 output contract",
+    error_message: null,
+    imported_by: "demo",
+    importer_name: "aphisit",
+    importer_email: null,
+    created_at: "2026-06-02T03:05:00+07:00",
+  },
+  {
+    id: "psrc-2026-05",
+    name: "predict-export-2026-05",
+    client_label: "1Moby demo",
+    original_filename: "predict-export-2026-05.xlsx",
+    file_checksum_sha256: "demo-psrc-2026-05",
+    file_size_bytes: 2_716_448,
+    import_status: "ready",
+    imported_at: "2026-05-02T02:49:00+07:00",
+    sheet_manifest: SOURCE_MANIFEST.raw,
+    clean_manifest: SOURCE_MANIFEST,
+    cleaned_at: "2026-05-02T02:51:00+07:00",
+    notes: "Demo source generated from ML v2 output contract",
+    error_message: null,
+    imported_by: "demo",
+    importer_name: "aphisit",
+    importer_email: null,
+    created_at: "2026-05-02T02:49:00+07:00",
+  },
+];
+
 // Session-local additions from mockCreatePredictionRun (not persisted).
 const sessionRuns: PredictionRun[] = [];
+const baseRunOverrides = new Map<string, PredictionRun>();
+const deletedRunIds = new Set<string>();
+const sessionSources: PredictDataSource[] = [];
+
+export function mockPredictDataSources(): PredictDataSource[] {
+  return [...sessionSources, ...BASE_PREDICT_SOURCES];
+}
+
+export function mockPredictDataSource(id: string): PredictDataSource {
+  const source = mockPredictDataSources().find((s) => s.id === id);
+  if (!source) throw new Error("Predict data source not found");
+  return source;
+}
+
+export function mockUploadPredictDataFile(
+  file: File,
+  name?: string,
+  clientLabel?: string,
+  notes?: string
+): PredictImportDone {
+  const sourceId = `psrc-local-${sessionSources.length + 1}`;
+  const source: PredictDataSource = {
+    id: sourceId,
+    name: name?.trim() || file.name.replace(/\.xlsx$/i, ""),
+    client_label: clientLabel?.trim() || null,
+    original_filename: file.name,
+    file_checksum_sha256: `demo-${sourceId}`,
+    file_size_bytes: file.size,
+    import_status: "ready",
+    imported_at: new Date().toISOString(),
+    sheet_manifest: SOURCE_MANIFEST.raw,
+    clean_manifest: SOURCE_MANIFEST,
+    cleaned_at: new Date().toISOString(),
+    notes: notes?.trim() || "Demo import; no file was sent to the prediction API",
+    error_message: null,
+    imported_by: "demo",
+    importer_name: "you",
+    importer_email: null,
+    created_at: new Date().toISOString(),
+  };
+  sessionSources.unshift(source);
+  return {
+    source_id: source.id,
+    import_status: source.import_status,
+    sheet_manifest: SOURCE_MANIFEST.raw,
+    file_checksum_sha256: source.file_checksum_sha256,
+    clean_manifest: SOURCE_MANIFEST,
+  };
+}
 
 export function mockPredictionRuns(): PredictionRun[] {
-  return [...sessionRuns, ...BASE_RUNS];
+  const baseRuns = BASE_RUNS
+    .map((run) => baseRunOverrides.get(run.id) ?? run)
+    .filter((run) => !deletedRunIds.has(run.id));
+  return [...sessionRuns.filter((run) => !deletedRunIds.has(run.id)), ...baseRuns];
 }
 
 export function mockCreatePredictionRun(input: {
@@ -117,12 +236,13 @@ export function mockCreatePredictionRun(input: {
   name: string;
   cutoff_date: string;
 }): PredictionRun {
+  const source = mockPredictDataSources().find((s) => s.id === input.predict_source_id);
   const run: PredictionRun = {
     id: `run-local-${sessionRuns.length + 1}`,
     name: input.name,
     status: "in_progress",
     predict_source_id: input.predict_source_id,
-    predict_source_name: input.predict_source_id,
+    predict_source_name: source?.name ?? input.predict_source_id,
     cutoff_date: input.cutoff_date,
     total_customers: null,
     created_by: "you",
@@ -144,13 +264,37 @@ export function mockCreatePredictionRun(input: {
 
 export function mockDeletePredictionRun(id: string): void {
   const i = sessionRuns.findIndex((r) => r.id === id);
-  if (i >= 0) sessionRuns.splice(i, 1);
+  if (i >= 0) {
+    sessionRuns.splice(i, 1);
+    return;
+  }
+  deletedRunIds.add(id);
+  baseRunOverrides.delete(id);
 }
 
 export function mockRetryPredictionRun(id: string): PredictionRun {
   const run = mockPredictionRuns().find((r) => r.id === id);
   if (!run) throw new Error("Run not found");
-  return { ...run, status: "in_progress", progress: { step: "Re-running gates", pct: 10 } };
+  const rerun: PredictionRun = {
+    ...run,
+    status: "in_progress",
+    error_message: null,
+    finished_at: null,
+    progress: { step: "Re-running gates", pct: 10 },
+  };
+  const sessionIndex = sessionRuns.findIndex((r) => r.id === id);
+  if (sessionIndex >= 0) {
+    sessionRuns[sessionIndex] = rerun;
+  } else {
+    baseRunOverrides.set(id, rerun);
+  }
+  setTimeout(() => {
+    rerun.status = "completed";
+    rerun.progress = null;
+    rerun.total_customers = 1284;
+    rerun.finished_at = new Date().toISOString();
+  }, 6000);
+  return rerun;
 }
 
 // ── Customer population (per run, cached) ──────────────────────

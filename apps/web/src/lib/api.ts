@@ -8,6 +8,12 @@
 
 // Helpers
 
+const IS_ML_MOCK = process.env.NEXT_PUBLIC_ML_API_READY !== "1";
+
+async function mockMl() {
+  return import("@/mocks/ml");
+}
+
 function isApiError(data: unknown): data is { message: string } {
   return (
     typeof data === "object" &&
@@ -553,6 +559,8 @@ export interface PredictImportDone {
 }
 
 export async function fetchPredictDataSources(): Promise<PredictDataSource[]> {
+  if (IS_ML_MOCK) return (await mockMl()).mockPredictDataSources();
+
   const res = await apiFetch("/api/predict-data-sources");
   const body = await parseJson(res);
   if (!res.ok) {
@@ -564,6 +572,8 @@ export async function fetchPredictDataSources(): Promise<PredictDataSource[]> {
 }
 
 export async function fetchPredictDataSource(id: string): Promise<PredictDataSource> {
+  if (IS_ML_MOCK) return (await mockMl()).mockPredictDataSource(id);
+
   const res = await apiFetch(`/api/predict-data-sources/${id}`);
   const body = await parseJson(res);
   if (!res.ok) {
@@ -580,6 +590,10 @@ export async function uploadPredictDataFile(
   client_label?: string,
   notes?: string
 ): Promise<PredictImportDone> {
+  if (IS_ML_MOCK) {
+    return (await mockMl()).mockUploadPredictDataFile(file, name, client_label, notes);
+  }
+
   const fd = new FormData();
   fd.append("file", file);
   if (name) fd.append("name", name);
