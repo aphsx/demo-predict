@@ -1,13 +1,13 @@
 "use client";
 /**
- * Binds /customers/[id] to the active prediction run (spec §2.0/§2.3):
+ * Binds /customers/[id] to the URL-selected or active prediction run (spec §2.0/§2.3):
  * run selector → fetchRunOutput + fetchCustomerUsageMonthly →
  * CustomerDetailView. No mock fallback — empty state links to /runs.
  */
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Database } from "lucide-react";
-import RunSelector, { useActiveRun } from "@/components/RunSelector";
+import { useActiveRun } from "@/components/RunSelector";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { fetchCustomerUsageMonthly, fetchRunOutput } from "@/lib/mlApi";
 import {
@@ -16,19 +16,39 @@ import {
   type UsageTrendPoint,
 } from "./CustomerDetailView";
 
-export function CustomerDetailClient({ accId }: { accId: string }) {
-  const { run, runId, loading: runsLoading } = useActiveRun();
+export function CustomerDetailClient({
+  accId,
+  requestedRunId,
+}: {
+  accId: string;
+  requestedRunId: string;
+}) {
+  const { run, runId, runs, setRunId, loading: runsLoading } = useActiveRun();
+  const effectiveRunId =
+    requestedRunId && runs.some((candidate) => candidate.id === requestedRunId)
+      ? requestedRunId
+      : runId;
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [usageTrend, setUsageTrend] = useState<UsageTrendPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!runId) return;
+    if (!requestedRunId || runsLoading) return;
+    if (runs.some((candidate) => candidate.id === requestedRunId)) {
+      setRunId(requestedRunId);
+    }
+  }, [requestedRunId, runs, runsLoading, setRunId]);
+
+  useEffect(() => {
+    if (!effectiveRunId) return;
     let alive = true;
     setCustomer(null);
     setUsageTrend([]);
     setError(null);
-    Promise.all([fetchRunOutput(runId, accId), fetchCustomerUsageMonthly(runId, accId)])
+    Promise.all([
+      fetchRunOutput(effectiveRunId, accId),
+      fetchCustomerUsageMonthly(effectiveRunId, accId),
+    ])
       .then(([output, usage]) => {
         if (!alive) return;
         setCustomer(output);
@@ -40,15 +60,11 @@ export function CustomerDetailClient({ accId }: { accId: string }) {
     return () => {
       alive = false;
     };
-  }, [runId, accId]);
+  }, [effectiveRunId, accId]);
 
-  const selectorBar = (
-    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 px-8 pt-5">
-      <RunSelector />
-    </div>
-  );
+  const effectiveRun = runs.find((candidate) => candidate.id === effectiveRunId) ?? run;
 
-  if (!runsLoading && !run) {
+  if (!runsLoading && !effectiveRun) {
     return (
       <div className="px-8 py-10">
         <EmptyState
@@ -70,35 +86,31 @@ export function CustomerDetailClient({ accId }: { accId: string }) {
 
   if (error) {
     return (
-      <>
-        {selectorBar}
-        <div className="px-8 py-6">
-          <EmptyState title={`โหลดข้อมูล account ${accId} ไม่สำเร็จ`} hint={error} />
-        </div>
-      </>
+      <div className="px-8 py-6">
+        <EmptyState title={`โหลดข้อมูล account ${accId} ไม่สำเร็จ`} hint={error} />
+      </div>
     );
   }
 
   if (runsLoading || !customer) {
     return (
-      <>
-        {selectorBar}
-        <div className="space-y-5 px-8 py-5">
-          <Skeleton className="h-10 w-48 rounded-xl" />
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-72 rounded-[26px]" />
-            ))}
-          </div>
+      <div className="space-y-5 px-8 py-5">
+        <Skeleton className="h-10 w-48 rounded-xl" />
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-72 rounded-[26px]" />
+          ))}
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
-      {selectorBar}
-      <CustomerDetailView accId={accId} customer={customer} usageTrend={usageTrend} />
-    </>
+    <CustomerDetailView
+      accId={accId}
+      customer={customer}
+      usageTrend={usageTrend}
+      runId={effectiveRun?.id}
+    />
   );
 }

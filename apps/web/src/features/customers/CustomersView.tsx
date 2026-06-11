@@ -47,11 +47,12 @@ interface CustomersViewProps {
   rows: CustomerRow[];
   total: number;
   pending: boolean;
+  runId: string;
   filters: CustomerFilters;
   onFiltersChange: (filters: CustomerFilters) => void;
 }
 
-function Inner({ rows, total, pending, filters, onFiltersChange }: CustomersViewProps) {
+function Inner({ rows, total, pending, runId, filters, onFiltersChange }: CustomersViewProps) {
   const router = useRouter();
 
   const [aiGeneration, setAiGeneration] = useState<Record<number, AiGenerationStatus>>({});
@@ -80,6 +81,8 @@ function Inner({ rows, total, pending, filters, onFiltersChange }: CustomersView
 
   const activeFilters = Object.entries(filters).filter(([_, value]) => value).length;
   const pendingRows = pending;
+  const customerHref = (accId: number) =>
+    `/customers/${accId}?run=${encodeURIComponent(runId)}`;
 
   return (
     <main className="px-8 py-6 pb-12">
@@ -154,9 +157,9 @@ function Inner({ rows, total, pending, filters, onFiltersChange }: CustomersView
                   role="button"
                   tabIndex={0}
                   className="grid w-full cursor-pointer grid-cols-1 gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50 xl:grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_150px_150px_120px] xl:items-center xl:gap-4"
-                  onClick={() => router.push(`/customers/${r.acc_id}`)}
+                  onClick={() => router.push(customerHref(r.acc_id))}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") router.push(`/customers/${r.acc_id}`);
+                    if (event.key === "Enter") router.push(customerHref(r.acc_id));
                   }}
                 >
                   <div>

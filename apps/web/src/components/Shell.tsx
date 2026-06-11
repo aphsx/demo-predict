@@ -5,6 +5,8 @@ import Sidebar from "./Sidebar";
 import AIChatWidget from "./AIChatWidget";
 import { MobyIntroSplash } from "./MobyIntroSplash";
 import { GlobalStatusDialogHost } from "./GlobalStatusDialogHost";
+import RunSelector from "./RunSelector";
+import { RunUrlSync } from "@/stores/RunUrlSync";
 
 const BARE_ROUTES = ["/login"];
 
@@ -20,6 +22,10 @@ const EXACT_ROUTE_TITLES: Record<string, string> = {
 function getRouteTitle(pathname: string) {
   if (pathname.startsWith("/customers/")) return "Customer detail";
   return EXACT_ROUTE_TITLES[pathname];
+}
+
+function shouldShowRunSelector(pathname: string) {
+  return pathname === "/" || pathname === "/customers" || pathname.startsWith("/customers/");
 }
 
 export default function Shell({ children }: { children: ReactNode }) {
@@ -38,23 +44,34 @@ export default function Shell({ children }: { children: ReactNode }) {
 
   const hideWidget = pathname.startsWith("/ai-chat");
   const routeTitle = getRouteTitle(pathname);
+  const showRunSelector = shouldShowRunSelector(pathname);
 
   return (
     <>
       <MobyIntroSplash />
       <GlobalStatusDialogHost />
+      {showRunSelector && (
+        <Suspense fallback={null}>
+          <RunUrlSync />
+        </Suspense>
+      )}
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <header className="flex h-16 shrink-0 items-center justify-between overflow-hidden border-b border-gray-200 bg-white px-8">
+          <header className="flex h-16 shrink-0 items-center justify-between gap-4 overflow-hidden border-b border-gray-200 bg-white px-8">
             {routeTitle ? (
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h1 className="type-display truncate text-[20px] leading-tight">
                   {routeTitle}
                 </h1>
               </div>
             ) : (
-              <div />
+              <div className="min-w-0 flex-1" />
+            )}
+            {showRunSelector && (
+              <div className="min-w-0 shrink-0">
+                <RunSelector />
+              </div>
             )}
           </header>
           <main className="flex-1 overflow-y-auto">

@@ -138,7 +138,6 @@ export function RunsTable({
           open
           tone="warning"
           title="ยืนยันการลบ prediction run"
-          message={`ลบ run "${pendingDeleteRun.name}"? ผลทำนายทั้งหมดของ run นี้จะถูกลบถาวร`}
           confirmLabel="ลบ run"
           cancelLabel="ยกเลิก"
           loading={deletingId === pendingDeleteRun.id}

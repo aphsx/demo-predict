@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Database } from "lucide-react";
-import RunSelector, { useActiveRun } from "@/components/RunSelector";
+import { useActiveRun } from "@/components/RunSelector";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { fetchRunSummary, type RunSummary } from "@/lib/mlApi";
 import { DashboardView } from "./DashboardView";
@@ -29,12 +29,6 @@ export function DashboardClient() {
       alive = false;
     };
   }, [runId]);
-
-  const selectorBar = (
-    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 px-4 pt-5 sm:px-6 lg:px-8">
-      <RunSelector />
-    </div>
-  );
 
   if (!runsLoading && !run) {
     return (
@@ -58,36 +52,25 @@ export function DashboardClient() {
 
   if (error) {
     return (
-      <>
-        {selectorBar}
-        <div className="px-4 py-6 sm:px-6 lg:px-8">
-          <EmptyState title="โหลด summary ไม่สำเร็จ" hint={error} />
-        </div>
-      </>
+      <div className="px-4 py-6 sm:px-6 lg:px-8">
+        <EmptyState title="โหลด summary ไม่สำเร็จ" hint={error} />
+      </div>
     );
   }
 
   if (runsLoading || !summary) {
     return (
-      <>
-        {selectorBar}
-        <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
-          <Skeleton className="h-28 w-full rounded-[26px]" />
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 rounded-[22px]" />
-            ))}
-          </div>
-          <Skeleton className="h-72 w-full rounded-[26px]" />
+      <div className="space-y-5 px-4 py-5 sm:px-6 lg:px-8">
+        <Skeleton className="h-28 w-full rounded-[26px]" />
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-[22px]" />
+          ))}
         </div>
-      </>
+        <Skeleton className="h-72 w-full rounded-[26px]" />
+      </div>
     );
   }
 
-  return (
-    <>
-      {selectorBar}
-      <DashboardView summary={summary} runId={runId} />
-    </>
-  );
+  return <DashboardView summary={summary} runId={runId} />;
 }

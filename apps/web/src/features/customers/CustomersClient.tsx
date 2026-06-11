@@ -13,7 +13,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { Database } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import RunSelector, { useActiveRun } from "@/components/RunSelector";
+import { useActiveRun } from "@/components/RunSelector";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { fetchRunOutputs, type OutputsPage, type OutputsQuery } from "@/lib/mlApi";
 import { CustomersView, type CustomerFilters } from "./CustomersView";
@@ -24,8 +24,13 @@ const PAGE_SIZE = 500;
 const SEARCH_DEBOUNCE_MS = 300;
 
 function CustomersClientInner() {
-  const { run, runId, loading: runsLoading } = useActiveRun();
+  const { run, runId, runs, setRunId, loading: runsLoading } = useActiveRun();
   const sp = useSearchParams();
+  const requestedRunId = sp.get("run") || "";
+  const effectiveRunId =
+    requestedRunId && runs.some((candidate) => candidate.id === requestedRunId)
+      ? requestedRunId
+      : runId;
   const [filters, setFilters] = useState<CustomerFilters>({
     lifecycle_stage: sp.get("lifecycle_stage") || "",
     search: sp.get("search") || "",
@@ -46,11 +51,18 @@ function CustomersClientInner() {
   }, [filters.search]);
 
   useEffect(() => {
-    if (!runId) return;
+    if (!requestedRunId || runsLoading) return;
+    if (runs.some((candidate) => candidate.id === requestedRunId)) {
+      setRunId(requestedRunId);
+    }
+  }, [requestedRunId, runs, runsLoading, setRunId]);
+
+  useEffect(() => {
+    if (!effectiveRunId) return;
     let alive = true;
     setPending(true);
     setError(null);
-    fetchRunOutputs(runId, {
+    fetchRunOutputs(effectiveRunId, {
       page: 1,
       page_size: PAGE_SIZE,
       sort: "priority_score:desc",
@@ -68,18 +80,12 @@ function CustomersClientInner() {
       alive = false;
     };
   }, [
-    runId,
+    effectiveRunId,
     debouncedSearch,
     filters.lifecycle_stage,
     filters.customer_value_tier,
     filters.churn_risk_level,
   ]);
-
-  const selectorBar = (
-    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 px-8 pt-5">
-      <RunSelector />
-    </div>
-  );
 
   if (!runsLoading && !run) {
     return (
@@ -103,39 +109,31 @@ function CustomersClientInner() {
 
   if (error) {
     return (
-      <>
-        {selectorBar}
-        <div className="px-8 py-6">
-          <EmptyState title="โหลดข้อมูลลูกค้าไม่สำเร็จ" hint={error} />
-        </div>
-      </>
+      <div className="px-8 py-6">
+        <EmptyState title="โหลดข้อมูลลูกค้าไม่สำเร็จ" hint={error} />
+      </div>
     );
   }
 
   if (runsLoading || !page) {
     return (
-      <>
-        {selectorBar}
-        <div className="space-y-3 px-8 py-5">
-          {[...Array(8)].map((_, i) => (
-            <Skeleton key={i} className="h-14" />
-          ))}
-        </div>
-      </>
+      <div className="space-y-3 px-8 py-5">
+        {[...Array(8)].map((_, i) => (
+          <Skeleton key={i} className="h-14" />
+        ))}
+      </div>
     );
   }
 
   return (
-    <>
-      {selectorBar}
-      <CustomersView
-        rows={page.data}
-        total={page.total}
-        pending={pending}
-        filters={filters}
-        onFiltersChange={setFilters}
-      />
-    </>
+    <CustomersView
+      rows={page.data}
+      total={page.total}
+      pending={pending}
+      runId={effectiveRunId}
+      filters={filters}
+      onFiltersChange={setFilters}
+    />
   );
 }
 
