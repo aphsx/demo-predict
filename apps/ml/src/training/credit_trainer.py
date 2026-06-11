@@ -11,6 +11,11 @@ magnitude; anchoring on the baseline makes the model learn corrections to it,
 so it starts from baseline accuracy instead of competing against it from
 scratch. Quantiles survive the transform because per-row shifts and
 monotonic maps preserve quantile order.
+
+On top of the anchor, the median correction is SHRUNK toward zero by a factor
+λ ∈ [0, 1] calibrated on validation MAE (`_calibrate_shrinkage`). λ = 0
+degrades gracefully to the carryover baseline, so a regime change in future
+data can make the model fall back to the baseline but never collapse below it.
 """
 
 from __future__ import annotations
@@ -57,26 +62,88 @@ class CreditHorizonModels:
     params: dict[str, Any]
     models: dict[float, lgb.LGBMRegressor]
     interval_widening: float
+    correction_shrinkage: float = 1.0
 
     def predict_quantiles(
         self,
         x: pd.DataFrame,
         anchor_log: np.ndarray,
     ) -> dict[float, np.ndarray]:
-        raw = {
-            alpha: np.clip(
-                np.expm1(
-                    np.clip(self.models[alpha].predict(x), -CORRECTION_CLIP, CORRECTION_CLIP)
-                    + anchor_log
-                ),
-                0,
-                None,
-            )
-            for alpha in QUANTILES
-        }
-        stacked = np.sort(np.vstack([raw[alpha] for alpha in QUANTILES]), axis=0)
-        ordered = {alpha: stacked[i] for i, alpha in enumerate(QUANTILES)}
+        ordered = _ordered_quantile_predictions(
+            self.models, x, anchor_log, getattr(self, "correction_shrinkage", 1.0)
+        )
         return _widen_interval(ordered, self.interval_widening)
+
+
+def _ordered_quantile_predictions(
+    models: dict[float, lgb.LGBMRegressor],
+    x: pd.DataFrame,
+    anchor_log: np.ndarray,
+    shrinkage: float,
+) -> dict[float, np.ndarray]:
+    """Anchor + shrunk correction, mapped back to credit units and sorted.
+
+    Shrinkage moves the LOCATION of all quantiles toward the carryover anchor
+    by scaling the median correction with λ, while keeping each quantile's
+    spread around the median intact (a uniform shift in log space preserves
+    quantile order and interval width).
+    """
+
+    corrections = {alpha: models[alpha].predict(x) for alpha in QUANTILES}
+    location_shift = (shrinkage - 1.0) * corrections[0.50]
+    raw = {
+        alpha: np.clip(
+            np.expm1(
+                np.clip(corrections[alpha] + location_shift, -CORRECTION_CLIP, CORRECTION_CLIP)
+                + anchor_log
+            ),
+            0,
+            None,
+        )
+        for alpha in QUANTILES
+    }
+    # Resolve quantile crossings by pinning p50 (the value the shrinkage was
+    # calibrated on) and clamping outer quantiles to stay monotone around it —
+    # a full sort would silently swap the median away from the tuned forecast.
+    median = raw[0.50]
+    ordered: dict[float, np.ndarray] = {0.50: median}
+    bound = median
+    for alpha in (0.25, 0.10):
+        bound = np.minimum(raw[alpha], bound)
+        ordered[alpha] = bound
+    bound = median
+    for alpha in (0.75, 0.90):
+        bound = np.maximum(raw[alpha], bound)
+        ordered[alpha] = bound
+    return ordered
+
+
+def _calibrate_shrinkage(
+    models: dict[float, lgb.LGBMRegressor],
+    x_val: pd.DataFrame,
+    y_val: np.ndarray,
+    anchor_val: np.ndarray,
+) -> float:
+    """Pick λ ∈ [0, 1] minimizing validation p50 MAE.
+
+    λ = 0 reproduces the carryover baseline exactly, so the point forecast can
+    never be worse than the baseline on the tuning split. This is the guard
+    against regime change in future data: when the learned corrections stop
+    helping, retraining shrinks them away instead of betting on them.
+    """
+
+    c50 = models[0.50].predict(x_val)
+    best_lambda, best_mae = 0.0, float("inf")
+    for lam in np.linspace(0.0, 1.0, 11):
+        predictions = np.clip(
+            np.expm1(np.clip(lam * c50, -CORRECTION_CLIP, CORRECTION_CLIP) + anchor_val),
+            0,
+            None,
+        )
+        mae = float(mean_absolute_error(y_val, predictions))
+        if mae < best_mae - 1e-9:
+            best_mae, best_lambda = mae, float(lam)
+    return best_lambda
 
 
 @dataclass
@@ -174,12 +241,14 @@ def backtest_credit(
             result.params_by_horizon[horizon_days],
             x_train, y_train, anchor_train, x_val, y_val, anchor_val,
         )
-        widening = _calibrate_widening(models, x_val, y_val, anchor_val)
+        shrinkage = _calibrate_shrinkage(models, x_val, y_val, anchor_val)
+        widening = _calibrate_widening(models, x_val, y_val, anchor_val, shrinkage)
         bundle = CreditHorizonModels(
             horizon_days=horizon_days,
             params=result.params_by_horizon[horizon_days],
             models=models,
             interval_widening=widening,
+            correction_shrinkage=shrinkage,
         )
         predictions[horizon_days] = bundle.predict_quantiles(x_test, anchor_test)
 
@@ -244,12 +313,14 @@ def _train_horizon(
     models = _fit_quantile_models(
         best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
     )
-    widening = _calibrate_widening(models, x_val, y_val, anchor_val)
+    shrinkage = _calibrate_shrinkage(models, x_val, y_val, anchor_val)
+    widening = _calibrate_widening(models, x_val, y_val, anchor_val, shrinkage)
     return CreditHorizonModels(
         horizon_days=horizon_days,
         params=best_params,
         models=models,
         interval_widening=widening,
+        correction_shrinkage=shrinkage,
     )
 
 
@@ -282,22 +353,11 @@ def _calibrate_widening(
     x_val: pd.DataFrame,
     y_val: np.ndarray,
     anchor_val: np.ndarray,
+    shrinkage: float = 1.0,
 ) -> float:
     """Pick a widening multiplier so validation p10–p90 coverage ≈ 80% (§11)."""
 
-    raw = {
-        alpha: np.clip(
-            np.expm1(
-                np.clip(models[alpha].predict(x_val), -CORRECTION_CLIP, CORRECTION_CLIP)
-                + anchor_val
-            ),
-            0,
-            None,
-        )
-        for alpha in QUANTILES
-    }
-    stacked = np.sort(np.vstack([raw[alpha] for alpha in QUANTILES]), axis=0)
-    ordered = {alpha: stacked[i] for i, alpha in enumerate(QUANTILES)}
+    ordered = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
 
     best_factor, best_gap = 1.0, float("inf")
     for factor in np.linspace(0.3, 3.0, 28):

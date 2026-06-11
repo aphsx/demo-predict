@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 
@@ -39,6 +40,9 @@ MINIMUM_TIER_A_FEATURES = [
     "bc_usage_share",
     "api_usage_share",
     "otp_usage_share",
+    "credit_added_180d",
+    "credit_balance_proxy",
+    "credit_runway_months",
 ]
 
 ZERO_DEFAULT_FEATURES = {
@@ -59,6 +63,9 @@ ZERO_DEFAULT_FEATURES = {
     "bc_usage_share",
     "api_usage_share",
     "otp_usage_share",
+    "credit_added_180d",
+    "credit_balance_proxy",
+    "credit_runway_months",
 }
 
 NULLABLE_CONTRACT_FEATURES = {
@@ -216,6 +223,24 @@ FEATURE_METADATA: FeatureSchema = {
         "formula": "otp usage / total usage",
         "null_handling": "0 when total usage is zero",
     },
+    "credit_added_180d": {
+        "source": "payments.credit_add",
+        "lookback_window": "180d_before_cutoff",
+        "formula": "sum(credit_add in last 180 days)",
+        "null_handling": "0 when no top-up exists in window",
+    },
+    "credit_balance_proxy": {
+        "source": "payments.credit_add + usage.usage",
+        "lookback_window": "all_history_before_cutoff",
+        "formula": "sum(credit_add) - sum(usage), both before cutoff (PIT-safe; snapshot credit_sms/credit_email are NOT used because they reflect export time)",
+        "null_handling": "0 when no prior activity exists",
+    },
+    "credit_runway_months": {
+        "source": "payments.credit_add + usage.usage",
+        "lookback_window": "all_history_before_cutoff",
+        "formula": "credit_balance_proxy / (usage_recent_90d / 3), clipped to [0, 24]; 24 when balance > 0 with no recent usage",
+        "null_handling": "0 when no prior activity or non-positive balance",
+    },
 }
 
 
@@ -315,6 +340,7 @@ def feature_code_hash() -> str:
             "channel": inspect.getsource(build_channel_features),
             "source": inspect.getsource(build_source_features),
             "activity": inspect.getsource(build_activity_features),
+            "credit": inspect.getsource(build_credit_features),
             "interaction": inspect.getsource(build_interaction_features),
             "feature_schema": inspect.getsource(build_feature_schema),
             "feature_stats": inspect.getsource(build_feature_stats),
@@ -525,6 +551,61 @@ def build_source_features(usage: pd.DataFrame, cutoff_date: pd.Timestamp) -> pd.
     )
 
 
+def build_credit_features(
+    payments: pd.DataFrame,
+    usage: pd.DataFrame,
+    cutoff_date: pd.Timestamp,
+) -> pd.DataFrame:
+    """Build point-in-time credit balance/runway features.
+
+    The snapshot columns on customers (credit_sms/credit_email/expire_*)
+    reflect the export date, not the cutoff, so the balance is reconstructed
+    from pre-cutoff top-ups minus pre-cutoff usage instead.
+    """
+
+    cutoff = _timestamp(cutoff_date)
+    payment_history = _payment_history(payments, cutoff)
+    usage_history = _usage_history(usage, cutoff)
+
+    acc_ids = sorted(
+        set(payment_history["acc_id"].dropna().astype(int))
+        | set(usage_history["acc_id"].dropna().astype(int))
+    )
+    if not acc_ids:
+        return _empty_feature_frame(
+            ["credit_added_180d", "credit_balance_proxy", "credit_runway_months"]
+        )
+
+    credit_add = pd.to_numeric(payment_history["credit_add"], errors="coerce").fillna(0.0)
+    payment_history = payment_history.assign(credit_add_clean=credit_add)
+    recent_topups = payment_history[
+        payment_history["payment_date"] >= cutoff - pd.Timedelta(days=180)
+    ]
+    recent_usage_90 = usage_history[usage_history["period"] >= cutoff - pd.Timedelta(days=90)]
+
+    rows = pd.DataFrame({"acc_id": acc_ids})
+    rows["credit_added_180d"] = (
+        rows["acc_id"].map(recent_topups.groupby("acc_id")["credit_add_clean"].sum()).fillna(0.0)
+    )
+    added_all = rows["acc_id"].map(
+        payment_history.groupby("acc_id")["credit_add_clean"].sum()
+    ).fillna(0.0)
+    used_all = rows["acc_id"].map(usage_history.groupby("acc_id")["usage"].sum()).fillna(0.0)
+    rows["credit_balance_proxy"] = added_all - used_all
+
+    monthly_usage = (
+        rows["acc_id"].map(recent_usage_90.groupby("acc_id")["usage"].sum()).fillna(0.0) / 3.0
+    )
+    runway = np.where(
+        monthly_usage > 0,
+        rows["credit_balance_proxy"] / monthly_usage,
+        np.where(rows["credit_balance_proxy"] > 0, 24.0, 0.0),
+    )
+    rows["credit_runway_months"] = np.clip(runway, 0.0, 24.0)
+
+    return rows[["acc_id", "credit_added_180d", "credit_balance_proxy", "credit_runway_months"]]
+
+
 def build_activity_features(
     payments: pd.DataFrame,
     usage: pd.DataFrame,
@@ -608,6 +689,7 @@ def _build_feature_df(
         build_channel_features(usage, cutoff),
         build_source_features(usage, cutoff),
         build_activity_features(payments, usage, cutoff),
+        build_credit_features(payments, usage, cutoff),
     ]:
         feature_df = feature_df.merge(part, on="acc_id", how="left")
 

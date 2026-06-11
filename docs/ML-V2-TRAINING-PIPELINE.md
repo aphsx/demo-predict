@@ -59,9 +59,11 @@ cutoff C1 (ล่าสุดที่ horizon ครบ) ── final model ─
 | CLV | Active | `future_revenue_6m = Σ amount` ใน 180 วันหลัง cutoff (ศูนย์ได้ — zero-heavy) |
 | Credit | มีประวัติใช้งาน | `future_credit_usage_30d/90d`; `days_until_next_topup` (censored ถ้าไม่ top-up) |
 
-### Features — Tier A 24 ตัว (`features.py` — contract verify แล้ว)
+### Features — Tier A 27 ตัว (`features.py` — contract verify แล้ว)
 
-recency (4), payment RFM (7), usage volume/trend/consistency (8), channel + source shares (5) — รายชื่อเต็มอยู่ใน `MINIMUM_TIER_A_FEATURES`
+recency (4), payment RFM (7), usage volume/trend/consistency (8), channel + source shares (5), credit balance/runway (3) — รายชื่อเต็มอยู่ใน `MINIMUM_TIER_A_FEATURES`
+
+กลุ่ม credit balance/runway สร้างแบบ PIT-safe จาก event history เท่านั้น (`Σ credit_add ก่อน cutoff − Σ usage ก่อน cutoff`) — **ไม่ใช้** snapshot `credit_sms`/`credit_email`/`expire_*` ซึ่งเป็น Tier B
 
 **Tier system (เหตุผลที่เริ่มแค่ Tier A):**
 - **Tier A** — สร้างจาก event history (payments, usage) ย้อนเวลาได้แม่นยำ → ปลอดภัยจาก leak เสมอ
@@ -143,6 +145,12 @@ recency (4), payment RFM (7), usage volume/trend/consistency (8), channel + sour
 **LightGBM quantile** (α = 0.10, 0.25, 0.50, 0.75, 0.90) — แยกโมเดลต่อ quantile ต่อ horizon (30d, 90d)
 เหตุผลที่ต้องเป็น quantile: ธุรกิจต้องการ "ช่วง" ไม่ใช่ตัวเลขเดียว — p10–p90 ใช้บอกความมั่นใจบนหน้า 360 และคุม stock เครดิต / baseline: ค่าใช้จริง 30 วันล่าสุด
 
+กลไกกันแพ้ baseline (เพราะ usage รายเดือนของลูกค้าส่วนใหญ่ persistent มากจน carryover เกือบ optimal):
+
+- **Anchor บน log-ratio:** โมเดลเรียน correction ต่อ carryover (`log1p(y) − log1p(carryover)`) ไม่ใช่ทาย y ตรง ๆ
+- **Correction shrinkage:** คูณ correction ของ p50 ด้วย λ ∈ [0, 1] ที่ tune บน validation MAE — λ = 0 คือ carryover เป๊ะ ดังนั้น point forecast เสื่อมถอยอย่างสุภาพกลับไปเท่า baseline เมื่อพฤติกรรมลูกค้าเปลี่ยนจนสัญญาณหาย ไม่มีทางแพ้หนักเชิงโครงสร้าง (λ ต่อ horizon เก็บใน model card)
+- **Multi-cutoff pooling:** train split รวมแถวจาก backtest cutoffs เก่า (validation/test ยังเป็นของ cutoff ล่าสุดเท่านั้น และ acc_id ที่อยู่ใน validation/test จะไม่ถูกดึงเข้า train จาก cutoff ไหนเลย) — โมเดลได้เห็นลูกค้าคนเดิมในช่วงพฤติกรรมต่างกัน
+
 ## §9 Hyperparameter tuning (Optuna)
 
 - Optimize **PR-AUC บน validation** (churn) / Spearman (CLV) / pinball loss (credit)
@@ -197,7 +205,7 @@ recency (4), payment RFM (7), usage volume/trend/consistency (8), channel + sour
 
 | โมเดล | Baseline |
 |---|---|
-| Churn | (1) recency rule: `days_since_last_activity > 90` → churn; (2) RFM score ต่ำสุด quartile; (3) Logistic Regression บน 24 features |
+| Churn | (1) recency rule: `days_since_last_activity > 90` → churn; (2) RFM score ต่ำสุด quartile; (3) Logistic Regression บน Tier A features |
 | CLV | (1) ค่าเฉลี่ยกลุ่ม; (2) `total_revenue_180d` ที่ผ่านมา (สมมติอนาคต = อดีต); (3) RFM segment mean |
 | Credit | (1) ใช้เท่า 30 วันล่าสุด; (2) moving average 90 วัน |
 

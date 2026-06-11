@@ -43,7 +43,7 @@ def churn_rfm_quartile_scores(features: pd.DataFrame) -> np.ndarray:
 
 
 class ChurnLogisticBaseline:
-    """Plain logistic regression on the 24 preprocessed Tier A features."""
+    """Plain logistic regression on the preprocessed Tier A features."""
 
     def __init__(self, preprocessor: PreprocessorConfig):
         self.preprocessor = preprocessor

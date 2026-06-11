@@ -49,7 +49,7 @@ matching pipeline module:
 ```bash
 cd apps/ml
 python scripts/verify_clean_data_access.py     # train_clean_* / predict_clean_* loaders
-python scripts/verify_feature_builder.py       # deterministic 24-feature contract + feature_code_hash
+python scripts/verify_feature_builder.py       # deterministic 27-feature contract + feature_code_hash
 python scripts/verify_preprocessing.py         # fit-on-train-only preprocessing artifact
 python scripts/profile_training_dataset.py     # dataset profiling / label viability
 ```

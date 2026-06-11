@@ -32,7 +32,12 @@ from src.training.churn_trainer import (
 from src.training.clv_trainer import backtest_clv, train_clv
 from src.training.credit_trainer import backtest_credit, train_credit
 from src.training.data import load_train_clean
-from src.training.datasets import CutoffDatasets, backtest_cutoffs, build_cutoff_datasets
+from src.training.datasets import (
+    CutoffDatasets,
+    backtest_cutoffs,
+    build_cutoff_datasets,
+    pool_train_rows,
+)
 from src.training.features import build_feature_set_contract
 from src.training.labels import LabelConfig
 from src.training.leakage import run_leakage_suite
@@ -314,7 +319,7 @@ def _train_and_register_churn(
 
     version = next_version("churn")
     feature_contract = build_feature_set_contract(
-        datasets.feature_result, name="tier_a_24", version="v1", model_type="churn"
+        datasets.feature_result, name="tier_a_27", version="v1", model_type="churn"
     )
     feature_set_id = repository.save_feature_set_contract(feature_contract)
 
@@ -548,7 +553,7 @@ def _train_and_register_clv(
     progress("clv: artifacts + registry", 70)
     version = next_version("clv")
     feature_contract = build_feature_set_contract(
-        datasets.feature_result, name="tier_a_24", version="v1", model_type="clv"
+        datasets.feature_result, name="tier_a_27", version="v1", model_type="clv"
     )
     feature_set_id = repository.save_feature_set_contract(feature_contract)
 
@@ -694,15 +699,24 @@ def _train_and_register_credit(
     progress: Callable[[str, int], None],
 ) -> dict[str, Any]:
     progress("credit: quantile models (Optuna)", 75)
-    dataset = datasets.credit
+    # Multi-cutoff pooling: older-cutoff rows join the train split (validation/
+    # test stay at the latest cutoff) so the model sees the same customers in
+    # different behavioural regimes instead of one static snapshot.
+    dataset = pool_train_rows(datasets.credit, [bt.credit for bt in backtest_sets])
+    print(
+        f"credit: pooled train rows {int((dataset.frame['split'] == 'train').sum())} "
+        f"from {1 + len(backtest_sets)} cutoffs"
+    )
     preprocessor = fit_preprocessor(dataset.features("train"), datasets.feature_result.feature_schema)
     result = train_credit(dataset, preprocessor, progress=lambda m: print(m))
 
     progress("credit: backtests", 85)
     backtest_rows: list[dict[str, Any]] = []
     for bt in backtest_sets:
-        bt_preproc = fit_preprocessor(bt.credit.features("train"), bt.feature_result.feature_schema)
-        champion_metrics, baseline_metrics = backtest_credit(result, bt.credit, bt_preproc)
+        older = [b.credit for b in backtest_sets if b.cutoff_date < bt.cutoff_date]
+        bt_pooled = pool_train_rows(bt.credit, older)
+        bt_preproc = fit_preprocessor(bt_pooled.features("train"), bt.feature_result.feature_schema)
+        champion_metrics, baseline_metrics = backtest_credit(result, bt_pooled, bt_preproc)
         backtest_rows.append(
             {
                 "cutoff_date": str(bt.cutoff_date.date()),
@@ -744,7 +758,7 @@ def _train_and_register_credit(
     progress("credit: artifacts + registry", 92)
     version = next_version("credit")
     feature_contract = build_feature_set_contract(
-        datasets.feature_result, name="tier_a_24", version="v1", model_type="credit"
+        datasets.feature_result, name="tier_a_27", version="v1", model_type="credit"
     )
     feature_set_id = repository.save_feature_set_contract(feature_contract)
 
@@ -765,6 +779,11 @@ def _train_and_register_credit(
         "interval_widening": {
             str(h): result.horizons[h].interval_widening for h in result.horizons
         },
+        "correction_shrinkage": {
+            str(h): result.horizons[h].correction_shrinkage for h in result.horizons
+        },
+        "pooled_cutoffs": [str(datasets.cutoff_date.date())]
+        + [str(bt.cutoff_date.date()) for bt in backtest_sets],
         "primary_metric": {
             "name": "Coverage p10–p90",
             "value": coverage,

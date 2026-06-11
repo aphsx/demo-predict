@@ -166,7 +166,7 @@ def train_clv(
     if best_bundle is None:
         raise RuntimeError("BG-NBD failed to fit for all penalizer values.")
 
-    # ── Candidate 2: LightGBM Tweedie on the 24 Tier A features ──
+    # ── Candidate 2: LightGBM Tweedie on the Tier A features ──
     notify(f"clv: tuning LightGBM Tweedie with Optuna ({tweedie_trials} trials)")
     x_train = transform_features(dataset.features("train"), preprocessor)
     x_val = transform_features(dataset.features("validation"), preprocessor)

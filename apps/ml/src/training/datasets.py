@@ -33,7 +33,7 @@ SPLIT_TEST = "test"
 class SplitFrame:
     """One model's dataset with assigned splits.
 
-    `frame` columns: acc_id, the 24 Tier A features (raw, pre-preprocessing),
+    `frame` columns: acc_id, the Tier A features (raw, pre-preprocessing),
     label columns, and `split` ∈ {train, validation, test}.
     """
 
@@ -180,6 +180,35 @@ def _assign_split(frame: pd.DataFrame, stratify: pd.Series, seed: int) -> pd.Dat
     split.iloc[test_idx] = SPLIT_TEST
     frame["split"] = split.values
     return frame
+
+
+def pool_train_rows(primary: SplitFrame, older: list[SplitFrame]) -> SplitFrame:
+    """Pool older-cutoff rows into the primary train split (multi-cutoff training).
+
+    Validation/test stay exclusively at the primary (latest) cutoff so holdout
+    metrics keep their meaning. Older-cutoff rows are added as extra train rows
+    only for acc_ids that are NOT held out in the primary validation/test
+    splits — split contamination by acc_id therefore stays impossible, and
+    `check_split_contamination` still passes on the pooled frame.
+    """
+
+    held_out = set(primary.split(SPLIT_VALIDATION)["acc_id"].astype(int)) | set(
+        primary.split(SPLIT_TEST)["acc_id"].astype(int)
+    )
+    frames = [primary.frame]
+    for older_set in older:
+        extra = older_set.frame[
+            ~older_set.frame["acc_id"].astype(int).isin(held_out)
+        ].copy()
+        extra["split"] = SPLIT_TRAIN
+        frames.append(extra)
+    pooled = pd.concat(frames, ignore_index=True)
+    return SplitFrame(
+        model_type=primary.model_type,
+        frame=pooled,
+        label_columns=list(primary.label_columns),
+        feature_names=list(primary.feature_names),
+    )
 
 
 def check_split_contamination(split_frame: SplitFrame) -> dict[str, object]:
