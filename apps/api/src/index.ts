@@ -40,7 +40,7 @@ const app = new Elysia()
     return {
       status: "ok",
       db: "connected",
-      message: "Legacy ML runtime removed; ML v2 training pipeline is being rebuilt.",
+      message: "ML v2 API: prediction-runs, training-runs, model-performance.",
     };
   })
   .listen(PORT);

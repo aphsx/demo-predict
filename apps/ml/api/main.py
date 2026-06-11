@@ -61,7 +61,7 @@ async def health(db: AsyncSession = Depends(get_db)):
         "status": "ok",
         "db": "connected",
         "models_dir": str(MODEL_DIR),
-        "message": "Legacy ML runtime removed; ML v2 training pipeline is being rebuilt.",
+        "message": "ML v2 internal API: health + training/prediction job triggers.",
     }
 
 

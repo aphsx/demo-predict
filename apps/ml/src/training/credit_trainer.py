@@ -3,6 +3,14 @@
 LightGBM quantile models per horizon (30d, 90d) × quantile (p10–p90), Optuna
 tuned on p50 pinball loss per horizon, with a multiplicative interval widening
 factor calibrated on validation so p10–p90 coverage lands at the 80% target.
+
+The models are trained on the LOG-RATIO against the carryover baseline
+(`log1p(y) − log1p(carryover)`). Trees predict piecewise-constant values and
+cannot track the y≈carryover relationship across seven orders of usage
+magnitude; anchoring on the baseline makes the model learn corrections to it,
+so it starts from baseline accuracy instead of competing against it from
+scratch. Quantiles survive the transform because per-row shifts and
+monotonic maps preserve quantile order.
 """
 
 from __future__ import annotations
@@ -33,23 +41,28 @@ TARGET_COVERAGE = 0.80
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
+def credit_anchor_log(features_raw: pd.DataFrame, horizon_days: int) -> np.ndarray:
+    """log1p of the carryover baseline forecast (the model's anchor)."""
+
+    return np.log1p(np.clip(credit_last_30d_carryover(features_raw, horizon_days), 0, None))
+
+
 @dataclass
 class CreditHorizonModels:
     horizon_days: int
     params: dict[str, Any]
     models: dict[float, lgb.LGBMRegressor]
     interval_widening: float
-    # Models are trained on log1p(usage): quantiles are invariant under
-    # monotonic transforms, and the log scale tames the heavy right tail.
-    log_target: bool = True
 
-    def predict_quantiles(self, x: pd.DataFrame) -> dict[float, np.ndarray]:
-        raw = {}
-        for alpha in QUANTILES:
-            pred = self.models[alpha].predict(x)
-            if self.log_target:
-                pred = np.expm1(pred)
-            raw[alpha] = np.clip(pred, 0, None)
+    def predict_quantiles(
+        self,
+        x: pd.DataFrame,
+        anchor_log: np.ndarray,
+    ) -> dict[float, np.ndarray]:
+        raw = {
+            alpha: np.clip(np.expm1(self.models[alpha].predict(x) + anchor_log), 0, None)
+            for alpha in QUANTILES
+        }
         stacked = np.sort(np.vstack([raw[alpha] for alpha in QUANTILES]), axis=0)
         ordered = {alpha: stacked[i] for i, alpha in enumerate(QUANTILES)}
         return _widen_interval(ordered, self.interval_widening)
@@ -85,22 +98,32 @@ def train_credit(
         }
         for horizon, column in HORIZONS.items()
     }
+    anchors = {
+        horizon: {
+            split: credit_anchor_log(dataset.features(split), horizon)
+            for split in ("train", "validation", "test")
+        }
+        for horizon in HORIZONS
+    }
 
     horizons: dict[int, CreditHorizonModels] = {}
-    for horizon_days, _column in HORIZONS.items():
+    for horizon_days in HORIZONS:
         notify(f"credit: tuning LightGBM quantile models for {horizon_days}d horizon ({n_trials} trials)")
         horizons[horizon_days] = _train_horizon(
-            x["train"], y[horizon_days]["train"], x["validation"], y[horizon_days]["validation"],
+            x["train"], y[horizon_days]["train"], anchors[horizon_days]["train"],
+            x["validation"], y[horizon_days]["validation"], anchors[horizon_days]["validation"],
             horizon_days=horizon_days, n_trials=n_trials,
         )
 
     validation_metrics = credit_metrics(
-        y[30]["validation"], horizons[30].predict_quantiles(x["validation"]),
-        y[90]["validation"], horizons[90].predict_quantiles(x["validation"]),
+        y[30]["validation"],
+        horizons[30].predict_quantiles(x["validation"], anchors[30]["validation"]),
+        y[90]["validation"],
+        horizons[90].predict_quantiles(x["validation"], anchors[90]["validation"]),
     )
     test_metrics = credit_metrics(
-        y[30]["test"], horizons[30].predict_quantiles(x["test"]),
-        y[90]["test"], horizons[90].predict_quantiles(x["test"]),
+        y[30]["test"], horizons[30].predict_quantiles(x["test"], anchors[30]["test"]),
+        y[90]["test"], horizons[90].predict_quantiles(x["test"], anchors[90]["test"]),
     )
 
     baseline_metrics = _evaluate_baselines(dataset, y)
@@ -132,32 +155,39 @@ def backtest_credit(
         y_train = pd.to_numeric(dataset.labels("train", column), errors="coerce").fillna(0.0).to_numpy()
         y_val = pd.to_numeric(dataset.labels("validation", column), errors="coerce").fillna(0.0).to_numpy()
         y_test[horizon_days] = pd.to_numeric(dataset.labels("test", column), errors="coerce").fillna(0.0).to_numpy()
-        models = _fit_quantile_models(result.params_by_horizon[horizon_days], x_train, y_train, x_val, y_val)
-        widening = _calibrate_widening(models, x_val, y_val)
+        anchor_train = credit_anchor_log(dataset.features("train"), horizon_days)
+        anchor_val = credit_anchor_log(dataset.features("validation"), horizon_days)
+        anchor_test = credit_anchor_log(dataset.features("test"), horizon_days)
+
+        models = _fit_quantile_models(
+            result.params_by_horizon[horizon_days],
+            x_train, y_train, anchor_train, x_val, y_val, anchor_val,
+        )
+        widening = _calibrate_widening(models, x_val, y_val, anchor_val)
         bundle = CreditHorizonModels(
             horizon_days=horizon_days,
             params=result.params_by_horizon[horizon_days],
             models=models,
             interval_widening=widening,
         )
-        predictions[horizon_days] = bundle.predict_quantiles(x_test)
+        predictions[horizon_days] = bundle.predict_quantiles(x_test, anchor_test)
 
     champion_metrics = credit_metrics(
         y_test[30], predictions[30], y_test[90], predictions[90]
     )
-    y_by_split = {
-        horizon: {"test": y_test[horizon]}
-        for horizon in HORIZONS
-    }
-    baseline_metrics = _evaluate_baselines(dataset, {h: {"test": y_test[h]} for h in HORIZONS}, splits=("test",))
+    baseline_metrics = _evaluate_baselines(
+        dataset, {h: {"test": y_test[h]} for h in HORIZONS}, splits=("test",)
+    )
     return champion_metrics, baseline_metrics
 
 
 def _train_horizon(
     x_train: pd.DataFrame,
     y_train: np.ndarray,
+    anchor_train: np.ndarray,
     x_val: pd.DataFrame,
     y_val: np.ndarray,
+    anchor_val: np.ndarray,
     *,
     horizon_days: int,
     n_trials: int,
@@ -178,16 +208,19 @@ def _train_horizon(
             "verbosity": -1,
         }
 
+    target_train = np.log1p(np.clip(y_train, 0, None)) - anchor_train
+    target_val = np.log1p(np.clip(y_val, 0, None)) - anchor_val
+
     def objective(trial: optuna.Trial) -> float:
         params = build_params(trial)
         model = lgb.LGBMRegressor(objective="quantile", alpha=0.50, **params)
         model.fit(
             x_train,
-            np.log1p(np.clip(y_train, 0, None)),
-            eval_set=[(x_val, np.log1p(np.clip(y_val, 0, None)))],
+            target_train,
+            eval_set=[(x_val, target_val)],
             callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
         )
-        predictions = np.clip(np.expm1(model.predict(x_val)), 0, None)
+        predictions = np.clip(np.expm1(model.predict(x_val) + anchor_val), 0, None)
         return pinball_loss(y_val, predictions, 0.50)
 
     study = optuna.create_study(
@@ -197,8 +230,10 @@ def _train_horizon(
     study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
     best_params = build_params(optuna.trial.FixedTrial(study.best_params))
 
-    models = _fit_quantile_models(best_params, x_train, y_train, x_val, y_val)
-    widening = _calibrate_widening(models, x_val, y_val)
+    models = _fit_quantile_models(
+        best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+    )
+    widening = _calibrate_widening(models, x_val, y_val, anchor_val)
     return CreditHorizonModels(
         horizon_days=horizon_days,
         params=best_params,
@@ -211,18 +246,20 @@ def _fit_quantile_models(
     params: dict[str, Any],
     x_train: pd.DataFrame,
     y_train: np.ndarray,
+    anchor_train: np.ndarray,
     x_val: pd.DataFrame,
     y_val: np.ndarray,
+    anchor_val: np.ndarray,
 ) -> dict[float, lgb.LGBMRegressor]:
+    target_train = np.log1p(np.clip(y_train, 0, None)) - anchor_train
+    target_val = np.log1p(np.clip(y_val, 0, None)) - anchor_val
     models: dict[float, lgb.LGBMRegressor] = {}
-    y_train_log = np.log1p(np.clip(y_train, 0, None))
-    y_val_log = np.log1p(np.clip(y_val, 0, None))
     for alpha in QUANTILES:
         model = lgb.LGBMRegressor(objective="quantile", alpha=alpha, **params)
         model.fit(
             x_train,
-            y_train_log,
-            eval_set=[(x_val, y_val_log)],
+            target_train,
+            eval_set=[(x_val, target_val)],
             callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
         )
         models[alpha] = model
@@ -233,11 +270,12 @@ def _calibrate_widening(
     models: dict[float, lgb.LGBMRegressor],
     x_val: pd.DataFrame,
     y_val: np.ndarray,
+    anchor_val: np.ndarray,
 ) -> float:
     """Pick a widening multiplier so validation p10–p90 coverage ≈ 80% (§11)."""
 
     raw = {
-        alpha: np.clip(np.expm1(models[alpha].predict(x_val)), 0, None)
+        alpha: np.clip(np.expm1(models[alpha].predict(x_val) + anchor_val), 0, None)
         for alpha in QUANTILES
     }
     stacked = np.sort(np.vstack([raw[alpha] for alpha in QUANTILES]), axis=0)

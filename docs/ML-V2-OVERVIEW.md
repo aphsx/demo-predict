@@ -68,13 +68,13 @@ Overview ▸ Customers ▸ Customer 360 ▸ Model Performance
 | Label builders | ✅ เสร็จ (`labels.py`) |
 | Tier A feature builder (24 features) + lifecycle rules | ✅ เสร็จ (`features.py`) |
 | Preprocessing contract (fit-on-train-only) | ✅ เสร็จ (`preprocessing.py`) |
-| Dataset builders (features + labels + split) | ❌ ยังไม่มี |
-| Baselines + candidate training + Optuna + calibration | ❌ ยังไม่มี |
-| Evaluation + ml_model_evaluations | ❌ ยังไม่มี |
-| Champion/challenger + alias activation | ❌ ยังไม่มี |
-| Prediction runner → ml_prediction_outputs | ❌ ยังไม่มี |
-| Elysia API สำหรับ prediction output / summary / model metrics | ❌ ยังไม่มี |
-| หน้าเว็บต่อ API จริง (ตอนนี้เป็น mock ทั้งหมด) | ❌ ยังไม่มี |
+| Dataset builders (features + labels + split) | ✅ เสร็จ (`datasets.py` — temporal grouped split + month-aligned backtest cutoffs) |
+| Baselines + candidate training + Optuna + calibration | ✅ เสร็จ (`baselines.py`, `churn_trainer.py`, `clv_trainer.py`, `credit_trainer.py`) |
+| Evaluation + ml_model_evaluations | ✅ เสร็จ (`metrics.py`, `registry.py` — holdout/backtest/baseline ทุก split) |
+| Champion/challenger + alias activation | ✅ เสร็จ (`registry.py` + promotion gate ใน `runner.py`; churn เลือก candidate ที่ CV สูงสุด*ที่ผ่าน gate*) |
+| Prediction runner → ml_prediction_outputs | ✅ เสร็จ (`src/prediction/runner.py` + `predict_v2.py`) |
+| Elysia API สำหรับ prediction output / summary / model metrics | ✅ เสร็จ (`routes/prediction-runs.ts`, `training-runs.ts`, `model-performance.ts`, suggested-cutoff) |
+| หน้าเว็บต่อ API จริง (ตอนนี้เป็น mock ทั้งหมด) | ✅ เสร็จ (mlApi ชี้ API จริง; mock เหลือเฉพาะ opt-in ผ่าน `NEXT_PUBLIC_ML_USE_MOCK=1`) |
 
 > โค้ดเทรนเก่าใน `apps/ml/src/models/` และ `apps/ml/train.py` คือ legacy v1 — **ไม่เอามาใช้ต่อ**
 > เขียน training runner ใหม่ทั้งหมดใน `apps/ml/src/training/` ตาม `ML-V2-TRAINING-PIPELINE.md`

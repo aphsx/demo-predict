@@ -96,14 +96,36 @@ class ChurnTrainResult:
         return self.calibrator.transform(self.champion.predict_raw(x))
 
 
-def train_churn(
+@dataclass
+class ChurnTraining:
+    """Tuned candidates + cached splits, before champion finalization.
+
+    The runner finalizes candidates in CV order and keeps the first one that
+    passes the promotion gate (§8: a tree that cannot decisively beat the
+    simple models is not the champion).
+    """
+
+    dataset: SplitFrame
+    preprocessor: PreprocessorConfig
+    candidates: list[ChurnCandidate]  # sorted by CV PR-AUC, best first
+    competition: dict[str, float]
+    cv_oof: dict[str, np.ndarray]
+    x_trval: pd.DataFrame
+    y_trval: np.ndarray
+    x_test: pd.DataFrame
+    y_test: np.ndarray
+    y_train: np.ndarray
+    y_val: np.ndarray
+
+
+def train_churn_candidates(
     dataset: SplitFrame,
     preprocessor: PreprocessorConfig,
     *,
     lgbm_trials: int = LGBM_TRIALS,
     xgb_trials: int = XGB_TRIALS,
     progress: Callable[[str], None] | None = None,
-) -> ChurnTrainResult:
+) -> ChurnTraining:
     notify = progress or (lambda message: logger.info(message))
 
     x_train = transform_features(dataset.features("train"), preprocessor)
@@ -125,67 +147,110 @@ def train_churn(
     notify(f"churn: tuning XGBoost with Optuna ({xgb_trials} trials)")
     candidates.append(_tune_xgboost(x_train, y_train, x_val, y_val, scale_pos_weight, xgb_trials))
 
-    # ── Champion selection by 5-fold CV on train∪validation ──────
+    # ── Candidate ranking by 5-fold CV on train∪validation ───────
     # A single 20% validation slice is too noisy to pick the champion at this
-    # dataset size; cross-validated PR-AUC over train∪validation is the
-    # tie-breaker, and its out-of-fold predictions feed calibration (§10) and
+    # dataset size; cross-validated PR-AUC over train∪validation ranks the
+    # candidates, and its out-of-fold predictions feed calibration (§10) and
     # threshold selection (§13). The test split stays untouched until the end.
     x_trval = pd.concat([x_train, x_val], ignore_index=True)
     y_trval = np.concatenate([y_train, y_val])
 
     competition: dict[str, float] = {}
-    cv_results: dict[str, tuple[float, np.ndarray]] = {}
+    cv_oof: dict[str, np.ndarray] = {}
     for candidate in candidates:
         candidate.params = _resolved_params(candidate)
         cv_score, oof = _cv_oof(candidate, x_trval, y_trval)
-        cv_results[candidate.name] = (cv_score, oof)
+        cv_oof[candidate.name] = oof
         competition[candidate.name] = round(cv_score, 4)
         notify(f"churn: {candidate.name} CV PR-AUC = {cv_score:.4f} (val {candidate.validation_pr_auc:.4f})")
 
-    champion = max(candidates, key=lambda candidate: cv_results[candidate.name][0])
-    champion_oof = cv_results[champion.name][1]
-    notify(f"churn: champion candidate = {champion.name} (CV PR-AUC {competition[champion.name]:.4f})")
+    candidates.sort(key=lambda candidate: -competition[candidate.name])
+    return ChurnTraining(
+        dataset=dataset,
+        preprocessor=preprocessor,
+        candidates=candidates,
+        competition=competition,
+        cv_oof=cv_oof,
+        x_trval=x_trval,
+        y_trval=y_trval,
+        x_test=x_test,
+        y_test=y_test,
+        y_train=y_train,
+        y_val=y_val,
+    )
+
+
+def finalize_churn_candidate(
+    training: ChurnTraining,
+    candidate: ChurnCandidate,
+    progress: Callable[[str], None] | None = None,
+) -> ChurnTrainResult:
+    """Calibrate + threshold + evaluate one candidate as the would-be champion."""
+
+    notify = progress or (lambda message: logger.info(message))
 
     # ── Calibration on out-of-fold predictions (§10) ──────────────
-    calibrator = _fit_calibrator(champion_oof, y_trval)
-    calibrated_oof = calibrator.transform(champion_oof)
-    notify(f"churn: calibration method = {calibrator.method}")
+    oof = training.cv_oof[candidate.name]
+    calibrator = _fit_calibrator(oof, training.y_trval)
+    calibrated_oof = calibrator.transform(oof)
+    notify(f"churn: {candidate.name} calibration method = {calibrator.method}")
 
     # ── Threshold from calibrated OOF (§13, clipped to a usable band) ──
-    f2_threshold = select_threshold_max_fbeta(y_trval, calibrated_oof, beta=2.0)
+    f2_threshold = select_threshold_max_fbeta(training.y_trval, calibrated_oof, beta=2.0)
     high_threshold = float(np.clip(f2_threshold, 0.35, 0.85))
     thresholds = risk_thresholds_from_high(high_threshold)
 
-    validation_metrics = churn_metrics(y_trval, calibrated_oof, threshold=thresholds["high"])
+    validation_metrics = churn_metrics(training.y_trval, calibrated_oof, threshold=thresholds["high"])
 
-    # ── Final model: refit champion config on train∪validation ────
-    final_model = clone_candidate_model(champion, y_trval)
-    final_model.fit(x_trval, y_trval)
-    champion.model = final_model
+    # ── Final model: refit candidate config on train∪validation ───
+    final_model = clone_candidate_model(candidate, training.y_trval)
+    final_model.fit(training.x_trval, training.y_trval)
+    candidate.model = final_model
 
-    # ── Test split: touched once (§6) ─────────────────────────────
-    calibrated_test = calibrator.transform(champion.predict_raw(x_test))
-    test_metrics = churn_metrics(y_test, calibrated_test, threshold=thresholds["high"])
+    # ── Test split (§6) ───────────────────────────────────────────
+    calibrated_test = calibrator.transform(candidate.predict_raw(training.x_test))
+    test_metrics = churn_metrics(training.y_test, calibrated_test, threshold=thresholds["high"])
 
     # ── Baselines evaluated with the same harness (§12) ──────────
     baseline_metrics = _evaluate_baselines(
-        dataset, preprocessor, y_train, y_val, y_test, thresholds["high"]
+        training.dataset,
+        training.preprocessor,
+        training.y_train,
+        training.y_val,
+        training.y_test,
+        thresholds["high"],
     )
 
     return ChurnTrainResult(
-        champion=champion,
+        champion=candidate,
         calibrator=calibrator,
         thresholds=thresholds,
-        competition=competition,
+        competition=training.competition,
         validation_metrics=validation_metrics,
         test_metrics=test_metrics,
-        calibration_json=calibration_curve_points(y_test, calibrated_test),
-        confusion_json=confusion_at_threshold(y_test, calibrated_test, thresholds["high"]),
-        lift_table_json=lift_table(y_test, calibrated_test),
-        feature_importance=_feature_importance(champion, x_train),
+        calibration_json=calibration_curve_points(training.y_test, calibrated_test),
+        confusion_json=confusion_at_threshold(training.y_test, calibrated_test, thresholds["high"]),
+        lift_table_json=lift_table(training.y_test, calibrated_test),
+        feature_importance=_feature_importance(candidate, training.x_trval),
         baseline_metrics=baseline_metrics,
-        preprocessor=preprocessor,
+        preprocessor=training.preprocessor,
     )
+
+
+def train_churn(
+    dataset: SplitFrame,
+    preprocessor: PreprocessorConfig,
+    *,
+    lgbm_trials: int = LGBM_TRIALS,
+    xgb_trials: int = XGB_TRIALS,
+    progress: Callable[[str], None] | None = None,
+) -> ChurnTrainResult:
+    """Convenience wrapper: finalize the top-CV candidate."""
+
+    training = train_churn_candidates(
+        dataset, preprocessor, lgbm_trials=lgbm_trials, xgb_trials=xgb_trials, progress=progress
+    )
+    return finalize_churn_candidate(training, training.candidates[0], progress)
 
 
 def refit_for_backtest(

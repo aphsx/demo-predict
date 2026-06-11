@@ -11,7 +11,6 @@ from __future__ import annotations
 import io
 import json
 import logging
-import traceback
 from contextlib import redirect_stdout
 from typing import Any, Callable
 
@@ -25,7 +24,11 @@ from src.training.baselines import (
     CLV_BASELINE_NAMES,
     CREDIT_BASELINE_NAMES,
 )
-from src.training.churn_trainer import refit_for_backtest, train_churn
+from src.training.churn_trainer import (
+    finalize_churn_candidate,
+    refit_for_backtest,
+    train_churn_candidates,
+)
 from src.training.clv_trainer import backtest_clv, train_clv
 from src.training.credit_trainer import backtest_credit, train_credit
 from src.training.data import load_train_clean
@@ -191,63 +194,113 @@ def _train_and_register_churn(
     preprocessor = fit_preprocessor(
         dataset.features("train"), datasets.feature_result.feature_schema
     )
-    result = train_churn(dataset, preprocessor, progress=lambda m: print(m))
+    training = train_churn_candidates(dataset, preprocessor, progress=lambda m: print(m))
+    source_id = source_id_of(training_run_id)
 
-    progress("churn: leakage tests", 38)
-    leakage = run_leakage_suite(
-        dataset, preprocessor, result.champion, result.validation_metrics["roc_auc"]
-    )
-    _save_leakage_report(training_run_id, source_id_of(training_run_id), datasets, leakage)
+    # ── Champion = highest-CV candidate that passes the promotion gate ──
+    # §8: a tree that cannot decisively beat the simpler models across every
+    # split and cutoff is not the champion — fall through in CV order.
+    progress("churn: promotion gate per candidate", 35)
+    selection_log: list[dict[str, Any]] = []
+    selected: dict[str, Any] | None = None
+    for attempt_index, candidate in enumerate(training.candidates):
+        print(f"churn: evaluating candidate {candidate.name} as champion (#{attempt_index + 1})")
+        result = finalize_churn_candidate(training, candidate, progress=lambda m: print(m))
 
-    progress("churn: backtests", 42)
-    backtest_rows: list[dict[str, Any]] = []
-    for bt in backtest_sets:
-        bt_preproc = fit_preprocessor(bt.churn.features("train"), bt.feature_result.feature_schema)
-        y_test, probs, high_thr = refit_for_backtest(result.champion, bt.churn, bt_preproc)
-        backtest_rows.append(
+        leakage = run_leakage_suite(
+            dataset, preprocessor, candidate, result.validation_metrics["roc_auc"]
+        )
+
+        backtest_rows: list[dict[str, Any]] = []
+        for bt in backtest_sets:
+            bt_preproc = fit_preprocessor(bt.churn.features("train"), bt.feature_result.feature_schema)
+            y_test, probs, high_thr = refit_for_backtest(candidate, bt.churn, bt_preproc)
+            backtest_rows.append(
+                {
+                    "cutoff_date": str(bt.cutoff_date.date()),
+                    "metrics": round_metrics(churn_metrics(y_test, probs, threshold=high_thr)),
+                    "baselines": _churn_backtest_baselines(bt, bt_preproc, high_thr),
+                }
+            )
+
+        # Gate №3: must beat every baseline of a *different* algorithm. When
+        # the champion IS the logistic-regression candidate, the LR baseline
+        # is the same model class and a strict win over itself is impossible
+        # by design.
+        required_baselines = [
+            name for name in CHURN_BASELINE_NAMES if name != candidate.name
+        ]
+        beats_baselines = (
+            all(
+                result.validation_metrics["pr_auc"] > result.baseline_metrics[name]["validation"]["pr_auc"]
+                for name in required_baselines
+            )
+            and all(
+                result.test_metrics["pr_auc"] > result.baseline_metrics[name]["test"]["pr_auc"]
+                for name in required_baselines
+            )
+            and all(
+                row["metrics"]["pr_auc"]
+                > max(
+                    metrics["pr_auc"]
+                    for name, metrics in row["baselines"].items()
+                    if name in required_baselines
+                )
+                for row in backtest_rows
+            )
+        )
+        calibration_ok = result.test_metrics["ece"] < ECE_LIMIT
+        champion_check = _beats_existing_champion("churn", "pr_auc", backtest_rows)
+        promote, reason = _promotion_decision(
+            beats_baselines=beats_baselines,
+            leakage_passed=leakage["passed"],
+            calibration_ok=calibration_ok,
+            calibration_label=f"ECE {result.test_metrics['ece']:.3f} (เกณฑ์ < {ECE_LIMIT})",
+            artifact_ok=True,  # checked again after artifacts are written
+            champion_check=champion_check,
+        )
+        selection_log.append(
             {
-                "cutoff_date": str(bt.cutoff_date.date()),
-                "metrics": round_metrics(churn_metrics(y_test, probs, threshold=high_thr)),
-                "baselines": _churn_backtest_baselines(bt, bt_preproc, high_thr),
+                "candidate": candidate.name,
+                "cv_pr_auc": training.competition[candidate.name],
+                "test_pr_auc": result.test_metrics["pr_auc"],
+                "gate_passed": promote,
+                "reason": reason,
             }
         )
-        print(f"churn backtest {bt.cutoff_date.date()}: PR-AUC {backtest_rows[-1]['metrics']['pr_auc']}")
+        print(f"churn: candidate {candidate.name} gate_passed={promote} — {reason}")
 
-    # Promotion gate (§14)
-    progress("churn: promotion gate + artifacts", 48)
+        attempt = {
+            "candidate": candidate,
+            "result": result,
+            "leakage": leakage,
+            "backtest_rows": backtest_rows,
+            "beats_baselines": beats_baselines,
+            "calibration_ok": calibration_ok,
+            "champion_check": champion_check,
+        }
+        if selected is None:
+            selected = attempt  # top-CV fallback if nobody passes
+        if promote:
+            selected = attempt
+            break
+
+    assert selected is not None
+    result = selected["result"]
+    leakage = selected["leakage"]
+    backtest_rows = selected["backtest_rows"]
+    beats_baselines = selected["beats_baselines"]
+    calibration_ok = selected["calibration_ok"]
+    champion_check = selected["champion_check"]
+    _save_leakage_report(training_run_id, source_id, datasets, leakage)
+
+    progress("churn: artifacts + registry", 48)
     baseline_best_test = max(
         result.baseline_metrics[name]["test"]["pr_auc"] for name in CHURN_BASELINE_NAMES
     )
     baseline_best_name = max(
         CHURN_BASELINE_NAMES, key=lambda name: result.baseline_metrics[name]["test"]["pr_auc"]
     )
-    # Gate №3: must beat every baseline of a *different* algorithm. When the
-    # champion IS the logistic-regression candidate, the LR baseline is the
-    # same model class and a strict win over itself is impossible by design.
-    required_baselines = [
-        name for name in CHURN_BASELINE_NAMES if name != result.champion.name
-    ]
-    beats_baselines = (
-        all(
-            result.validation_metrics["pr_auc"] > result.baseline_metrics[name]["validation"]["pr_auc"]
-            for name in required_baselines
-        )
-        and all(
-            result.test_metrics["pr_auc"] > result.baseline_metrics[name]["test"]["pr_auc"]
-            for name in required_baselines
-        )
-        and all(
-            row["metrics"]["pr_auc"]
-            > max(
-                metrics["pr_auc"]
-                for name, metrics in row["baselines"].items()
-                if name in required_baselines
-            )
-            for row in backtest_rows
-        )
-    )
-    calibration_ok = result.test_metrics["ece"] < ECE_LIMIT
-    champion_check = _beats_existing_champion("churn", "pr_auc", backtest_rows)
 
     version = next_version("churn")
     feature_contract = build_feature_set_contract(
@@ -267,7 +320,8 @@ def _train_and_register_churn(
         "feature_set": f"{feature_contract.name}/{feature_contract.version}",
         "feature_code_hash": feature_contract.feature_code_hash,
         "params": _plain(result.champion.params),
-        "candidate_competition_val_pr_auc": result.competition,
+        "candidate_competition_cv_pr_auc": result.competition,
+        "candidate_selection": selection_log,
         "calibration_method": result.calibrator.method,
         "calibration_ece_test": result.test_metrics["ece"],
         "thresholds": result.thresholds,

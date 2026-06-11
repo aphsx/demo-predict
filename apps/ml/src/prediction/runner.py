@@ -303,9 +303,11 @@ def _apply_credit(
         frame[name] = default
 
     if credit_mask.any():
+        from src.training.credit_trainer import credit_anchor_log
+
         x = transform_features(features_raw[credit_mask], credit_bundle["preprocessor"])
-        q30 = horizons[30].predict_quantiles(x)
-        q90 = horizons[90].predict_quantiles(x)
+        q30 = horizons[30].predict_quantiles(x, credit_anchor_log(features_raw[credit_mask], 30))
+        q90 = horizons[90].predict_quantiles(x, credit_anchor_log(features_raw[credit_mask], 90))
         frame.loc[credit_mask, "predicted_credit_usage_30d"] = q30[0.50]
         frame.loc[credit_mask, "predicted_credit_usage_90d"] = q90[0.50]
         frame.loc[credit_mask, "credit_p10_30d"] = q30[0.10]
