@@ -299,11 +299,17 @@ def _train_and_register_churn(
     _save_leakage_report(training_run_id, source_id, datasets, leakage)
 
     progress("churn: artifacts + registry", 48)
+    # Headline baseline = best baseline of a DIFFERENT algorithm. When the
+    # champion is the LR candidate, comparing it against the LR baseline reads
+    # as "model loses to baseline" when they are the same model class.
+    comparable = [
+        name for name in CHURN_BASELINE_NAMES if name != result.champion.name
+    ] or CHURN_BASELINE_NAMES
     baseline_best_test = max(
-        result.baseline_metrics[name]["test"]["pr_auc"] for name in CHURN_BASELINE_NAMES
+        result.baseline_metrics[name]["test"]["pr_auc"] for name in comparable
     )
     baseline_best_name = max(
-        CHURN_BASELINE_NAMES, key=lambda name: result.baseline_metrics[name]["test"]["pr_auc"]
+        comparable, key=lambda name: result.baseline_metrics[name]["test"]["pr_auc"]
     )
 
     version = next_version("churn")

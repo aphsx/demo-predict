@@ -111,7 +111,10 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
 
     progress("features", 20)
     feature_result = build_all_features(customers, payments, usage, cutoff)
-    frame = feature_result.lifecycle_df.merge(feature_result.feature_df, on="acc_id", how="left")
+    # lifecycle_df carries its own days_since_last_activity (same definition
+    # as the feature) — drop it so the merge keeps the plain feature column.
+    lifecycle_df = feature_result.lifecycle_df.drop(columns=["days_since_last_activity"])
+    frame = lifecycle_df.merge(feature_result.feature_df, on="acc_id", how="left")
     frame["acc_id"] = frame["acc_id"].astype(int)
 
     # Eligibility matrix per OUTPUT-CONTRACT §2 (overrides features.py flags
@@ -217,16 +220,22 @@ def _churn_shap_factors(
     if not churn_mask.any():
         return factors
     try:
-        import shap
-
         x = transform_features(features_raw[churn_mask], churn_bundle["preprocessor"])
-        explainer = shap.TreeExplainer(churn_bundle["model"])
-        values = explainer.shap_values(x)
-        if isinstance(values, list):
-            values = values[1]
-        if getattr(values, "ndim", 2) == 3:
-            values = values[:, :, 1]
-    except Exception as exc:  # noqa: BLE001 - linear champion or SHAP failure → no factors.
+        model = churn_bundle["model"]
+        if hasattr(model, "coef_"):
+            # Linear champion: SHAP of a linear model on standardized features
+            # is exactly coef_j × x_ij (relative to the feature mean).
+            values = np.asarray(x) * np.asarray(model.coef_[0])
+        else:
+            import shap
+
+            explainer = shap.TreeExplainer(model)
+            values = explainer.shap_values(x)
+            if isinstance(values, list):
+                values = values[1]
+            if getattr(values, "ndim", 2) == 3:
+                values = values[:, :, 1]
+    except Exception as exc:  # noqa: BLE001 - explainability failure must not block the run.
         logger.warning("SHAP factors unavailable: %s", exc)
         return factors
 
@@ -553,8 +562,8 @@ def _build_output_rows(
                 "predicted_credit_usage_90d": _round_or_none(row["predicted_credit_usage_90d"], 2),
                 "credit_forecast_interval_json": interval,
                 "estimated_days_until_topup": _int_or_none(row["estimated_days_until_topup"]),
-                "credit_urgency_level": row["credit_urgency_level"],
-                "recommended_followup_date": row["recommended_followup_date"],
+                "credit_urgency_level": _str_or_none(row["credit_urgency_level"]),
+                "recommended_followup_date": _str_or_none(row["recommended_followup_date"]),
                 "usage_trend": row["usage_trend"],
                 "days_since_last_activity": _int_or_none(row["days_since_last_activity"]),
                 "n_purchases": int(row["n_purchases"]),
