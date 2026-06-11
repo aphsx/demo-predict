@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, ListChecks, RefreshCw, Trash2 } from "lucide-react";
+import { StatusDialog } from "@/components/StatusDialog";
 import {
   EmptyState, ProgressMeter, SectionCard, Skeleton,
 } from "@/components/ui";
@@ -40,6 +41,7 @@ export function RunsTable({
   const setRunId = useRunStore((s) => s.setRunId);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteRun, setPendingDeleteRun] = useState<PredictionRun | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const openRun = (run: PredictionRun) => {
@@ -61,11 +63,11 @@ export function RunsTable({
   };
 
   const remove = async (run: PredictionRun) => {
-    if (!confirm(`ลบ run "${run.name}"? ผลทำนายทั้งหมดของ run นี้จะถูกลบ`)) return;
     setDeletingId(run.id);
     setError(null);
     try {
       await deletePredictionRun(run.id);
+      setPendingDeleteRun(null);
       await onRefresh();
     } catch (e) {
       setError(getDisplayError(e, "ลบ run ไม่สำเร็จ") ?? "ลบ run ไม่สำเร็จ");
@@ -75,60 +77,76 @@ export function RunsTable({
   };
 
   return (
-    <SectionCard
-      title="Prediction runs"
-      hint="หนึ่งแถวต่อหนึ่งรอบทำนาย — เปิด run ที่ completed เพื่อดู dashboard"
-    >
-      {error && (
-        <div className="mb-3 rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-3 py-2 text-[12.5px] text-[color:var(--danger)]">
-          {error}
-        </div>
-      )}
+    <>
+      <SectionCard
+        title="Prediction runs"
+        hint="หนึ่งแถวต่อหนึ่งรอบทำนาย — เปิด run ที่ completed เพื่อดู dashboard"
+      >
+        {error && (
+          <div className="mb-3 rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-3 py-2 text-[12.5px] text-[color:var(--danger)]">
+            {error}
+          </div>
+        )}
 
-      {loading ? (
-        <div className="space-y-2">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-8" />
-          ))}
-        </div>
-      ) : runs.length === 0 ? (
-        <EmptyState
-          icon={ListChecks}
-          title="ยังไม่มี prediction run — import ข้อมูลและสร้าง run แรก"
-          hint="เลือก predict source ที่ ready แล้วกด Create run ด้านบน"
+        {loading ? (
+          <div className="space-y-2">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-8" />
+            ))}
+          </div>
+        ) : runs.length === 0 ? (
+          <EmptyState
+            icon={ListChecks}
+            title="ยังไม่มี prediction run — import ข้อมูลและสร้าง run แรก"
+            hint="เลือก predict source ที่ ready แล้วกด Create run ด้านบน"
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Status</th>
+                  <th>Source</th>
+                  <th>Cutoff</th>
+                  <th className="text-right">Customers</th>
+                  <th>Created by</th>
+                  <th>Finished</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map((run) => (
+                  <RunRow
+                    key={run.id}
+                    run={run}
+                    retrying={retryingId === run.id}
+                    deleting={deletingId === run.id}
+                    onOpen={() => openRun(run)}
+                    onRetry={() => void retry(run)}
+                    onDelete={() => setPendingDeleteRun(run)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+
+      {pendingDeleteRun && (
+        <StatusDialog
+          open
+          tone="warning"
+          title="ยืนยันการลบ prediction run"
+          message={`ลบ run "${pendingDeleteRun.name}"? ผลทำนายทั้งหมดของ run นี้จะถูกลบถาวร`}
+          confirmLabel="ลบ run"
+          cancelLabel="ยกเลิก"
+          loading={deletingId === pendingDeleteRun.id}
+          onCancel={() => setPendingDeleteRun(null)}
+          onConfirm={() => void remove(pendingDeleteRun)}
         />
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="table-base">
-            <thead>
-              <tr>
-                <th>Run</th>
-                <th>Status</th>
-                <th>Source</th>
-                <th>Cutoff</th>
-                <th className="text-right">Customers</th>
-                <th>Created by</th>
-                <th>Finished</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => (
-                <RunRow
-                  key={run.id}
-                  run={run}
-                  retrying={retryingId === run.id}
-                  deleting={deletingId === run.id}
-                  onOpen={() => openRun(run)}
-                  onRetry={() => void retry(run)}
-                  onDelete={() => void remove(run)}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
-    </SectionCard>
+    </>
   );
 }
 
