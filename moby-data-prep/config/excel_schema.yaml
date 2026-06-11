@@ -1,0 +1,131 @@
+# 1Moby Excel import contract — train raw only (see docs/naming-convention.md)
+# Source of truth for import_train_raw.py
+# Sheet names must match the workbook exactly.
+
+version: "1.0"
+
+required_sheets:
+  - Users+User_profile
+  - Backend_payment
+
+optional_sheets:
+  - SMS_usage (BC)
+  - SMS_usage (API)
+  - SMS_usage (OTP)
+  - Email_usage (BC)
+  - Email_usage (API)
+  - Email_usage (OTP)
+
+# Excel sheet name → PostgreSQL table name
+sheets:
+  Users+User_profile:
+    table: train_raw_sheet_users_user_profile
+    required_headers:
+      - acc_id
+    expected_headers:
+      - acc_id
+      - status (SMS)
+      - user.credit + user.credit_premium
+      - credit_email
+      - expire
+      - expire_email
+      - status (Email)
+      - join_date
+      - last_access
+      - last_send
+
+  Backend_payment:
+    table: train_raw_sheet_backend_payment
+    required_headers:
+      - uid
+      - payment_date
+      - acc_id
+    expected_headers:
+      - uid
+      - payment_date
+      - acc_id
+      - credit_add
+      - amount
+      - credit_type
+
+  SMS_usage (BC):
+    table: train_raw_sheet_sms_usage_bc
+    required_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+    expected_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+
+  SMS_usage (API):
+    table: train_raw_sheet_sms_usage_api
+    required_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+    expected_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+
+  SMS_usage (OTP):
+    table: train_raw_sheet_sms_usage_otp
+    required_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+    expected_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+
+  Email_usage (BC):
+    table: train_raw_sheet_email_usage_bc
+    required_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+    expected_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+
+  Email_usage (API):
+    table: train_raw_sheet_email_usage_api
+    required_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+    expected_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+
+  Email_usage (OTP):
+    table: train_raw_sheet_email_usage_otp
+    required_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+    expected_headers:
+      - year
+      - month
+      - acc_id
+      - usage
+
+import:
+  batch_size: 500
+  skip_wholly_empty_rows: true

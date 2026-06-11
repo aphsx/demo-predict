@@ -2,10 +2,11 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Lock, Mail } from "lucide-react";
 import { signIn } from "@/lib/auth-client";
 import { LoginBackground } from "@/components/LoginBackground";
 import { isDevAuthBypassEnabled } from "@/lib/dev-auth";
-import { INTRO_ASSETS, LOGIN_BRAND } from "@/lib/login-brand-colors";
+import { INTRO_ASSETS, MOBY_BRAND } from "@/lib/login-brand-colors";
 
 type Provider = "google";
 
@@ -46,45 +47,54 @@ function LoginForm() {
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-10">
       <LoginBackground />
 
-      <section className="relative z-10 w-full max-w-sm">
+      <section className="relative z-10 w-full max-w-[400px]">
         <div
-          className="rounded-[28px] px-7 py-8 text-center sm:px-8"
-          style={{
-            background: "rgba(255,255,255,0.14)",
-            backdropFilter: "blur(22px)",
-            WebkitBackdropFilter: "blur(22px)",
-            border: "1px solid rgba(255,255,255,0.22)",
-            boxShadow: "0 24px 60px rgba(10,18,38,0.24)",
-          }}
+          className="rounded-[32px] bg-white px-8 pb-8 pt-8"
+          style={{ boxShadow: "0 24px 60px rgba(10,18,38,0.18)" }}
         >
-          <img
-            src={INTRO_ASSETS.logo}
-            alt="1Moby"
-            className="mx-auto mb-6 block h-12 w-auto"
-            style={{ filter: "brightness(0) invert(1)" }}
-          />
-
-          <div className="space-y-2">
-            <p
-              className="text-[11px] font-semibold uppercase tracking-[0.28em]"
-              style={{ color: "rgba(255,255,255,0.58)" }}
-            >
-              Customer Intelligence
+          <div className="space-y-2 text-center">
+            <img
+              src={INTRO_ASSETS.logo}
+              alt="1Moby"
+              className="mx-auto h-9 w-auto"
+              style={{ filter: "brightness(0)" }}
+            />
+            <p className="text-sm" style={{ color: "#8A8F9E" }}>
+              Sign in to 1Moby Intelligence
             </p>
-            <h1 className="text-3xl font-semibold text-white" style={{ letterSpacing: "-0.03em" }}>
-              Sign in
-            </h1>
-            
+          </div>
+
+          <div className="mt-7 space-y-3">
+            <MockField icon={<Mail size={18} strokeWidth={1.75} />} placeholder="Email" />
+            <MockField icon={<Lock size={18} strokeWidth={1.75} />} placeholder="Password" />
+          </div>
+
+
+          <button
+            type="button"
+            disabled
+            className="mt-5 h-12 w-full rounded-2xl text-sm font-semibold text-white opacity-90"
+            style={{ background: MOBY_BRAND.blue }}
+          >
+            Login
+          </button>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-[#E8EAEF]" />
+            <span className="text-xs" style={{ color: "#B0B5C3" }}>
+              or
+            </span>
+            <div className="h-px flex-1 bg-[#E8EAEF]" />
           </div>
 
           <button
             onClick={() => handle("google")}
             disabled={busy !== null}
-            className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-2xl px-4 text-sm font-semibold text-slate-900 transition disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex h-12 w-full items-center justify-center gap-3 rounded-2xl border px-4 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{
-              background: "rgba(255,255,255,0.96)",
-              border: "1px solid rgba(255,255,255,0.5)",
-              boxShadow: "0 10px 24px rgba(8,15,35,0.12)",
+              background: "#FFFFFF",
+              borderColor: "#E8EAEF",
+              color: MOBY_BRAND.dark,
             }}
           >
             {busy === "google" ? (
@@ -102,33 +112,37 @@ function LoginForm() {
 
           {error && (
             <div
-              className="mt-4 rounded-2xl px-4 py-3 text-left text-xs leading-5 text-white"
-              style={{ background: "rgba(220,38,38,0.18)", border: "1px solid rgba(255,255,255,0.12)" }}
+              className="mt-4 rounded-2xl px-4 py-3 text-left text-xs leading-5"
+              style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#B91C1C" }}
             >
               {error}
             </div>
           )}
 
-          <p className="mt-6 text-xs leading-5" style={{ color: "rgba(255,255,255,0.52)" }}>
-            {devAuthBypassEnabled
-              ? "โหมด local dev เปิดอยู่ ปุ่มนี้จะพาเข้า workspace โดยไม่เรียก Google OAuth"
-              : "หากเข้าไม่ได้ ให้ตรวจสอบว่าบัญชี Google ของคุณถูกเพิ่มสิทธิ์ในระบบแล้ว"}
-          </p>
+          
         </div>
-
-        <p className="mt-4 text-center text-[11px] tracking-[0.18em] uppercase" style={{ color: "rgba(255,255,255,0.34)" }}>
-          Powered by 1Moby
-        </p>
       </section>
     </main>
+  );
+}
+
+function MockField({ icon, placeholder }: { icon: React.ReactNode; placeholder: string }) {
+  return (
+    <div
+      className="flex h-12 items-center gap-3 rounded-2xl px-4"
+      style={{ background: "#F3F4F8", color: "#B0B5C3" }}
+    >
+      {icon}
+      <span className="text-sm">{placeholder}</span>
+    </div>
   );
 }
 
 function Spinner() {
   return (
     <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" stroke={LOGIN_BRAND.orange} strokeOpacity="0.22" strokeWidth="3" />
-      <path d="M12 2a10 10 0 0 1 10 10" stroke={LOGIN_BRAND.orange} strokeWidth="3" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="10" stroke={MOBY_BRAND.orangeWarm} strokeOpacity="0.22" strokeWidth="3" />
+      <path d="M12 2a10 10 0 0 1 10 10" stroke={MOBY_BRAND.orangeWarm} strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

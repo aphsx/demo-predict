@@ -7,6 +7,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-Light.otf") format("opentype");
   font-weight: 300;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -14,6 +15,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-Regular.otf") format("opentype");
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -21,6 +23,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-Medium.otf") format("opentype");
   font-weight: 500;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -28,6 +31,7 @@
   src: url("/fonts/GeometricaEN/Geometrica-Bold.otf") format("opentype");
   font-weight: 700;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -35,27 +39,31 @@
   src: url("/fonts/GeometricaEN/Geometrica-ExtraBold.otf") format("opentype");
   font-weight: 800;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
-  font-family: "Mero Thai";
+  font-family: "merothai";
   src: url("/fonts/MeroTH/MeroThai-Regular.otf") format("opentype");
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
-  font-family: "Mero Thai";
+  font-family: "merothai";
   src: url("/fonts/MeroTH/MeroThai-Medium.otf") format("opentype");
   font-weight: 500;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
-  font-family: "Mero Thai";
+  font-family: "merothai";
   src: url("/fonts/MeroTH/MeroThai-Bold.otf") format("opentype");
   font-weight: 700;
   font-style: normal;
+  font-display: swap;
 }
 
 /* ───────────────────────────────────────────────────────────
@@ -67,25 +75,25 @@
   --moby-50:  #eff6ff;
   --moby-100: #dbeafe;
   --moby-200: #bfdbfe;
-  --moby-500: #3b82f6;
-  --moby-600: #2563eb;
-  --moby-700: #1d4ed8;
-  --moby-800: #1e40af;
-  --moby-900: #0f2c63;
+  --moby-500: #006bff;
+  --moby-600: #006bff;
+  --moby-700: #006bff;
+  --moby-800: #0056cc;
+  --moby-900: #003f99;
 
   /* Neutrals (slate) */
-  --bg:       #f6f8fb;
+  --bg:       #f8fafc;
   --surface:  #ffffff;
-  --surface-2:#fafbfd;
-  --line:     #e6eaf0;
-  --line-2:   #eef1f5;
+  --surface-2:#f9fafb;
+  --line:     #e5e7eb;
+  --line-2:   #f3f4f6;
 
-  --ink-1: #0b1220;     /* headings */
-  --ink-2: #1f2937;     /* body strong */
-  --ink-3: #475569;     /* body */
-  --ink-4: #64748b;     /* secondary */
-  --ink-5: #94a3b8;     /* tertiary */
-  --ink-6: #cbd5e1;     /* disabled */
+  --ink-1: #1D1F2A;     /* 1Moby headline dark */
+  --ink-2: #242424;     /* strong text */
+  --ink-3: #3a3e53;     /* body */
+  --ink-4: #6B6B6B;     /* meta / secondary copy */
+  --ink-5: #999999;     /* labels */
+  --ink-6: #d1d5db;     /* gray-300: disabled */
 
   /* Semantic */
   --ok:       #059669;
@@ -97,11 +105,11 @@
   --info:     #0369a1;
   --info-bg:  #f0f9ff;
 
-  /* Lifecycle palette */
-  --c-paid:    #2563eb;
-  --c-free:    #7c3aed;
-  --c-churn:   #f97316;
-  --c-ghost:   #94a3b8;
+  /* Lifecycle palette — 1Moby brand (must match dashboard LIFECYCLE_PALETTE) */
+  --c-paid:    #006bff;
+  --c-free:    #ffa400;
+  --c-churn:   #fc4c02;
+  --c-ghost:   #9ca3af;
 
   /* Shape */
   --r-sm: 6px;
@@ -114,38 +122,89 @@
   --shadow-2: 0 1px 0 rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.06);
   --shadow-3: 0 8px 24px rgba(15,23,42,.08);
 
-  /* Type */
-  --font-ui: 'Geometrica', 'Mero Thai', 'Sarabun', 'Noto Sans Thai', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-num: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Type — 1moby.com stacks:
+     UI/default + headings = merothai, long-form copy = Sarabun,
+     Latin labels & numerals = "Geometrica, merothai" (never monospace) */
+  --font-display: 'merothai', 'MeroThai', 'Sarabun', 'Noto Sans Thai', sans-serif;
+  --font-body: 'Sarabun', 'merothai', 'Noto Sans Thai', sans-serif;
+  --font-ui: 'merothai', 'Sarabun', 'Noto Sans Thai', sans-serif;
+  --font-num: 'Geometrica', 'merothai', 'Sarabun', 'Noto Sans Thai', sans-serif;
 }
 
 html, body { height: 100%; }
 body {
   font-family: var(--font-ui);
-  background: var(--bg);
-  color: var(--ink-2);
-  -webkit-font-smoothing: antialiased;
+  font-weight: 400;
+  @apply bg-slate-50;
+  color: var(--ink-3);
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
   text-rendering: optimizeLegibility;
 }
 
-/* numerals */
-.num { font-family: var(--font-num); font-feature-settings: "tnum" 1, "lnum" 1; letter-spacing: -.01em; }
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* numerals — 1moby never goes heavier than Medium (500); this wins over
+   stray font-bold/font-semibold utilities so every number shares one pattern */
+.num {
+  font-family: var(--font-num);
+  font-weight: 500;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  letter-spacing: -.01em;
+  color: inherit;
+}
+
+/* typography patterns from 1moby.com article pages */
+.type-display {
+  font-family: var(--font-display);
+  color: var(--ink-1);
+  font-weight: 500;
+  letter-spacing: -.03em;
+}
+.type-section-title {
+  font-family: var(--font-display);
+  color: var(--ink-1);
+  font-weight: 500;
+  letter-spacing: -.02em;
+}
+/* small uppercase tag — 1moby blog-tag pattern (Geometrica, light) */
+.type-label {
+  font-family: var(--font-num);
+  color: var(--ink-4);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.type-meta { color: var(--ink-4); }
+.type-muted { color: var(--ink-5); }
+/* long-form copy — 1moby blog-content pattern (Sarabun, #6b6b6b, 1.6) */
+.type-body { font-family: var(--font-body); color: var(--ink-4); line-height: 1.6; }
 
 /* surfaces */
-.surface       { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
-.surface-flat  { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); }
-.surface-soft  { background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-md); }
-.surface-elev  { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-2); }
+.surface       { @apply rounded-lg border border-gray-200 bg-white shadow-none; }
+.surface-flat  { @apply rounded-lg border border-gray-200 bg-white shadow-none; }
+.surface-soft  { @apply rounded-lg border border-gray-200 bg-gray-50 shadow-none; }
+.surface-elev  { @apply rounded-lg border border-gray-200 bg-white shadow-none; }
 
 /* dividers */
-.hairline { border-color: var(--line); }
-hr.hairline { border-top: 1px solid var(--line); border-bottom: none; }
+.hairline { @apply border-gray-200; }
+hr.hairline { @apply border-t border-gray-200; border-bottom: none; }
 
-/* scrollbar */
-::-webkit-scrollbar       { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #d6dbe2; border-radius: 8px; border: 2px solid var(--bg); }
-::-webkit-scrollbar-thumb:hover { background: #b8c0cc; }
-::-webkit-scrollbar-track { background: transparent; }
+/* scrollbar: keep scrolling available, hide the visual rail everywhere */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 
 /* focus */
 :focus-visible { outline: 2px solid var(--moby-500); outline-offset: 2px; border-radius: 6px; }
@@ -163,12 +222,12 @@ hr.hairline { border-top: 1px solid var(--line); border-bottom: none; }
 .table-base { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .table-base thead th {
   position: sticky; top: 0; z-index: 1;
-  background: var(--surface-2); color: var(--ink-4);
+  @apply bg-gray-50 text-[color:var(--ink-4)];
   font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-  text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line);
+  text-align: left; padding: 10px 14px; @apply border-b border-gray-200;
 }
-.table-base tbody td { padding: 10px 14px; border-bottom: 1px solid var(--line-2); color: var(--ink-2); }
-.table-base tbody tr:hover { background: var(--surface-2); }
+.table-base tbody td { padding: 10px 14px; @apply border-b border-gray-100 text-[color:var(--ink-2)]; }
+.table-base tbody tr:hover { @apply bg-gray-50; }
 
 /* card hover lift */
 .lift { transition: box-shadow .15s ease, transform .15s ease; }
@@ -187,16 +246,17 @@ hr.hairline { border-top: 1px solid var(--line); border-bottom: none; }
 }
 
 /* segmented control */
-.segmented { display: inline-flex; padding: 3px; border-radius: 8px; background: #eef2f7; border: 1px solid var(--line); }
+.segmented { @apply inline-flex border border-gray-200 bg-gray-100; padding: 3px; border-radius: 8px; }
 .segmented button {
-  font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 6px; color: var(--ink-3);
+  @apply text-[color:var(--ink-3)];
+  font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 6px;
 }
-.segmented button.active { background: var(--surface); color: var(--ink-1); box-shadow: var(--shadow-1); }
+.segmented button.active { @apply bg-white text-[color:var(--ink-1)]; box-shadow: var(--shadow-1); }
 
 /* sparkline track */
-.spark-track { stroke: var(--line); fill: none; stroke-width: 1; }
+.spark-track { stroke: #e5e7eb; fill: none; stroke-width: 1; }
 .spark-line  { stroke: var(--moby-600); fill: none; stroke-width: 1.5; }
-.spark-area  { fill: rgba(37,99,235,.10); }
+.spark-area  { fill: rgba(0,107,255,.10); }
 
 /* anim */
 @keyframes pulse-soft { 0%,100% { opacity: 1 } 50% { opacity: .6 } }

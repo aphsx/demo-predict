@@ -3,7 +3,6 @@ Alembic async environment.
 Pulls DATABASE_URL from env and runs migrations against asyncpg.
 """
 import asyncio
-import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -16,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # Make `api.*` importable from this script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from api.database import Base  # noqa: E402
+from api.database import Base, get_database_url  # noqa: E402
 import api.models  # noqa: E402,F401  (registers all tables on Base.metadata)
 
 config = context.config
@@ -24,7 +23,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://moby:moby1234@db:5432/moby")
+DATABASE_URL = get_database_url()
 ASYNC_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 config.set_main_option("sqlalchemy.url", ASYNC_URL)
 
