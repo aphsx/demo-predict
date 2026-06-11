@@ -670,7 +670,7 @@ export function mockRunOutputs(runId: string, q: OutputsQuery): OutputsPage {
   });
 
   const page = q.page ?? 1;
-  const pageSize = q.page_size ?? 50;
+  const pageSize = q.page_size ?? 8;
   return {
     total: rows.length,
     page,

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useRunStore } from "./runStore";
 
 export interface ChatMsg {
   id: string;
@@ -108,6 +109,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const history = [...messages, userMsg]
       .filter((message) => message.id !== WELCOME_ID)
       .map((message) => ({ role: message.role, content: message.content }));
+      const runId = useRunStore.getState().runId.trim();
 
     controller = new AbortController();
     set({ messages: [...messages, userMsg, replyMsg], sending: true });
@@ -118,7 +120,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, run_id: runId || undefined }),
         signal: controller.signal,
       });
 

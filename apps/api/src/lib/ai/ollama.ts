@@ -150,20 +150,35 @@ export function extractJsonObject(text: string): unknown {
   throw new Error("Model returned incomplete JSON.");
 }
 
-function isTextToSqlPlan(value: unknown): value is TextToSqlPlan {
-  if (!value || typeof value !== "object") return false;
-  const maybe = value as {
-    should_query?: unknown;
-    sql?: unknown;
-    reasoning?: unknown;
-    answer_without_query?: unknown;
+function readStringField(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") return value;
+  }
+  return undefined;
+}
+
+function coerceTextToSqlPlan(value: unknown): TextToSqlPlan | null {
+  if (!value || typeof value !== "object") return null;
+  const maybe = value as Record<string, unknown>;
+  const sqlValue = maybe.sql ?? maybe.query ?? maybe.sql_query ?? maybe.statement;
+  const sql = typeof sqlValue === "string" ? sqlValue : null;
+  const explicitShouldQuery = maybe.should_query ?? maybe.shouldQuery ?? maybe.needs_query;
+  const shouldQuery = typeof explicitShouldQuery === "boolean" ? explicitShouldQuery : sql !== null;
+  const reasoning = readStringField(maybe, ["reasoning", "reason", "rationale"]) ?? "No planner reasoning provided.";
+  const answerWithoutQuery = readStringField(maybe, [
+    "answer_without_query",
+    "answerWithoutQuery",
+    "answer",
+  ]);
+
+  if (sqlValue !== undefined && sqlValue !== null && typeof sqlValue !== "string") return null;
+  return {
+    should_query: shouldQuery,
+    sql: shouldQuery ? sql : null,
+    reasoning,
+    ...(answerWithoutQuery ? { answer_without_query: answerWithoutQuery } : {}),
   };
-  return (
-    typeof maybe.should_query === "boolean" &&
-    (typeof maybe.sql === "string" || maybe.sql === null) &&
-    typeof maybe.reasoning === "string" &&
-    (typeof maybe.answer_without_query === "string" || maybe.answer_without_query === undefined)
-  );
 }
 
 export async function generateTextToSqlPlan(params: {
@@ -216,7 +231,8 @@ export async function generateTextToSqlPlan(params: {
       warning: "Text-to-SQL planner returned invalid JSON and was safely skipped.",
     };
   }
-  if (!isTextToSqlPlan(parsed)) {
+  const plan = coerceTextToSqlPlan(parsed);
+  if (!plan) {
     return {
       should_query: false,
       sql: null,
@@ -226,7 +242,7 @@ export async function generateTextToSqlPlan(params: {
       warning: "Text-to-SQL planner returned an invalid shape and was safely skipped.",
     };
   }
-  return parsed;
+  return plan;
 }
 
 export async function generateFinalAnswer(params: {

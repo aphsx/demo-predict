@@ -589,7 +589,7 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
       }
 
       const page = Math.max(1, query.page ?? 1);
-      const pageSize = Math.min(200, Math.max(1, query.page_size ?? 50));
+      const pageSize = Math.min(200, Math.max(1, query.page_size ?? 8));
       const where = outputFilters(run.id, query);
 
       const [[{ total }], rows] = await Promise.all([

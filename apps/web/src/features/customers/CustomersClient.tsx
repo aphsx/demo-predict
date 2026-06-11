@@ -26,7 +26,7 @@ import {
 
 // Server-side sort keeps the most important customers in the fetched page;
 // filters are applied server-side so every lifecycle stage is reachable.
-const PAGE_SIZE = 500;
+const PAGE_SIZE = 8;
 const SEARCH_DEBOUNCE_MS = 300;
 const FILTER_KEYS = [
   "lifecycle_stage",
@@ -73,6 +73,11 @@ function sortsEqual(left: CustomerSort | null, right: CustomerSort | null) {
   return left?.key === right?.key && left?.direction === right?.direction;
 }
 
+function pageFromSearchParams(sp: URLSearchParams) {
+  const page = Number(sp.get("page"));
+  return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
 function CustomersClientInner() {
   const router = useRouter();
   const pathname = usePathname();
@@ -88,6 +93,9 @@ function CustomersClientInner() {
   );
   const [sort, setSort] = useState<CustomerSort | null>(() =>
     sortFromSearchParams(new URLSearchParams(Array.from(sp.entries())))
+  );
+  const [pageNumber, setPageNumber] = useState(() =>
+    pageFromSearchParams(new URLSearchParams(Array.from(sp.entries())))
   );
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
   const [page, setPage] = useState<OutputsPage | null>(null);
@@ -106,12 +114,15 @@ function CustomersClientInner() {
     const params = new URLSearchParams(Array.from(sp.entries()));
     const nextFilters = filtersFromSearchParams(params);
     const nextSort = sortFromSearchParams(params);
+    const nextPage = pageFromSearchParams(params);
     setFilters((current) => (filtersEqual(current, nextFilters) ? current : nextFilters));
     setSort((current) => (sortsEqual(current, nextSort) ? current : nextSort));
+    setPageNumber((current) => (current === nextPage ? current : nextPage));
   }, [sp]);
 
   const updateFilters = (nextFilters: CustomerFilters) => {
     setFilters(nextFilters);
+    setPageNumber(1);
 
     const params = new URLSearchParams(Array.from(sp.entries()));
     FILTER_KEYS.forEach((key) => {
@@ -122,6 +133,7 @@ function CustomersClientInner() {
         params.delete(key);
       }
     });
+    params.delete("page");
 
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
@@ -129,12 +141,29 @@ function CustomersClientInner() {
 
   const updateSort = (nextSort: CustomerSort | null) => {
     setSort(nextSort);
+    setPageNumber(1);
 
     const params = new URLSearchParams(Array.from(sp.entries()));
     if (nextSort) {
       params.set("sort", `${nextSort.key}:${nextSort.direction}`);
     } else {
       params.delete("sort");
+    }
+    params.delete("page");
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const updatePage = (nextPage: number) => {
+    const safePage = Math.max(1, nextPage);
+    setPageNumber(safePage);
+
+    const params = new URLSearchParams(Array.from(sp.entries()));
+    if (safePage > 1) {
+      params.set("page", String(safePage));
+    } else {
+      params.delete("page");
     }
 
     const query = params.toString();
@@ -154,7 +183,7 @@ function CustomersClientInner() {
     setPending(true);
     setError(null);
     fetchRunOutputs(effectiveRunId, {
-      page: 1,
+      page: pageNumber,
       page_size: PAGE_SIZE,
       sort: sort ? `${sort.key}:${sort.direction}` : undefined,
       search: debouncedSearch,
@@ -162,7 +191,15 @@ function CustomersClientInner() {
       customer_value_tier: filters.customer_value_tier as OutputsQuery["customer_value_tier"],
       churn_risk_level: filters.churn_risk_level as OutputsQuery["churn_risk_level"],
     })
-      .then((result) => alive && setPage(result))
+      .then((result) => {
+        if (!alive) return;
+        const totalPages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
+        if (pageNumber > totalPages) {
+          updatePage(totalPages);
+          return;
+        }
+        setPage(result);
+      })
       .catch((e: unknown) =>
         alive && setError(e instanceof Error ? e.message : "โหลดข้อมูลลูกค้าไม่สำเร็จ")
       )
@@ -176,6 +213,7 @@ function CustomersClientInner() {
     filters.lifecycle_stage,
     filters.customer_value_tier,
     filters.churn_risk_level,
+    pageNumber,
     sort,
   ]);
 
@@ -221,12 +259,15 @@ function CustomersClientInner() {
     <CustomersView
       rows={page.data}
       total={page.total}
+      page={page.page}
+      pageSize={page.page_size}
       pending={pending}
       runId={effectiveRunId}
       filters={filters}
       sort={sort}
       onFiltersChange={updateFilters}
       onSortChange={updateSort}
+      onPageChange={updatePage}
     />
   );
 }

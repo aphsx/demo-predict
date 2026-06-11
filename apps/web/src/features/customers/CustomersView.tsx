@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   RotateCcw,
   Search,
@@ -66,23 +68,29 @@ type AiGenerationStatus = "generating" | "generated";
 interface CustomersViewProps {
   rows: CustomerRow[];
   total: number;
+  page: number;
+  pageSize: number;
   pending: boolean;
   runId: string;
   filters: CustomerFilters;
   sort: CustomerSort | null;
   onFiltersChange: (filters: CustomerFilters) => void;
   onSortChange: (sort: CustomerSort | null) => void;
+  onPageChange: (page: number) => void;
 }
 
 function Inner({
   rows,
   total,
+  page,
+  pageSize,
   pending,
   runId,
   filters,
   sort,
   onFiltersChange,
   onSortChange,
+  onPageChange,
 }: CustomersViewProps) {
   const router = useRouter();
 
@@ -123,6 +131,9 @@ function Inner({
 
   const activeFilters = Object.entries(filters).filter(([_, value]) => value).length;
   const pendingRows = pending;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const startRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endRow = Math.min(total, (page - 1) * pageSize + rows.length);
   const customerHref = (accId: number) => {
     const params = new URLSearchParams({ run: runId });
     Object.entries(filters).forEach(([key, value]) => {
@@ -259,14 +270,32 @@ function Inner({
             )}
           </div>
 
-          <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-5 py-3">
+          <div className="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="num text-[12px] text-[color:var(--ink-4)]">
               {pendingRows
                 ? "Loading customers..."
-                : `${rows.length.toLocaleString()} shown of ${total.toLocaleString()} matching`}
+                : `${startRow.toLocaleString()}-${endRow.toLocaleString()} of ${total.toLocaleString()} matching`}
             </div>
-            <div className="num text-[12px] text-[color:var(--ink-4)]">
-              {total > rows.length ? "showing top results by priority" : ""}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onPageChange(page - 1)}
+                disabled={pendingRows || page <= 1}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-[12px] font-semibold text-[color:var(--ink-4)] hover:bg-gray-50 hover:text-[color:var(--ink-2)] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <ChevronLeft size={13} /> Previous
+              </button>
+              <span className="num min-w-[76px] text-center text-[12px] text-[color:var(--ink-4)]">
+                Page {page.toLocaleString()} / {totalPages.toLocaleString()}
+              </span>
+              <button
+                type="button"
+                onClick={() => onPageChange(page + 1)}
+                disabled={pendingRows || page >= totalPages}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-[12px] font-semibold text-[color:var(--ink-4)] hover:bg-gray-50 hover:text-[color:var(--ink-2)] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                Next <ChevronRight size={13} />
+              </button>
             </div>
           </div>
         </section>
