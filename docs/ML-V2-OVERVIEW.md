@@ -66,7 +66,7 @@ Overview ▸ Customers ▸ Customer 360 ▸ Model Performance
 | Import + clean (train / predict แยกกัน) | ✅ เสร็จ ใช้งานได้ |
 | Quality Gates 1–5 + persistence | ✅ เสร็จ (`apps/ml/src/training/validation.py`) |
 | Label builders | ✅ เสร็จ (`labels.py`) |
-| Tier A feature builder (27 features) + lifecycle rules | ✅ เสร็จ (`features.py`) |
+| Tier A feature builder (model-specific 24/27 features) + lifecycle rules | ✅ เสร็จ (`features.py`) |
 | Preprocessing contract (fit-on-train-only) | ✅ เสร็จ (`preprocessing.py`) |
 | Dataset builders (features + labels + split) | ✅ เสร็จ (`datasets.py` — temporal grouped split + month-aligned backtest cutoffs) |
 | Baselines + candidate training + Optuna + calibration | ✅ เสร็จ (`baselines.py`, `churn_trainer.py`, `clv_trainer.py`, `credit_trainer.py`) |

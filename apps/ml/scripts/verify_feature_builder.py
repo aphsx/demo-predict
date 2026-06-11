@@ -17,10 +17,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.training.data import database_url, load_predict_clean, load_train_clean  # noqa: E402
 from src.training.features import (  # noqa: E402
+    CREDIT_TIER_A_FEATURES,
     FeatureSetContract,
-    MINIMUM_TIER_A_FEATURES,
     build_all_features,
     build_feature_set_contract,
+    feature_names_for_model,
 )
 from src.training.repository import save_feature_set_contract, save_validation_report  # noqa: E402
 from src.training.validation import (  # noqa: E402
@@ -112,6 +113,7 @@ def build_feature_builder_artifacts(
         name=feature_set_name,
         version=feature_set_version,
         model_type=model_type,
+        feature_names=feature_names_for_model(model_type),
     )
     leakage_report = (
         check_train_feature_leakage(source_id, cutoff_date)
@@ -130,13 +132,13 @@ def build_feature_builder_artifacts(
             },
         ),
         _check(
-            "feature_names_match_minimum_tier_a",
-            result.feature_names == MINIMUM_TIER_A_FEATURES,
-            "Feature names match the minimum Tier A churn baseline contract.",
+            "feature_names_match_builder_contract",
+            result.feature_names == CREDIT_TIER_A_FEATURES,
+            "Feature builder emits the full Tier A superset in deterministic order.",
         ),
         _check(
             "feature_columns_are_deterministic",
-            list(result.feature_df.columns) == ["acc_id", *MINIMUM_TIER_A_FEATURES],
+            list(result.feature_df.columns) == ["acc_id", *CREDIT_TIER_A_FEATURES],
             "Feature DataFrame columns are in deterministic order.",
         ),
         _check(

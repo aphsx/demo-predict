@@ -15,7 +15,7 @@ import pandas as pd
 FeatureSchema = dict[str, dict[str, Any]]
 
 EPSILON = 1e-9
-MINIMUM_TIER_A_FEATURES = [
+BASE_TIER_A_FEATURES = [
     "customer_age_days",
     "days_since_last_activity",
     "days_since_last_payment",
@@ -40,10 +40,17 @@ MINIMUM_TIER_A_FEATURES = [
     "bc_usage_share",
     "api_usage_share",
     "otp_usage_share",
+]
+CREDIT_TIER_A_FEATURES = [
+    *BASE_TIER_A_FEATURES,
     "credit_added_180d",
     "credit_balance_proxy",
     "credit_runway_months",
 ]
+# Churn/CLV intentionally keep the original compact Tier A contract. Credit
+# uses the extended contract because balance/runway features are directly tied
+# to future usage but add avoidable noise to churn and CLV backtests.
+MINIMUM_TIER_A_FEATURES = BASE_TIER_A_FEATURES
 
 ZERO_DEFAULT_FEATURES = {
     "payment_count_all",
@@ -273,20 +280,23 @@ def build_feature_set_contract(
     name: str = "churn_A_safe_history",
     version: str = "v1",
     model_type: str = "churn",
+    feature_names: list[str] | None = None,
     status: str = "candidate",
 ) -> FeatureSetContract:
     """Build a persistable feature set contract for model training/prediction."""
 
-    feature_hash = feature_code_hash()
+    contract_features = list(feature_names or result.feature_names)
+    feature_schema = _schema_for_features(result.feature_schema, contract_features)
+    feature_hash = feature_code_hash(contract_features)
     lifecycle_hash = lifecycle_code_hash()
     return FeatureSetContract(
         name=name,
         version=version,
         model_type=model_type,
-        feature_names=list(result.feature_names),
-        feature_schema=result.feature_schema,
+        feature_names=contract_features,
+        feature_schema=feature_schema,
         transform_config=build_transform_config(
-            result.feature_schema,
+            feature_schema,
             feature_code_hash=feature_hash,
             lifecycle_code_hash=lifecycle_hash,
         ),
@@ -324,27 +334,42 @@ def build_transform_config(
     }
 
 
-def feature_code_hash() -> str:
+def _schema_for_features(feature_schema: FeatureSchema, feature_names: list[str]) -> FeatureSchema:
+    return {feature_name: feature_schema[feature_name] for feature_name in feature_names}
+
+
+def feature_names_for_model(model_type: str) -> list[str]:
+    """Return the feature contract used by each model family."""
+
+    return list(CREDIT_TIER_A_FEATURES if model_type == "credit" else BASE_TIER_A_FEATURES)
+
+
+def feature_code_hash(feature_names: list[str] | None = None) -> str:
     """Hash only source that affects the model feature matrix contract."""
 
+    contract_features = list(feature_names or MINIMUM_TIER_A_FEATURES)
+    uses_credit_features = any(name in CREDIT_TIER_A_FEATURES[len(BASE_TIER_A_FEATURES):] for name in contract_features)
+    builders = {
+        "feature_df": inspect.getsource(_build_feature_df),
+        "profile": inspect.getsource(build_profile_features),
+        "payment": inspect.getsource(build_payment_features),
+        "usage": inspect.getsource(build_usage_features),
+        "channel": inspect.getsource(build_channel_features),
+        "source": inspect.getsource(build_source_features),
+        "activity": inspect.getsource(build_activity_features),
+        "interaction": inspect.getsource(build_interaction_features),
+        "feature_schema": inspect.getsource(build_feature_schema),
+        "feature_stats": inspect.getsource(build_feature_stats),
+    }
+    if uses_credit_features:
+        builders["credit"] = inspect.getsource(build_credit_features)
+
     payload = {
-        "minimum_tier_a_features": MINIMUM_TIER_A_FEATURES,
-        "zero_default_features": sorted(ZERO_DEFAULT_FEATURES),
+        "minimum_tier_a_features": contract_features,
+        "zero_default_features": sorted(set(contract_features) & ZERO_DEFAULT_FEATURES),
         "nullable_contract_features": sorted(NULLABLE_CONTRACT_FEATURES),
-        "feature_metadata": FEATURE_METADATA,
-        "builders": {
-            "feature_df": inspect.getsource(_build_feature_df),
-            "profile": inspect.getsource(build_profile_features),
-            "payment": inspect.getsource(build_payment_features),
-            "usage": inspect.getsource(build_usage_features),
-            "channel": inspect.getsource(build_channel_features),
-            "source": inspect.getsource(build_source_features),
-            "activity": inspect.getsource(build_activity_features),
-            "credit": inspect.getsource(build_credit_features),
-            "interaction": inspect.getsource(build_interaction_features),
-            "feature_schema": inspect.getsource(build_feature_schema),
-            "feature_stats": inspect.getsource(build_feature_stats),
-        },
+        "feature_metadata": _schema_for_features(FEATURE_METADATA, contract_features),
+        "builders": builders,
         "helpers": {
             "base_customer_frame": inspect.getsource(_base_customer_frame),
             "payment_history": inspect.getsource(_payment_history),
@@ -660,11 +685,11 @@ def build_all_features(
 
     return FeatureBuildResult(
         feature_df=feature_df.reset_index(drop=True),
-        feature_names=list(MINIMUM_TIER_A_FEATURES),
-        feature_schema=build_feature_schema(feature_df, MINIMUM_TIER_A_FEATURES),
+        feature_names=list(CREDIT_TIER_A_FEATURES),
+        feature_schema=build_feature_schema(feature_df, CREDIT_TIER_A_FEATURES),
         feature_stats=build_feature_stats(
             feature_df,
-            MINIMUM_TIER_A_FEATURES,
+            CREDIT_TIER_A_FEATURES,
             cutoff,
             payments,
             usage,
@@ -694,8 +719,8 @@ def _build_feature_df(
         feature_df = feature_df.merge(part, on="acc_id", how="left")
 
     feature_df = build_interaction_features(feature_df)
-    feature_df = _ensure_feature_columns(feature_df, MINIMUM_TIER_A_FEATURES)
-    feature_df = feature_df[["acc_id", *MINIMUM_TIER_A_FEATURES]].sort_values("acc_id")
+    feature_df = _ensure_feature_columns(feature_df, CREDIT_TIER_A_FEATURES)
+    feature_df = feature_df[["acc_id", *CREDIT_TIER_A_FEATURES]].sort_values("acc_id")
     feature_df = _apply_feature_defaults(feature_df)
     return feature_df.reset_index(drop=True)
 

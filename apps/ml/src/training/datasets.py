@@ -19,6 +19,7 @@ from src.training.features import (
     MINIMUM_TIER_A_FEATURES,
     FeatureBuildResult,
     build_all_features,
+    feature_names_for_model,
 )
 from src.training.labels import LabelConfig, build_label_set
 
@@ -104,7 +105,12 @@ def _build_churn_frame(
     frame = feature_result.feature_df.merge(churn_labels, on="acc_id", how="inner")
     frame = frame[frame["eligible_for_churn"]].reset_index(drop=True)
     frame = _assign_split(frame, stratify=frame["churn_label"], seed=seed)
-    return SplitFrame(model_type="churn", frame=frame, label_columns=["churn_label"])
+    return SplitFrame(
+        model_type="churn",
+        frame=frame,
+        label_columns=["churn_label"],
+        feature_names=feature_names_for_model("churn"),
+    )
 
 
 def _build_clv_frame(
@@ -119,6 +125,7 @@ def _build_clv_frame(
         model_type="clv",
         frame=frame,
         label_columns=["future_revenue_6m", "future_purchase_flag"],
+        feature_names=feature_names_for_model("clv"),
     )
 
 
@@ -149,6 +156,7 @@ def _build_credit_frame(
             "days_until_next_topup",
             "topup_observed",
         ],
+        feature_names=feature_names_for_model("credit"),
     )
 
 

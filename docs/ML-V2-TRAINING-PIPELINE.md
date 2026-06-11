@@ -59,11 +59,12 @@ cutoff C1 (ล่าสุดที่ horizon ครบ) ── final model ─
 | CLV | Active | `future_revenue_6m = Σ amount` ใน 180 วันหลัง cutoff (ศูนย์ได้ — zero-heavy) |
 | Credit | มีประวัติใช้งาน | `future_credit_usage_30d/90d`; `days_until_next_topup` (censored ถ้าไม่ top-up) |
 
-### Features — Tier A 27 ตัว (`features.py` — contract verify แล้ว)
+### Features — model-specific Tier A contracts (`features.py` — contract verify แล้ว)
 
-recency (4), payment RFM (7), usage volume/trend/consistency (8), channel + source shares (5), credit balance/runway (3) — รายชื่อเต็มอยู่ใน `MINIMUM_TIER_A_FEATURES`
+- **Churn / CLV:** Tier A base 24 ตัว — recency (4), payment RFM (7), usage volume/trend/consistency (8), channel + source shares (5)
+- **Credit:** Tier A credit 27 ตัว — base 24 + credit balance/runway (3)
 
-กลุ่ม credit balance/runway สร้างแบบ PIT-safe จาก event history เท่านั้น (`Σ credit_add ก่อน cutoff − Σ usage ก่อน cutoff`) — **ไม่ใช้** snapshot `credit_sms`/`credit_email`/`expire_*` ซึ่งเป็น Tier B
+กลุ่ม credit balance/runway ใช้เฉพาะ Credit เพราะเพิ่มสัญญาณตรงกับ future usage แต่เพิ่ม noise ให้ Churn/CLV backtest. สร้างแบบ PIT-safe จาก event history เท่านั้น (`Σ credit_add ก่อน cutoff − Σ usage ก่อน cutoff`) — **ไม่ใช้** snapshot `credit_sms`/`credit_email`/`expire_*` ซึ่งเป็น Tier B
 
 **Tier system (เหตุผลที่เริ่มแค่ Tier A):**
 - **Tier A** — สร้างจาก event history (payments, usage) ย้อนเวลาได้แม่นยำ → ปลอดภัยจาก leak เสมอ
@@ -78,7 +79,7 @@ recency (4), payment RFM (7), usage volume/trend/consistency (8), channel + sour
 | กลไก | คือ |
 |---|---|
 | Builder รับ `cutoff_date` เสมอ | ทุก feature function กรอง `< cutoff` ก่อนคำนวณ — ไม่มี path ที่เห็นข้อมูลหลัง cutoff |
-| Feature contract + `feature_code_hash` | hash ของ source code ตัวสร้าง feature เก็บใน `ml_feature_sets` — predict ต้องใช้ hash เดียวกับตอนเทรน ไม่งั้น abort |
+| Feature contract + `feature_code_hash` | hash ของ source code ตัวสร้าง feature เก็บใน `ml_feature_sets` แยกตาม model feature list — predict ใช้คอลัมน์ตาม artifact preprocessor ของแต่ละ champion |
 | Preprocessor fit-on-train-only | `fit_preprocessor()` รับเฉพาะ train split; val/test/predict ใช้ `transform_features()` (มี `check_preprocessing_safety()` ตรวจ) |
 | แยก train/predict cleanทั้ง pipeline | `train_clean_*` กับ `predict_clean_*` ไม่ปนกันตั้งแต่ import |
 

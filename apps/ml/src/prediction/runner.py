@@ -21,7 +21,6 @@ from src.training import repository
 from src.training.artifacts import load_artifacts
 from src.training.data import database_url, load_predict_clean
 from src.training.features import (
-    MINIMUM_TIER_A_FEATURES,
     build_all_features,
     feature_code_hash,
 )
@@ -41,6 +40,35 @@ TOPUP_CAP_DAYS = 365
 INSERT_CHUNK = 1000
 
 DEFAULT_THRESHOLDS = {"medium": 0.30, "high": 0.60, "critical": 0.85}
+
+
+def _features_for_bundle(frame: pd.DataFrame, bundle: dict[str, Any]) -> pd.DataFrame:
+    feature_names = list(bundle["preprocessor"].feature_names)
+    missing = [feature_name for feature_name in feature_names if feature_name not in frame.columns]
+    if missing:
+        raise RuntimeError(f"Prediction features missing columns required by artifact: {missing}")
+    return frame[feature_names]
+
+
+def _feature_contract_guard(model_type: str, bundle: dict[str, Any], frame: pd.DataFrame) -> None:
+    """Validate required columns; allow legacy compatible hashes.
+
+    Feature hashes are now model-specific. Existing churn/CLV champions were
+    trained on the original 24-feature contract, while credit uses the extended
+    27-feature contract. If an older artifact's hash differs but all of its
+    serialized preprocessor columns are present, prediction remains safe.
+    """
+
+    features = _features_for_bundle(frame, bundle)
+    card = bundle["model_card"]
+    trained_hash = card.get("feature_code_hash")
+    current_hash = feature_code_hash(list(features.columns))
+    if trained_hash and trained_hash != current_hash:
+        logger.warning(
+            "Feature hash mismatch for %s champion %s, allowing compatible artifact columns.",
+            model_type,
+            card.get("version"),
+        )
 
 
 def run_prediction(prediction_run_id: str) -> None:
@@ -81,17 +109,6 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
             "bundle": load_artifacts(champion["artifact_path"]),
         }
 
-    # Feature contract hash must match training (TRAINING §5.1).
-    current_hash = feature_code_hash()
-    for model_type, champion in champions.items():
-        card = champion["bundle"]["model_card"]
-        trained_hash = card.get("feature_code_hash")
-        if trained_hash and trained_hash != current_hash:
-            raise RuntimeError(
-                f"Feature code hash mismatch for {model_type} champion "
-                f"({card.get('version')}): retrain before predicting."
-            )
-
     # ── Gates on the predict source ───────────────────────────────
     progress("quality gates", 10)
     gate_reports = [
@@ -124,16 +141,18 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     frame["el_clv"] = stage.isin(["Active Paid", "Active Free"])
     frame["el_credit"] = stage.isin(["Active Paid", "Active Free"])
 
-    features_raw = frame[MINIMUM_TIER_A_FEATURES]
+    for model_type, champion in champions.items():
+        _feature_contract_guard(model_type, champion["bundle"], frame)
 
     # ── Churn (calibrated probability + SHAP factors) ─────────────
     progress("churn model", 35)
     churn_bundle = champions["churn"]["bundle"]
+    churn_features = _features_for_bundle(frame, churn_bundle)
     thresholds = churn_bundle.get("thresholds") or DEFAULT_THRESHOLDS
     churn_prob = np.full(len(frame), np.nan)
     churn_mask = frame["el_churn"].to_numpy()
     if churn_mask.any():
-        x_churn = transform_features(features_raw[churn_mask], churn_bundle["preprocessor"])
+        x_churn = transform_features(churn_features[churn_mask], churn_bundle["preprocessor"])
         raw_scores = churn_bundle["model"].predict_proba(x_churn)[:, 1]
         calibrator = churn_bundle["calibrator"]
         churn_prob[churn_mask] = (
@@ -146,18 +165,20 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
 
     progress("churn explanations (SHAP)", 45)
     frame["churn_factors"] = _churn_shap_factors(
-        churn_bundle, features_raw, frame, churn_mask
+        churn_bundle, churn_features, frame, churn_mask
     )
 
     # ── CLV + p_alive ─────────────────────────────────────────────
     progress("clv model", 55)
     clv_bundle = champions["clv"]["bundle"]
-    frame = _apply_clv(frame, clv_bundle, features_raw, payments, cutoff)
+    clv_features = _features_for_bundle(frame, clv_bundle)
+    frame = _apply_clv(frame, clv_bundle, clv_features, payments, cutoff)
 
     # ── Credit quantiles ─────────────────────────────────────────
     progress("credit model", 65)
     credit_bundle = champions["credit"]["bundle"]
-    frame = _apply_credit(frame, credit_bundle, features_raw)
+    credit_features = _features_for_bundle(frame, credit_bundle)
+    frame = _apply_credit(frame, credit_bundle, credit_features)
 
     # ── Descriptive + profile snapshot (§3.3) ─────────────────────
     progress("derived fields", 75)

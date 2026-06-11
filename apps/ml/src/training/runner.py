@@ -199,7 +199,7 @@ def _train_and_register_churn(
     progress("churn: baselines + candidates (Optuna)", 15)
     dataset = datasets.churn
     preprocessor = fit_preprocessor(
-        dataset.features("train"), datasets.feature_result.feature_schema
+        dataset.features("train"), _feature_schema_for_dataset(datasets, dataset)
     )
     training = train_churn_candidates(dataset, preprocessor, progress=lambda m: print(m))
     source_id = source_id_of(training_run_id)
@@ -220,7 +220,9 @@ def _train_and_register_churn(
 
         backtest_rows: list[dict[str, Any]] = []
         for bt in backtest_sets:
-            bt_preproc = fit_preprocessor(bt.churn.features("train"), bt.feature_result.feature_schema)
+            bt_preproc = fit_preprocessor(
+                bt.churn.features("train"), _feature_schema_for_dataset(bt, bt.churn)
+            )
             y_test, probs, raw_scores, high_thr = refit_for_backtest(candidate, bt.churn, bt_preproc)
             backtest_rows.append(
                 {
@@ -319,7 +321,11 @@ def _train_and_register_churn(
 
     version = next_version("churn")
     feature_contract = build_feature_set_contract(
-        datasets.feature_result, name="tier_a_27", version="v1", model_type="churn"
+        datasets.feature_result,
+        name="tier_a_24",
+        version="v1",
+        model_type="churn",
+        feature_names=dataset.feature_names,
     )
     feature_set_id = repository.save_feature_set_contract(feature_contract)
 
@@ -506,7 +512,9 @@ def _train_and_register_clv(
 ) -> dict[str, Any]:
     progress("clv: candidates (BG-NBD vs Tweedie)", 55)
     dataset = datasets.clv
-    preprocessor = fit_preprocessor(dataset.features("train"), datasets.feature_result.feature_schema)
+    preprocessor = fit_preprocessor(
+        dataset.features("train"), _feature_schema_for_dataset(datasets, dataset)
+    )
     result = train_clv(
         dataset, payments, datasets.cutoff_date, horizon_days, preprocessor,
         progress=lambda m: print(m),
@@ -515,7 +523,9 @@ def _train_and_register_clv(
     progress("clv: backtests", 65)
     backtest_rows: list[dict[str, Any]] = []
     for bt in backtest_sets:
-        bt_preproc = fit_preprocessor(bt.clv.features("train"), bt.feature_result.feature_schema)
+        bt_preproc = fit_preprocessor(
+            bt.clv.features("train"), _feature_schema_for_dataset(bt, bt.clv)
+        )
         champion_metrics, baseline_metrics = backtest_clv(
             result, bt.clv, payments, bt.cutoff_date, horizon_days, bt_preproc
         )
@@ -553,7 +563,11 @@ def _train_and_register_clv(
     progress("clv: artifacts + registry", 70)
     version = next_version("clv")
     feature_contract = build_feature_set_contract(
-        datasets.feature_result, name="tier_a_27", version="v1", model_type="clv"
+        datasets.feature_result,
+        name="tier_a_24",
+        version="v1",
+        model_type="clv",
+        feature_names=dataset.feature_names,
     )
     feature_set_id = repository.save_feature_set_contract(feature_contract)
 
@@ -707,7 +721,9 @@ def _train_and_register_credit(
         f"credit: pooled train rows {int((dataset.frame['split'] == 'train').sum())} "
         f"from {1 + len(backtest_sets)} cutoffs"
     )
-    preprocessor = fit_preprocessor(dataset.features("train"), datasets.feature_result.feature_schema)
+    preprocessor = fit_preprocessor(
+        dataset.features("train"), _feature_schema_for_dataset(datasets, dataset)
+    )
     result = train_credit(dataset, preprocessor, progress=lambda m: print(m))
 
     progress("credit: backtests", 85)
@@ -715,7 +731,9 @@ def _train_and_register_credit(
     for bt in backtest_sets:
         older = [b.credit for b in backtest_sets if b.cutoff_date < bt.cutoff_date]
         bt_pooled = pool_train_rows(bt.credit, older)
-        bt_preproc = fit_preprocessor(bt_pooled.features("train"), bt.feature_result.feature_schema)
+        bt_preproc = fit_preprocessor(
+            bt_pooled.features("train"), _feature_schema_for_dataset(bt, bt_pooled)
+        )
         champion_metrics, baseline_metrics = backtest_credit(result, bt_pooled, bt_preproc)
         backtest_rows.append(
             {
@@ -758,7 +776,11 @@ def _train_and_register_credit(
     progress("credit: artifacts + registry", 92)
     version = next_version("credit")
     feature_contract = build_feature_set_contract(
-        datasets.feature_result, name="tier_a_27", version="v1", model_type="credit"
+        datasets.feature_result,
+        name="tier_a_27",
+        version="v1",
+        model_type="credit",
+        feature_names=dataset.feature_names,
     )
     feature_set_id = repository.save_feature_set_contract(feature_contract)
 
@@ -896,6 +918,16 @@ def _train_and_register_credit(
 
 
 # ── Shared helpers ───────────────────────────────────────────────
+
+
+def _feature_schema_for_dataset(
+    cutoff_datasets: CutoffDatasets,
+    dataset: Any,
+) -> dict[str, dict[str, Any]]:
+    return {
+        feature_name: cutoff_datasets.feature_result.feature_schema[feature_name]
+        for feature_name in dataset.feature_names
+    }
 
 
 def _promotion_decision(
