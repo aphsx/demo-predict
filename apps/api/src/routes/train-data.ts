@@ -2,11 +2,12 @@
  * [NEW] Train raw data API — import 8-sheet Excel into train_data_sources + train_raw_sheet_*.
  */
 import Elysia, { t } from "elysia";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
 import { canMutateOwnedRecord, denyMutation } from "../lib/access-control";
 import { requireUser } from "../lib/auth-middleware";
+import { UUID_RE } from "../lib/ml-contract";
 import { importTrainExcel, prepareTrainDataSource, type TrainImportResult } from "../lib/train-import";
 import type { TrainImportProgressEvent } from "../lib/train-import-progress";
 import { abortTrainDataSource, releaseStaleTrainImports } from "../lib/abort-data-source";
@@ -291,6 +292,54 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
     }
     return mapSource(rows[0]);
   })
+  // Gate 3 suggestion: latest training cutoff whose 180-day label horizon is
+  // fully observed = (latest activity date + 1 day) - horizon.
+  .get(
+    "/:id/suggested-cutoff",
+    async ({ params, set }) => {
+      if (!UUID_RE.test(params.id)) {
+        set.status = 404;
+        return { message: "Train data source not found" };
+      }
+      const [source] = await db
+        .select({ id: trainDataSources.id })
+        .from(trainDataSources)
+        .where(eq(trainDataSources.id, params.id))
+        .limit(1);
+      if (!source) {
+        set.status = 404;
+        return { message: "Train data source not found" };
+      }
+
+      const HORIZON_DAYS = 180;
+      const [row] = await db.execute<{
+        suggested_cutoff: string | null;
+        latest_data_date: string | null;
+      }>(sql`
+        SELECT to_char(latest + 1 - ${HORIZON_DAYS}::int, 'YYYY-MM-DD') AS suggested_cutoff,
+               to_char(latest, 'YYYY-MM-DD') AS latest_data_date
+        FROM (
+          SELECT GREATEST(
+            (SELECT MAX(payment_date)::date
+             FROM train_clean_payments WHERE source_id = ${params.id}),
+            (SELECT MAX(make_date(year, month, 1))
+             FROM train_clean_usage
+             WHERE source_id = ${params.id} AND year IS NOT NULL AND month IS NOT NULL)
+          ) AS latest
+        ) s
+      `);
+      if (!row?.suggested_cutoff || !row.latest_data_date) {
+        set.status = 400;
+        return { message: "No clean activity data for this source yet" };
+      }
+      return {
+        suggested_cutoff: row.suggested_cutoff,
+        latest_data_date: row.latest_data_date,
+        horizon_days: HORIZON_DAYS,
+      };
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
   .delete(
     "/:id",
     async ({ params, userId, set }) => {

@@ -2,10 +2,11 @@
  * [NEW] Predict raw + clean API — Excel → predict_raw_sheet_* → predict_clean_*.
  */
 import Elysia, { t } from "elysia";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { predictDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
+import { UUID_RE } from "../lib/ml-contract";
 import { importPredictExcel, type PredictImportResult } from "../lib/predict-import";
 import { abortPredictDataSource } from "../lib/abort-data-source";
 import { cleanPredictFromRaw } from "../lib/predict-clean";
@@ -96,6 +97,45 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
     }
     return mapSource(rows[0]);
   })
+  // Suggested prediction cutoff = day after the latest observed activity
+  // (payments + usage months) in the source's clean tables.
+  .get(
+    "/:id/suggested-cutoff",
+    async ({ params, set }) => {
+      if (!UUID_RE.test(params.id)) {
+        set.status = 404;
+        return { message: "Predict data source not found" };
+      }
+      const [source] = await db
+        .select({ id: predictDataSources.id })
+        .from(predictDataSources)
+        .where(eq(predictDataSources.id, params.id))
+        .limit(1);
+      if (!source) {
+        set.status = 404;
+        return { message: "Predict data source not found" };
+      }
+
+      const [row] = await db.execute<{ suggested_cutoff: string | null }>(sql`
+        SELECT to_char(latest + 1, 'YYYY-MM-DD') AS suggested_cutoff
+        FROM (
+          SELECT GREATEST(
+            (SELECT MAX(payment_date)::date
+             FROM predict_clean_payments WHERE source_id = ${params.id}),
+            (SELECT MAX(make_date(year, month, 1))
+             FROM predict_clean_usage
+             WHERE source_id = ${params.id} AND year IS NOT NULL AND month IS NOT NULL)
+          ) AS latest
+        ) s
+      `);
+      if (!row?.suggested_cutoff) {
+        set.status = 400;
+        return { message: "No clean activity data for this source yet" };
+      }
+      return { suggested_cutoff: row.suggested_cutoff };
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
   .post(
     "/import",
     async ({ body, userId, set }) => {
