@@ -12,7 +12,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { Database } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useActiveRun } from "@/components/RunSelector";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { fetchRunOutputs, type OutputsPage, type OutputsQuery } from "@/lib/mlApi";
@@ -22,8 +22,29 @@ import { CustomersView, type CustomerFilters } from "./CustomersView";
 // filters are applied server-side so every lifecycle stage is reachable.
 const PAGE_SIZE = 500;
 const SEARCH_DEBOUNCE_MS = 300;
+const FILTER_KEYS = [
+  "lifecycle_stage",
+  "search",
+  "customer_value_tier",
+  "churn_risk_level",
+] as const satisfies readonly (keyof CustomerFilters)[];
+
+function filtersFromSearchParams(sp: URLSearchParams): CustomerFilters {
+  return {
+    lifecycle_stage: sp.get("lifecycle_stage") || "",
+    search: sp.get("search") || "",
+    customer_value_tier: sp.get("customer_value_tier") || "",
+    churn_risk_level: sp.get("churn_risk_level") || "",
+  };
+}
+
+function filtersEqual(left: CustomerFilters, right: CustomerFilters) {
+  return FILTER_KEYS.every((key) => left[key] === right[key]);
+}
 
 function CustomersClientInner() {
+  const router = useRouter();
+  const pathname = usePathname();
   const { run, runId, runs, setRunId, loading: runsLoading } = useActiveRun();
   const sp = useSearchParams();
   const requestedRunId = sp.get("run") || "";
@@ -31,12 +52,9 @@ function CustomersClientInner() {
     requestedRunId && runs.some((candidate) => candidate.id === requestedRunId)
       ? requestedRunId
       : runId;
-  const [filters, setFilters] = useState<CustomerFilters>({
-    lifecycle_stage: sp.get("lifecycle_stage") || "",
-    search: sp.get("search") || "",
-    customer_value_tier: sp.get("customer_value_tier") || "",
-    churn_risk_level: sp.get("churn_risk_level") || "",
-  });
+  const [filters, setFilters] = useState<CustomerFilters>(() =>
+    filtersFromSearchParams(new URLSearchParams(Array.from(sp.entries())))
+  );
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
   const [page, setPage] = useState<OutputsPage | null>(null);
   const [pending, setPending] = useState(false);
@@ -49,6 +67,28 @@ function CustomersClientInner() {
     );
     return () => window.clearTimeout(timer);
   }, [filters.search]);
+
+  useEffect(() => {
+    const nextFilters = filtersFromSearchParams(new URLSearchParams(Array.from(sp.entries())));
+    setFilters((current) => (filtersEqual(current, nextFilters) ? current : nextFilters));
+  }, [sp]);
+
+  const updateFilters = (nextFilters: CustomerFilters) => {
+    setFilters(nextFilters);
+
+    const params = new URLSearchParams(Array.from(sp.entries()));
+    FILTER_KEYS.forEach((key) => {
+      const value = nextFilters[key].trim();
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+    });
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
 
   useEffect(() => {
     if (!requestedRunId || runsLoading) return;
@@ -132,7 +172,7 @@ function CustomersClientInner() {
       pending={pending}
       runId={effectiveRunId}
       filters={filters}
-      onFiltersChange={setFilters}
+      onFiltersChange={updateFilters}
     />
   );
 }

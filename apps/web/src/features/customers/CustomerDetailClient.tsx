@@ -19,9 +19,11 @@ import {
 export function CustomerDetailClient({
   accId,
   requestedRunId,
+  customersHref,
 }: {
   accId: string;
   requestedRunId: string;
+  customersHref: string;
 }) {
   const { run, runId, runs, setRunId, loading: runsLoading } = useActiveRun();
   const effectiveRunId =
@@ -111,6 +113,7 @@ export function CustomerDetailClient({
       customer={customer}
       usageTrend={usageTrend}
       runId={effectiveRun?.id}
+      customersHref={customersHref}
     />
   );
 }

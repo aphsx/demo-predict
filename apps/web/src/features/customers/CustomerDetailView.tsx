@@ -51,11 +51,13 @@ export function CustomerDetailView({
   customer,
   usageTrend,
   runId,
+  customersHref,
 }: {
   accId: string;
   customer: CustomerDetail;
   usageTrend: UsageTrendPoint[];
   runId?: string;
+  customersHref?: string;
 }) {
   const churnPct = customer.churn_probability != null ? customer.churn_probability * 100 : null;
   const showAiPanel = customer.ai_status === "completed" && customer.ai_explanation != null;
@@ -63,12 +65,12 @@ export function CustomerDetailView({
   const peakUsage = usageTrend.length > 0 ? Math.max(...usageTrend.map((point) => point.usage)) : null;
   const showSubStage =
     Boolean(customer.sub_stage) && customer.sub_stage !== customer.lifecycle_stage;
-  const customersHref = runId ? `/customers?run=${encodeURIComponent(runId)}` : "/customers";
+  const customerListHref = customersHref ?? (runId ? `/customers?run=${encodeURIComponent(runId)}` : "/customers");
 
   return (
     <main className="px-8 py-6 pb-12">
       <Link
-        href={customersHref}
+        href={customerListHref}
         className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[.16em] text-[color:var(--ink-5)] hover:text-[color:var(--moby-600)]"
       >
         <ArrowLeft size={11} /> Customers

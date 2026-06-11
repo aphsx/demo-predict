@@ -81,8 +81,14 @@ function Inner({ rows, total, pending, runId, filters, onFiltersChange }: Custom
 
   const activeFilters = Object.entries(filters).filter(([_, value]) => value).length;
   const pendingRows = pending;
-  const customerHref = (accId: number) =>
-    `/customers/${accId}?run=${encodeURIComponent(runId)}`;
+  const customerHref = (accId: number) => {
+    const params = new URLSearchParams({ run: runId });
+    Object.entries(filters).forEach(([key, value]) => {
+      const trimmed = value.trim();
+      if (trimmed) params.set(key, trimmed);
+    });
+    return `/customers/${accId}?${params.toString()}`;
+  };
 
   return (
     <main className="px-8 py-6 pb-12">
