@@ -16,7 +16,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useActiveRun } from "@/components/RunSelector";
 import { EmptyState, Skeleton } from "@/components/ui";
 import { fetchRunOutputs, type OutputsPage, type OutputsQuery } from "@/lib/mlApi";
-import { CustomersView, type CustomerFilters } from "./CustomersView";
+import {
+  CustomersView,
+  type CustomerFilters,
+  type CustomerSort,
+  type CustomerSortDirection,
+  type CustomerSortKey,
+} from "./CustomersView";
 
 // Server-side sort keeps the most important customers in the fetched page;
 // filters are applied server-side so every lifecycle stage is reachable.
@@ -28,6 +34,16 @@ const FILTER_KEYS = [
   "customer_value_tier",
   "churn_risk_level",
 ] as const satisfies readonly (keyof CustomerFilters)[];
+const SORT_KEYS = [
+  "acc_id",
+  "lifecycle_stage",
+  "churn_probability",
+  "priority_score",
+  "predicted_clv_6m",
+  "total_revenue",
+  "ai_status",
+] as const satisfies readonly CustomerSortKey[];
+const SORT_DIRECTIONS = ["asc", "desc"] as const satisfies readonly CustomerSortDirection[];
 
 function filtersFromSearchParams(sp: URLSearchParams): CustomerFilters {
   return {
@@ -40,6 +56,21 @@ function filtersFromSearchParams(sp: URLSearchParams): CustomerFilters {
 
 function filtersEqual(left: CustomerFilters, right: CustomerFilters) {
   return FILTER_KEYS.every((key) => left[key] === right[key]);
+}
+
+function sortFromSearchParams(sp: URLSearchParams): CustomerSort | null {
+  const [key, direction] = (sp.get("sort") ?? "").split(":");
+  if (
+    SORT_KEYS.includes(key as CustomerSortKey) &&
+    SORT_DIRECTIONS.includes(direction as CustomerSortDirection)
+  ) {
+    return { key: key as CustomerSortKey, direction: direction as CustomerSortDirection };
+  }
+  return null;
+}
+
+function sortsEqual(left: CustomerSort | null, right: CustomerSort | null) {
+  return left?.key === right?.key && left?.direction === right?.direction;
 }
 
 function CustomersClientInner() {
@@ -55,6 +86,9 @@ function CustomersClientInner() {
   const [filters, setFilters] = useState<CustomerFilters>(() =>
     filtersFromSearchParams(new URLSearchParams(Array.from(sp.entries())))
   );
+  const [sort, setSort] = useState<CustomerSort | null>(() =>
+    sortFromSearchParams(new URLSearchParams(Array.from(sp.entries())))
+  );
   const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
   const [page, setPage] = useState<OutputsPage | null>(null);
   const [pending, setPending] = useState(false);
@@ -69,8 +103,11 @@ function CustomersClientInner() {
   }, [filters.search]);
 
   useEffect(() => {
-    const nextFilters = filtersFromSearchParams(new URLSearchParams(Array.from(sp.entries())));
+    const params = new URLSearchParams(Array.from(sp.entries()));
+    const nextFilters = filtersFromSearchParams(params);
+    const nextSort = sortFromSearchParams(params);
     setFilters((current) => (filtersEqual(current, nextFilters) ? current : nextFilters));
+    setSort((current) => (sortsEqual(current, nextSort) ? current : nextSort));
   }, [sp]);
 
   const updateFilters = (nextFilters: CustomerFilters) => {
@@ -85,6 +122,20 @@ function CustomersClientInner() {
         params.delete(key);
       }
     });
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
+  const updateSort = (nextSort: CustomerSort | null) => {
+    setSort(nextSort);
+
+    const params = new URLSearchParams(Array.from(sp.entries()));
+    if (nextSort) {
+      params.set("sort", `${nextSort.key}:${nextSort.direction}`);
+    } else {
+      params.delete("sort");
+    }
 
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
@@ -105,7 +156,7 @@ function CustomersClientInner() {
     fetchRunOutputs(effectiveRunId, {
       page: 1,
       page_size: PAGE_SIZE,
-      sort: "priority_score:desc",
+      sort: sort ? `${sort.key}:${sort.direction}` : undefined,
       search: debouncedSearch,
       lifecycle_stage: filters.lifecycle_stage as OutputsQuery["lifecycle_stage"],
       customer_value_tier: filters.customer_value_tier as OutputsQuery["customer_value_tier"],
@@ -125,6 +176,7 @@ function CustomersClientInner() {
     filters.lifecycle_stage,
     filters.customer_value_tier,
     filters.churn_risk_level,
+    sort,
   ]);
 
   if (!runsLoading && !run) {
@@ -172,7 +224,9 @@ function CustomersClientInner() {
       pending={pending}
       runId={effectiveRunId}
       filters={filters}
+      sort={sort}
       onFiltersChange={updateFilters}
+      onSortChange={updateSort}
     />
   );
 }

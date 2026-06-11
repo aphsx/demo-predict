@@ -186,12 +186,14 @@ function mapOutput(row: OutputRow): PredictionOutput {
 
 const SORT_COLUMNS = {
   priority_score: mlPredictionOutputs.priorityScore,
+  lifecycle_stage: mlPredictionOutputs.lifecycleStage,
   churn_probability: mlPredictionOutputs.churnProbability,
   predicted_clv_6m: mlPredictionOutputs.predictedClv6m,
   revenue_at_risk: mlPredictionOutputs.revenueAtRisk,
   total_revenue: mlPredictionOutputs.totalRevenue,
   days_since_last_activity: mlPredictionOutputs.daysSinceLastActivity,
   estimated_days_until_topup: mlPredictionOutputs.estimatedDaysUntilTopup,
+  ai_status: mlPredictionOutputs.aiStatus,
   acc_id: mlPredictionOutputs.accId,
 } as const;
 

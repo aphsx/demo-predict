@@ -1,3 +1,7 @@
+docker compose stop web
+cd apps/web
+ELYSIA_URL=http://localhost:3001 bun run dev
+
 # Web Dev Workflow
 
 docker compose up -d --build api

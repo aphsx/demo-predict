@@ -3,6 +3,8 @@
 import { useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowDown,
+  ArrowUp,
   Loader2,
   RotateCcw,
   Search,
@@ -25,7 +27,25 @@ export type CustomerRow = Pick<
   | "customer_value_tier"
   | "n_purchases"
   | "total_revenue"
+  | "priority_score"
+  | "ai_status"
 >;
+
+export type CustomerSortKey =
+  | "acc_id"
+  | "lifecycle_stage"
+  | "churn_probability"
+  | "priority_score"
+  | "predicted_clv_6m"
+  | "total_revenue"
+  | "ai_status";
+
+export type CustomerSortDirection = "asc" | "desc";
+
+export interface CustomerSort {
+  key: CustomerSortKey;
+  direction: CustomerSortDirection;
+}
 
 export interface CustomerFilters {
   lifecycle_stage: string;
@@ -49,10 +69,21 @@ interface CustomersViewProps {
   pending: boolean;
   runId: string;
   filters: CustomerFilters;
+  sort: CustomerSort | null;
   onFiltersChange: (filters: CustomerFilters) => void;
+  onSortChange: (sort: CustomerSort | null) => void;
 }
 
-function Inner({ rows, total, pending, runId, filters, onFiltersChange }: CustomersViewProps) {
+function Inner({
+  rows,
+  total,
+  pending,
+  runId,
+  filters,
+  sort,
+  onFiltersChange,
+  onSortChange,
+}: CustomersViewProps) {
   const router = useRouter();
 
   const [aiGeneration, setAiGeneration] = useState<Record<number, AiGenerationStatus>>({});
@@ -62,6 +93,17 @@ function Inner({ rows, total, pending, runId, filters, onFiltersChange }: Custom
     onFiltersChange({ ...filters, [key]: value });
   };
   const clearAll = () => onFiltersChange(EMPTY_FILTERS);
+  const cycleSort = (key: CustomerSortKey) => {
+    if (!sort || sort.key !== key) {
+      onSortChange({ key, direction: "asc" });
+      return;
+    }
+    if (sort.direction === "asc") {
+      onSortChange({ key, direction: "desc" });
+      return;
+    }
+    onSortChange(null);
+  };
 
   const startAiGeneration = (accId: number) => {
     setAiGeneration(current => ({ ...current, [accId]: "generating" }));
@@ -140,13 +182,14 @@ function Inner({ rows, total, pending, runId, filters, onFiltersChange }: Custom
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_150px_150px_120px] gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] max-xl:hidden">
-            <div>Account</div>
-            <div>Lifecycle</div>
-            <div>Churn</div>
-            <div className="text-right">CLV 6m</div>
-            <div className="text-right">Revenue</div>
-            <div className="text-right">AI</div>
+          <div className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_110px_150px_150px_120px] gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] max-xl:hidden">
+            <SortableHeader label="Account" sortKey="acc_id" activeSort={sort} onSort={cycleSort} />
+            <SortableHeader label="Lifecycle" sortKey="lifecycle_stage" activeSort={sort} onSort={cycleSort} />
+            <SortableHeader label="Churn" sortKey="churn_probability" activeSort={sort} onSort={cycleSort} />
+            <SortableHeader label="Score" sortKey="priority_score" activeSort={sort} onSort={cycleSort} alignRight />
+            <SortableHeader label="CLV 6m" sortKey="predicted_clv_6m" activeSort={sort} onSort={cycleSort} alignRight />
+            <SortableHeader label="Revenue" sortKey="total_revenue" activeSort={sort} onSort={cycleSort} alignRight />
+            <SortableHeader label="AI" sortKey="ai_status" activeSort={sort} onSort={cycleSort} alignRight />
           </div>
 
           <div className="divide-y divide-gray-100">
@@ -162,7 +205,7 @@ function Inner({ rows, total, pending, runId, filters, onFiltersChange }: Custom
                   key={r.acc_id}
                   role="button"
                   tabIndex={0}
-                  className="grid w-full cursor-pointer grid-cols-1 gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50 xl:grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_150px_150px_120px] xl:items-center xl:gap-4"
+                  className="grid w-full cursor-pointer grid-cols-1 gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50 xl:grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_110px_150px_150px_120px] xl:items-center xl:gap-4"
                   onClick={() => router.push(customerHref(r.acc_id))}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") router.push(customerHref(r.acc_id));
@@ -187,6 +230,7 @@ function Inner({ rows, total, pending, runId, filters, onFiltersChange }: Custom
                     value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
                     valueColor="#fc4c02"
                   />
+                  <MetricCell label="Score" value={r.priority_score.toFixed(0)} alignRight />
                   <MetricCell label="CLV 6m" value={r.predicted_clv_6m != null ? formatCurrency(r.predicted_clv_6m) : "—"} alignRight />
                   <MetricCell label="Revenue" value={r.total_revenue != null ? formatCurrency(r.total_revenue) : "—"} alignRight />
                   <div className="flex justify-start xl:justify-end">
@@ -269,6 +313,38 @@ function MetricCell({
         {value}
       </p>
     </div>
+  );
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  activeSort,
+  onSort,
+  alignRight = false,
+}: {
+  label: string;
+  sortKey: CustomerSortKey;
+  activeSort: CustomerSort | null;
+  onSort: (key: CustomerSortKey) => void;
+  alignRight?: boolean;
+}) {
+  const isActive = activeSort?.key === sortKey;
+  const direction = isActive ? activeSort.direction : null;
+  const Icon = direction === "desc" ? ArrowDown : ArrowUp;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1.5 rounded-lg py-1 transition-colors hover:text-[color:var(--ink-2)] ${
+        alignRight ? "justify-end text-right" : "justify-start text-left"
+      } ${isActive ? "text-[color:var(--moby-600)]" : ""}`}
+      title="Click to sort ascending, descending, then reset"
+    >
+      <span>{label}</span>
+      <Icon size={12} className={isActive ? "opacity-100" : "opacity-25"} />
+    </button>
   );
 }
 
