@@ -29,11 +29,13 @@ def build_churn_labels(
     horizon_end = cutoff + pd.Timedelta(days=config.horizon_days)
     active_start = cutoff - pd.Timedelta(days=config.active_window_days)
 
-    customer_ids = _customer_ids(customers)
+    # Populations are defined by observed activity, not by membership in the
+    # uploaded customer sheet — profile sheets are not guaranteed to cover
+    # every paying/sending account, and Tier A features need no profile row.
     activity = _activity_events(payments, usage)
-    pre_active_ids = _ids_in_window(activity, active_start, cutoff) & customer_ids
-    future_active_ids = _ids_in_window(activity, cutoff, horizon_end) & customer_ids
-    ever_paid_before_ids = _ids_before(payments, "payment_date", cutoff) & customer_ids
+    pre_active_ids = _ids_in_window(activity, active_start, cutoff)
+    future_active_ids = _ids_in_window(activity, cutoff, horizon_end)
+    ever_paid_before_ids = _ids_before(payments, "payment_date", cutoff)
 
     eligible_ids = pre_active_ids & ever_paid_before_ids
     rows = pd.DataFrame({"acc_id": sorted(eligible_ids)})
@@ -59,8 +61,7 @@ def build_clv_labels(
     horizon_end = cutoff + pd.Timedelta(days=config.horizon_days)
     active_start = cutoff - pd.Timedelta(days=config.active_window_days)
 
-    customer_ids = _customer_ids(customers)
-    active_ids = _ids_in_window(_activity_events(payments, usage), active_start, cutoff) & customer_ids
+    active_ids = _ids_in_window(_activity_events(payments, usage), active_start, cutoff)
     future_payments = payments[
         (payments["payment_date"] >= cutoff) & (payments["payment_date"] < horizon_end)
     ]
@@ -75,17 +76,18 @@ def build_clv_labels(
 
 def build_credit_usage_labels(
     customers: pd.DataFrame,
+    payments: pd.DataFrame,
     usage: pd.DataFrame,
     cutoff_date: pd.Timestamp,
 ) -> pd.DataFrame:
-    """Build future 30d/90d usage labels for all known customers."""
+    """Build future 30d/90d usage labels for all known accounts."""
 
     cutoff = _timestamp(cutoff_date)
-    customer_ids = sorted(_customer_ids(customers))
+    account_ids = sorted(_known_account_ids(customers, payments, usage, cutoff))
     future_usage_30d = _future_usage_sum(usage, cutoff, cutoff + pd.Timedelta(days=30))
     future_usage_90d = _future_usage_sum(usage, cutoff, cutoff + pd.Timedelta(days=90))
 
-    rows = pd.DataFrame({"acc_id": customer_ids})
+    rows = pd.DataFrame({"acc_id": account_ids})
     rows["future_credit_usage_30d"] = rows["acc_id"].map(future_usage_30d).fillna(0.0)
     rows["future_credit_usage_90d"] = rows["acc_id"].map(future_usage_90d).fillna(0.0)
     rows["eligible_for_credit"] = True
@@ -95,17 +97,18 @@ def build_credit_usage_labels(
 def build_topup_timing_labels(
     customers: pd.DataFrame,
     payments: pd.DataFrame,
+    usage: pd.DataFrame,
     cutoff_date: pd.Timestamp,
 ) -> pd.DataFrame:
     """Build observed days-until-next-top-up labels after cutoff."""
 
     cutoff = _timestamp(cutoff_date)
-    customer_ids = sorted(_customer_ids(customers))
+    account_ids = sorted(_known_account_ids(customers, payments, usage, cutoff))
     future_payments = payments[payments["payment_date"] >= cutoff]
     next_payment = future_payments.groupby("acc_id")["payment_date"].min()
     days_until_next = (next_payment - cutoff).dt.days
 
-    rows = pd.DataFrame({"acc_id": customer_ids})
+    rows = pd.DataFrame({"acc_id": account_ids})
     rows["days_until_next_topup"] = rows["acc_id"].map(days_until_next)
     rows["topup_observed"] = rows["days_until_next_topup"].notna()
     return rows
@@ -122,8 +125,8 @@ def build_label_set(
     return {
         "churn": build_churn_labels(customers, payments, usage, config),
         "clv": build_clv_labels(customers, payments, usage, config),
-        "credit_usage": build_credit_usage_labels(customers, usage, config.cutoff_date),
-        "topup_timing": build_topup_timing_labels(customers, payments, config.cutoff_date),
+        "credit_usage": build_credit_usage_labels(customers, payments, usage, config.cutoff_date),
+        "topup_timing": build_topup_timing_labels(customers, payments, usage, config.cutoff_date),
     }
 
 
@@ -150,6 +153,24 @@ def _future_usage_sum(
 
 def _customer_ids(customers: pd.DataFrame) -> set[int]:
     return set(customers["acc_id"].dropna().astype(int).tolist())
+
+
+def _known_account_ids(
+    customers: pd.DataFrame,
+    payments: pd.DataFrame,
+    usage: pd.DataFrame,
+    cutoff: pd.Timestamp,
+) -> set[int]:
+    """Customer-sheet accounts plus any account with pre-cutoff activity.
+
+    Must stay consistent with the feature spine in features.py so every label
+    row has a feature row to join against."""
+
+    activity = _activity_events(payments, usage)
+    pre_cutoff_ids = set(
+        activity.loc[activity["activity_date"] < cutoff, "acc_id"].dropna().astype(int)
+    )
+    return _customer_ids(customers) | pre_cutoff_ids
 
 
 def _ids_before(frame: pd.DataFrame, date_column: str, cutoff: pd.Timestamp) -> set[int]:

@@ -19,6 +19,7 @@ from src.training.data import database_url, load_predict_clean, load_train_clean
 from src.training.features import (  # noqa: E402
     CREDIT_TIER_A_FEATURES,
     FeatureSetContract,
+    _known_account_ids,
     build_all_features,
     build_feature_set_contract,
     feature_names_for_model,
@@ -123,12 +124,17 @@ def build_feature_builder_artifacts(
 
     checks = [
         _check(
-            "one_feature_row_per_customer",
-            len(result.feature_df) == customers["acc_id"].nunique(),
-            "Feature row count matches distinct customer count.",
+            "one_feature_row_per_account",
+            len(result.feature_df)
+            == len(_known_account_ids(customers, payments, usage, pd.Timestamp(cutoff_date))),
+            "Feature row count matches the account spine (customer sheet plus "
+            "accounts with pre-cutoff activity).",
             {
                 "feature_rows": len(result.feature_df),
                 "distinct_customers": int(customers["acc_id"].nunique()),
+                "spine_accounts": len(
+                    _known_account_ids(customers, payments, usage, pd.Timestamp(cutoff_date))
+                ),
             },
         ),
         _check(

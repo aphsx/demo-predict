@@ -238,6 +238,17 @@ def check_split_contamination(split_frame: SplitFrame) -> dict[str, object]:
     }
 
 
+def month_start(date: pd.Timestamp) -> pd.Timestamp:
+    """Snap a date down to the first day of its month.
+
+    Usage data has monthly granularity — a cutoff that is not month-aligned
+    makes the 30d credit label window miss usage periods inconsistently and
+    produces bogus zero labels, so every cutoff in the system is month-aligned.
+    """
+
+    return pd.Timestamp(date).to_period("M").to_timestamp()
+
+
 def backtest_cutoffs(
     latest_cutoff: pd.Timestamp,
     step_months: int = 2,
@@ -245,13 +256,37 @@ def backtest_cutoffs(
 ) -> list[pd.Timestamp]:
     """Older cutoffs C2, C3, … for multi-cutoff backtesting (§3).
 
-    Steps are calendar months (not days) because usage data has monthly
-    granularity — a cutoff that is not month-aligned makes the 30d credit
-    label window miss every usage period and produces bogus zero labels.
+    Steps are calendar months (not days) — see `month_start`.
     """
 
     latest = pd.Timestamp(latest_cutoff)
     return [
         (latest.to_period("M") - step_months * i).to_timestamp()
         for i in range(1, n_backtests + 1)
+    ]
+
+
+def adaptive_backtest_cutoffs(
+    latest_cutoff: pd.Timestamp,
+    min_activity: pd.Timestamp,
+    max_activity: pd.Timestamp,
+    label_window_days: int,
+    step_months: int = 2,
+    max_backtests: int = 6,
+    min_history_days: int = 365,
+) -> list[pd.Timestamp]:
+    """Backtest cutoffs scaled to the uploaded data span (§3).
+
+    Instead of a fixed count, walk back `step_months` at a time and keep every
+    cutoff that still has `min_history_days` of history before it and a full
+    `label_window_days` of data after it — a 2-year upload yields more
+    backtests than a 1-year upload, capped at `max_backtests` for runtime.
+    """
+
+    candidates = backtest_cutoffs(latest_cutoff, step_months, max_backtests)
+    return [
+        cutoff
+        for cutoff in candidates
+        if (cutoff - pd.Timestamp(min_activity)).days >= min_history_days
+        and cutoff + pd.Timedelta(days=label_window_days) <= pd.Timestamp(max_activity)
     ]

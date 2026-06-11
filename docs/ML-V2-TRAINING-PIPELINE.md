@@ -38,8 +38,10 @@
 ## §3 Cutoff, horizon และ backtest
 
 - **Horizon:** 180 วัน (ทั้ง churn และ CLV 6 เดือน) / credit ใช้ 30 และ 90 วัน
-- **เงื่อนไขเลือก cutoff:** ต้องมีประวัติก่อน cutoff ≥ 365 วัน (ให้ feature 180d/6m มีของจริง) และมีข้อมูลหลัง cutoff ≥ horizon เต็ม (label ครบ) — Gate 3 เช็คอยู่แล้ว
-- **Multi-cutoff backtest:** เทรน/วัดที่ cutoff เดียวเชื่อไม่ได้ ใช้อย่างน้อย 3 cutoff เลื่อนถอยทีละ ~60 วัน:
+- **ทุก cutoff ต้อง month-aligned (ตรงต้นเดือน):** usage เป็นรายเดือน — cutoff กลางเดือนทำให้ label window 30 วันของ credit จับ usage period ไม่สม่ำเสมอ suggested cutoff จาก API snap ลงต้นเดือนเสมอ (`date_trunc('month', latest − horizon)`)
+- **Per-model cutoff:** churn/CLV ใช้ C1 = ต้นเดือนของ `latest − 180d` ส่วน **credit ใช้ C1 ของตัวเอง** = ต้นเดือนของ `latest − 90d` (label window ของ credit สั้นกว่า ไม่ต้องทิ้งข้อมูล 3 เดือนล่าสุดตาม horizon ของ churn) — runner คำนวณให้อัตโนมัติและบันทึกใน `training_config_json.credit_cutoff_date`
+- **เงื่อนไขเลือก cutoff:** ขั้นต่ำ (blocker, Gate 3): ประวัติก่อน cutoff ครอบ active window 180 วัน + ข้อมูลหลัง cutoff ≥ horizon เต็ม แนะนำ (warning): ประวัติก่อน cutoff ≥ 365 วัน เพื่อให้ feature 180d/6m มีของจริง
+- **Multi-cutoff backtest (adaptive):** จำนวน backtest ปรับตามช่วงข้อมูลที่อัพโหลดจริง — เดินถอยทีละ 2 เดือนจาก C1 เก็บทุก cutoff ที่ (ก) มีประวัติก่อนหน้า ≥ 365 วัน และ (ข) มี label window เต็มหลัง cutoff สูงสุด 6 ตัว (`adaptive_backtest_cutoffs` ใน `datasets.py`) ข้อมูล 2 ปีได้ ~3–4 backtest, ข้อมูล 1 ปีอาจได้ 0 — ถ้าได้ 0 ระบบเทรนต่อแต่เตือนชัดเจนว่า stability ข้ามเวลายังไม่ถูกพิสูจน์ cutoff ที่ใช้จริงทุกตัวบันทึกใน `training_config_json`
 
 ```
 cutoff C3 (เก่าสุด) ── train ──▶ วัดบน label หลัง C3
@@ -51,13 +53,15 @@ cutoff C1 (ล่าสุดที่ horizon ครบ) ── final model ─
 
 ## §4 Labels และ Features
 
-### Labels (`labels.py` — นิยามคงเดิม)
+### Labels (`labels.py`)
+
+**ประชากรนิยามจาก activity ไม่ใช่จากชีท Users:** spine ของทั้ง feature และ label = บัญชีในชีท Users ∪ ทุกบัญชีที่มี payment/usage ก่อน cutoff (`_known_account_ids`) — ชีท profile ที่อัพโหลดมาไม่การันตีว่าครอบทุกบัญชีที่ใช้งานจริง บัญชี orphan (มี activity แต่ไม่มีแถว profile) ยังเทรน/ทำนายได้เต็มที่เพราะ Tier A feature สร้างจาก event history ล้วน ๆ (ขาดแค่ `customer_age_days` ซึ่ง nullable อยู่แล้ว)
 
 | โมเดล | ประชากร (ณ cutoff) | Label |
 |---|---|---|
-| Churn | Active Paid | `churned = 1` ถ้าไม่มี payment และไม่มี usage > 0 เลยใน 180 วันหลัง cutoff |
-| CLV | Active | `future_revenue_6m = Σ amount` ใน 180 วันหลัง cutoff (ศูนย์ได้ — zero-heavy) |
-| Credit | มีประวัติใช้งาน | `future_credit_usage_30d/90d`; `days_until_next_topup` (censored ถ้าไม่ top-up) |
+| Churn | Active Paid (มี activity ใน 180 วันก่อน cutoff + เคยจ่ายก่อน cutoff) | `churned = 1` ถ้าไม่มี payment และไม่มี usage > 0 เลยใน 180 วันหลัง cutoff |
+| CLV | Active (มี activity ใน 180 วันก่อน cutoff) | `future_revenue_6m = Σ amount` ใน 180 วันหลัง cutoff (ศูนย์ได้ — zero-heavy) |
+| Credit | มีประวัติ activity (payment หรือ usage) ก่อน cutoff | `future_credit_usage_30d/90d`; `days_until_next_topup` (censored ถ้าไม่ top-up) |
 
 ### Features — model-specific Tier A contracts (`features.py` — contract verify แล้ว)
 

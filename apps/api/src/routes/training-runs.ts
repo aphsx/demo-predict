@@ -122,8 +122,10 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
         set.status = 400;
         return { message: "horizon_days must be positive" };
       }
+      // Month-aligned: usage data is monthly, so a mid-month cutoff makes the
+      // credit 30d label window catch usage periods inconsistently.
       const [suggested] = await db.execute<{ cutoff_date: string | null }>(sql`
-        SELECT to_char(latest - ${horizonDays}::int, 'YYYY-MM-DD') AS cutoff_date
+        SELECT to_char(date_trunc('month', (latest - ${horizonDays}::int)::timestamp)::date, 'YYYY-MM-DD') AS cutoff_date
         FROM (
           SELECT GREATEST(
             (SELECT MAX(payment_date)::date

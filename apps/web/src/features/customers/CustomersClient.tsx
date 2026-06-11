@@ -3,38 +3,77 @@
  * Binds /customers to the active prediction run (spec §2.0/§2.2):
  * run selector → fetchRunOutputs → CustomersView. Owns loading/empty/error
  * states per spec §5 — no mock fallback when no run is completed.
+ *
+ * Filters are SERVER-side: stage/search/tier/risk go into the outputs query.
+ * Client-side filtering of one priority-sorted page silently starved every
+ * non-top-priority stage (Ghost/Churned never reached the page), so every
+ * filter change refetches instead.
  */
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { Database } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import RunSelector, { useActiveRun } from "@/components/RunSelector";
 import { EmptyState, Skeleton } from "@/components/ui";
-import { fetchRunOutputs } from "@/lib/mlApi";
-import { CustomersView, type CustomerRow } from "./CustomersView";
+import { fetchRunOutputs, type OutputsPage, type OutputsQuery } from "@/lib/mlApi";
+import { CustomersView, type CustomerFilters } from "./CustomersView";
 
-// Client-side filtering in CustomersView works on one page of outputs;
-// server-side sort keeps the most important customers in that page.
+// Server-side sort keeps the most important customers in the fetched page;
+// filters are applied server-side so every lifecycle stage is reachable.
 const PAGE_SIZE = 500;
+const SEARCH_DEBOUNCE_MS = 300;
 
-export function CustomersClient() {
+function CustomersClientInner() {
   const { run, runId, loading: runsLoading } = useActiveRun();
-  const [rows, setRows] = useState<CustomerRow[] | null>(null);
+  const sp = useSearchParams();
+  const [filters, setFilters] = useState<CustomerFilters>({
+    lifecycle_stage: sp.get("lifecycle_stage") || "",
+    search: sp.get("search") || "",
+    customer_value_tier: sp.get("customer_value_tier") || "",
+    churn_risk_level: sp.get("churn_risk_level") || "",
+  });
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.search);
+  const [page, setPage] = useState<OutputsPage | null>(null);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedSearch(filters.search),
+      SEARCH_DEBOUNCE_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [filters.search]);
 
   useEffect(() => {
     if (!runId) return;
     let alive = true;
-    setRows(null);
+    setPending(true);
     setError(null);
-    fetchRunOutputs(runId, { page: 1, page_size: PAGE_SIZE, sort: "priority_score:desc" })
-      .then((page) => alive && setRows(page.data))
+    fetchRunOutputs(runId, {
+      page: 1,
+      page_size: PAGE_SIZE,
+      sort: "priority_score:desc",
+      search: debouncedSearch,
+      lifecycle_stage: filters.lifecycle_stage as OutputsQuery["lifecycle_stage"],
+      customer_value_tier: filters.customer_value_tier as OutputsQuery["customer_value_tier"],
+      churn_risk_level: filters.churn_risk_level as OutputsQuery["churn_risk_level"],
+    })
+      .then((result) => alive && setPage(result))
       .catch((e: unknown) =>
         alive && setError(e instanceof Error ? e.message : "โหลดข้อมูลลูกค้าไม่สำเร็จ")
-      );
+      )
+      .finally(() => alive && setPending(false));
     return () => {
       alive = false;
     };
-  }, [runId]);
+  }, [
+    runId,
+    debouncedSearch,
+    filters.lifecycle_stage,
+    filters.customer_value_tier,
+    filters.churn_risk_level,
+  ]);
 
   const selectorBar = (
     <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 px-8 pt-5">
@@ -73,13 +112,13 @@ export function CustomersClient() {
     );
   }
 
-  if (runsLoading || !rows) {
+  if (runsLoading || !page) {
     return (
       <>
         {selectorBar}
         <div className="space-y-3 px-8 py-5">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-2xl" />
+          {[...Array(8)].map((_, i) => (
+            <Skeleton key={i} className="h-14" />
           ))}
         </div>
       </>
@@ -89,7 +128,21 @@ export function CustomersClient() {
   return (
     <>
       {selectorBar}
-      <CustomersView rows={rows} />
+      <CustomersView
+        rows={page.data}
+        total={page.total}
+        pending={pending}
+        filters={filters}
+        onFiltersChange={setFilters}
+      />
     </>
+  );
+}
+
+export function CustomersClient() {
+  return (
+    <Suspense fallback={<div className="p-8 text-[color:var(--ink-5)]">Loading…</div>}>
+      <CustomersClientInner />
+    </Suspense>
   );
 }

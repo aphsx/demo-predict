@@ -317,7 +317,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         suggested_cutoff: string | null;
         latest_data_date: string | null;
       }>(sql`
-        SELECT to_char(latest - ${HORIZON_DAYS}::int, 'YYYY-MM-DD') AS suggested_cutoff,
+        SELECT to_char(date_trunc('month', (latest - ${HORIZON_DAYS}::int)::timestamp)::date, 'YYYY-MM-DD') AS suggested_cutoff,
                to_char(latest, 'YYYY-MM-DD') AS latest_data_date
         FROM (
           SELECT GREATEST(

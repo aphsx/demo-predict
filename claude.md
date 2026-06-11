@@ -179,16 +179,17 @@ Key design decisions:
 - Better Auth tables use camelCase column names (quoted identifiers in PG) — Drizzle schema
   preserves this in `apps/api/src/db/schema.ts`.
 
-## The Five ML Models + Lifecycle Engine
+## ML v2 Components (see docs/ML-V2-OVERVIEW.md — canonical)
 
-| Component           | Type                       | Output                                               |
-| ------------------- | -------------------------- | ---------------------------------------------------- |
-| **Lifecycle**       | Rule-based                 | Stage: Ghost / Churned / Active Free / Active Paid   |
-| **Churn**           | LightGBM + Optuna + SHAP   | `churn_probability`, per-customer SHAP factors       |
-| **CLV + RFM**       | BG-NBD + Gamma-Gamma       | `predicted_clv_6m`, `p_alive`, `n_purchases`         |
-| **Credit Forecast** | Quantile regression        | `credit_p10` … `credit_p90`                          |
-| **Winback**         | LightGBM                   | `comeback_probability` (for Churned stage only)      |
-| **Conversion**      | LightGBM                   | `conversion_probability` (for Active Free only)      |
+| Component           | Type                              | Output                                              |
+| ------------------- | --------------------------------- | --------------------------------------------------- |
+| **Lifecycle**       | Rule-based (not ML)               | `lifecycle_stage`, `sub_stage`                      |
+| **Churn**           | LightGBM + calibration + SHAP     | `churn_probability`, `churn_risk_level`, factors    |
+| **CLV**             | BG-NBD + Gamma-Gamma vs ML regressor | `predicted_clv_6m`, `p_alive`                    |
+| **Credit Forecast** | LightGBM quantile regression      | `predicted_credit_usage_30d/90d`, days-until-topup  |
+
+Win-back and conversion models (`comeback_probability`, `conversion_probability`)
+were **permanently cut** from ML v2 — do not reintroduce them.
 
 ## Job Flow
 

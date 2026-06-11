@@ -62,7 +62,9 @@ CREDIT_USAGE_NONZERO_MIN = 500
 TOPUP_OBSERVED_MIN = 500
 CLV_TOP_1_SHARE_WARNING_MAX = 0.50
 TOPUP_CENSORING_WARNING_MAX = 0.90
-MIN_HISTORY_DAYS_WARNING = 180
+# TRAINING-PIPELINE §3: ≥365d history is recommended so 180d/6m features have
+# real depth; the hard blocker stays at the 180d active window (Gate 3).
+MIN_HISTORY_DAYS_WARNING = 365
 
 
 @dataclass(frozen=True)
@@ -332,6 +334,7 @@ def _schema_quality_checks(dataset: CleanDataset) -> list[ValidationCheck]:
             _allowed_values_check("usage_source_values", usage["usage_source"], ALLOWED_USAGE_SOURCES),
             _duplicate_customer_check(customers),
             _orphan_activity_check(customers, payments, usage),
+            _duplicate_usage_source_check(usage),
         ]
     )
 
@@ -905,7 +908,9 @@ def _orphan_activity_check(
         message=(
             "Orphan activity acc_id rate is within threshold."
             if orphan_rate <= ORPHAN_ACTIVITY_RATE_WARNING_THRESHOLD
-            else "Orphan activity acc_id rate exceeds threshold."
+            else "Customer sheet does not cover all active accounts. Orphan accounts "
+            "are still included in training/prediction populations (activity-based "
+            "spine) but have no profile fields."
         ),
         details={
             "orphan_acc_id_count": len(orphan_ids),
@@ -914,6 +919,48 @@ def _orphan_activity_check(
             "threshold": ORPHAN_ACTIVITY_RATE_WARNING_THRESHOLD,
             "orphan_acc_ids_sample": orphan_ids[:20],
         },
+    )
+
+
+def _duplicate_usage_source_check(usage: pd.DataFrame) -> ValidationCheck:
+    """Warn when two usage-source sheets in the same channel are exact copies.
+
+    Distinct sources legitimately coexist in real exports, so rows are never
+    dropped — but a sheet duplicated by an export bug (e.g. OTP = copy of API)
+    double-counts usage in every feature and credit label, so the run must be
+    interpreted with that in mind."""
+
+    key_columns = ["acc_id", "year", "month", "usage"]
+    duplicated_pairs: list[dict[str, Any]] = []
+    if len(usage) and all(column in usage.columns for column in [*key_columns, "channel", "usage_source"]):
+        for channel, channel_rows in usage.groupby("channel"):
+            sources = {
+                source: rows[key_columns].sort_values(key_columns).reset_index(drop=True)
+                for source, rows in channel_rows.groupby("usage_source")
+            }
+            names = sorted(sources)
+            for index, first in enumerate(names):
+                for second in names[index + 1 :]:
+                    if len(sources[first]) and sources[first].equals(sources[second]):
+                        duplicated_pairs.append(
+                            {
+                                "channel": str(channel),
+                                "sources": [str(first), str(second)],
+                                "rows": int(len(sources[first])),
+                            }
+                        )
+
+    return ValidationCheck(
+        name="usage_source_sheet_duplication",
+        severity="warning",
+        passed=not duplicated_pairs,
+        message=(
+            "No usage-source sheets are exact duplicates."
+            if not duplicated_pairs
+            else "Usage-source sheets contain exact duplicates — usage volume is "
+            "double-counted in features/labels until the export is fixed."
+        ),
+        details={"duplicated_pairs": duplicated_pairs},
     )
 
 

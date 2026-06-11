@@ -34,8 +34,9 @@ from src.training.credit_trainer import backtest_credit, train_credit
 from src.training.data import load_train_clean
 from src.training.datasets import (
     CutoffDatasets,
-    backtest_cutoffs,
+    adaptive_backtest_cutoffs,
     build_cutoff_datasets,
+    month_start,
     pool_train_rows,
 )
 from src.training.features import build_feature_set_contract
@@ -69,7 +70,31 @@ COVERAGE_RANGE = (0.75, 0.90)
 BACKTEST_COVERAGE_RANGE = (0.70, 0.92)
 CREDIT_MAE_TOLERANCE = 1.10
 BACKTEST_STEP_MONTHS = 2
-N_BACKTESTS = 2
+# Backtest count adapts to the uploaded data span (§3): every step-month
+# cutoff with ≥MIN_BACKTEST_HISTORY_DAYS of history and a full label window
+# is used, capped at MAX_BACKTESTS for runtime.
+MAX_BACKTESTS = 6
+MIN_BACKTEST_HISTORY_DAYS = 365
+# Credit labels need only 30/90d of post-cutoff data, so credit trains at its
+# own fresher month-aligned cutoff instead of wasting the newest months on the
+# churn/CLV 180d horizon.
+CREDIT_LABEL_WINDOW_DAYS = 90
+
+
+def _activity_range(payments: pd.DataFrame, usage: pd.DataFrame) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Min/max activity dates (payments + positive usage), matching the label
+    definition of activity in labels.py."""
+
+    dates = pd.concat(
+        [
+            payments.loc[payments["payment_date"].notna(), "payment_date"],
+            usage.loc[(usage["usage"] > 0) & usage["period"].notna(), "period"],
+        ],
+        ignore_index=True,
+    )
+    if dates.empty:
+        raise RuntimeError("No payment or usage activity found for this source")
+    return pd.Timestamp(dates.min()), pd.Timestamp(dates.max())
 
 
 def run_training(training_run_id: str) -> None:
@@ -112,7 +137,7 @@ def _run_training_inner(training_run_id: str, log_buffer: io.StringIO) -> None:
             "horizon_days": horizon_days,
             "seed": 42,
             "backtest_step_months": BACKTEST_STEP_MONTHS,
-            "n_backtests": N_BACKTESTS,
+            "max_backtests": MAX_BACKTESTS,
         },
     )
     progress("gates", 3)
@@ -136,6 +161,7 @@ def _run_training_inner(training_run_id: str, log_buffer: io.StringIO) -> None:
     # ── Data + datasets (§2 steps 2, 6–7) ─────────────────────────
     progress("features", 8)
     customers, payments, usage = load_train_clean(source_id)
+    activity_min, activity_max = _activity_range(payments, usage)
     datasets_c1 = build_cutoff_datasets(customers, payments, usage, cutoff, horizon_days)
     print(
         f"C1={cutoff.date()} churn n={len(datasets_c1.churn.frame)} "
@@ -143,14 +169,78 @@ def _run_training_inner(training_run_id: str, log_buffer: io.StringIO) -> None:
     )
 
     progress("backtest datasets", 12)
+    backtest_dates = adaptive_backtest_cutoffs(
+        cutoff,
+        activity_min,
+        activity_max,
+        label_window_days=horizon_days,
+        step_months=BACKTEST_STEP_MONTHS,
+        max_backtests=MAX_BACKTESTS,
+        min_history_days=MIN_BACKTEST_HISTORY_DAYS,
+    )
+    if not backtest_dates:
+        print(
+            "WARNING: data span supports no backtest cutoffs — model stability "
+            "across time is unverified for this run."
+        )
     backtest_sets: list[CutoffDatasets] = []
-    for old_cutoff in backtest_cutoffs(cutoff, BACKTEST_STEP_MONTHS, N_BACKTESTS):
+    for old_cutoff in backtest_dates:
         try:
             backtest_sets.append(
                 build_cutoff_datasets(customers, payments, usage, old_cutoff, horizon_days)
             )
         except Exception as exc:  # noqa: BLE001 - an infeasible old cutoff shrinks the backtest.
             print(f"backtest cutoff {old_cutoff.date()} skipped: {exc}")
+
+    # ── Credit datasets at credit's own fresher cutoff ────────────
+    credit_cutoff = month_start(activity_max - pd.Timedelta(days=CREDIT_LABEL_WINDOW_DAYS))
+    datasets_credit = datasets_c1
+    credit_backtest_sets = backtest_sets
+    if credit_cutoff > cutoff:
+        try:
+            datasets_credit = build_cutoff_datasets(
+                customers, payments, usage, credit_cutoff, horizon_days
+            )
+            credit_backtest_sets = []
+            for old_cutoff in adaptive_backtest_cutoffs(
+                credit_cutoff,
+                activity_min,
+                activity_max,
+                label_window_days=CREDIT_LABEL_WINDOW_DAYS,
+                step_months=BACKTEST_STEP_MONTHS,
+                max_backtests=MAX_BACKTESTS,
+                min_history_days=MIN_BACKTEST_HISTORY_DAYS,
+            ):
+                try:
+                    credit_backtest_sets.append(
+                        build_cutoff_datasets(customers, payments, usage, old_cutoff, horizon_days)
+                    )
+                except Exception as exc:  # noqa: BLE001 - infeasible old cutoff shrinks the backtest.
+                    print(f"credit backtest cutoff {old_cutoff.date()} skipped: {exc}")
+            print(f"credit C1={credit_cutoff.date()} n={len(datasets_credit.credit.frame)}")
+        except Exception as exc:  # noqa: BLE001 - fall back to the shared cutoff.
+            print(f"credit cutoff {credit_cutoff.date()} infeasible ({exc}); using shared C1")
+            datasets_credit = datasets_c1
+            credit_backtest_sets = backtest_sets
+            credit_cutoff = cutoff
+    else:
+        credit_cutoff = cutoff
+
+    update_training_run(
+        training_run_id,
+        training_config={
+            "cutoff_date": str(cutoff.date()),
+            "horizon_days": horizon_days,
+            "seed": 42,
+            "backtest_step_months": BACKTEST_STEP_MONTHS,
+            "max_backtests": MAX_BACKTESTS,
+            "min_backtest_history_days": MIN_BACKTEST_HISTORY_DAYS,
+            "activity_range": [str(activity_min.date()), str(activity_max.date())],
+            "backtest_cutoffs": [str(b.cutoff_date.date()) for b in backtest_sets],
+            "credit_cutoff_date": str(credit_cutoff.date()),
+            "credit_backtest_cutoffs": [str(b.cutoff_date.date()) for b in credit_backtest_sets],
+        },
+    )
 
     results: list[dict[str, Any]] = []
 
@@ -171,7 +261,7 @@ def _run_training_inner(training_run_id: str, log_buffer: io.StringIO) -> None:
     # ── Credit ────────────────────────────────────────────────────
     results.append(
         _train_and_register_credit(
-            training_run_id, datasets_c1, backtest_sets, horizon_days, created_by, progress
+            training_run_id, datasets_credit, credit_backtest_sets, horizon_days, created_by, progress
         )
     )
 

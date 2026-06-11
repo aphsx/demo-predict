@@ -372,6 +372,7 @@ def feature_code_hash(feature_names: list[str] | None = None) -> str:
         "builders": builders,
         "helpers": {
             "base_customer_frame": inspect.getsource(_base_customer_frame),
+            "known_account_ids": inspect.getsource(_known_account_ids),
             "payment_history": inspect.getsource(_payment_history),
             "usage_history": inspect.getsource(_usage_history),
             "payment_interval_features": inspect.getsource(_payment_interval_features),
@@ -706,7 +707,7 @@ def _build_feature_df(
     cutoff_date: pd.Timestamp,
 ) -> pd.DataFrame:
     cutoff = _timestamp(cutoff_date)
-    feature_df = _base_customer_frame(customers)
+    feature_df = _base_customer_frame(customers, payments, usage, cutoff)
     for part in [
         build_profile_features(customers, cutoff),
         build_payment_features(payments, cutoff),
@@ -759,7 +760,7 @@ def build_lifecycle_outputs(
 
     cutoff = _timestamp(cutoff_date)
     active_start = cutoff - pd.Timedelta(days=active_window_days)
-    customer_ids = _customer_ids(customers)
+    customer_ids = _known_account_ids(customers, payments, usage, cutoff)
     payment_history = _payment_history(payments, cutoff)
     usage_history = _usage_history(usage, cutoff)
     activity = pd.concat(
@@ -851,8 +852,36 @@ def build_feature_stats(
     }
 
 
-def _base_customer_frame(customers: pd.DataFrame) -> pd.DataFrame:
-    return pd.DataFrame({"acc_id": sorted(_customer_ids(customers))})
+def _base_customer_frame(
+    customers: pd.DataFrame,
+    payments: pd.DataFrame,
+    usage: pd.DataFrame,
+    cutoff: pd.Timestamp,
+) -> pd.DataFrame:
+    return pd.DataFrame(
+        {"acc_id": sorted(_known_account_ids(customers, payments, usage, cutoff))}
+    )
+
+
+def _known_account_ids(
+    customers: pd.DataFrame,
+    payments: pd.DataFrame,
+    usage: pd.DataFrame,
+    cutoff: pd.Timestamp,
+) -> set[int]:
+    """Account spine: the customer sheet plus any account with pre-cutoff
+    activity. Uploaded profile sheets are not guaranteed to cover every
+    account that pays or sends — activity-only (orphan) accounts still carry
+    full Tier A signal and must not be dropped from features or labels."""
+
+    payment_history = _payment_history(payments, cutoff)
+    usage_history = _usage_history(usage, cutoff)
+    active_usage = usage_history[usage_history["usage"] > 0]
+    return (
+        _customer_ids(customers)
+        | set(payment_history["acc_id"].dropna().astype(int).tolist())
+        | set(active_usage["acc_id"].dropna().astype(int).tolist())
+    )
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:

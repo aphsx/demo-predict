@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useMemo, useState, type MouseEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, type MouseEvent } from "react";
+import { useRouter } from "next/navigation";
 import {
   Loader2,
   RotateCcw,
@@ -27,23 +27,40 @@ export type CustomerRow = Pick<
   | "total_revenue"
 >;
 
+export interface CustomerFilters {
+  lifecycle_stage: string;
+  search: string;
+  customer_value_tier: string;
+  churn_risk_level: string;
+}
+
+const EMPTY_FILTERS: CustomerFilters = {
+  lifecycle_stage: "",
+  search: "",
+  customer_value_tier: "",
+  churn_risk_level: "",
+};
+
 type AiGenerationStatus = "generating" | "generated";
 
-function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
-  const router = useRouter();
-  const sp = useSearchParams();
+interface CustomersViewProps {
+  rows: CustomerRow[];
+  total: number;
+  pending: boolean;
+  filters: CustomerFilters;
+  onFiltersChange: (filters: CustomerFilters) => void;
+}
 
-  const [filters, setFilters] = useState({
-    lifecycle_stage: sp.get("lifecycle_stage") || "",
-    search: sp.get("search") || "",
-  });
+function Inner({ rows, total, pending, filters, onFiltersChange }: CustomersViewProps) {
+  const router = useRouter();
+
   const [aiGeneration, setAiGeneration] = useState<Record<number, AiGenerationStatus>>({});
   const [pendingOverwriteAccId, setPendingOverwriteAccId] = useState<number | null>(null);
 
-  const setFilter = (key: string, value: string) => {
-    setFilters(current => ({ ...current, [key]: value }));
+  const setFilter = (key: keyof CustomerFilters, value: string) => {
+    onFiltersChange({ ...filters, [key]: value });
   };
-  const clearAll = () => setFilters({ lifecycle_stage: "", search: "" });
+  const clearAll = () => onFiltersChange(EMPTY_FILTERS);
 
   const startAiGeneration = (accId: number) => {
     setAiGeneration(current => ({ ...current, [accId]: "generating" }));
@@ -61,26 +78,8 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
     startAiGeneration(accId);
   };
 
-  const rows = useMemo(() => {
-    const needle = filters.search.trim().toLowerCase();
-
-    return allRows.filter((row) => {
-      const matchesStage = !filters.lifecycle_stage || row.lifecycle_stage === filters.lifecycle_stage;
-      const matchesSearch =
-        !needle ||
-        String(row.acc_id).includes(needle) ||
-        (row.lifecycle_stage ?? "").toLowerCase().includes(needle) ||
-        (row.sub_stage ?? "").toLowerCase().includes(needle);
-
-      return matchesStage && matchesSearch;
-    });
-  }, [allRows, filters.lifecycle_stage, filters.search]);
-  const total = rows.length;
-  const pageSize = 50;
-  const page = 1;
-  const pages = Math.max(1, Math.ceil(total / pageSize));
   const activeFilters = Object.entries(filters).filter(([_, value]) => value).length;
-  const pendingRows = false;
+  const pendingRows = pending;
 
   return (
     <main className="px-8 py-6 pb-12">
@@ -92,7 +91,7 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                 <input
                   value={filters.search}
                   onChange={event => setFilter("search", event.target.value)}
-                  placeholder="Search account ID, lifecycle, or sub-stage..."
+                  placeholder="Search account ID..."
                   className="h-11 min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[color:var(--ink-5)]"
                 />
               </div>
@@ -109,6 +108,16 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
                     {stage}
                   </FilterChip>
                 ))}
+                {filters.customer_value_tier && (
+                  <FilterChip active onClick={() => setFilter("customer_value_tier", "")}>
+                    Tier: {filters.customer_value_tier} ✕
+                  </FilterChip>
+                )}
+                {filters.churn_risk_level && (
+                  <FilterChip active onClick={() => setFilter("churn_risk_level", "")}>
+                    Risk: {filters.churn_risk_level} ✕
+                  </FilterChip>
+                )}
                 {activeFilters > 0 && (
                   <button
                     type="button"
@@ -199,9 +208,13 @@ function Inner({ rows: allRows }: { rows: CustomerRow[] }) {
 
           <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-5 py-3">
             <div className="num text-[12px] text-[color:var(--ink-4)]">
-              {pendingRows ? "Preparing prediction output..." : `${total.toLocaleString()} shown of ${allRows.length.toLocaleString()}`}
+              {pendingRows
+                ? "Loading customers..."
+                : `${rows.length.toLocaleString()} shown of ${total.toLocaleString()} matching`}
             </div>
-            <div className="num text-[12px] text-[color:var(--ink-4)]">Page {page} / {pages}</div>
+            <div className="num text-[12px] text-[color:var(--ink-4)]">
+              {total > rows.length ? "showing top results by priority" : ""}
+            </div>
           </div>
         </section>
 
@@ -307,10 +320,6 @@ function FilterChip({
   );
 }
 
-export function CustomersView({ rows }: { rows: CustomerRow[] }) {
-  return (
-    <Suspense fallback={<div className="p-8 text-[color:var(--ink-5)]">Loading…</div>}>
-      <Inner rows={rows} />
-    </Suspense>
-  );
+export function CustomersView(props: CustomersViewProps) {
+  return <Inner {...props} />;
 }
