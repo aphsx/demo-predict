@@ -102,6 +102,19 @@ function validateHeaders(sheetName: string, headers: (string | null)[], required
   }
 }
 
+function validateWorkbookSheets(sheetNames: string[]): void {
+  const expected = new Set(Object.keys(PREDICT_SHEET_CONFIG));
+  for (const req of PREDICT_REQUIRED_SHEETS) {
+    if (!sheetNames.includes(req)) {
+      throw new Error(`Missing required sheet: ${req}`);
+    }
+  }
+  const unexpected = sheetNames.filter((name) => !expected.has(name));
+  if (unexpected.length > 0) {
+    throw new Error(`Unexpected sheet(s): ${unexpected.join(", ")}. Expected exactly 8 fixed-schema sheets.`);
+  }
+}
+
 function parseSheetRows(
   buffer: Buffer,
   sheetName: PredictSheetName,
@@ -166,11 +179,7 @@ export async function importPredictExcel(params: {
   const checksum = createHash("sha256").update(params.buffer).digest("hex");
 
   const wb = XLSX.read(params.buffer, { type: "buffer", cellDates: true });
-  for (const req of PREDICT_REQUIRED_SHEETS) {
-    if (!wb.SheetNames.includes(req)) {
-      throw new Error(`Missing required sheet: ${req}`);
-    }
-  }
+  validateWorkbookSheets(wb.SheetNames);
 
   const [created] = await db
     .insert(predictDataSources)

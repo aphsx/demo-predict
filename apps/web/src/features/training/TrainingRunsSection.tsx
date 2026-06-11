@@ -31,15 +31,19 @@ export function TrainingRunsSection({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestedCutoff, setSuggestedCutoff] = useState<string | null>(null);
+  const [latestDataDate, setLatestDataDate] = useState<string | null>(null);
 
   const selectedSourceId = selectedSource?.id ?? null;
   useEffect(() => {
     setSuggestedCutoff(null);
+    setLatestDataDate(null);
     if (!selectedSourceId) return;
     let alive = true;
     fetchTrainSuggestedCutoff(selectedSourceId)
-      .then(({ suggested_cutoff }) => {
-        if (alive) setSuggestedCutoff(suggested_cutoff);
+      .then(({ suggested_cutoff, latest_data_date }) => {
+        if (!alive) return;
+        setSuggestedCutoff(suggested_cutoff);
+        setLatestDataDate(latest_data_date);
       })
       .catch(() => {
         // The panel falls back to its local default when no suggestion is available.
@@ -110,6 +114,7 @@ export function TrainingRunsSection({
       <TrainRunPanel
         selectedSource={selectedSource}
         suggestedCutoff={suggestedCutoff}
+        latestDataDate={latestDataDate}
         creating={creating}
         onTrain={(input) => void handleTrain(input)}
       />

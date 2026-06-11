@@ -2,12 +2,12 @@
 /**
  * Spec §2.5 — create-run section. Source dropdown is limited to
  * import_status === "ready"; run name defaults to `{source.name} — {today}`;
- * cutoff defaults to the API-suggested cutoff of the selected source
- * (latest observed activity — the user can still override it).
+ * cutoff is auto-managed from the API-suggested cutoff of the selected source
+ * (latest observed activity + 1). Manual override is hidden in Advanced.
  */
 
 import { useEffect, useState } from "react";
-import { Play, RefreshCw } from "lucide-react";
+import { Play, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { SectionCard } from "@/components/ui";
 import type { PredictDataSource } from "@/lib/api";
 import { createPredictionRun, fetchPredictSuggestedCutoff } from "@/lib/mlApi";
@@ -32,6 +32,8 @@ export function CreateRunPanel({
   const [nameTouched, setNameTouched] = useState(false);
   const [cutoff, setCutoff] = useState(todayISO());
   const [cutoffTouched, setCutoffTouched] = useState(false);
+  const [latestDataDate, setLatestDataDate] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,10 +57,13 @@ export function CreateRunPanel({
   useEffect(() => {
     if (!selected) return;
     setCutoffTouched(false);
+    setLatestDataDate(null);
+    setCutoff("");
     let alive = true;
     fetchPredictSuggestedCutoff(selected.id)
-      .then(({ suggested_cutoff }) => {
+      .then(({ suggested_cutoff, latest_data_date }) => {
         if (!alive) return;
+        setLatestDataDate(latest_data_date);
         setCutoffTouched((touched) => {
           if (!touched) setCutoff(suggested_cutoff);
           return touched;
@@ -100,7 +105,7 @@ export function CreateRunPanel({
       title="Create prediction run"
       hint="เลือก source ที่ import เสร็จแล้ว ระบบจะรัน lifecycle / churn / CLV / credit forecast ให้ทุกลูกค้า"
     >
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_auto] gap-3 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_auto] gap-3 items-start">
         <div>
           <label className={labelCls}>Predict source</label>
           <select
@@ -132,20 +137,22 @@ export function CreateRunPanel({
           />
         </div>
         <div>
-          <label className={labelCls}>Cutoff date</label>
-          <input
-            type="date"
-            value={cutoff}
-            onChange={(e) => {
-              setCutoff(e.target.value);
-              setCutoffTouched(true);
-            }}
-            disabled={creating || readySources.length === 0}
-            className={inputCls}
-          />
-          <p className="text-[11px] text-[color:var(--ink-5)] mt-1">
-            ค่าแนะนำจากวันที่ข้อมูลล่าสุดของ source — แก้ไขได้
-          </p>
+          <label className={labelCls}>Prediction cutoff</label>
+          <div className="min-h-9 rounded-lg border border-[color:var(--moby-100)] bg-white px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[13px] font-semibold text-[color:var(--ink-2)]">
+                {cutoff || "Waiting for source"}
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
+                {cutoffTouched ? "Manual" : "Auto"}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-4 text-[color:var(--ink-5)]">
+              {latestDataDate
+                ? `ข้อมูลล่าสุด ${latestDataDate}; predict as-of วันถัดไป`
+                : "ระบบเลือกจากวันที่ข้อมูลล่าสุดของ source"}
+            </p>
+          </div>
         </div>
         <div className="md:pt-5">
           <button
@@ -158,6 +165,34 @@ export function CreateRunPanel({
             {creating ? "Creating…" : "Create run"}
           </button>
         </div>
+      </div>
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[color:var(--moby-100)] bg-white px-3 text-[12px] text-[color:var(--ink-4)] hover:bg-gray-50"
+        >
+          <SlidersHorizontal size={13} />
+          Advanced
+        </button>
+        {showAdvanced && (
+          <label className="mt-3 block max-w-[240px]">
+            <span className={labelCls}>Manual cutoff override</span>
+            <input
+              type="date"
+              value={cutoff}
+              onChange={(e) => {
+                setCutoff(e.target.value);
+                setCutoffTouched(true);
+              }}
+              disabled={creating || readySources.length === 0}
+              className={inputCls}
+            />
+            <p className="mt-1 text-[11px] leading-4 text-[color:var(--ink-5)]">
+              ใช้เฉพาะกรณีต้อง replay prediction ณ วันอื่นของ dataset เดิม
+            </p>
+          </label>
+        )}
       </div>
       {error && (
         <div className="mt-3 rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-3 py-2 text-[12.5px] text-[color:var(--danger)]">

@@ -110,6 +110,19 @@ function validateHeaders(sheetName: string, headers: (string | null)[], required
   }
 }
 
+function validateWorkbookSheets(sheetNames: string[]): void {
+  const expected = new Set(Object.keys(TRAIN_SHEET_CONFIG));
+  for (const req of TRAIN_REQUIRED_SHEETS) {
+    if (!sheetNames.includes(req)) {
+      throw new Error(`Missing required sheet: ${req}`);
+    }
+  }
+  const unexpected = sheetNames.filter((name) => !expected.has(name));
+  if (unexpected.length > 0) {
+    throw new Error(`Unexpected sheet(s): ${unexpected.join(", ")}. Expected exactly 8 fixed-schema sheets.`);
+  }
+}
+
 function parseSheetRows(
   buffer: Buffer,
   sheetName: TrainSheetName,
@@ -173,11 +186,7 @@ export async function prepareTrainDataSource(params: {
   const checksum = createHash("sha256").update(params.buffer).digest("hex");
 
   const wb = XLSX.read(params.buffer, { type: "buffer", cellDates: true });
-  for (const req of TRAIN_REQUIRED_SHEETS) {
-    if (!wb.SheetNames.includes(req)) {
-      throw new Error(`Missing required sheet: ${req}`);
-    }
-  }
+  validateWorkbookSheets(wb.SheetNames);
 
   const existing = await db
     .select({ id: trainDataSources.id })
@@ -242,11 +251,7 @@ export async function importTrainExcel(params: {
     emit?.({ progress: 0, step: "Reading workbook…" });
 
     const wb = XLSX.read(params.buffer, { type: "buffer", cellDates: true });
-    for (const req of TRAIN_REQUIRED_SHEETS) {
-      if (!wb.SheetNames.includes(req)) {
-        throw new Error(`Missing required sheet: ${req}`);
-      }
-    }
+    validateWorkbookSheets(wb.SheetNames);
 
     const existing = await db
       .select({ id: trainDataSources.id })

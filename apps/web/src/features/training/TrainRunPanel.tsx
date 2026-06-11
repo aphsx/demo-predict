@@ -6,14 +6,15 @@ import { MockBadge } from "@/components/RunSelector";
 import { StatusPill } from "@/components/ui";
 import type { TrainDataSource } from "@/lib/api";
 import { IMPORT_ACCENT } from "./training-utils";
-import { DEFAULT_HORIZON_DAYS, defaultCutoffDate } from "./training-run-utils";
+import { DEFAULT_HORIZON_DAYS } from "./training-run-utils";
 
 const CUTOFF_HELPER =
-  "ค่าแนะนำจาก Gate 3: วันล่าสุดที่ horizon 180 วันยังครบ — แก้ไขได้";
+  "ระบบเลือก cutoff ล่าสุดที่ยังมี label horizon ครบ เพื่อกัน leakage และไม่ให้ train fail";
 
 export function TrainRunPanel({
   selectedSource,
   suggestedCutoff,
+  latestDataDate,
   creating,
   onTrain,
 }: {
@@ -21,16 +22,20 @@ export function TrainRunPanel({
   selectedSource: TrainDataSource | null;
   /** Gate 3 suggestion from the API for the selected dataset. */
   suggestedCutoff: string | null;
+  /** Latest observed activity date used to derive the cutoff. */
+  latestDataDate: string | null;
   creating: boolean;
   onTrain: (input: { cutoff_date: string; horizon_days: number }) => void;
 }) {
-  const [cutoffDate, setCutoffDate] = useState<string>(defaultCutoffDate);
+  const [cutoffDate, setCutoffDate] = useState<string>("");
   const [cutoffTouched, setCutoffTouched] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [horizonDays, setHorizonDays] = useState<number>(DEFAULT_HORIZON_DAYS);
 
   useEffect(() => {
     setCutoffTouched(false);
+    setCutoffDate("");
+    setHorizonDays(DEFAULT_HORIZON_DAYS);
   }, [selectedSource?.id]);
 
   useEffect(() => {
@@ -39,6 +44,7 @@ export function TrainRunPanel({
 
   const horizonValid = Number.isInteger(horizonDays) && horizonDays > 0;
   const canTrain = Boolean(selectedSource) && Boolean(cutoffDate) && horizonValid && !creating;
+  const cutoffMode = cutoffTouched ? "Manual override" : "Auto-managed";
 
   return (
     <section className="surface-elev overflow-hidden">
@@ -84,23 +90,24 @@ export function TrainRunPanel({
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-              Cutoff date
-            </span>
-            <input
-              type="date"
-              value={cutoffDate}
-              onChange={(e) => {
-                setCutoffDate(e.target.value);
-                setCutoffTouched(true);
-              }}
-              className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
-            />
-            <span className="mt-1.5 block text-[12px] leading-5 text-[color:var(--ink-4)]">
-              {CUTOFF_HELPER}
-            </span>
-          </label>
+          <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-[var(--shadow-1)]">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+                Training cutoff
+              </span>
+              <StatusPill tone={cutoffTouched ? "warn" : "ok"} dot={false}>
+                {cutoffMode}
+              </StatusPill>
+            </div>
+            <div className="mt-2 text-[24px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+              {cutoffDate || "Waiting for source"}
+            </div>
+            <p className="mt-1.5 text-[12px] leading-5 text-[color:var(--ink-4)]">
+              {latestDataDate
+                ? `ข้อมูลล่าสุด ${latestDataDate}; horizon ${horizonDays} วัน จึงใช้ cutoff นี้อัตโนมัติ`
+                : CUTOFF_HELPER}
+            </p>
+          </div>
 
           <div>
             <button
@@ -112,27 +119,46 @@ export function TrainRunPanel({
               Advanced
             </button>
             {showAdvanced && (
-              <label className="mt-3 block">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
-                  Horizon (days)
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={Number.isNaN(horizonDays) ? "" : horizonDays}
-                  onChange={(e) => setHorizonDays(Number.parseInt(e.target.value, 10))}
-                  className="mt-1.5 h-11 w-full max-w-[200px] rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
-                />
-                <span className="mt-1.5 block text-[12px] leading-5 text-[color:var(--ink-4)]">
-                  default {DEFAULT_HORIZON_DAYS} วัน — เปลี่ยนเฉพาะเมื่อรู้ว่าทำอะไรอยู่
-                </span>
-                {!horizonValid && (
-                  <span className="mt-1 block text-[12px] text-[color:var(--danger)]">
-                    Horizon ต้องเป็นจำนวนวันที่มากกว่า 0
+              <div className="mt-3 space-y-3">
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+                    Manual cutoff override
                   </span>
-                )}
-              </label>
+                  <input
+                    type="date"
+                    value={cutoffDate}
+                    onChange={(e) => {
+                      setCutoffDate(e.target.value);
+                      setCutoffTouched(true);
+                    }}
+                    className="mt-1.5 h-11 w-full max-w-[240px] rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
+                  />
+                  <span className="mt-1.5 block text-[12px] leading-5 text-[color:var(--ink-4)]">
+                    แก้เฉพาะกรณีพิเศษ; API จะ block ถ้า history หรือ label horizon ไม่ครบ
+                  </span>
+                </label>
+                <label className="block">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
+                    Horizon (days)
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={Number.isNaN(horizonDays) ? "" : horizonDays}
+                    onChange={(e) => setHorizonDays(Number.parseInt(e.target.value, 10))}
+                    className="mt-1.5 h-11 w-full max-w-[200px] rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
+                  />
+                  <span className="mt-1.5 block text-[12px] leading-5 text-[color:var(--ink-4)]">
+                    default {DEFAULT_HORIZON_DAYS} วัน — เปลี่ยนเฉพาะเมื่อรู้ว่าทำอะไรอยู่
+                  </span>
+                  {!horizonValid && (
+                    <span className="mt-1 block text-[12px] text-[color:var(--danger)]">
+                      Horizon ต้องเป็นจำนวนวันที่มากกว่า 0
+                    </span>
+                  )}
+                </label>
+              </div>
             )}
           </div>
         </div>

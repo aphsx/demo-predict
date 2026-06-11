@@ -234,16 +234,17 @@ export function mockPredictionRuns(): PredictionRun[] {
 export function mockCreatePredictionRun(input: {
   predict_source_id: string;
   name: string;
-  cutoff_date: string;
+  cutoff_date?: string;
 }): PredictionRun {
   const source = mockPredictDataSources().find((s) => s.id === input.predict_source_id);
+  const cutoffDate = input.cutoff_date ?? mockPredictSuggestedCutoff(input.predict_source_id).suggested_cutoff;
   const run: PredictionRun = {
     id: `run-local-${sessionRuns.length + 1}`,
     name: input.name,
     status: "in_progress",
     predict_source_id: input.predict_source_id,
     predict_source_name: source?.name ?? input.predict_source_id,
-    cutoff_date: input.cutoff_date,
+    cutoff_date: cutoffDate,
     total_customers: null,
     created_by: "you",
     created_at: new Date().toISOString(),
@@ -263,8 +264,17 @@ export function mockCreatePredictionRun(input: {
 }
 
 /** Same shape as GET /predict-data-sources/:id/suggested-cutoff. */
-export function mockPredictSuggestedCutoff(_sourceId: string): { suggested_cutoff: string } {
-  return { suggested_cutoff: new Date().toISOString().slice(0, 10) };
+export function mockPredictSuggestedCutoff(_sourceId: string): {
+  suggested_cutoff: string;
+  latest_data_date: string;
+} {
+  const latest = new Date();
+  const cutoff = new Date(latest);
+  cutoff.setDate(cutoff.getDate() + 1);
+  return {
+    suggested_cutoff: cutoff.toISOString().slice(0, 10),
+    latest_data_date: latest.toISOString().slice(0, 10),
+  };
 }
 
 /** Same shape as GET /train-data-sources/:id/suggested-cutoff (Gate 3). */
@@ -276,7 +286,7 @@ export function mockTrainSuggestedCutoff(_sourceId: string): {
   const horizonDays = 180;
   const latest = new Date();
   const cutoff = new Date(latest);
-  cutoff.setDate(cutoff.getDate() + 1 - horizonDays);
+  cutoff.setDate(cutoff.getDate() - horizonDays);
   return {
     suggested_cutoff: cutoff.toISOString().slice(0, 10),
     latest_data_date: latest.toISOString().slice(0, 10),
@@ -884,14 +894,15 @@ export function mockTrainingRuns(): TrainingRun[] {
 export function mockCreateTrainingRun(input: {
   train_source_id: string;
   dataset_name: string;
-  cutoff_date: string;
+  cutoff_date?: string;
   horizon_days?: number;
 }): TrainingRun {
+  const cutoffDate = input.cutoff_date ?? mockTrainSuggestedCutoff(input.train_source_id).suggested_cutoff;
   const run: TrainingRun = {
     id: `train-local-${TRAINING_RUNS.length + 1}`,
     status: "in_progress",
     dataset_name: input.dataset_name,
-    cutoff_date: input.cutoff_date,
+    cutoff_date: cutoffDate,
     horizon_days: input.horizon_days ?? 180,
     started_at: new Date().toISOString(),
     finished_at: null,

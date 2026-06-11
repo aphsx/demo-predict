@@ -291,7 +291,7 @@ export async function fetchPredictionRuns(): Promise<PredictionRun[]> {
 export async function createPredictionRun(input: {
   predict_source_id: string;
   name: string;
-  cutoff_date: string;
+  cutoff_date?: string;
 }): Promise<PredictionRun> {
   if (IS_ML_MOCK) return (await mock()).mockCreatePredictionRun(input);
   return sendJson("/api/prediction-runs", "POST", input);
@@ -348,7 +348,7 @@ export async function fetchCustomerPayments(
 /** GET /predict-data-sources/:id/suggested-cutoff — day after latest observed activity. */
 export async function fetchPredictSuggestedCutoff(
   sourceId: string
-): Promise<{ suggested_cutoff: string }> {
+): Promise<{ suggested_cutoff: string; latest_data_date: string | null }> {
   if (IS_ML_MOCK) return (await mock()).mockPredictSuggestedCutoff(sourceId);
   return getJson(`/api/predict-data-sources/${sourceId}/suggested-cutoff`);
 }
@@ -374,7 +374,7 @@ export async function fetchTrainingRuns(): Promise<TrainingRun[]> {
 export async function createTrainingRun(input: {
   train_source_id: string;
   dataset_name: string;
-  cutoff_date: string;
+  cutoff_date?: string;
   horizon_days?: number;
 }): Promise<TrainingRun> {
   if (IS_ML_MOCK) return (await mock()).mockCreateTrainingRun(input);

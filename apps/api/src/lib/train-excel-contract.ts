@@ -3,9 +3,9 @@
  * Predict raw uses the same sheet list in predict-excel-contract.ts.
  */
 
-export const TRAIN_REQUIRED_SHEETS = ["Users+User_profile", "Backend_payment"] as const;
-
-export const TRAIN_OPTIONAL_SHEETS = [
+export const TRAIN_REQUIRED_SHEETS = [
+  "Users+User_profile",
+  "Backend_payment",
   "SMS_usage (BC)",
   "SMS_usage (API)",
   "SMS_usage (OTP)",
@@ -14,7 +14,9 @@ export const TRAIN_OPTIONAL_SHEETS = [
   "Email_usage (OTP)",
 ] as const;
 
-export const TRAIN_ALL_SHEETS = [...TRAIN_REQUIRED_SHEETS, ...TRAIN_OPTIONAL_SHEETS] as const;
+export const TRAIN_OPTIONAL_SHEETS = [] as const;
+
+export const TRAIN_ALL_SHEETS = TRAIN_REQUIRED_SHEETS;
 
 export type TrainSheetName = (typeof TRAIN_ALL_SHEETS)[number];
 

@@ -3,7 +3,7 @@
  * Response contract mirrors apps/web/src/lib/mlApi.ts (snake_case keys).
  */
 import Elysia, { t } from "elysia";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { mlTrainingRuns, trainDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
@@ -16,6 +16,8 @@ import {
 } from "../lib/ml-contract";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_HORIZON_DAYS = 180;
+const ACTIVE_WINDOW_DAYS = 180;
 
 const runSelect = {
   id: mlTrainingRuns.id,
@@ -98,7 +100,7 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
         set.status = 400;
         return { message: "train_source_id must be a UUID" };
       }
-      if (!DATE_RE.test(body.cutoff_date)) {
+      if (body.cutoff_date !== undefined && !DATE_RE.test(body.cutoff_date)) {
         set.status = 400;
         return { message: "cutoff_date must be YYYY-MM-DD" };
       }
@@ -115,13 +117,78 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
         set.status = 400;
         return { message: "Train data source must be ready before training" };
       }
+      const horizonDays = body.horizon_days ?? DEFAULT_HORIZON_DAYS;
+      if (horizonDays <= 0) {
+        set.status = 400;
+        return { message: "horizon_days must be positive" };
+      }
+      const [suggested] = await db.execute<{ cutoff_date: string | null }>(sql`
+        SELECT to_char(latest - ${horizonDays}::int, 'YYYY-MM-DD') AS cutoff_date
+        FROM (
+          SELECT GREATEST(
+            (SELECT MAX(payment_date)::date
+             FROM train_clean_payments WHERE source_id = ${body.train_source_id}),
+            (SELECT MAX(make_date(year, month, 1))
+             FROM train_clean_usage
+             WHERE source_id = ${body.train_source_id}
+               AND year IS NOT NULL
+               AND month IS NOT NULL)
+          ) AS latest
+        ) s
+      `);
+      const cutoffDate = body.cutoff_date ?? suggested?.cutoff_date;
+      if (!cutoffDate) {
+        set.status = 400;
+        return { message: "No clean activity data for this source yet" };
+      }
+
+      const [cutoffCheck] = await db.execute<{
+        min_activity_date: string | null;
+        max_activity_date: string | null;
+        required_history_before: string;
+        required_label_through: string;
+        history_ok: boolean | null;
+        label_ok: boolean | null;
+      }>(sql`
+        WITH activity AS (
+          SELECT MIN(activity_date)::date AS min_activity,
+                 MAX(activity_date)::date AS max_activity
+          FROM (
+            SELECT payment_date::date AS activity_date
+            FROM train_clean_payments
+            WHERE source_id = ${body.train_source_id} AND payment_date IS NOT NULL
+            UNION ALL
+            SELECT make_date(year, month, 1)::date AS activity_date
+            FROM train_clean_usage
+            WHERE source_id = ${body.train_source_id}
+              AND year IS NOT NULL
+              AND month IS NOT NULL
+          ) a
+        )
+        SELECT
+          to_char(min_activity, 'YYYY-MM-DD') AS min_activity_date,
+          to_char(max_activity, 'YYYY-MM-DD') AS max_activity_date,
+          to_char(${cutoffDate}::date - ${ACTIVE_WINDOW_DAYS}::int, 'YYYY-MM-DD') AS required_history_before,
+          to_char(${cutoffDate}::date + ${horizonDays}::int, 'YYYY-MM-DD') AS required_label_through,
+          min_activity < (${cutoffDate}::date - ${ACTIVE_WINDOW_DAYS}::int) AS history_ok,
+          max_activity >= (${cutoffDate}::date + ${horizonDays}::int) AS label_ok
+        FROM activity
+      `);
+      if (!cutoffCheck?.history_ok || !cutoffCheck.label_ok) {
+        set.status = 400;
+        return {
+          message:
+            "cutoff_date does not satisfy training Gate 3. Use the suggested cutoff for this source.",
+          details: cutoffCheck ?? null,
+        };
+      }
 
       const [inserted] = await db
         .insert(mlTrainingRuns)
         .values({
           sourceId: body.train_source_id,
-          cutoffDate: body.cutoff_date,
-          horizonDays: body.horizon_days ?? 180,
+          cutoffDate,
+          horizonDays,
           status: "pending",
           createdBy: userId!,
         })
@@ -142,7 +209,7 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
     {
       body: t.Object({
         train_source_id: t.String(),
-        cutoff_date: t.String(),
+        cutoff_date: t.Optional(t.String()),
         horizon_days: t.Optional(t.Number()),
         // sent by the web client; dataset_name is derived from the source server-side
         dataset_name: t.Optional(t.String()),

@@ -292,8 +292,9 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
     }
     return mapSource(rows[0]);
   })
-  // Gate 3 suggestion: latest training cutoff whose 180-day label horizon is
-  // fully observed = (latest activity date + 1 day) - horizon.
+  // Gate 3 suggestion: latest training cutoff whose label horizon is fully
+  // observed. Python checks `max_activity >= cutoff + horizon`, so the latest
+  // safe cutoff is `latest_activity_date - horizon`.
   .get(
     "/:id/suggested-cutoff",
     async ({ params, set }) => {
@@ -316,7 +317,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         suggested_cutoff: string | null;
         latest_data_date: string | null;
       }>(sql`
-        SELECT to_char(latest + 1 - ${HORIZON_DAYS}::int, 'YYYY-MM-DD') AS suggested_cutoff,
+        SELECT to_char(latest - ${HORIZON_DAYS}::int, 'YYYY-MM-DD') AS suggested_cutoff,
                to_char(latest, 'YYYY-MM-DD') AS latest_data_date
         FROM (
           SELECT GREATEST(

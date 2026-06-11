@@ -421,12 +421,12 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
         set.status = 400;
         return { message: "predict_source_id must be a UUID" };
       }
-      if (!DATE_RE.test(body.cutoff_date)) {
+      if (body.cutoff_date !== undefined && !DATE_RE.test(body.cutoff_date)) {
         set.status = 400;
         return { message: "cutoff_date must be YYYY-MM-DD" };
       }
       const [source] = await db
-        .select({ id: predictDataSources.id })
+        .select({ id: predictDataSources.id, importStatus: predictDataSources.importStatus })
         .from(predictDataSources)
         .where(eq(predictDataSources.id, body.predict_source_id))
         .limit(1);
@@ -434,13 +434,36 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
         set.status = 404;
         return { message: "Predict data source not found" };
       }
+      if (source.importStatus !== "ready") {
+        set.status = 400;
+        return { message: "Predict data source must be ready before prediction" };
+      }
+      const [suggested] = await db.execute<{ cutoff_date: string | null }>(sql`
+        SELECT to_char(latest + 1, 'YYYY-MM-DD') AS cutoff_date
+        FROM (
+          SELECT GREATEST(
+            (SELECT MAX(payment_date)::date
+             FROM predict_clean_payments WHERE source_id = ${body.predict_source_id}),
+            (SELECT MAX(make_date(year, month, 1))
+             FROM predict_clean_usage
+             WHERE source_id = ${body.predict_source_id}
+               AND year IS NOT NULL
+               AND month IS NOT NULL)
+          ) AS latest
+        ) s
+      `);
+      const cutoffDate = body.cutoff_date ?? suggested?.cutoff_date;
+      if (!cutoffDate) {
+        set.status = 400;
+        return { message: "No clean activity data for this source yet" };
+      }
 
       const [inserted] = await db
         .insert(mlPredictionRuns)
         .values({
           predictSourceId: body.predict_source_id,
           name: body.name,
-          cutoffDate: body.cutoff_date,
+          cutoffDate,
           status: "pending",
           createdBy: userId!,
         })
@@ -462,7 +485,7 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
       body: t.Object({
         predict_source_id: t.String(),
         name: t.String({ minLength: 1 }),
-        cutoff_date: t.String(),
+        cutoff_date: t.Optional(t.String()),
       }),
     }
   )

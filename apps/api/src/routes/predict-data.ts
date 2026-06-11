@@ -116,8 +116,12 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
         return { message: "Predict data source not found" };
       }
 
-      const [row] = await db.execute<{ suggested_cutoff: string | null }>(sql`
-        SELECT to_char(latest + 1, 'YYYY-MM-DD') AS suggested_cutoff
+      const [row] = await db.execute<{
+        suggested_cutoff: string | null;
+        latest_data_date: string | null;
+      }>(sql`
+        SELECT to_char(latest + 1, 'YYYY-MM-DD') AS suggested_cutoff,
+               to_char(latest, 'YYYY-MM-DD') AS latest_data_date
         FROM (
           SELECT GREATEST(
             (SELECT MAX(payment_date)::date
@@ -132,7 +136,10 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
         set.status = 400;
         return { message: "No clean activity data for this source yet" };
       }
-      return { suggested_cutoff: row.suggested_cutoff };
+      return {
+        suggested_cutoff: row.suggested_cutoff,
+        latest_data_date: row.latest_data_date,
+      };
     },
     { params: t.Object({ id: t.String() }) }
   )
