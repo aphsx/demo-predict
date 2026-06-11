@@ -6,54 +6,57 @@ import {
   Gem,
   ShieldCheck,
   TrendingDown,
+  Users,
 } from "lucide-react";
 import { formatCredits, formatCurrency, formatNumber } from "@/lib/format";
-import { MOBY_BRAND } from "@/lib/login-brand-colors";
-import type { DashboardOverview } from "@/mocks/dashboard";
-import type { MonthlyRevenuePoint } from "@/mocks/monthly-revenue";
+import type { RunSummary } from "@/lib/mlApi";
 import { CreditUrgencyCard } from "./CreditUrgencyCard";
 import { LifecycleMixCard } from "./LifecycleMixCard";
 import { MetricCard } from "./MetricCard";
 import { MonthlyRevenueCard } from "./MonthlyRevenueCard";
 import { RiskCard } from "./RiskCard";
+import { TopPriorityCard } from "./TopPriorityCard";
 import { ValueCard } from "./ValueCard";
+import { ValueRiskMatrixCard } from "./ValueRiskMatrixCard";
 import { TEXT_SAFE } from "./palette";
+import { fromRunSummary } from "./types";
 
-export function DashboardView({
-  overview,
-  monthlyRevenue,
-}: {
-  overview: DashboardOverview;
-  monthlyRevenue: MonthlyRevenuePoint[];
-}) {
-  const activeHighRiskPct = (overview.active_churn.high / overview.active_churn.base_customers) * 100;
-  const ghostPct = (overview.totals.ghost_customers / overview.totals.customers) * 100;
+export function DashboardView({ summary, runId }: { summary: RunSummary; runId: string }) {
+  const { overview, monthlyRevenue } = fromRunSummary(summary);
+  const activeHighRiskPct =
+    overview.active_churn.base_customers > 0
+      ? (overview.active_churn.high / overview.active_churn.base_customers) * 100
+      : 0;
 
   return (
     <main className="min-w-0 px-4 py-6 pb-12 sm:px-6 lg:px-8">
-      
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard
+          icon={Users}
+          label="Total customers"
+          value={formatNumber(overview.totals.customers)}
+          hint={`run cutoff ${overview.run.cutoff_date}`}
+          tone="brand"
+        />
         <MetricCard
           icon={Gem}
           label="Avg monthly value"
           value={formatCurrency(overview.monthly_value.avg_monthly_revenue)}
-          hint={`${overview.monthly_value.months}-month avg from payment history`}
+          hint={`${overview.monthly_value.months}-month avg from payment history (actual)`}
           tone="warn"
-          href="/monthly-value"
         />
         <MetricCard
           icon={TrendingDown}
           label="Active high risk"
           value={formatNumber(overview.active_churn.high)}
-          hint={`${activeHighRiskPct.toFixed(1)}% จากลูกค้าทั้งหมดที่ใช้งาน`}
+          hint={`${activeHighRiskPct.toFixed(1)}% of churn-eligible (active paid) — forecast`}
           tone="danger"
         />
         <MetricCard
           icon={CreditCard}
           label="Revenue at risk"
           value={formatCurrency(overview.totals.revenue_at_risk)}
-          hint="การสูญเสียที่คาดการณ์ไว้หากลูกค้าที่มีความเสี่ยงสูงละลาย"
+          hint="expected 6m loss across active paid — forecast"
           tone="warn"
         />
         <MetricCard
@@ -75,16 +78,17 @@ export function DashboardView({
           <ValueCard overview={overview} />
           <CreditUrgencyCard overview={overview} />
         </div>
+        <ValueRiskMatrixCard summary={summary} runId={runId} />
+        <TopPriorityCard summary={summary} runId={runId} />
       </section>
 
       <section className="surface mt-6 p-4">
         <div className={`flex min-w-0 flex-wrap items-center gap-3 text-[11px] text-[color:var(--ink-5)] ${TEXT_SAFE}`}>
           <ShieldCheck size={12} />
-          Mock dashboard data is isolated in `src/mocks/dashboard.ts`
+          Run: {overview.run.name} · cutoff {overview.run.cutoff_date}
           <span className="opacity-50">·</span>
-          API-ready shape: totals / lifecycle / active_churn / value / credit / monthly_usage
-          <span className="opacity-50">·</span>
-          Ghost share: {ghostPct.toFixed(1)}%
+          Models: churn {summary.model_versions.churn} / clv {summary.model_versions.clv} / credit{" "}
+          {summary.model_versions.credit}
         </div>
       </section>
     </main>

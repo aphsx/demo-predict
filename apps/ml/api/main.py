@@ -61,33 +61,49 @@ async def health(db: AsyncSession = Depends(get_db)):
         "status": "ok",
         "db": "connected",
         "models_dir": str(MODEL_DIR),
-        "message": "Legacy ML runtime removed; ML v2 training pipeline is being rebuilt.",
+        "message": "ML v2 internal API: health + training/prediction job triggers.",
     }
 
 
-# ── Internal Explain ───────────────────────────────────────────────
-@app.get("/internal/explain")
-async def internal_explain(
-    run_id: str,
-    acc_id: int,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Placeholder until explanations are rebuilt on top of ml_prediction_outputs."""
-    _require_internal_token(request)
-    _ = (run_id, acc_id, db)
-    raise HTTPException(
-        503,
-        "Explain unavailable until the ML v2 prediction output flow is implemented.",
-    )
+# ── Internal ML v2 job triggers ────────────────────────────────────
+# Elysia creates the run row (status=pending) then POSTs here. The job runs
+# as a detached subprocess so the HTTP call returns immediately; the runner
+# itself owns all status/progress updates on the run row.
+
+import subprocess
+import sys
+
+APP_ROOT = Path(__file__).resolve().parents[1]
 
 
-# ── Internal Train ─────────────────────────────────────────────────
-@app.post("/internal/train")
-async def internal_train(request: Request):
-    """Placeholder until training is rebuilt on top of train_clean_*."""
-    _require_internal_token(request)
-    raise HTTPException(
-        503,
-        "Training unavailable until the ML v2 train_clean_* pipeline is implemented.",
+def _spawn_job(script: str, flag: str, run_id: str) -> int:
+    process = subprocess.Popen(
+        [sys.executable, str(APP_ROOT / script), flag, run_id],
+        cwd=str(APP_ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
+    return process.pid
+
+
+@app.post("/internal/training-runs")
+async def internal_training_run(request: Request):
+    _require_internal_token(request)
+    body = await request.json()
+    training_run_id = body.get("training_run_id")
+    if not training_run_id:
+        raise HTTPException(400, "training_run_id is required")
+    pid = _spawn_job("train_v2.py", "--training-run-id", training_run_id)
+    return {"accepted": True, "training_run_id": training_run_id, "pid": pid}
+
+
+@app.post("/internal/prediction-runs")
+async def internal_prediction_run(request: Request):
+    _require_internal_token(request)
+    body = await request.json()
+    prediction_run_id = body.get("prediction_run_id")
+    if not prediction_run_id:
+        raise HTTPException(400, "prediction_run_id is required")
+    pid = _spawn_job("predict_v2.py", "--prediction-run-id", prediction_run_id)
+    return {"accepted": True, "prediction_run_id": prediction_run_id, "pid": pid}

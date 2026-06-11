@@ -68,7 +68,7 @@ No UNIQUE on business keys.
 | `train_raw_sheet_email_usage_api` | `Email_usage (API)` |
 | `train_raw_sheet_email_usage_otp` | `Email_usage (OTP)` |
 
-DDL: [`migrations/001_train_raw_eight_tables.sql`](../migrations/001_train_raw_eight_tables.sql)
+DDL: [`db/init/001_schema.sql`](../../db/init/001_schema.sql)
 
 ## Example `row_payload`
 
@@ -89,7 +89,7 @@ DDL: [`migrations/001_train_raw_eight_tables.sql`](../migrations/001_train_raw_e
 }
 ```
 
-## Later layers (not in this migration)
+## Later layers
 
 | Family | When |
 |--------|------|

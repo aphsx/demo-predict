@@ -5,7 +5,7 @@
  * (summary KPIs, matrix, top priority) is DERIVED from those rows with the
  * same formulas the real prediction runner will use
  * (docs/ML-V2-OUTPUT-CONTRACT.md §5), so numbers agree across pages.
- * Served by lib/mlApi.ts while NEXT_PUBLIC_ML_API_READY !== "1".
+ * Served by lib/mlApi.ts while NEXT_PUBLIC_ML_USE_MOCK === "1".
  */
 
 import type {
@@ -262,6 +262,28 @@ export function mockCreatePredictionRun(input: {
   return run;
 }
 
+/** Same shape as GET /predict-data-sources/:id/suggested-cutoff. */
+export function mockPredictSuggestedCutoff(_sourceId: string): { suggested_cutoff: string } {
+  return { suggested_cutoff: new Date().toISOString().slice(0, 10) };
+}
+
+/** Same shape as GET /train-data-sources/:id/suggested-cutoff (Gate 3). */
+export function mockTrainSuggestedCutoff(_sourceId: string): {
+  suggested_cutoff: string;
+  latest_data_date: string;
+  horizon_days: number;
+} {
+  const horizonDays = 180;
+  const latest = new Date();
+  const cutoff = new Date(latest);
+  cutoff.setDate(cutoff.getDate() + 1 - horizonDays);
+  return {
+    suggested_cutoff: cutoff.toISOString().slice(0, 10),
+    latest_data_date: latest.toISOString().slice(0, 10),
+    horizon_days: horizonDays,
+  };
+}
+
 export function mockDeletePredictionRun(id: string): void {
   const i = sessionRuns.findIndex((r) => r.id === id);
   if (i >= 0) {
@@ -461,8 +483,6 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
     revenue_at_risk: revenueAtRisk,
     priority_score: 0, // assigned below
     priority_reason: "",
-    recommended_action: "monitor",
-    recommended_followup_date: null,
     ai_status: "not_requested",
     ai_explanation: null,
     ai_recommended_message: null,
@@ -472,7 +492,7 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
   };
 }
 
-function assignDerived(rows: PredictionOutput[], cutoff: string): void {
+function assignDerived(rows: PredictionOutput[]): void {
   // value tier: percentile of CLV among active (contract §3.5)
   const active = rows.filter((c) => c.predicted_clv_6m !== null && c.predicted_clv_6m > 0);
   const sorted = [...active].sort((a, b) => (b.predicted_clv_6m ?? 0) - (a.predicted_clv_6m ?? 0));
@@ -484,9 +504,6 @@ function assignDerived(rows: PredictionOutput[], cutoff: string): void {
   // priority score: 50×risk + 30×value pct + 20×credit (contract §5.2)
   const clvRank = new Map<number, number>();
   sorted.forEach((c, i) => clvRank.set(c.acc_id, 1 - i / Math.max(sorted.length - 1, 1)));
-  const cutoffMs = new Date(cutoff).getTime();
-  const addDays = (n: number) => new Date(cutoffMs + n * 86400000).toISOString().slice(0, 10);
-
   for (const c of rows) {
     const pRisk = c.churn_probability ?? 0;
     const pValue = clvRank.get(c.acc_id) ?? 0;
@@ -503,39 +520,6 @@ function assignDerived(rows: PredictionOutput[], cutoff: string): void {
     ];
     drivers.sort((a, b) => b[0] - a[0]);
     c.priority_reason = drivers[0][0] > 0 ? drivers[0][1] : "ไม่มีสัญญาณเร่งด่วน";
-
-    // recommended action — rule order per contract §5.3
-    const risk = c.churn_risk_level;
-    const highRisk = risk === "high" || risk === "critical";
-    const tier = c.customer_value_tier;
-    if (highRisk && (tier === "high" || tier === "mid")) {
-      c.recommended_action = "save_call";
-      c.recommended_followup_date = addDays(3);
-    } else if (c.credit_urgency_level === "critical") {
-      c.recommended_action = "topup_reminder";
-      c.recommended_followup_date = addDays(1);
-    } else if (c.credit_urgency_level === "warning") {
-      c.recommended_action = "topup_reminder";
-      c.recommended_followup_date = addDays(7);
-    } else if (highRisk) {
-      c.recommended_action = "retention_campaign";
-      c.recommended_followup_date = addDays(14);
-    } else if (
-      c.lifecycle_stage === "Active Free" &&
-      (c.usage_trend === "increasing" || tier === "high")
-    ) {
-      c.recommended_action = "upsell_offer";
-      c.recommended_followup_date = addDays(7);
-    } else if (
-      c.sub_stage === "Churned Paid" &&
-      (c.days_since_last_activity ?? 999) <= 270
-    ) {
-      c.recommended_action = "winback_manual";
-      c.recommended_followup_date = addDays(30);
-    } else {
-      c.recommended_action = "monitor";
-      c.recommended_followup_date = null;
-    }
   }
 }
 
@@ -549,7 +533,7 @@ function population(runId: string): PredictionOutput[] {
   for (let i = 0; i < POPULATION; i++) {
     rows.push(buildCustomer(run.id, run.cutoff_date, 10001 + i * 7));
   }
-  assignDerived(rows, run.cutoff_date);
+  assignDerived(rows);
   populationCache.set(runId, rows);
   return rows;
 }

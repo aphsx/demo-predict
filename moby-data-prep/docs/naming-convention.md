@@ -45,7 +45,7 @@ Config: `config/excel_schema.yaml` (train raw only)
 | `predict_raw_sheet_email_usage_api` | … |
 | `predict_raw_sheet_email_usage_otp` | … |
 
-Migration: `migrations/003_predict_raw_eight_tables.sql`  
+Schema bootstrap: `db/init/001_schema.sql`  
 API: `POST /predict-data-sources/import` (Elysia) · `/runs` page upload
 
 ## Reserved (not created yet)

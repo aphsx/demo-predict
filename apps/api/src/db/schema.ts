@@ -1,9 +1,8 @@
 /**
- * Drizzle schema introspected from Alembic migrations:
- *   Alembic owns auth + ML migrations; moby-data-prep SQL owns train/predict import tables.
- *   ML runtime tables use the ml_* schema below.
+ * Drizzle schema reflects the single PostgreSQL bootstrap:
+ *   db/init/001_schema.sql creates auth, train/predict, and ml_* tables.
  *
- * DO NOT run drizzle-kit generate or push — Alembic owns the migrations.
+ * DO NOT run drizzle-kit generate or push — edit the bootstrap schema deliberately.
  * This file is for the query builder only.
  */
 import {
@@ -23,7 +22,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
-// ── Better Auth tables (camelCase column names — created with quoted identifiers by Alembic) ──
+// ── Better Auth tables (camelCase column names — created with quoted identifiers) ──
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -92,9 +91,7 @@ export const verification = pgTable("verification", {
 // ── ML output/runtime tables now live in the ml_* schema below. ───────────────
 // Auth and train/predict import-clean tables stay intact.
 
-// ── [NEW] Train raw data — greenfield (moby-data-prep migrations) ─────────────
-// 8 sheet tables + catalog. Migrations: moby-data-prep/migrations/
-// Predict clean: predict_clean_* (007). ML worker wiring deferred.
+// ── Train raw data — 8 fixed Excel sheet tables + catalog ─────────────────────
 
 export const trainDataSources = pgTable(
   "train_data_sources",
@@ -147,7 +144,7 @@ export const trainRawSheetEmailUsageBc = trainRawSheet("train_raw_sheet_email_us
 export const trainRawSheetEmailUsageApi = trainRawSheet("train_raw_sheet_email_usage_api");
 export const trainRawSheetEmailUsageOtp = trainRawSheet("train_raw_sheet_email_usage_otp");
 
-// ── [NEW] Train clean — typed rows for model training (moby-data-prep/migrations/005_*) ──
+// ── Train clean — typed rows for model training ───────────────────────────────
 
 export const trainCleanCustomers = pgTable(
   "train_clean_customers",
@@ -219,8 +216,7 @@ export const trainCleanUsage = pgTable(
   ]
 );
 
-// ── [NEW] Predict raw data — greenfield (moby-data-prep/migrations/003_*) ─────
-// Independent predict upload source.
+// ── Predict raw data — independent prediction upload source ───────────────────
 
 export const predictDataSources = pgTable(
   "predict_data_sources",
@@ -275,7 +271,7 @@ export const predictRawSheetEmailUsageBc = predictRawSheet("predict_raw_sheet_em
 export const predictRawSheetEmailUsageApi = predictRawSheet("predict_raw_sheet_email_usage_api");
 export const predictRawSheetEmailUsageOtp = predictRawSheet("predict_raw_sheet_email_usage_otp");
 
-// ── [NEW] Predict clean — typed rows per run (moby-data-prep/migrations/007_*) ──
+// ── Predict clean — typed rows for prediction runs ────────────────────────────
 
 export const predictCleanCustomers = pgTable(
   "predict_clean_customers",
@@ -361,6 +357,8 @@ export const mlTrainingRuns = pgTable(
     cutoffDate: date("cutoff_date").notNull(),
     horizonDays: integer("horizon_days").notNull(),
     trainingConfigJson: jsonb("training_config_json"),
+    progressJson: jsonb("progress_json"),
+    resultsJson: jsonb("results_json"),
     parentTrainingRunId: uuid("parent_training_run_id"),
     notes: text("notes"),
     errorMessage: text("error_message"),
@@ -482,7 +480,10 @@ export const mlPredictionRuns = pgTable(
   {
     id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
     predictSourceId: uuid("predict_source_id").notNull(),
+    name: text("name").notNull().default("Prediction run"),
     status: text("status").notNull().default("pending"),
+    progressJson: jsonb("progress_json"),
+    modelVersionsJson: jsonb("model_versions_json"),
     cutoffDate: date("cutoff_date").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -581,7 +582,6 @@ export const mlPredictionOutputs = pgTable(
     predictedCreditUsage90d: numeric("predicted_credit_usage_90d", { precision: 14, scale: 2 }),
     estimatedDaysUntilTopup: integer("estimated_days_until_topup"),
     creditUrgencyLevel: text("credit_urgency_level"),
-    recommendedFollowupDate: date("recommended_followup_date"),
     usageTrend: text("usage_trend"),
     daysSinceLastActivity: integer("days_since_last_activity"),
     nPurchases: integer("n_purchases"),
@@ -590,7 +590,6 @@ export const mlPredictionOutputs = pgTable(
     everPaid: boolean("ever_paid").notNull().default(false),
     priorityScore: numeric("priority_score", { precision: 5, scale: 2 }),
     priorityReason: text("priority_reason"),
-    recommendedAction: text("recommended_action"),
     aiExplanation: text("ai_explanation"),
     aiReasoningJson: jsonb("ai_reasoning_json"),
     aiRecommendedMessage: text("ai_recommended_message"),
@@ -601,6 +600,10 @@ export const mlPredictionOutputs = pgTable(
     outputNotes: text("output_notes"),
     modelEligibilityJson: jsonb("model_eligibility_json"),
     modelVersionsJson: jsonb("model_versions_json"),
+    churnFactorsJson: jsonb("churn_factors_json"),
+    pAlive: numeric("p_alive", { precision: 5, scale: 4 }),
+    profileSnapshotJson: jsonb("profile_snapshot_json"),
+    creditForecastIntervalJson: jsonb("credit_forecast_interval_json"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
   },
   (t) => [

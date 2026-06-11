@@ -11,7 +11,21 @@ import {
 import { StatusDialog } from "@/components/StatusDialog";
 import { Skeleton } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
-import { STAGES, type CustomerRow } from "@/mocks/customers";
+import type { PredictionOutput } from "@/lib/mlApi";
+
+export const STAGES = ["Active Paid", "Active Free", "Churned", "Ghost"];
+
+export type CustomerRow = Pick<
+  PredictionOutput,
+  | "acc_id"
+  | "lifecycle_stage"
+  | "sub_stage"
+  | "churn_probability"
+  | "predicted_clv_6m"
+  | "customer_value_tier"
+  | "n_purchases"
+  | "total_revenue"
+>;
 
 type AiGenerationStatus = "generating" | "generated";
 

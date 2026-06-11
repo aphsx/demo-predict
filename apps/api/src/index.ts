@@ -4,6 +4,9 @@ import { auth } from "./auth";
 import { trainDataRoutes } from "./routes/train-data";
 import { predictDataRoutes } from "./routes/predict-data";
 import { aiChatRoutes } from "./routes/ai-chat";
+import { predictionRunRoutes } from "./routes/prediction-runs";
+import { trainingRunRoutes } from "./routes/training-runs";
+import { modelPerformanceRoutes } from "./routes/model-performance";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -27,11 +30,17 @@ const app = new Elysia()
   .use(predictDataRoutes)
   // Isolated LLM chat API. UI wiring will be rebuilt separately.
   .use(aiChatRoutes)
+  // ML v2 — prediction runs + outputs/summary (spec §4/§7)
+  .use(predictionRunRoutes)
+  // ML v2 — training runs (spec §2.6)
+  .use(trainingRunRoutes)
+  // ML v2 — champion model performance (spec §2.4)
+  .use(modelPerformanceRoutes)
   .get("/health", () => {
     return {
       status: "ok",
       db: "connected",
-      message: "Legacy ML runtime removed; ML v2 training pipeline is being rebuilt.",
+      message: "ML v2 API: prediction-runs, training-runs, model-performance.",
     };
   })
   .listen(PORT);

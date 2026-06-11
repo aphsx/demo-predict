@@ -21,7 +21,7 @@ Package manager is **Bun** (`packageManager: bun@1.0.0`); the monorepo is driven
 bun install
 
 # Full stack via Docker (recommended) — db, redis, ml, api, web.
-# ml entrypoint runs migrate_or_repair.py (Alembic + moby-data-prep SQL) before serving.
+# Fresh Postgres volumes initialize from the single schema at db/init/001_schema.sql.
 docker compose up --build
 docker compose up -d db redis        # just the backing services for local dev
 
@@ -38,9 +38,6 @@ cd apps/api && bun run db:introspect # Drizzle reflects current PG schema into s
 # ML service (Python 3.11). Run inside the container or a venv with apps/ml/requirements.txt installed.
 cd apps/ml
 uvicorn api.main:app --port 8000 --reload      # FastAPI health/internal surface only
-python scripts/migrate_or_repair.py            # apply Alembic + moby-data-prep migrations / repair partial dev volumes
-alembic revision --autogenerate -m "msg"       # ml_* / Better-Auth schema only — Alembic owns these
-alembic upgrade head
 ```
 
 ### Tests / verification
@@ -103,9 +100,9 @@ moby-analytics/
 │   └── ml/            # Python — FastAPI health + ML v2 rebuild modules
 │       ├── api/       #   FastAPI app (main.py = health only; keep tiny)
 │       ├── src/training/  # Active ML v2 rebuild: data, features, labels, preprocessing, validation, repository
-│       ├── scripts/   #   verify_*.py contract checks + migrate_or_repair.py + profile_training_dataset.py
-│       └── alembic/   #   Owns the ml_* / Better-Auth schema migrations
-├── moby-data-prep/    # Owns raw+clean table SQL (migrations/00X_*.sql) + Excel import contract docs/config
+│       └── scripts/   #   verify_*.py contract checks + profile_training_dataset.py
+├── db/init/           # Single PostgreSQL bootstrap schema
+├── moby-data-prep/    # Excel import contract docs/config
 >>>>>>> Stashed changes
 ├── packages/
 │   └── types/         # Shared TypeScript types (stub; populate as routes solidify)
@@ -118,10 +115,9 @@ moby-analytics/
 └── CLAUDE.md
 ```
 
-Note: schema is owned by **two** migration sources, both applied at `ml` container startup by
-`apps/ml/scripts/migrate_or_repair.py` (see `apps/ml/entrypoint.sh`): Alembic (`apps/ml/alembic/versions/`)
-for `ml_*`/Better-Auth tables, and `moby-data-prep/migrations/*.sql` (mounted at `/app/train-migrations`)
-for the `*_raw_sheet_*` / `*_clean_*` tables. Drizzle only introspects; never run `drizzle-kit generate`.
+Note: schema is a single bootstrap file at `db/init/001_schema.sql`, mounted into Postgres
+as `/docker-entrypoint-initdb.d/001_schema.sql` for fresh Docker volumes. Drizzle only reflects
+that schema for query building; do not run `drizzle-kit generate` or push schema from Drizzle.
 
 ## Service Ports
 
@@ -165,7 +161,7 @@ The user uploads a **fixed-schema Excel file with exactly 8 sheets**. Schema is 
 | `Email_usage (API)`  | year, month, acc_id, usage                                                          |
 | `Email_usage (OTP)`  | year, month, acc_id, usage                                                          |
 
-## PostgreSQL Schema (Drizzle — introspected, Alembic owns migrations)
+## PostgreSQL Schema (Drizzle — reflects `db/init/001_schema.sql`)
 
 Tables:
 
@@ -211,7 +207,7 @@ Key design decisions:
 | **Arq for jobs** | Python-native queue; the only consumer is Python. No need for cross-language Streams protocol. |
 | **Redis Streams for progress** | Worker pushes structured events; SSE endpoint XREADs without polling. |
 | **FastAPI is internal-only** | SHAP and training require Python. Elysia proxies these via X-Internal-Token. FastAPI never serves the browser directly. |
-| **Drizzle in introspect mode** | Alembic owns schema; Drizzle reflects it. `drizzle-kit generate` is never run. |
+| **Drizzle in introspect mode** | `db/init/001_schema.sql` owns schema; Drizzle reflects it. `drizzle-kit generate` is never run. |
 | **SSE not WebSockets** | Server pushes only. Auto-reconnect built-in. Works behind any proxy. |
 | **PostgreSQL not MongoDB** | Data is relational. All ML output is tabular. |
 
@@ -318,7 +314,7 @@ NEXT_PUBLIC_AUTH_URL     # http://localhost:3001 (browser-visible)
 
 - `apps/ml/src/` — ML pipeline code. Belongs to the original author. Touch only to fix bugs, never to refactor style.
 - `apps/ml/worker/predict_worker.py` — Arq worker. Same constraint.
-- `apps/ml/alembic/` — Do not add migrations from Drizzle. Alembic owns the schema.
+- `db/init/001_schema.sql` — single schema bootstrap; edit deliberately and keep Drizzle in sync.
 - `apps/ml/train.py` — Training CLI.
 
 ## Always Check

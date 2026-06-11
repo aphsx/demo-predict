@@ -1,7 +1,7 @@
 # moby-data-prep
 
-**[NEW]** Greenfield data prep (this folder). The monorepo `apps/api` still has **[LEGACY]** predict tables
-(`prediction_runs`, `raw_*`) until migration finishes — see [`docs/DATA-PIPELINE-MIGRATION.md`](../docs/DATA-PIPELINE-MIGRATION.md).
+Data preparation helpers for the fixed 1Moby Excel contract. Database tables are created by
+the single bootstrap schema at `db/init/001_schema.sql`.
 
 Data preparation for 1Moby ML — **separate table families** for train, predict, and clean.
 
@@ -23,11 +23,6 @@ pip install -r requirements.txt
 
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5433/moby
 
-# Docker: applied automatically when ml starts (see docs/DATA-PIPELINE-MIGRATION.md)
-# Local manual:
-psql "$DATABASE_URL" -f migrations/001_train_raw_eight_tables.sql
-psql "$DATABASE_URL" -f migrations/002_add_imported_by.sql
-
 python scripts/import_train_raw.py \
   --file "../data/[1Moby] Data_example for Bangkok university.xlsx" \
   --name "Bangkok University example" \
@@ -39,7 +34,6 @@ python scripts/import_train_raw.py \
 | Path | Purpose |
 |------|---------|
 | `config/excel_schema.yaml` | Train raw: sheet → `train_raw_sheet_*` |
-| `migrations/001_train_raw_eight_tables.sql` | Train raw DDL |
 | `scripts/import_train_raw.py` | Import into train raw tables |
 | `docs/naming-convention.md` | Train / predict / clean naming rules |
 | `docs/raw-data-schema.md` | Train raw schema detail |

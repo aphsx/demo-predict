@@ -10,7 +10,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Schema is owned by Alembic (apps/ml/alembic/versions/*) — applied at ml startup.
+      # Single schema bootstrap. Runs only when postgres_data is first created.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "5433:5432"
     healthcheck:
@@ -38,8 +39,6 @@ services:
     volumes:
       - ./models:/app/models
       - ./data:/data
-      # [NEW] train raw DDL — applied by migrate_or_repair.py after Alembic
-      - ./moby-data-prep/migrations:/app/train-migrations:ro
     depends_on:
       db:
         condition: service_healthy

@@ -1,8 +1,7 @@
-import { FileSpreadsheet, Play, RefreshCw, Trash2 } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, Trash2 } from "lucide-react";
 import { EmptyState, StatusPill } from "@/components/ui";
 import type { TrainDataSource } from "@/lib/api";
 import {
-  IMPORT_ACCENT,
   formatDate,
   getCleanCounts,
   statusLabel,
@@ -13,20 +12,14 @@ export function ModelTrainingPanel({
   sources,
   selectedSource,
   readyCount,
-  training,
   deletingId,
-  canTrain,
-  onTrain,
   onSelect,
   onDelete,
 }: {
   sources: TrainDataSource[];
   selectedSource: TrainDataSource | null;
   readyCount: number;
-  training: boolean;
   deletingId: string | null;
-  canTrain: boolean;
-  onTrain: () => void;
   onSelect: (source: TrainDataSource) => void;
   onDelete: (source: TrainDataSource) => void;
 }) {
@@ -42,19 +35,9 @@ export function ModelTrainingPanel({
               Select dataset and train
             </h2>
             <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
-              เลือก clean dataset ที่ import สำเร็จแล้ว เพื่อใช้เป็น source สำหรับ training รอบถัดไป.
+              เลือก clean dataset ที่ import สำเร็จแล้ว เพื่อใช้เป็น source สำหรับ training panel ด้านล่าง.
             </p>
           </div>
-          <button
-            type="button"
-            disabled={!canTrain || training}
-            onClick={onTrain}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 xl:min-w-[190px]"
-            style={{ background: IMPORT_ACCENT }}
-          >
-            {training ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
-            {training ? "Training..." : "Train selected"}
-          </button>
         </div>
       </div>
 

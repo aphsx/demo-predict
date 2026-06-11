@@ -1,11 +1,10 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Lock, Mail } from "lucide-react";
 import { signIn } from "@/lib/auth-client";
 import { LoginBackground } from "@/components/LoginBackground";
-import { isDevAuthBypassEnabled } from "@/lib/dev-auth";
 import { INTRO_ASSETS, MOBY_BRAND } from "@/lib/login-brand-colors";
 
 type Provider = "google";
@@ -19,22 +18,15 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const sp = useSearchParams();
   const callbackURL = sp.get("redirect") || "/";
   const [busy, setBusy] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const devAuthBypassEnabled = isDevAuthBypassEnabled();
 
   const handle = async (provider: Provider) => {
     try {
       setBusy(provider);
       setError(null);
-
-      if (devAuthBypassEnabled) {
-        router.replace(callbackURL);
-        return;
-      }
 
       await signIn.social({ provider, callbackURL });
     } catch (e: any) {
@@ -100,12 +92,12 @@ function LoginForm() {
             {busy === "google" ? (
               <>
                 <Spinner />
-                <span>{devAuthBypassEnabled ? "Opening workspace..." : "Connecting to Google..."}</span>
+                <span>Connecting to Google...</span>
               </>
             ) : (
               <>
                 <GoogleIcon />
-                <span>{devAuthBypassEnabled ? "Enter workspace" : "Continue with Google"}</span>
+                <span>Continue with Google</span>
               </>
             )}
           </button>

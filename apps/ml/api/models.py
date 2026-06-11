@@ -1,6 +1,6 @@
 """
-SQLAlchemy 2.0 ORM models — single source of truth for the schema.
-Alembic autogenerates migrations by diffing this file against the DB.
+SQLAlchemy 2.0 ORM models for Better Auth tables.
+The database schema is bootstrapped from db/init/001_schema.sql.
 """
 from datetime import datetime
 

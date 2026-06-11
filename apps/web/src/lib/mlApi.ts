@@ -2,14 +2,15 @@
  * ML v2 API client — contract per docs/ML-V2-DASHBOARD-SPEC.md §4/§7 and
  * docs/ML-V2-OUTPUT-CONTRACT.md.
  *
- * The Elysia prediction/training routes are not mounted yet. Until
- * NEXT_PUBLIC_ML_API_READY=1, every function serves from the deterministic
- * mock in src/mocks/ml.ts (single source — summary numbers are derived from
- * the same customer rows the table pages show). Views must surface IS_ML_MOCK
- * as a "Demo data" badge.
+ * The Elysia routes are mounted: /prediction-runs, /training-runs,
+ * /model-performance, plus suggested-cutoff endpoints for train/predict data.
+ * Set NEXT_PUBLIC_ML_USE_MOCK=1 for offline dev: every function then serves
+ * from the deterministic mock in src/mocks/ml.ts (single source — summary
+ * numbers are derived from the same customer rows the table pages show).
+ * Views must surface IS_ML_MOCK as a "Demo data" badge.
  */
 
-export const IS_ML_MOCK = process.env.NEXT_PUBLIC_ML_API_READY !== "1";
+export const IS_ML_MOCK = process.env.NEXT_PUBLIC_ML_USE_MOCK === "1";
 
 // ── Contract types ──────────────────────────────────────────────
 
@@ -100,8 +101,6 @@ export interface PredictionOutput {
   revenue_at_risk: number | null;
   priority_score: number;
   priority_reason: string;
-  recommended_action: string;
-  recommended_followup_date: string | null;
   // AI (phase 2)
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
@@ -346,6 +345,22 @@ export async function fetchCustomerPayments(
   return getJson(`/api/prediction-runs/${runId}/customers/${accId}/payments`);
 }
 
+/** GET /predict-data-sources/:id/suggested-cutoff — day after latest observed activity. */
+export async function fetchPredictSuggestedCutoff(
+  sourceId: string
+): Promise<{ suggested_cutoff: string }> {
+  if (IS_ML_MOCK) return (await mock()).mockPredictSuggestedCutoff(sourceId);
+  return getJson(`/api/predict-data-sources/${sourceId}/suggested-cutoff`);
+}
+
+/** GET /train-data-sources/:id/suggested-cutoff — Gate 3 feasible cutoff. */
+export async function fetchTrainSuggestedCutoff(
+  sourceId: string
+): Promise<{ suggested_cutoff: string; latest_data_date: string; horizon_days: number }> {
+  if (IS_ML_MOCK) return (await mock()).mockTrainSuggestedCutoff(sourceId);
+  return getJson(`/api/train-data-sources/${sourceId}/suggested-cutoff`);
+}
+
 export async function fetchModelPerformance(): Promise<ModelPerfEntry[]> {
   if (IS_ML_MOCK) return (await mock()).mockModelPerformance();
   return getJson("/api/model-performance");
@@ -372,12 +387,3 @@ export const LIFECYCLE_STAGES: LifecycleStage[] = ["Active Paid", "Active Free",
 export const RISK_LEVELS: RiskLevel[] = ["low", "medium", "high", "critical"];
 export const VALUE_TIERS: ValueTier[] = ["high", "mid", "low", "none"];
 export const URGENCY_LEVELS: UrgencyLevel[] = ["critical", "warning", "monitor", "stable"];
-
-export const ACTION_LABELS: Record<string, string> = {
-  save_call: "โทร retention ด่วน",
-  topup_reminder: "เตือนเติมเครดิต",
-  retention_campaign: "แคมเปญรักษาลูกค้า",
-  upsell_offer: "เสนอ upgrade เป็น Paid",
-  winback_manual: "ติดต่อ win-back",
-  monitor: "เฝ้าดู",
-};

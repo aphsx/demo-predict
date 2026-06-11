@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { TrainDataSource } from "@/lib/api";
-import { createTrainingRun, fetchTrainingRuns, type TrainingRun } from "@/lib/mlApi";
+import {
+  createTrainingRun,
+  fetchTrainingRuns,
+  fetchTrainSuggestedCutoff,
+  type TrainingRun,
+} from "@/lib/mlApi";
 import { getDisplayError } from "@/lib/ui-error";
 import { getTimestamp } from "./training-utils";
 import { TrainRunPanel } from "./TrainRunPanel";
@@ -25,6 +30,24 @@ export function TrainingRunsSection({
   const [runs, setRuns] = useState<TrainingRun[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestedCutoff, setSuggestedCutoff] = useState<string | null>(null);
+
+  const selectedSourceId = selectedSource?.id ?? null;
+  useEffect(() => {
+    setSuggestedCutoff(null);
+    if (!selectedSourceId) return;
+    let alive = true;
+    fetchTrainSuggestedCutoff(selectedSourceId)
+      .then(({ suggested_cutoff }) => {
+        if (alive) setSuggestedCutoff(suggested_cutoff);
+      })
+      .catch(() => {
+        // The panel falls back to its local default when no suggestion is available.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedSourceId]);
 
   const load = useCallback(async () => {
     try {
@@ -86,6 +109,7 @@ export function TrainingRunsSection({
 
       <TrainRunPanel
         selectedSource={selectedSource}
+        suggestedCutoff={suggestedCutoff}
         creating={creating}
         onTrain={(input) => void handleTrain(input)}
       />

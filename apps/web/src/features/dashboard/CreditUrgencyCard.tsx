@@ -1,4 +1,4 @@
-import type { DashboardOverview } from "@/mocks/dashboard";
+import type { DashboardOverview } from "./types";
 import { formatCredits, formatNumber } from "@/lib/format";
 import { RiskListRow } from "./RiskCard";
 import { CREDIT_PALETTE, TEXT_SAFE } from "./palette";

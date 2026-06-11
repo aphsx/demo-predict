@@ -84,8 +84,6 @@
 | `revenue_at_risk` | NUMERIC(14,2) | `churn_probability × predicted_clv_6m` — ดูนิยามเต็ม §5.1 |
 | `priority_score` | NUMERIC(5,2) | 0–100 — ดู §5.2 |
 | `priority_reason` | TEXT | ประโยคสั้นจาก rule ที่ดันคะแนน เช่น "เสี่ยง churn 82% × CLV ฿45k" |
-| `recommended_action` | TEXT | mapping rule — ดู §5.3 |
-| `recommended_followup_date` | DATE | ดู §5.3 |
 
 ### 3.8 AI explanation (Phase 2 — โครงรองรับไว้แล้ว)
 
@@ -100,9 +98,9 @@
 | `model_eligibility_json` | `{churn: {eligible, status, reason}, clv: {...}, credit: {...}}` — status ∈ predicted / not_eligible / insufficient_data / failed |
 | `model_versions_json` | `{churn: <version_id>, clv: <version_id>, credit: <version_id>}` |
 
-### 3.10 การเปลี่ยน schema ที่ต้องทำ (Alembic migration ใหม่)
+### 3.10 Schema status
 
-เพิ่มคอลัมน์: `churn_factors_json` JSONB, `p_alive` NUMERIC(5,4), `profile_snapshot_json` JSONB, `credit_forecast_interval_json` JSONB — นอกนั้น schema ปัจจุบันครบแล้ว
+คอลัมน์ `churn_factors_json`, `p_alive`, `profile_snapshot_json`, `credit_forecast_interval_json` อยู่ใน single bootstrap schema แล้ว (`db/init/001_schema.sql`)
 
 ## §5 นิยาม derived fields แบบละเอียด
 
@@ -137,19 +135,9 @@ P_credit = max(0, 1 − estimated_days_until_topup/90) (0 ถ้า null)
 น้ำหนักเก็บใน config ของ prediction runner (constant เดียว ไม่กระจายตามโค้ด) — ปรับได้เมื่อทีมขายให้ feedback
 `priority_reason` = ระบุ component ที่สูงสุด แปลงเป็นข้อความ
 
-### §5.3 Recommended action + follow-up date
+### §5.3 Action workflow removed
 
-Rule ตามลำดับ (ข้อแรกที่เข้าเงื่อนไขชนะ):
-
-| ลำดับ | เงื่อนไข | `recommended_action` | `recommended_followup_date` |
-|---|---|---|---|
-| 1 | risk ∈ {high, critical} และ value tier ∈ {high, mid} | `save_call` — โทร retention | cutoff + 3 วัน |
-| 2 | `credit_urgency_level = critical` | `topup_reminder` | วันนี้ +1 |
-| 3 | `credit_urgency_level = warning` | `topup_reminder` | cutoff + 7 วัน |
-| 4 | risk ∈ {high, critical} (value ต่ำ) | `retention_campaign` (อัตโนมัติ ไม่ใช้คนโทร) | cutoff + 14 วัน |
-| 5 | stage = Active Free และ (usage_trend = increasing หรือ value tier = high) | `upsell_offer` | cutoff + 7 วัน |
-| 6 | sub_stage = Churned Paid และ days_since_last_activity ≤ 270 | `winback_manual` (rule ไม่ใช่โมเดล) | cutoff + 30 วัน |
-| 7 | อื่น ๆ | `monitor` | null |
+Prediction output ไม่สร้าง `recommended_action` หรือ follow-up date แล้ว เพราะ workflow การติดต่อยังไม่ถูกนิยามเป็น product behavior ที่ชัดเจน ใช้ `priority_score` + `priority_reason` เพื่อจัดลำดับลูกค้าใน `/customers` แทน
 
 ## §6 ลำดับการเขียน output ของ prediction runner
 

@@ -190,7 +190,7 @@ body(
     "ระบบ backend ใช้สถาปัตยกรรม Elysia.js (Bun) เป็น REST API + Arq Worker สำหรับ ML Pipeline "
     "โดยมี Next.js 14 เป็น Frontend และ PostgreSQL เป็น Database "
     "ผลลัพธ์คือระบบที่ช่วยให้ทีม Sales/Account Manager สามารถ upload Excel และดูผล "
-    "prediction พร้อม action queue ได้ทันทีโดยไม่ต้องวิเคราะห์ด้วยตนเอง",
+    "prediction พร้อมการจัดลำดับลูกค้าตาม priority ได้ทันทีโดยไม่ต้องวิเคราะห์ด้วยตนเอง",
     size=15
 )
 
@@ -260,7 +260,7 @@ for prob in [
 body("AI เข้ามาเปลี่ยน Workflow อย่างไร", bold=True, size=15, space_before=8)
 body(
     "ระบบ 1Moby Intelligence เปลี่ยน workflow จาก 'คนอ่าน Excel แล้วตัดสินใจเอง' "
-    "เป็น 'ระบบ AI สร้าง action list ให้ทันทีหลัง upload ข้อมูล' ดังขั้นตอนต่อไปนี้:"
+    "เป็น 'ระบบ AI จัดลำดับลูกค้าที่ควรตรวจสอบก่อนทันทีหลัง upload ข้อมูล' ดังขั้นตอนต่อไปนี้:"
 )
 steps = [
     "ผู้ใช้สร้าง Prediction Run และกำหนด cutoff date",
@@ -270,8 +270,8 @@ steps = [
     "Worker สร้าง feature 30 ตัวแบบ point-in-time safe จากข้อมูลก่อน cutoff",
     "AI/ML models วิเคราะห์ lifecycle, churn, CLV, credit forecast, win-back, conversion",
     "บันทึกผล prediction ลง PostgreSQL (batch insert 1,000 rows/trip)",
-    "ผู้ใช้ดูผลผ่าน Dashboard, Customer List, Customer 360, Action Queue และ Model Health",
-    "ทีมธุรกิจนำผลไปตัดสินใจ: โทรหาลูกค้าเสี่ยงสูง, ส่ง reminder เติมเครดิต, ทำ win-back campaign",
+    "ผู้ใช้ดูผลผ่าน Dashboard, Customer List, Customer 360 และ Model Health",
+    "ทีมธุรกิจนำผลไปตัดสินใจจาก priority score, churn risk, CLV และ credit urgency",
 ]
 for i, s in enumerate(steps, 1):
     bullet(f"{i}. {s}")
@@ -305,7 +305,7 @@ add_table(
         ["web (Next.js)", "Next.js 14, TypeScript, Tailwind", ":3000", "Frontend + Proxy rewrite /api/* → Elysia"],
         ["api (Elysia)", "Elysia.js บน Bun, Drizzle ORM, Better Auth", ":3001", "REST API + Better Auth + SSE + Arq enqueue"],
         ["ml (FastAPI)", "Python 3.11, FastAPI", ":8001 (internal)", "Internal routes: /health, /internal/explain, /internal/train"],
-        ["db (PostgreSQL)", "PostgreSQL 15-alpine", ":5433", "Primary database — Alembic owns migrations"],
+        ["db (PostgreSQL)", "PostgreSQL 15-alpine", ":5433", "Primary database — single bootstrap schema"],
         ["redis", "Redis 7-alpine", "—", "Arq job queue + Redis Streams (progress events)"],
         ["worker (Arq)", "Python, Arq", "—", "ML pipeline consumer — รัน 5 models + batch insert"],
     ],
@@ -370,7 +370,7 @@ add_table(
         ["การเตือนเติมเครดิต", "ดูวันหมดอายุหรือยอดเครดิตเอง", "Quantile model ทำนาย P10-P90 + urgency label + alert_date"],
         ["ลูกค้าที่เลิกใช้", "ต้องค้นเองว่าใครควรตามกลับ", "Win-back model จัดลำดับ churned customers ตาม probability"],
         ["ลูกค้าฟรี", "ไม่รู้ว่าใครน่าจะจ่ายเงิน", "Conversion model ทำนายโอกาสเปลี่ยนเป็น paid customer"],
-        ["การตัดสินใจ", "Analyst สรุปให้ Sales (ใช้เวลา 1-2 วัน)", "Dashboard + Action Queue พร้อมใช้งานทันทีหลัง upload"],
+        ["การตัดสินใจ", "Analyst สรุปให้ Sales (ใช้เวลา 1-2 วัน)", "Dashboard + Customers priority sorting พร้อมใช้งานทันทีหลัง upload"],
         ["Explainability", "ไม่มี — ตัดสินใจจาก intuition", "SHAP top-3 risk factors แสดงรายลูกค้า"],
         ["Priority Score", "ไม่มี scoring — ต้องนับเองว่าใครสำคัญ", "Priority score 0-10 จาก weighted blend 4 ปัจจัย"],
     ],
@@ -686,7 +686,6 @@ add_table(
         ["Pipelines / Runs", "/runs", "สร้าง run, upload Excel, ดู status แบบ real-time ผ่าน SSE"],
         ["Customers", "/customers", "ตารางลูกค้าทั้งหมด, filter by lifecycle/churn tier/urgency/RFM, search"],
         ["Customer 360", "/customers/[id]", "Churn gauge + SHAP factors, CLV + CI, RFM scores, credit forecast timeline"],
-        ["Action Queue", "/playbooks", "รายชื่อลูกค้าที่ควร action เรียงตาม priority score"],
         ["Alerts", "/alerts", "แจ้งเตือนระดับ portfolio/model drift/data quality"],
         ["Model Health", "/model-performance", "AUC/F1/Coverage metrics, SHAP plots, training log, model drift (PSI/KS)"],
         ["AI Chat (Demo)", "/ai-chat", "หน้าสนทนา demo สำหรับถามภาพรวมระบบ (LLM integration — Phase 2)"],

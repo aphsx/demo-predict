@@ -25,14 +25,15 @@
 | `/login` | Login | — | ใช้งานได้แล้ว |
 
 **เอาออก:**
+- `/playbooks` — **ตัดออกจาก scope** ยังไม่ชัดว่าทีมจะใช้ workflow แบบไหน — งาน "ใครต้องถูกติดต่อก่อน" ใช้ quick presets + sort `priority_score` ใน `/customers` แทน; ไม่มี `recommended_action` / follow-up workflow ใน output contract แล้ว
 - `/alerts` — โฟลเดอร์ว่าง ไม่มี page.tsx ลบทิ้ง (สัญญาณเตือนใช้ quick presets ใน `/customers` แทน)
 - `/monthly-value` — ยุบเป็น drill-down/modal ของกราฟ revenue ใน Overview (ข้อมูลเดียวกัน ไม่ควรเป็น route แยก)
-- ฟังก์ชัน stub ทั้งหมดใน `apps/web/src/lib/api.ts` (`fetchRuns`→`[]`, `streamChat` ฯลฯ) — แทนด้วย client ของ API ใหม่ (§7)
+- ฟังก์ชัน stub เก่าใน `apps/web/src/lib/api.ts` ถูกลบแล้ว — หน้า ML ใช้ client ของ API ใหม่ (§7)
 - การ์ด AI explanation ที่เป็น "Mockup" — render เฉพาะเมื่อ `ai_status='completed'`
 
 ## §2.0 Layout กลาง (ทุกหน้า)
 
-**Sidebar (รายการสุดท้ายหลังตัด routes ที่ไม่อยู่ใน scope):**
+**Sidebar (รายการสุดท้ายหลังตัด playbooks/alerts/monthly-value):**
 
 ```
 📊 Dashboard          /
@@ -93,7 +94,7 @@ Header: ชื่อ run, `cutoff_date`, `total_customers`, เวลา predict
 | Credit urgency | `credit_urgency_level` + `estimated_days_until_topup` |
 | Last activity | `days_since_last_activity` |
 | Revenue (จริง) | `total_revenue` |
-| Action | `recommended_action` |
+| Priority reason | `priority_reason` |
 
 **Filters:** lifecycle stage, risk level, value tier, credit urgency, `ever_paid`, ค้นหา `acc_id`
 **Default sort:** `priority_score desc`
@@ -117,8 +118,8 @@ join_date + อายุลูกค้า, status SMS/Email, เครดิต
 - Credit: `predicted_credit_usage_30d/90d`, แถบช่วง p10–p90, `estimated_days_until_topup`
 - ถ้าโมเดลไหน not eligible → แสดงเหตุผลจาก `model_eligibility_json` แทนตัวเลข (เช่น "ลูกค้า Ghost — ไม่อยู่ในเงื่อนไขโมเดล churn")
 
-**D. Action**
-`priority_score`, `recommended_action`, `priority_reason`, `recommended_followup_date`
+**D. Priority**
+`priority_score`, `priority_reason`
 AI explanation (Phase 2): render เฉพาะ `ai_status='completed'`
 
 ## §2.4 หน้า Model Performance (`/model-performance`)
@@ -186,13 +187,13 @@ name · status pill (pending / in_progress / completed / failed) · predict sour
 ## §2.7 หน้า AI Assistant (`/ai-chat`)
 
 ฟีเจอร์แยก — spec หลักอยู่ `AI-ASSISTANT-ARCHITECTURE.md` สิ่งที่ต้องแก้ให้สอดคล้อง ML v2:
-- Quick links เหลือ Customers / Model Performance
+- ลบ quick link ที่ชี้ `/playbooks` (หน้าโดนลบ) — เหลือ Customers / Model Performance
 - Quick prompts ปรับเป็นคำถามที่ตอบได้จริงจาก `ml_prediction_outputs` (เช่น "ลูกค้าเสี่ยงสูงที่ CLV เกิน 10k มีใครบ้าง")
 - Evidence panel แสดง SQL ที่รันจริง (มีอยู่แล้ว — คงไว้)
 
 ## §2.8 หน้า Login (`/login`)
 
-คงเดิม: Google OAuth ผ่าน Better Auth + dev bypass — ไม่มีงานเพิ่ม
+คงเดิม: Google OAuth ผ่าน Better Auth เท่านั้น
 
 ## §3 Value provenance — ทุกค่าบน UI มาจากไหน คำนวณเมื่อไหร่ โดยใคร
 
@@ -253,7 +254,6 @@ KPI "Active high risk" = count(*) WHERE lifecycle_stage='Active Paid'
 | Last activity | `days_since_last_activity` | P | นับจาก cutoff ไม่ใช่จากวันนี้ — tooltip ต้องบอก |
 | Revenue / Purchases / Avg ticket | `total_revenue`, `n_purchases`, `avg_transaction_value` | P | ข้อมูลจริงสะสมถึง cutoff |
 | Priority score + เหตุผล | `priority_score` (50 risk / 30 value / 20 credit), `priority_reason` | P | น้ำหนักอยู่ใน runner config |
-| Recommended action / follow-up | rule table ใน OUTPUT-CONTRACT §5.3 | P | UI แสดงอย่างเดียว ไม่ re-derive |
 | Churn factors (360) | `churn_factors_json` (top-5 SHAP) | P | แปล feature name → ภาษาคนด้วย mapping ฝั่ง UI (mapping คงที่ ไม่ใช่ logic) |
 | Profile (เครดิต/expire/status) | `profile_snapshot_json` | P | ค่า "ณ วัน export Excel" — ไม่ใช่ realtime, UI ติด label วันที่ |
 | กราฟ usage รายเดือน (360) | query `predict_clean_usage` ตรง | Q | ไม่เก็บใน outputs |
@@ -303,14 +303,15 @@ KPI "Active high risk" = count(*) WHERE lifecycle_stage='Active Paid'
 | หน้า | มีแล้ว | ยังขาด / ต้องแก้ |
 |---|---|---|
 | `/` Overview | KPI 4 ใบ, lifecycle mix, revenue chart, risk + CLV + top-up widgets — **mock ทั้งหมด** | ต่อ `/summary` จริง; เพิ่ม Total customers KPI, Value×Risk matrix, Top 10 priority, run selector; แยก label actual vs forecast |
-| `/customers` | ตาราง acc_id / stage / churn / CLV / revenue + filter lifecycle | คอลัมน์ risk level, revenue_at_risk, value tier, credit urgency, last activity, action; filter risk/tier/urgency; quick presets; sort ฝั่ง server; export CSV |
+| `/customers` | ตาราง acc_id / stage / churn / CLV / revenue + filter lifecycle | คอลัมน์ risk level, revenue_at_risk, value tier, credit urgency, last activity, priority reason; filter risk/tier/urgency; quick presets; sort ฝั่ง server; export CSV |
 | `/customers/[id]` | hero metrics, usage chart, profile ย่อ | churn factors (SHAP) — หัวใจของหน้า, profile snapshot (เครดิต/expire), payment timeline, แถบ p10–p90 credit, เหตุผล not eligible, ซ่อน AI card ที่เป็น Mockup |
+| `/playbooks` | lane + การ์ด + done checkbox | **ลบ route ทั้งหน้า** (ตัดออกจาก scope — ดู §2) |
 | `/model-performance` | การ์ด 4 โมเดล — **ตัวเลข hardcode** | อ่านจาก `ml_model_evaluations`; แยก split, เทียบ baseline, calibration curve, lift table, threshold ที่ใช้ |
 | `/runs` | โครงหน้า + ตาราง — fetch เป็น stub คืน `[]` | ทำตาม §2.5: ย้าย predict import มารวม, create run (เลือก source + cutoff ที่ API แนะนำ), progress steps, open→เลือก run บน dashboard, retry/delete |
 | `/training` | import + เลือก dataset ใช้งานได้จริง | ทำตาม §2.6: Train panel จริง (cutoff แนะนำจาก Gate 3), การ์ดสรุปผล+เหตุผล promote/ไม่ promote, training history |
-| `/ai-chat` | chat + evidence panel ใช้งานได้ | ปรับ quick prompts ให้ถามจาก `ml_prediction_outputs` ได้จริง (§2.7) |
-| Layout/nav | sidebar มีลิงก์ครบทุกหน้าเก่า | ตัดเมนู routes ที่ไม่อยู่ใน scope, เพิ่ม run selector ใน header (§2.0) |
-| `/alerts`, `/monthly-value` | — | ลบ route (§2) |
+| `/ai-chat` | chat + evidence panel ใช้งานได้ | ลบ quick link `/playbooks`, ปรับ quick prompts ให้ถามจาก `ml_prediction_outputs` ได้จริง (§2.7) |
+| Layout/nav | sidebar มีลิงก์ครบทุกหน้าเก่า | ตัดเมนู playbooks / alerts / monthly-value, เพิ่ม run selector ใน header (§2.0) |
+| `/alerts`, `/monthly-value`, `/playbooks` | — | ลบ route (§2) |
 
 ## §7 API ที่หน้าเว็บต้องใช้ (Elysia — ทุก key เป็น snake_case)
 

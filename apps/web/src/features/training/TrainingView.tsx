@@ -9,7 +9,6 @@ import { Skeleton } from "@/components/ui";
 import {
   deleteTrainDataSource,
   fetchTrainDataSources,
-  trainModels,
   uploadTrainDataFileWithProgress,
   type TrainDataSource,
 } from "@/lib/api";
@@ -17,17 +16,16 @@ import { getDisplayError } from "@/lib/ui-error";
 import { FilePickerPanel } from "./FilePickerPanel";
 import { ModelTrainingPanel } from "./ModelTrainingPanel";
 import { ProgressCard } from "./ProgressCard";
+import { TrainingRunsSection } from "./TrainingRunsSection";
 import {
   IMPORT_ACCENT,
   getTimestamp,
   wait,
-  waitForTrainingHealth,
 } from "./training-utils";
 
 export function TrainingView() {
   const [trainSources, setTrainSources] = useState<TrainDataSource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [training, setTraining] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importStep, setImportStep] = useState("");
@@ -77,7 +75,8 @@ export function TrainingView() {
   );
   const selectedSource =
     sortedSources.find((source) => source.id === selectedSourceId) ?? readySources[0] ?? null;
-  const canTrain = Boolean(selectedSource && selectedSource.import_status === "ready");
+  const selectedReadySource =
+    selectedSource?.import_status === "ready" ? selectedSource : null;
 
   useEffect(() => {
     if (sortedSources.length === 0) {
@@ -157,26 +156,6 @@ export function TrainingView() {
       setImportError(getDisplayError(e, "ลบ dataset ไม่สำเร็จ"));
     } finally {
       setDeletingId(null);
-    }
-  };
-
-  const startTraining = async () => {
-    if (!canTrain) {
-      setImportError("กรุณาเลือก dataset ที่พร้อมใช้งานก่อนเริ่ม train");
-      return;
-    }
-    setTraining(true);
-    setImportError(null);
-    setImportSuccess(null);
-
-    try {
-      await trainModels();
-      await waitForTrainingHealth();
-      await load();
-    } catch (e) {
-      setImportError(getDisplayError(e, "เริ่ม train model ไม่สำเร็จ"));
-    } finally {
-      setTraining(false);
     }
   };
 
@@ -260,9 +239,9 @@ export function TrainingView() {
               </div>
             </div>
 
-            {(importing || training) && (
+            {importing && (
               <ProgressCard
-                training={training}
+                training={false}
                 progress={importProgress}
                 step={importStep}
                 phase={importPhase}
@@ -288,13 +267,12 @@ export function TrainingView() {
           sources={sortedSources}
           selectedSource={selectedSource}
           readyCount={readySources.length}
-          training={training}
           deletingId={deletingId}
-          canTrain={canTrain}
-          onTrain={() => void startTraining()}
           onSelect={(source) => setSelectedSourceId(source.id)}
           onDelete={(source) => setPendingDeleteSource(source)}
         />
+
+        <TrainingRunsSection selectedSource={selectedReadySource} />
       </div>
 
       {pendingDeleteSource && (
