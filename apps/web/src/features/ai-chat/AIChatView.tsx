@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, type ChangeEvent } from "react";
-import { Send, RotateCcw, Sparkles, User } from "lucide-react";
-import { PageHeader } from "@/components/ui";
+import { Bot, Send, RotateCcw, User } from "lucide-react";
 import { MarkdownLite } from "@/components/chat/MarkdownLite";
 import { TypingDots } from "@/components/chat/TypingDots";
 import { formatTime } from "@/lib/format";
@@ -12,8 +11,9 @@ import { RunUrlSync } from "@/stores/RunUrlSync";
 import { QuickPromptsAside } from "./QuickPromptsAside";
 
 const TEXT_WRAP = "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
-const CHAT_COLUMN = "mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col px-3 pb-3 sm:px-5 sm:pb-5 lg:px-6";
+const CHAT_COLUMN = "flex min-h-0 w-full flex-1 flex-col";
 const MESSAGE_BUBBLE = "max-w-full rounded-2xl px-4 py-3 text-[13.5px] leading-relaxed";
+const CENTER_COLUMN = "mx-auto w-full max-w-4xl";
 
 export function AIChatView() {
   const runId = useRunStore((s) => s.runId);
@@ -71,33 +71,33 @@ export function AIChatView() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-[color:var(--bg)]">
       <RunUrlSync />
-      <PageHeader
-        eyebrow={runId ? `AI · Run ${runId.slice(0, 8)}…` : "AI · ไม่มี run"}
-        title="Moby AI Assistant"
-        actions={
-          <button
-            onClick={reset}
-            className="h-9 px-3 rounded-lg border border-gray-200 bg-white
-              text-[13px] text-[color:var(--ink-2)] hover:bg-gray-50
-              inline-flex items-center gap-1.5 transition-colors whitespace-nowrap"
-          >
-            <RotateCcw size={13} />
-            Reset conversation
-          </button>
-        }
-      />
-
       <div className="flex min-h-0 flex-1 overflow-hidden">
 
         {/* ── main chat column ───────────────────────────── */}
         <div className={CHAT_COLUMN}>
 
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-[var(--shadow-1)]">
+          <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-5 py-3">
+            <div className="min-w-0">
+              <p className="type-label">{runId ? `AI · Run ${runId.slice(0, 8)}...` : "AI · ไม่มี run"}</p>
+              <h2 className="type-section-title mt-0.5 text-[18px]">
+                Moby AI Assistant
+              </h2>
+            </div>
+            <button
+              onClick={reset}
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-[color:var(--ink-2)] transition-colors hover:bg-gray-50"
+            >
+              <RotateCcw size={13} />
+              Reset
+            </button>
+          </header>
           {/* messages */}
           <div
             ref={scrollRef}
-            className="flex-1 min-h-0 space-y-4 overflow-y-auto overscroll-contain bg-[#f8fafc] px-3 py-4 sm:px-5"
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-[#f8fafc] px-4 py-4 pb-36 sm:px-6"
           >
+            <div className={`${CENTER_COLUMN} space-y-4`}>
             {messages.map(msg => {
               if (msg.role === "assistant" && (msg.pending || msg.content.trim() === "")) return null;
 
@@ -106,7 +106,7 @@ export function AIChatView() {
                 {/* avatar */}
                 {msg.role === "assistant" ? (
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] shadow-md">
-                    <Sparkles size={15} className="text-white" />
+                    <Bot size={15} className="text-white" />
                   </div>
                 ) : (
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[color:var(--ink-3)] shadow-sm ring-1 ring-gray-200">
@@ -152,7 +152,7 @@ export function AIChatView() {
             {thinking && (
               <div className="flex min-w-0 gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] shadow-md">
-                  <Sparkles size={15} className="text-white animate-pulse" />
+                  <Bot size={15} className="text-white animate-pulse" />
                 </div>
                 <div className="flex max-w-[min(78%,46rem)] items-center gap-2 rounded-2xl rounded-tl-sm border border-gray-200 bg-white px-4 py-3.5 shadow-sm">
                   <span className="text-[12px] text-[color:var(--ink-4)]">กำลังวิเคราะห์</span>
@@ -160,12 +160,13 @@ export function AIChatView() {
                 </div>
               </div>
             )}
+            </div>
           </div>
 
-          <footer className="shrink-0 border-t border-gray-200 bg-white">
+          <footer className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-4 sm:px-6 sm:pb-6">
             {/* input box */}
-            <div className="p-3 sm:p-4">
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2">
+            <div className={`${CENTER_COLUMN} pointer-events-auto`}>
+              <div className="rounded-2xl bg-white px-3 py-2 shadow-[0_18px_48px_rgba(15,23,42,0.16)]">
                 <textarea
                   ref={inputRef}
                   id="ai-chat-page-input"
@@ -178,7 +179,7 @@ export function AIChatView() {
                     placeholder:text-[color:var(--ink-5)] outline-none focus:outline-none focus:ring-0 focus-visible:outline-none ${TEXT_WRAP}`}
                   style={{ overflowY: "auto" }}
                 />
-                <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-gray-200 pt-2">
+                <div className="mt-2 flex min-w-0 items-center gap-2 pt-2">
                   <span className={`flex-1 text-[11px] text-[color:var(--ink-5)] ${TEXT_WRAP}`}>
                     {runId ? `Ollama Cloud · Text-to-SQL · Run ${runId.slice(0, 8)}` : "Ollama Cloud · Text-to-SQL · knowledge evidence"}
                   </span>
