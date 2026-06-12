@@ -28,6 +28,7 @@ import lightgbm as lgb
 import numpy as np
 import optuna
 import pandas as pd
+import xgboost as xgb
 
 from src.training.baselines import credit_last_30d_carryover, credit_moving_avg_90d
 from src.training.datasets import SplitFrame
@@ -43,6 +44,16 @@ HORIZONS = {30: "future_credit_usage_30d", 90: "future_credit_usage_90d"}
 CREDIT_TRIALS = 30
 TARGET_COVERAGE = 0.80
 URGENT_TOPUP_DAYS = 14
+
+# Top-up timing model (XGBoost AFT — handles the ~70% censored rows that the
+# observed-only alternatives would silently drop). The small distribution ×
+# scale grid is chosen on validation urgent-F2: the model exists to power the
+# "must top up within ≤14 days" alert, so that is what selection optimizes.
+TOPUP_AFT_DISTRIBUTIONS = ("normal", "logistic")
+TOPUP_AFT_SCALES = (0.5, 1.0, 1.5)
+TOPUP_AFT_ROUNDS = 600
+TOPUP_MIN_OBSERVED_DAYS = 0.5  # AFT bounds must be positive; same-day top-up → half a day
+TOPUP_RAW_PRED_CAP = 3650.0  # AFT extrapolates exp(η) — censored-heavy rows can overflow
 # Cap on the learned log-ratio correction (≈ ×0.22 – ×4.5 of the carryover
 # anchor). Uncapped corrections extrapolate badly on whale customers at older
 # backtest cutoffs and blow up MAE.
@@ -155,6 +166,7 @@ class CreditTrainResult:
     baseline_metrics: dict[str, dict[str, dict[str, float]]]
     preprocessor: PreprocessorConfig
     params_by_horizon: dict[int, dict[str, Any]] = field(default_factory=dict)
+    topup_model: "TopupTimingModel | None" = None
 
 
 def train_credit(
@@ -162,6 +174,7 @@ def train_credit(
     preprocessor: PreprocessorConfig,
     *,
     n_trials: int = CREDIT_TRIALS,
+    topup_censor_days: float = 180.0,
     progress: Callable[[str], None] | None = None,
 ) -> CreditTrainResult:
     notify = progress or (lambda message: logger.info(message))
@@ -201,18 +214,29 @@ def train_credit(
         }
         for split in ("validation", "test")
     }
+    notify("credit: training top-up timing model (XGBoost AFT)")
+    topup_model = train_topup_model(dataset, preprocessor, censor_days=topup_censor_days)
+
     validation_metrics = credit_metrics(
         y[30]["validation"], predictions["validation"][30],
         y[90]["validation"], predictions["validation"][90],
-    )
-    validation_metrics.update(
-        urgent_topup_metrics(dataset, "validation", predictions["validation"][30][0.50])
     )
     test_metrics = credit_metrics(
         y[30]["test"], predictions["test"][30],
         y[90]["test"], predictions["test"][90],
     )
-    test_metrics.update(urgent_topup_metrics(dataset, "test", predictions["test"][30][0.50]))
+    for split_name, metrics in (("validation", validation_metrics), ("test", test_metrics)):
+        metrics.update(topup_timing_metrics(dataset, split_name, topup_model, x[split_name]))
+        metrics.update(
+            urgent_topup_metrics(
+                dataset,
+                split_name,
+                heuristic_topup_days(
+                    dataset.features(split_name), predictions[split_name][30][0.50]
+                ),
+                suffix="_heuristic",
+            )
+        )
 
     baseline_metrics = _evaluate_baselines(dataset, y)
 
@@ -223,6 +247,7 @@ def train_credit(
         baseline_metrics=baseline_metrics,
         preprocessor=preprocessor,
         params_by_horizon={h: m.params for h, m in horizons.items()},
+        topup_model=topup_model,
     )
 
 
@@ -265,7 +290,26 @@ def backtest_credit(
     champion_metrics = credit_metrics(
         y_test[30], predictions[30], y_test[90], predictions[90]
     )
-    champion_metrics.update(urgent_topup_metrics(dataset, "test", predictions[30][0.50]))
+    # Refit the top-up timing model at this cutoff with the champion's
+    # (distribution, scale) — same protocol as the quantile-model refits.
+    bt_topup = train_topup_model(
+        dataset,
+        preprocessor,
+        censor_days=result.topup_model.censor_days if result.topup_model else 180.0,
+        fixed_params=(
+            (result.topup_model.distribution, result.topup_model.scale)
+            if result.topup_model
+            else None
+        ),
+    )
+    champion_metrics.update(topup_timing_metrics(dataset, "test", bt_topup, x_test))
+    champion_metrics.update(
+        urgent_topup_metrics(
+            dataset, "test",
+            heuristic_topup_days(dataset.features("test"), predictions[30][0.50]),
+            suffix="_heuristic",
+        )
+    )
     baseline_metrics = _evaluate_baselines(
         dataset, {h: {"test": y_test[h]} for h in HORIZONS}, splits=("test",)
     )
@@ -399,18 +443,54 @@ def _widen_interval(
 def urgent_topup_metrics(
     dataset: SplitFrame,
     split: str,
-    p50_30d: np.ndarray,
+    est_days: np.ndarray,
+    suffix: str = "",
 ) -> dict[str, Any]:
     """Quality of the "must top up within ≤14 days" alert (TRAINING §11).
 
-    Mirrors the prediction-side derivation (`estimated_days_until_topup` =
-    ceil(balance / (p50_30d / 30))) but with the PIT-safe
-    `credit_balance_proxy` feature in place of the export-time snapshot
-    balance, which does not exist for historical cutoffs. Actual urgency =
-    the customer really topped up within 14 days after the cutoff
-    (`days_until_next_topup` label; censored rows count as not urgent).
+    `est_days` is the estimated days-until-top-up per row of the split (from
+    the AFT model or the balance/burn heuristic — pass `suffix` to persist
+    both side by side). Actual urgency = the customer really topped up within
+    14 days after the cutoff (`days_until_next_topup` label; censored rows
+    count as not urgent).
     """
 
+    actual = _actual_urgent(dataset, split)
+    predicted = np.asarray(est_days, dtype=float) <= URGENT_TOPUP_DAYS
+
+    tp = int(np.sum(predicted & actual))
+    fp = int(np.sum(predicted & ~actual))
+    fn = int(np.sum(~predicted & actual))
+    return {
+        f"urgent_topup_precision{suffix}": round(tp / (tp + fp), 4) if tp + fp else None,
+        f"urgent_topup_recall{suffix}": round(tp / (tp + fn), 4) if tp + fn else None,
+        f"urgent_topup_actual_n{suffix}": tp + fn,
+        f"urgent_topup_flagged_n{suffix}": tp + fp,
+    }
+
+
+def heuristic_topup_days(features_raw: pd.DataFrame, p50_30d: np.ndarray) -> np.ndarray:
+    """Prediction-side derivation: ceil(balance / (p50_30d / 30)).
+
+    Uses the PIT-safe `credit_balance_proxy` feature in place of the
+    export-time snapshot balance, which does not exist for historical
+    cutoffs. Rows with no forecast burn get +inf (never urgent).
+    """
+
+    balance = (
+        pd.to_numeric(features_raw["credit_balance_proxy"], errors="coerce")
+        .fillna(0.0)
+        .clip(lower=0.0)
+        .to_numpy()
+    )
+    daily_burn = np.asarray(p50_30d, dtype=float) / 30.0
+    est_days = np.full(len(balance), np.inf)
+    burning = daily_burn > 0
+    est_days[burning] = np.ceil(balance[burning] / daily_burn[burning])
+    return est_days
+
+
+def _actual_urgent(dataset: SplitFrame, split: str) -> np.ndarray:
     rows = dataset.split(split)
     days_label = pd.to_numeric(rows["days_until_next_topup"], errors="coerce")
     observed = (
@@ -418,29 +498,168 @@ def urgent_topup_metrics(
         if "topup_observed" in rows.columns
         else days_label.notna()
     )
-    actual = (observed & (days_label <= URGENT_TOPUP_DAYS)).to_numpy()
+    return (observed & (days_label <= URGENT_TOPUP_DAYS)).to_numpy()
 
-    balance = (
-        pd.to_numeric(rows["credit_balance_proxy"], errors="coerce")
-        .fillna(0.0)
-        .clip(lower=0.0)
-        .to_numpy()
+
+# ── Top-up timing model (XGBoost AFT) ────────────────────────────
+
+
+@dataclass
+class TopupTimingModel:
+    booster: xgb.Booster
+    distribution: str
+    scale: float
+    censor_days: float
+    feature_names: list[str]
+    # Censoring inflates the raw AFT estimate, so a fixed "≤14 days" UI rule
+    # on raw days barely fires. AFT days are monotone in risk, so flagging at
+    # the F2-optimal validation threshold t* is the optimal decision rule —
+    # day_scale = 14 / t* bakes that rule into the shipped days value while
+    # preserving ranking. Tuned on validation in train_topup_model.
+    day_scale: float = 1.0
+    urgent_day_threshold_raw: float = float(URGENT_TOPUP_DAYS)
+
+    def predict_days(self, x: pd.DataFrame) -> np.ndarray:
+        data = xgb.DMatrix(x[self.feature_names])
+        raw = np.clip(self.booster.predict(data), 0.0, TOPUP_RAW_PRED_CAP)
+        return raw * self.day_scale
+
+
+def train_topup_model(
+    dataset: SplitFrame,
+    preprocessor: PreprocessorConfig,
+    censor_days: float,
+    fixed_params: tuple[str, float] | None = None,
+) -> TopupTimingModel:
+    """Fit days-until-next-top-up as a right-censored AFT regression.
+
+    Customers who never topped up inside the label window are censored at
+    `censor_days` (lower bound = window, upper bound = +inf) instead of being
+    dropped or faked as zero. `fixed_params` skips the selection grid —
+    backtest refits reuse the champion's (distribution, scale).
+    """
+
+    x_train = transform_features(dataset.features("train"), preprocessor)
+    x_val = transform_features(dataset.features("validation"), preprocessor)
+    dtrain = _topup_dmatrix(x_train, dataset, "train", censor_days)
+    dval = _topup_dmatrix(x_val, dataset, "validation", censor_days)
+    actual_val = _actual_urgent(dataset, "validation")
+
+    grid = [fixed_params] if fixed_params else [
+        (distribution, scale)
+        for distribution in TOPUP_AFT_DISTRIBUTIONS
+        for scale in TOPUP_AFT_SCALES
+    ]
+    best: TopupTimingModel | None = None
+    best_score = -1.0
+    for distribution, scale in grid:
+        params = {
+            "objective": "survival:aft",
+            "eval_metric": "aft-nloglik",
+            "aft_loss_distribution": distribution,
+            "aft_loss_distribution_scale": scale,
+            "max_depth": 4,
+            "learning_rate": 0.05,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "min_child_weight": 10.0,
+            "lambda": 1.0,
+            "seed": RANDOM_SEED,
+            "verbosity": 0,
+        }
+        booster = xgb.train(
+            params,
+            dtrain,
+            num_boost_round=TOPUP_AFT_ROUNDS,
+            evals=[(dval, "validation")],
+            early_stopping_rounds=50,
+            verbose_eval=False,
+        )
+        days_val = np.clip(booster.predict(dval), 0.0, TOPUP_RAW_PRED_CAP)
+        threshold, score = _tune_urgent_threshold(actual_val, days_val)
+        if score > best_score:
+            best_score = score
+            best = TopupTimingModel(
+                booster=booster,
+                distribution=distribution,
+                scale=scale,
+                censor_days=censor_days,
+                feature_names=list(x_train.columns),
+                day_scale=float(URGENT_TOPUP_DAYS) / threshold,
+                urgent_day_threshold_raw=threshold,
+            )
+    assert best is not None
+    return best
+
+
+def _tune_urgent_threshold(actual: np.ndarray, days_val: np.ndarray) -> tuple[float, float]:
+    """Sweep day-thresholds on validation; return (best threshold, best F2)."""
+
+    candidates = np.unique(
+        np.concatenate(
+            [
+                np.quantile(days_val, np.linspace(0.02, 0.98, 49)),
+                [float(URGENT_TOPUP_DAYS)],
+            ]
+        )
     )
-    daily_burn = np.asarray(p50_30d, dtype=float) / 30.0
-    est_days = np.full(len(rows), np.inf)
-    burning = daily_burn > 0
-    est_days[burning] = np.ceil(balance[burning] / daily_burn[burning])
-    predicted = est_days <= URGENT_TOPUP_DAYS
+    best_threshold, best_score = float(URGENT_TOPUP_DAYS), -1.0
+    for threshold in candidates:
+        if threshold <= 0:
+            continue
+        score = _urgent_fbeta(actual, days_val <= threshold, beta=2.0)
+        if score > best_score:
+            best_score, best_threshold = score, float(threshold)
+    return best_threshold, best_score
 
-    tp = int(np.sum(predicted & actual))
-    fp = int(np.sum(predicted & ~actual))
-    fn = int(np.sum(~predicted & actual))
-    return {
-        "urgent_topup_precision": round(tp / (tp + fp), 4) if tp + fp else None,
-        "urgent_topup_recall": round(tp / (tp + fn), 4) if tp + fn else None,
-        "urgent_topup_actual_n": tp + fn,
-        "urgent_topup_flagged_n": tp + fp,
-    }
+
+def topup_timing_metrics(
+    dataset: SplitFrame,
+    split: str,
+    model: TopupTimingModel,
+    x: pd.DataFrame,
+) -> dict[str, Any]:
+    """Urgent alert quality + MAE on the rows whose top-up was observed."""
+
+    days_pred = model.predict_days(x)
+    metrics = urgent_topup_metrics(dataset, split, days_pred)
+    rows = dataset.split(split)
+    days_label = pd.to_numeric(rows["days_until_next_topup"], errors="coerce")
+    observed = days_label.notna().to_numpy()
+    if observed.any():
+        metrics["topup_mae_days_observed"] = round(
+            float(np.mean(np.abs(days_pred[observed] - days_label.to_numpy()[observed]))), 2
+        )
+    metrics["topup_observed_n"] = int(observed.sum())
+    return metrics
+
+
+def _topup_dmatrix(
+    x: pd.DataFrame,
+    dataset: SplitFrame,
+    split: str,
+    censor_days: float,
+) -> xgb.DMatrix:
+    rows = dataset.split(split)
+    days = pd.to_numeric(rows["days_until_next_topup"], errors="coerce").to_numpy()
+    observed = ~np.isnan(days)
+    lower = np.where(observed, np.clip(days, TOPUP_MIN_OBSERVED_DAYS, None), censor_days)
+    upper = np.where(observed, np.clip(days, TOPUP_MIN_OBSERVED_DAYS, None), np.inf)
+    matrix = xgb.DMatrix(x)
+    matrix.set_float_info("label_lower_bound", lower.astype(np.float32))
+    matrix.set_float_info("label_upper_bound", upper.astype(np.float32))
+    return matrix
+
+
+def _urgent_fbeta(actual: np.ndarray, predicted: np.ndarray, beta: float) -> float:
+    tp = float(np.sum(predicted & actual))
+    fp = float(np.sum(predicted & ~actual))
+    fn = float(np.sum(~predicted & actual))
+    if tp == 0:
+        return 0.0
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    return (1 + beta**2) * precision * recall / ((beta**2) * precision + recall)
 
 
 def _evaluate_baselines(

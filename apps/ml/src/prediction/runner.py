@@ -320,6 +320,7 @@ def _apply_credit(
     features_raw: pd.DataFrame,
 ) -> pd.DataFrame:
     horizons = credit_bundle["model"]["horizons"]
+    topup_model = credit_bundle["model"].get("topup_model")
     credit_mask = frame["el_credit"].to_numpy()
     columns = {
         "predicted_credit_usage_30d": np.nan,
@@ -328,6 +329,7 @@ def _apply_credit(
         "credit_p90_30d": np.nan,
         "credit_p10_90d": np.nan,
         "credit_p90_90d": np.nan,
+        "estimated_days_until_topup": np.nan,
     }
     for name, default in columns.items():
         frame[name] = default
@@ -344,6 +346,14 @@ def _apply_credit(
         frame.loc[credit_mask, "credit_p90_30d"] = q30[0.90]
         frame.loc[credit_mask, "credit_p10_90d"] = q90[0.10]
         frame.loc[credit_mask, "credit_p90_90d"] = q90[0.90]
+        if topup_model is not None:
+            # AFT model trained on the censored days_until_next_topup label —
+            # replaces the balance/burn heuristic (kept as fallback for older
+            # artifacts without the model, see _apply_derived).
+            days = topup_model.predict_days(x)
+            frame.loc[credit_mask, "estimated_days_until_topup"] = np.minimum(
+                np.ceil(days), TOPUP_CAP_DAYS
+            )
     return frame
 
 
@@ -437,13 +447,17 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
         churn_prob.notna() & clv.notna(), (churn_prob * clv).round(2), np.nan
     )
 
-    # estimated days until top-up (§3.6)
+    # estimated days until top-up (§3.6) — primary source is the AFT model
+    # (set in _apply_credit); the balance/burn heuristic only fills rows the
+    # model left empty (older artifacts without a topup_model).
     p50_30 = pd.to_numeric(frame["predicted_credit_usage_30d"], errors="coerce")
     daily_burn = p50_30 / 30.0
     credit_balance = pd.to_numeric(frame["credit_balance_total"], errors="coerce").fillna(0.0)
-    days = np.where(
+    heuristic_days = np.where(
         daily_burn > 0, np.minimum(np.ceil(credit_balance / daily_burn), TOPUP_CAP_DAYS), np.nan
     )
+    model_days = pd.to_numeric(frame["estimated_days_until_topup"], errors="coerce")
+    days = np.where(model_days.notna(), model_days, heuristic_days)
     frame["estimated_days_until_topup"] = days
 
     urgency = pd.Series([None] * len(frame), index=frame.index, dtype="object")

@@ -831,7 +831,9 @@ def _train_and_register_credit(
     preprocessor = fit_preprocessor(
         dataset.features("train"), _feature_schema_for_dataset(datasets, dataset)
     )
-    result = train_credit(dataset, preprocessor, progress=lambda m: print(m))
+    result = train_credit(
+        dataset, preprocessor, topup_censor_days=float(horizon_days), progress=lambda m: print(m)
+    )
 
     progress("credit: backtests", 85)
     backtest_rows: list[dict[str, Any]] = []
@@ -921,6 +923,21 @@ def _train_and_register_credit(
         "correction_shrinkage": {
             str(h): result.horizons[h].correction_shrinkage for h in result.horizons
         },
+        "topup_model": (
+            {
+                "algorithm": "xgboost_aft",
+                "distribution": result.topup_model.distribution,
+                "scale": result.topup_model.scale,
+                "censor_days": result.topup_model.censor_days,
+                "day_scale": result.topup_model.day_scale,
+                "urgent_day_threshold_raw": result.topup_model.urgent_day_threshold_raw,
+                "urgent_topup_precision_test": result.test_metrics.get("urgent_topup_precision"),
+                "urgent_topup_recall_test": result.test_metrics.get("urgent_topup_recall"),
+                "topup_mae_days_observed_test": result.test_metrics.get("topup_mae_days_observed"),
+            }
+            if result.topup_model
+            else None
+        ),
         "pooled_cutoffs": [str(datasets.cutoff_date.date())]
         + [str(bt.cutoff_date.date()) for bt in backtest_sets],
         "primary_metric": {
@@ -937,6 +954,7 @@ def _train_and_register_credit(
     model_object = {
         "kind": "credit_bundle",
         "horizons": result.horizons,
+        "topup_model": result.topup_model,
     }
     artifact_path, checksum = save_artifacts(
         model_type="credit",
