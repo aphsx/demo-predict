@@ -2,14 +2,7 @@ import type { PredictionOutput } from "@/lib/mlApi";
 
 type AiFields = Pick<PredictionOutput, "ai_status" | "ai_explanation">;
 
-export function customerAiExplanationText({ ai_status, ai_explanation }: AiFields): string {
-  const saved = ai_explanation?.trim();
-  if (saved) return saved;
-
-  if (ai_status === "pending") return "กำลังสร้างคำอธิบายจาก AI…";
-  if (ai_status === "failed") return "สร้างคำอธิบายจาก AI ไม่สำเร็จ";
-  return "ยังไม่มีคำอธิบายจาก AI";
-}
+// Narrative text (pending/failed/empty/ready) now lives in ./reasoning (composeReasoning).
 
 export function isCustomerAiGenerating(
   { ai_status }: AiFields,

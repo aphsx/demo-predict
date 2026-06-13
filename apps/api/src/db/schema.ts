@@ -617,10 +617,6 @@ export const mlPredictionOutputs = pgTable(
 );
 
 // ── AI Chat v2 (reflects db/init/001_schema.sql) ──────────────────────────────
-// NOTE: ai_knowledge_chunks.embedding is a pgvector column. The Drizzle query
-// builder has no vector type, so the embedding column is intentionally omitted
-// here — write/read it via raw `sql` in the ingest + retrieval code.
-
 export const aiConversations = pgTable(
   "ai_conversations",
   {
@@ -653,36 +649,6 @@ export const aiMessages = pgTable(
   (t) => [index("ai_messages_conv_idx").on(t.conversationId, t.id)]
 );
 
-export const aiKnowledgeDocuments = pgTable(
-  "ai_knowledge_documents",
-  {
-    id: uuid("id").primaryKey().default(sql`uuid_generate_v4()`),
-    title: text("title").notNull(),
-    source: text("source").notNull(),
-    contentHash: text("content_hash"),
-    uploadedBy: text("uploaded_by").references(() => user.id, { onDelete: "set null" }),
-    chunkCount: integer("chunk_count").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
-  },
-  (t) => [uniqueIndex("ai_knowledge_documents_source_idx").on(t.source)]
-);
-
-// embedding column omitted on purpose — see note above.
-export const aiKnowledgeChunks = pgTable(
-  "ai_knowledge_chunks",
-  {
-    id: bigint("id", { mode: "number" }).primaryKey(),
-    documentId: uuid("document_id")
-      .notNull()
-      .references(() => aiKnowledgeDocuments.id, { onDelete: "cascade" }),
-    chunkIndex: integer("chunk_index").notNull(),
-    content: text("content").notNull(),
-    tokenCount: integer("token_count"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`NOW()`),
-  },
-  (t) => [index("ai_knowledge_chunks_doc_idx").on(t.documentId, t.chunkIndex)]
-);
-
 // ── Convenience type exports ───────────────────────────────────────────────────
 
 export type User         = typeof user.$inferSelect;
@@ -693,5 +659,3 @@ export type MlPredictionRun = typeof mlPredictionRuns.$inferSelect;
 export type MlPredictionOutput = typeof mlPredictionOutputs.$inferSelect;
 export type AiConversation = typeof aiConversations.$inferSelect;
 export type AiMessage = typeof aiMessages.$inferSelect;
-export type AiKnowledgeDocument = typeof aiKnowledgeDocuments.$inferSelect;
-export type AiKnowledgeChunk = typeof aiKnowledgeChunks.$inferSelect;

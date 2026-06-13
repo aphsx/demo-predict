@@ -3,7 +3,9 @@
 import Link from "next/link";
 import type { ElementType, ReactNode } from "react";
 import {
+  ArrowDownRight,
   ArrowLeft,
+  ArrowUpRight,
   CreditCard,
   Gem,
   TrendingDown,
@@ -11,7 +13,8 @@ import {
 import { MarkdownLite } from "@/components/chat/MarkdownLite";
 import { formatCurrency } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
-import { customerAiExplanationText } from "./customer-ai";
+import type { ChurnFactor } from "@/lib/mlApi";
+import { composeReasoning, type ReasoningLayer } from "./reasoning";
 
 export type CustomerDetail = {
   lifecycle_stage: string;
@@ -31,6 +34,8 @@ export type CustomerDetail = {
   total_revenue: number;
   avg_transaction_value: number | null;
   ever_paid: boolean;
+  priority_reason: string;
+  churn_factors: ChurnFactor[] | null;
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
   output_status: string;
@@ -59,8 +64,7 @@ export function CustomerDetailView({
   customersHref?: string;
 }) {
   const churnPct = customer.churn_probability != null ? customer.churn_probability * 100 : null;
-  const aiReason = customerAiExplanationText(customer);
-  const hasAiExplanation = Boolean(customer.ai_explanation?.trim());
+  const reasoning = composeReasoning(customer);
   const latestUsage = usageTrend.at(-1);
   const peakUsage = usageTrend.length > 0 ? Math.max(...usageTrend.map((point) => point.usage)) : null;
   const showSubStage =
@@ -164,13 +168,7 @@ export function CustomerDetailView({
               className="flex min-h-0 flex-1 flex-col"
               bodyClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain"
             >
-              {hasAiExplanation ? (
-                <div className="text-[13px] leading-6 text-[color:var(--ink-3)]">
-                  <MarkdownLite text={aiReason} strongClassName="font-semibold text-[color:var(--ink-1)]" />
-                </div>
-              ) : (
-                <p className="text-[13px] leading-6 text-[color:var(--ink-5)]">{aiReason}</p>
-              )}
+              <ReasoningStack reasoning={reasoning} />
             </Panel>
           </div>
         </div>
@@ -221,6 +219,83 @@ export function CustomerDetailView({
         </div>
       </section>
     </main>
+  );
+}
+
+function ReasoningStack({ reasoning }: { reasoning: ReasoningLayer }) {
+  const { headline, drivers, narrative } = reasoning;
+  return (
+    <div className="space-y-5">
+      {headline && (
+        <ReasonSection label="ทำไมต้องสนใจ" order={1}>
+          <p className="text-[13px] leading-6 text-[color:var(--ink-2)]">{headline}</p>
+        </ReasonSection>
+      )}
+
+      {drivers.length > 0 && (
+        <ReasonSection label="ปัจจัยจากโมเดล" order={2}>
+          <ul className="space-y-2">
+            {drivers.map((driver) => (
+              <li
+                key={driver.label}
+                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2"
+              >
+                <span className="flex items-center gap-2 text-[12.5px] text-[color:var(--ink-2)]">
+                  <span
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-lg"
+                    style={{
+                      backgroundColor:
+                        driver.direction === "up" ? "rgba(252,76,2,0.12)" : "rgba(0,107,255,0.12)",
+                      color: driver.direction === "up" ? CHURN_COLOR : MOBY_BRAND.blue,
+                    }}
+                  >
+                    {driver.direction === "up" ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                  </span>
+                  {driver.label}
+                </span>
+                <span className="num text-[12.5px] font-semibold text-[color:var(--ink-1)]">
+                  {driver.valueText}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </ReasonSection>
+      )}
+
+      <ReasonSection label="บทวิเคราะห์ AI" order={3}>
+        {narrative.kind === "ready" ? (
+          <div className="text-[13px] leading-6 text-[color:var(--ink-3)]">
+            <MarkdownLite text={narrative.text} strongClassName="font-semibold text-[color:var(--ink-1)]" />
+          </div>
+        ) : (
+          <p className="text-[13px] leading-6 text-[color:var(--ink-5)]">{narrative.text}</p>
+        )}
+      </ReasonSection>
+    </div>
+  );
+}
+
+function ReasonSection({
+  label,
+  order,
+  children,
+}: {
+  label: string;
+  order: number;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-gray-100 text-[10px] font-bold text-[color:var(--ink-4)]">
+          {order}
+        </span>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-[color:var(--ink-5)]">
+          {label}
+        </h3>
+      </div>
+      {children}
+    </div>
   );
 }
 
