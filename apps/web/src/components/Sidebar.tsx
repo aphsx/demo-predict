@@ -4,8 +4,9 @@ import { usePathname } from "next/navigation";
 import { INTRO_ASSETS } from "@/lib/login-brand-colors";
 import {
   LayoutDashboard, Users, Database,
-  Activity, ShieldCheck, MessageSquareMore,
+  Activity, MessageSquareMore,
 } from "lucide-react";
+import UserNavProfile from "./UserNavProfile";
 
 type Item = { href: string; label: string; icon: any };
 
@@ -142,11 +143,7 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* Footer */}
-      <div className="px-4 py-3 flex items-center gap-2 text-[11.5px] text-[color:var(--ink-4)]">
-        <ShieldCheck size={13} className="text-[color:var(--ok)]" />
-        <span>5 models · point-in-time safe</span>
-      </div>
+      <UserNavProfile />
     </aside>
   );
 }
