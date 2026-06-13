@@ -23,13 +23,13 @@
 import { db } from "../../db/client";
 import { aiConversations, aiMessages, mlPredictionRuns } from "../../db/schema";
 import { eq, desc } from "drizzle-orm";
-import { complete, stream, type ChatMessage } from "./llm-client";
+import { complete, stream, LLMError, type ChatMessage } from "./llm-client";
 import { getLLMConfig, isLLMConfigured } from "./llm-config";
 import { checkUserQuestionSafety, renderGuardrails } from "./safety";
 import { getAiUserRole, renderSemanticLayerForPrompt } from "./semantic-layer";
 import { validateTextToSql } from "./sql-guard";
 import { executeReadOnlySql, type QueryResultPreview } from "./sql-executor";
-import { extractJsonObject } from "./ollama"; // keep using the parser from old module
+import { extractJsonObject } from "./json";
 
 // ── SSE helpers ────────────────────────────────────────────────────────────────
 
@@ -306,8 +306,11 @@ export async function* orchestrate(opts: OrchestratorOptions): AsyncGenerator<st
       yield sseToken(token);
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "LLM stream failed";
-    yield sseError(msg, "llm_stream_failed");
+    if (e instanceof LLMError) {
+      yield sseError(e.message, e.code);
+    } else {
+      yield sseError(e instanceof Error ? e.message : "LLM stream failed", "llm_stream_failed");
+    }
     return;
   }
 

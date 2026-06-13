@@ -13,7 +13,7 @@
  */
 
 import type { CustomerAiContext } from "./customer-ai-context";
-import { complete, stream, type ChatMessage } from "./llm-client";
+import { complete, type ChatMessage } from "./llm-client";
 import { getLLMConfig, isLLMConfigured } from "./llm-config";
 import { renderGuardrails } from "./safety";
 
@@ -51,6 +51,15 @@ ${renderGuardrails()}
 
 // ── Context formatter ──────────────────────────────────────────────────────────
 
+/** Render SHAP churn drivers as a compact, model-faithful list (top 5). */
+function formatChurnFactors(factors: CustomerAiContext["ml_output"]["churn_factors"]): string {
+  if (!factors || factors.length === 0) return "N/A";
+  return factors
+    .slice(0, 5)
+    .map((f) => `${f.feature} (${f.direction === "up" ? "เพิ่มความเสี่ยง" : "ลดความเสี่ยง"}, ค่า=${f.value})`)
+    .join("; ");
+}
+
 function formatContext(ctx: CustomerAiContext): string {
   const { run, acc_id, customer_dataset, ml_output } = ctx;
   const { profile, usage_monthly, payments } = customer_dataset;
@@ -59,7 +68,7 @@ function formatContext(ctx: CustomerAiContext): string {
   const usageSummary = usage_monthly
     .slice(-6)
     .reverse()
-    .map((u) => `  ${u.year}-${String(u.month).padStart(2, "0")}: ${u.usage} units (${u.channel})`)
+    .map((u) => `  ${u.month}: รวม ${u.total} (SMS ${u.sms} / Email ${u.email})`)
     .join("\n");
 
   const paymentSummary = payments
@@ -95,7 +104,7 @@ Priority reason: ${ml_output.priority_reason ?? "N/A"}
 Revenue at risk: ${ml_output.revenue_at_risk != null ? "฿" + ml_output.revenue_at_risk.toLocaleString() : "N/A"}
 Predicted CLV 6m: ${ml_output.predicted_clv_6m != null ? "฿" + ml_output.predicted_clv_6m.toLocaleString() : "N/A"}
 P(alive): ${ml_output.p_alive != null ? (ml_output.p_alive * 100).toFixed(1) + "%" : "N/A"}
-Churn factors: ${ml_output.churn_factors_json ? JSON.stringify(ml_output.churn_factors_json) : "N/A"}
+Churn factors: ${formatChurnFactors(ml_output.churn_factors)}
 </data>`;
 }
 
@@ -125,22 +134,4 @@ export async function generateCustomerAiExplanation(
   if (!text) throw new Error("LLM returned an empty explanation");
 
   return { explanation: text, model: llmConfig.model };
-}
-
-/** Streaming variant — yields tokens, useful for real-time display. */
-export async function* streamCustomerAiExplanation(
-  context: CustomerAiContext
-): AsyncGenerator<string> {
-  if (!isLLMConfigured()) {
-    throw new Error("กรุณาตั้งค่า LLM_API_KEY (หรือ OLLAMA_API_KEY) ใน .env ก่อนใช้ Gen AI");
-  }
-
-  const llmConfig = getLLMConfig();
-
-  const messages: ChatMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: formatContext(context) },
-  ];
-
-  yield* stream(messages, { config: llmConfig, temperature: 0.2 });
 }

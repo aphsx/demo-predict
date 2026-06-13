@@ -636,7 +636,7 @@ export const aiConversations = pgTable(
 export const aiMessages = pgTable(
   "ai_messages",
   {
-    id: bigint("id", { mode: "number" }).primaryKey(),
+    id: bigserial("id", { mode: "number" }).primaryKey(),
     conversationId: uuid("conversation_id")
       .notNull()
       .references(() => aiConversations.id, { onDelete: "cascade" }),

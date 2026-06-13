@@ -76,18 +76,3 @@ export function isLLMConfigured(): boolean {
   if (c.provider === "openai") return c.apiKey.length > 0;
   return true; // Ollama: key optional for local, runtime error surfaces if missing for Cloud
 }
-
-// ── Backward-compat shims (used by legacy ollama.ts callers) ─────────────────
-
-/** @deprecated Use getLLMConfig() */
-export type OllamaConfig = { apiKey: string; host: string; model: string };
-
-/** @deprecated Use getLLMConfig() */
-export function getOllamaConfig(): OllamaConfig {
-  const c = getLLMConfig();
-  return { apiKey: c.apiKey, host: c.baseUrl, model: c.model };
-}
-
-// Keep these exports so existing imports don't break
-export const DEFAULT_OLLAMA_HOST = PROVIDER_DEFAULTS.ollama.baseUrl;
-export const DEFAULT_OLLAMA_MODEL = PROVIDER_DEFAULTS.ollama.model;

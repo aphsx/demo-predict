@@ -60,16 +60,3 @@ export function checkUserQuestionSafety(question: string): SafetyCheck {
   }
   return { ok: true, warnings, blockedReason: null };
 }
-
-export function sanitizeRetrievedText(text: string): string {
-  return text
-    .replace(/```/g, "'''")
-    .replace(/\b(system|developer|assistant)\s*:/gi, "$1 label:")
-    .replace(/ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|rules?)/gi, "[removed instruction-like text]")
-    .slice(0, 1_500);
-}
-
-export function truncateForEvidence(value: string, maxChars: number): string {
-  if (value.length <= maxChars) return value;
-  return `${value.slice(0, maxChars)}\n[truncated ${value.length - maxChars} chars]`;
-}

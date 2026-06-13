@@ -49,18 +49,6 @@ export async function* stream(
   }
 }
 
-/** Collect a streamed response into a single string (convenience). */
-export async function streamToString(
-  messages: ChatMessage[],
-  opts: CompletionOptions = {}
-): Promise<string> {
-  const parts: string[] = [];
-  for await (const token of stream(messages, opts)) {
-    parts.push(token);
-  }
-  return parts.join("");
-}
-
 // ── OpenAI-compatible ──────────────────────────────────────────────────────────
 
 type OpenAIRequest = {
