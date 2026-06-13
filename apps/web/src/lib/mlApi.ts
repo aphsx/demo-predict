@@ -329,6 +329,29 @@ export async function fetchRunOutput(runId: string, accId: number | string): Pro
   return getJson(`/api/prediction-runs/${runId}/outputs/${accId}`);
 }
 
+export interface CustomerAiExplanationResult {
+  acc_id: number;
+  ai_status: PredictionOutput["ai_status"];
+  ai_explanation: string | null;
+  ai_model: string;
+  ai_generated_at: string;
+}
+
+export async function generateCustomerAiExplanation(
+  runId: string,
+  accId: number | string,
+  options: { force?: boolean } = {}
+): Promise<CustomerAiExplanationResult> {
+  if (IS_ML_MOCK) {
+    return (await mock()).mockGenerateCustomerAiExplanation(runId, Number(accId), options);
+  }
+  return sendJson(
+    `/api/prediction-runs/${runId}/outputs/${accId}/ai-explanation`,
+    "POST",
+    options
+  );
+}
+
 export async function fetchCustomerUsageMonthly(
   runId: string,
   accId: number | string

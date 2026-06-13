@@ -13,8 +13,13 @@ import {
   predictDataSources,
   user,
 } from "../db/schema";
-import { canMutateOwnedRecord, denyMutation } from "../lib/access-control";
+import { canReadOwnedRecord, denyNotFound } from "../lib/access-control";
 import { requireUser } from "../lib/auth-middleware";
+import { createCustomerAiExplanation } from "../lib/ai/customer-ai-service";
+import {
+  loadCustomerPayments,
+  loadCustomerUsageMonthly,
+} from "../lib/ai/customer-dataset";
 import { triggerMlJob } from "../lib/ml-internal";
 import {
   DEFAULT_RISK_THRESHOLDS,
@@ -104,6 +109,17 @@ async function fetchRun(id: string): Promise<RunRow | null> {
     .where(eq(mlPredictionRuns.id, id))
     .limit(1);
   return rows[0] ?? null;
+}
+
+function requireOwnedRun(
+  run: RunRow | null,
+  userId: string | null | undefined,
+  set: { status?: number | string }
+) {
+  if (!run || !canReadOwnedRecord(userId, run.createdBy)) {
+    return denyNotFound(set, "Prediction run not found");
+  }
+  return null;
 }
 
 // ── Output row mapping ──────────────────────────────────────────
@@ -407,12 +423,13 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
 
 export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
   .use(requireUser)
-  .get("/", async () => {
+  .get("/", async ({ userId }) => {
     const rows = await db
       .select(runSelect)
       .from(mlPredictionRuns)
       .leftJoin(predictDataSources, eq(mlPredictionRuns.predictSourceId, predictDataSources.id))
       .leftJoin(user, eq(mlPredictionRuns.createdBy, user.id))
+      .where(eq(mlPredictionRuns.createdBy, userId!))
       .orderBy(desc(mlPredictionRuns.createdAt));
     return rows.map(mapRun);
   })
@@ -493,13 +510,11 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
   )
   .get(
     "/:id",
-    async ({ params, set }) => {
+    async ({ params, userId, set }) => {
       const run = await fetchRun(params.id);
-      if (!run) {
-        set.status = 404;
-        return { message: "Prediction run not found" };
-      }
-      return mapRun(run);
+      const denied = requireOwnedRun(run, userId, set);
+      if (denied) return denied;
+      return mapRun(run!);
     },
     { params: t.Object({ id: t.String() }) }
   )
@@ -507,14 +522,9 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
     "/:id/retry",
     async ({ params, userId, set }) => {
       const run = await fetchRun(params.id);
-      if (!run) {
-        set.status = 404;
-        return { message: "Prediction run not found" };
-      }
-      if (!canMutateOwnedRecord(userId, run.createdBy)) {
-        return denyMutation(set, "Only the run creator can retry it.");
-      }
-      if (run.status !== "failed") {
+      const denied = requireOwnedRun(run, userId, set);
+      if (denied) return denied;
+      if (run!.status !== "failed") {
         set.status = 400;
         return { message: "Only failed runs can be retried" };
       }
@@ -522,18 +532,18 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
       await db
         .update(mlPredictionRuns)
         .set({ status: "pending", errorMessage: null, progressJson: null })
-        .where(eq(mlPredictionRuns.id, run.id));
+        .where(eq(mlPredictionRuns.id, run!.id));
 
       try {
-        await triggerMlJob("/internal/prediction-runs", { prediction_run_id: run.id });
+        await triggerMlJob("/internal/prediction-runs", { prediction_run_id: run!.id });
       } catch (e) {
         await db
           .update(mlPredictionRuns)
           .set({ status: "failed", errorMessage: (e as Error).message })
-          .where(eq(mlPredictionRuns.id, run.id));
+          .where(eq(mlPredictionRuns.id, run!.id));
       }
 
-      const fresh = await fetchRun(run.id);
+      const fresh = await fetchRun(run!.id);
       return mapRun(fresh!);
     },
     { params: t.Object({ id: t.String() }) }
@@ -542,24 +552,18 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
     "/:id",
     async ({ params, userId, set }) => {
       const run = await fetchRun(params.id);
-      if (!run) {
-        set.status = 404;
-        return { message: "Prediction run not found" };
-      }
-      if (!canMutateOwnedRecord(userId, run.createdBy)) {
-        return denyMutation(set, "Only the run creator can delete it.");
-      }
-      await db.delete(mlPredictionRuns).where(eq(mlPredictionRuns.id, run.id));
+      const denied = requireOwnedRun(run, userId, set);
+      if (denied) return denied;
+      await db.delete(mlPredictionRuns).where(eq(mlPredictionRuns.id, run!.id));
       return { deleted: true };
     },
     { params: t.Object({ id: t.String() }) }
   )
   .get(
     "/:id/summary",
-    async ({ params, set }) => {
+    async ({ params, userId, set }) => {
       if (!UUID_RE.test(params.id)) {
-        set.status = 404;
-        return { message: "Prediction run not found" };
+        return denyNotFound(set, "Prediction run not found");
       }
       const [row] = await db
         .select({
@@ -569,11 +573,10 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
         .from(mlPredictionRuns)
         .leftJoin(predictDataSources, eq(mlPredictionRuns.predictSourceId, predictDataSources.id))
         .leftJoin(user, eq(mlPredictionRuns.createdBy, user.id))
-        .where(eq(mlPredictionRuns.id, params.id))
+        .where(and(eq(mlPredictionRuns.id, params.id), eq(mlPredictionRuns.createdBy, userId!)))
         .limit(1);
       if (!row) {
-        set.status = 404;
-        return { message: "Prediction run not found" };
+        return denyNotFound(set, "Prediction run not found");
       }
       return buildSummary(row);
     },
@@ -581,16 +584,14 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
   )
   .get(
     "/:id/outputs",
-    async ({ params, query, set }): Promise<OutputsPage | { message: string }> => {
+    async ({ params, query, userId, set }): Promise<OutputsPage | { message: string }> => {
       const run = await fetchRun(params.id);
-      if (!run) {
-        set.status = 404;
-        return { message: "Prediction run not found" };
-      }
+      const denied = requireOwnedRun(run, userId, set);
+      if (denied) return denied;
 
       const page = Math.max(1, query.page ?? 1);
       const pageSize = Math.min(200, Math.max(1, query.page_size ?? 8));
-      const where = outputFilters(run.id, query);
+      const where = outputFilters(run!.id, query);
 
       const [[{ total }], rows] = await Promise.all([
         db
@@ -625,12 +626,14 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
   )
   .get(
     "/:id/outputs/:acc_id",
-    async ({ params, set }) => {
+    async ({ params, userId, set }) => {
       const accId = Number(params.acc_id);
       if (!UUID_RE.test(params.id) || !Number.isInteger(accId)) {
-        set.status = 404;
-        return { message: "Prediction output not found" };
+        return denyNotFound(set, "Prediction output not found");
       }
+      const run = await fetchRun(params.id);
+      const denied = requireOwnedRun(run, userId, set);
+      if (denied) return denied;
       const [row] = await db
         .select()
         .from(mlPredictionOutputs)
@@ -651,90 +654,75 @@ export const predictionRunRoutes = new Elysia({ prefix: "/prediction-runs" })
   )
   .get(
     "/:id/customers/:acc_id/usage-monthly",
-    async ({ params, set }): Promise<MonthlyUsagePoint[] | { message: string }> => {
+    async ({ params, userId, set }): Promise<MonthlyUsagePoint[] | { message: string }> => {
       const accId = Number(params.acc_id);
       const run = await fetchRun(params.id);
-      if (!run || !Number.isInteger(accId)) {
-        set.status = 404;
-        return { message: "Prediction run not found" };
+      const denied = requireOwnedRun(run, userId, set);
+      if (denied) return denied;
+      if (!Number.isInteger(accId)) {
+        return denyNotFound(set, "Prediction run not found");
       }
 
-      const rows = await db.execute<{
-        month: string;
-        sms: number;
-        email: number;
-        bc: number;
-        api: number;
-        otp: number;
-        total: number;
-      }>(sql`
-        SELECT to_char(make_date(year, month, 1), 'YYYY-MM') AS month,
-               COALESCE(SUM(usage) FILTER (WHERE channel = 'sms'), 0)::float8 AS sms,
-               COALESCE(SUM(usage) FILTER (WHERE channel = 'email'), 0)::float8 AS email,
-               COALESCE(SUM(usage) FILTER (WHERE usage_source = 'bc'), 0)::float8 AS bc,
-               COALESCE(SUM(usage) FILTER (WHERE usage_source = 'api'), 0)::float8 AS api,
-               COALESCE(SUM(usage) FILTER (WHERE usage_source = 'otp'), 0)::float8 AS otp,
-               COALESCE(SUM(usage), 0)::float8 AS total
-        FROM predict_clean_usage
-        WHERE source_id = ${run.predictSourceId}
-          AND acc_id = ${accId}
-          AND year IS NOT NULL
-          AND month IS NOT NULL
-          AND make_date(year, month, 1) >= date_trunc('month', ${run.cutoffDate}::date) - INTERVAL '12 months'
-          AND make_date(year, month, 1) < date_trunc('month', ${run.cutoffDate}::date)
-        GROUP BY 1
-      `);
-
-      const byMonth = new Map(rows.map((r) => [r.month, r]));
-      return monthKeysBeforeCutoff(run.cutoffDate).map((month) => {
-        const row = byMonth.get(month);
-        return {
-          month,
-          sms: row?.sms ?? 0,
-          email: row?.email ?? 0,
-          bc: row?.bc ?? 0,
-          api: row?.api ?? 0,
-          otp: row?.otp ?? 0,
-          total: row?.total ?? 0,
-        };
-      });
+      return loadCustomerUsageMonthly(run!, accId);
     },
     { params: t.Object({ id: t.String(), acc_id: t.String() }) }
   )
-  .get(
-    "/:id/customers/:acc_id/payments",
-    async ({ params, set }): Promise<PaymentEvent[] | { message: string }> => {
+  .post(
+    "/:id/outputs/:acc_id/ai-explanation",
+    async ({ params, body, userId, set }) => {
       const accId = Number(params.acc_id);
-      const run = await fetchRun(params.id);
-      if (!run || !Number.isInteger(accId)) {
-        set.status = 404;
-        return { message: "Prediction run not found" };
+      if (!UUID_RE.test(params.id) || !Number.isInteger(accId)) {
+        return denyNotFound(set, "Prediction output not found");
       }
 
-      const rows = await db.execute<{
-        payment_date: Date;
-        amount: number;
-        credit_add: number;
-        credit_type: string;
-      }>(sql`
-        SELECT payment_date,
-               COALESCE(amount, 0)::float8 AS amount,
-               COALESCE(credit_add, 0)::float8 AS credit_add,
-               COALESCE(credit_type, '') AS credit_type
-        FROM predict_clean_payments
-        WHERE source_id = ${run.predictSourceId}
-          AND acc_id = ${accId}
-          AND payment_date < ${run.cutoffDate}::date
-        ORDER BY payment_date DESC
-        LIMIT 50
-      `);
+      const run = await fetchRun(params.id);
+      const denied = requireOwnedRun(run, userId, set);
+      if (denied) return denied;
 
-      return rows.map((row) => ({
-        payment_date: new Date(row.payment_date).toISOString(),
-        amount: row.amount,
-        credit_add: row.credit_add,
-        credit_type: row.credit_type,
-      }));
+      const [row] = await db
+        .select()
+        .from(mlPredictionOutputs)
+        .where(
+          and(
+            eq(mlPredictionOutputs.predictionRunId, params.id),
+            eq(mlPredictionOutputs.accId, accId)
+          )
+        )
+        .limit(1);
+      if (!row) {
+        set.status = 404;
+        return { message: "Prediction output not found" };
+      }
+
+      const result = await createCustomerAiExplanation(
+        run!,
+        accId,
+        mapOutput(row),
+        body.force ?? false
+      );
+      if ("status" in result) {
+        set.status = result.status;
+        return result.body;
+      }
+      return result;
+    },
+    {
+      params: t.Object({ id: t.String(), acc_id: t.String() }),
+      body: t.Object({ force: t.Optional(t.Boolean()) }),
+    }
+  )
+  .get(
+    "/:id/customers/:acc_id/payments",
+    async ({ params, userId, set }): Promise<PaymentEvent[] | { message: string }> => {
+      const accId = Number(params.acc_id);
+      const run = await fetchRun(params.id);
+      const denied = requireOwnedRun(run, userId, set);
+      if (denied) return denied;
+      if (!Number.isInteger(accId)) {
+        return denyNotFound(set, "Prediction run not found");
+      }
+
+      return loadCustomerPayments(run!, accId);
     },
     { params: t.Object({ id: t.String(), acc_id: t.String() }) }
   );

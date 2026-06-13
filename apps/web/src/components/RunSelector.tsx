@@ -21,8 +21,9 @@ export function useActiveRun() {
         if (!alive) return;
         const completed = all.filter((r) => r.status === "completed");
         setRuns(completed);
-        // default = latest completed; also recover from a stale stored id
-        if (completed.length && (!runId || !completed.some((r) => r.id === runId))) {
+        if (completed.length === 0) {
+          if (runId) setRunId("");
+        } else if (!runId || !completed.some((r) => r.id === runId)) {
           setRunId(completed[0].id);
         }
       })

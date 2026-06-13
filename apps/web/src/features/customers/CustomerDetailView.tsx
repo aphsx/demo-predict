@@ -6,12 +6,12 @@ import {
   ArrowLeft,
   CreditCard,
   Gem,
-  MessageSquareText,
-  Sparkles,
   TrendingDown,
 } from "lucide-react";
+import { MarkdownLite } from "@/components/chat/MarkdownLite";
 import { formatCurrency } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
+import { customerAiExplanationText } from "./customer-ai";
 
 export type CustomerDetail = {
   lifecycle_stage: string;
@@ -31,9 +31,8 @@ export type CustomerDetail = {
   total_revenue: number;
   avg_transaction_value: number | null;
   ever_paid: boolean;
-  ai_status: string;
+  ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
-  ai_recommended_message: string | null;
   output_status: string;
 };
 
@@ -60,7 +59,8 @@ export function CustomerDetailView({
   customersHref?: string;
 }) {
   const churnPct = customer.churn_probability != null ? customer.churn_probability * 100 : null;
-  const showAiPanel = customer.ai_status === "completed" && customer.ai_explanation != null;
+  const aiReason = customerAiExplanationText(customer);
+  const hasAiExplanation = Boolean(customer.ai_explanation?.trim());
   const latestUsage = usageTrend.at(-1);
   const peakUsage = usageTrend.length > 0 ? Math.max(...usageTrend.map((point) => point.usage)) : null;
   const showSubStage =
@@ -77,13 +77,7 @@ export function CustomerDetailView({
       </Link>
 
       <section className="mt-4 space-y-5">
-        <div
-          className={`grid grid-cols-1 gap-5 ${
-            showAiPanel
-              ? "xl:grid-cols-[390px_minmax(0,1fr)_340px]"
-              : "xl:grid-cols-[390px_minmax(0,1fr)]"
-          }`}
-        >
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)_340px] xl:items-start">
           <Panel title={`Account ${accId}`}>
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -164,35 +158,21 @@ export function CustomerDetailView({
             </div>
           </Panel>
 
-          {showAiPanel && (
-          <Panel title="Reason and message">
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <SolidDetailPill color="#006bff" dot>{customer.ai_status}</SolidDetailPill>
-              </div>
-
-              <div className="rounded-[24px] border border-gray-200 bg-white p-4">
-                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--ink-1)]">
-                  <Sparkles size={14} /> Why now
+          <div className="flex min-h-0 max-h-[min(28rem,55vh)] flex-col self-stretch xl:max-h-none">
+            <Panel
+              title="เหตุผล"
+              className="flex min-h-0 flex-1 flex-col"
+              bodyClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+            >
+              {hasAiExplanation ? (
+                <div className="text-[13px] leading-6 text-[color:var(--ink-3)]">
+                  <MarkdownLite text={aiReason} strongClassName="font-semibold text-[color:var(--ink-1)]" />
                 </div>
-                <p className="text-[13px] leading-6 text-[color:var(--ink-3)]">
-                  {customer.ai_explanation}
-                </p>
-              </div>
-
-              {customer.ai_recommended_message && (
-                <div className="rounded-[24px] border border-gray-200 bg-white p-4">
-                  <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold text-[color:var(--ink-1)]">
-                    <MessageSquareText size={14} /> Suggested message
-                  </div>
-                  <p className="text-[13px] leading-6 text-[color:var(--ink-3)]">
-                    {customer.ai_recommended_message}
-                  </p>
-                </div>
+              ) : (
+                <p className="text-[13px] leading-6 text-[color:var(--ink-5)]">{aiReason}</p>
               )}
-            </div>
-          </Panel>
-          )}
+            </Panel>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -247,18 +227,22 @@ export function CustomerDetailView({
 function Panel({
   title,
   children,
+  className,
+  bodyClassName,
 }: {
   title: string;
   children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
 }) {
   return (
-    <section className="surface-elev overflow-hidden">
-      <div className="border-b border-gray-100 px-5 py-4">
+    <section className={`surface-elev flex min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
+      <div className="shrink-0 border-b border-gray-100 px-5 py-4">
         <h2 className="text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
           {title}
         </h2>
       </div>
-      <div className="p-5">{children}</div>
+      <div className={`p-5 ${bodyClassName ?? ""}`}>{children}</div>
     </section>
   );
 }

@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
-    "@google/generative-ai": "^0.21.0",
     "better-auth": "^1.2.0",
     "drizzle-orm": "^0.44.0",
     "elysia": "^1.2.0",

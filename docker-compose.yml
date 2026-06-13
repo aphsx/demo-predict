@@ -1,6 +1,9 @@
 services:
   db:
-    image: postgres:15-alpine
+    # pgvector/pgvector:pg15 is the official Postgres 15 image with the `vector`
+    # extension preinstalled (drop-in replacement for postgres:15-alpine).
+    # Required by AI Chat v2 RAG (ai_knowledge_chunks.embedding).
+    image: pgvector/pgvector:pg15
     restart: unless-stopped
     env_file:
       - .env

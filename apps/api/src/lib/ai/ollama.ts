@@ -1,18 +1,16 @@
+import { getOllamaConfig as readOllamaConfig, type OllamaConfig } from "./llm-config";
 import { renderSemanticLayerForPrompt, type AiUserRole } from "./semantic-layer";
 import type { QueryResultPreview } from "./sql-executor";
 import { truncateForEvidence } from "./safety";
+
+export type { OllamaConfig };
+export { getOllamaConfig } from "./llm-config";
 
 export type ChatRole = "user" | "assistant";
 
 export type ChatMessage = {
   role: ChatRole;
   content: string;
-};
-
-export type OllamaConfig = {
-  apiKey: string;
-  host: string;
-  model: string;
 };
 
 export type TextToSqlPlan = {
@@ -39,17 +37,7 @@ type OllamaErrorResponse = {
   error?: string;
 };
 
-const DEFAULT_OLLAMA_HOST = "https://ollama.com";
-const DEFAULT_OLLAMA_MODEL = "qwen3.5:397b-cloud";
 const MAX_FINAL_EVIDENCE_CHARS = 14_000;
-
-export function getOllamaConfig(): OllamaConfig {
-  return {
-    apiKey: process.env.OLLAMA_API_KEY?.trim() ?? "",
-    host: (process.env.OLLAMA_HOST?.trim() || DEFAULT_OLLAMA_HOST).replace(/\/+$/, ""),
-    model: process.env.OLLAMA_MODEL?.trim() || DEFAULT_OLLAMA_MODEL,
-  };
-}
 
 function isOllamaChatResponse(value: unknown): value is { message: { content: string } } {
   if (!value || typeof value !== "object") return false;
@@ -110,6 +98,12 @@ async function callOllama(
     throw new Error("Unexpected Ollama chat response");
   }
   return data.message.content;
+}
+
+export async function generateSimpleCompletion(prompt: string): Promise<string> {
+  const config = readOllamaConfig();
+  if (!config.apiKey) throw new Error("OLLAMA_API_KEY is not configured");
+  return callOllama(config, [{ role: "user", content: prompt }]);
 }
 
 export function extractJsonObject(text: string): unknown {

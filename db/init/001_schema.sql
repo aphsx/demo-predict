@@ -24,6 +24,7 @@ SET row_security = off;
 
 CREATE SCHEMA IF NOT EXISTS public;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
 
 
 SET default_tablespace = '';
@@ -49,6 +50,105 @@ CREATE TABLE public.account (
     "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
     "updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
+
+
+--
+-- Name: ai_conversations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_conversations (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    user_id text NOT NULL,
+    run_id uuid,
+    title text DEFAULT 'New chat'::text NOT NULL,
+    archived boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: ai_knowledge_chunks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_knowledge_chunks (
+    id bigint NOT NULL,
+    document_id uuid NOT NULL,
+    chunk_index integer NOT NULL,
+    content text NOT NULL,
+    embedding public.vector(768),
+    token_count integer,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: ai_knowledge_chunks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.ai_knowledge_chunks_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: ai_knowledge_chunks_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.ai_knowledge_chunks_id_seq OWNED BY public.ai_knowledge_chunks.id;
+
+
+--
+-- Name: ai_knowledge_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_knowledge_documents (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    title text NOT NULL,
+    source text NOT NULL,
+    content_hash text,
+    uploaded_by text,
+    chunk_count integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: ai_messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_messages (
+    id bigint NOT NULL,
+    conversation_id uuid NOT NULL,
+    role text NOT NULL,
+    content text NOT NULL,
+    evidence_json jsonb,
+    model text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ai_messages_role_check CHECK ((role = ANY (ARRAY['user'::text, 'assistant'::text])))
+);
+
+
+--
+-- Name: ai_messages_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.ai_messages_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: ai_messages_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.ai_messages_id_seq OWNED BY public.ai_messages.id;
 
 
 --
@@ -1121,6 +1221,20 @@ CREATE TABLE public.verification (
 
 
 --
+-- Name: ai_knowledge_chunks id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_knowledge_chunks ALTER COLUMN id SET DEFAULT nextval('public.ai_knowledge_chunks_id_seq'::regclass);
+
+
+--
+-- Name: ai_messages id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_messages ALTER COLUMN id SET DEFAULT nextval('public.ai_messages_id_seq'::regclass);
+
+
+--
 -- Name: ml_prediction_outputs id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1295,6 +1409,38 @@ ALTER TABLE ONLY public.account
 
 ALTER TABLE ONLY public.account
     ADD CONSTRAINT "account_providerId_accountId_key" UNIQUE ("providerId", "accountId");
+
+
+--
+-- Name: ai_conversations ai_conversations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_conversations
+    ADD CONSTRAINT ai_conversations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ai_knowledge_chunks ai_knowledge_chunks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_knowledge_chunks
+    ADD CONSTRAINT ai_knowledge_chunks_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ai_knowledge_documents ai_knowledge_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_knowledge_documents
+    ADD CONSTRAINT ai_knowledge_documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ai_messages ai_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_messages
+    ADD CONSTRAINT ai_messages_pkey PRIMARY KEY (id);
 
 
 --
@@ -1646,6 +1792,41 @@ ALTER TABLE ONLY public.verification
 --
 
 CREATE INDEX idx_account_user ON public.account USING btree ("userId");
+
+
+--
+-- Name: ai_conversations_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ai_conversations_user_idx ON public.ai_conversations USING btree (user_id, updated_at DESC);
+
+
+--
+-- Name: ai_knowledge_chunks_doc_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ai_knowledge_chunks_doc_idx ON public.ai_knowledge_chunks USING btree (document_id, chunk_index);
+
+
+--
+-- Name: ai_knowledge_chunks_embed_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ai_knowledge_chunks_embed_idx ON public.ai_knowledge_chunks USING hnsw (embedding public.vector_cosine_ops);
+
+
+--
+-- Name: ai_knowledge_documents_source_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ai_knowledge_documents_source_idx ON public.ai_knowledge_documents USING btree (source);
+
+
+--
+-- Name: ai_messages_conv_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ai_messages_conv_idx ON public.ai_messages USING btree (conversation_id, id);
 
 
 --
@@ -2200,6 +2381,46 @@ CREATE UNIQUE INDEX uq_ml_model_versions_one_active_per_type ON public.ml_model_
 
 ALTER TABLE ONLY public.account
     ADD CONSTRAINT "account_userId_fkey" FOREIGN KEY ("userId") REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ai_conversations ai_conversations_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_conversations
+    ADD CONSTRAINT ai_conversations_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.ml_prediction_runs(id) ON DELETE SET NULL;
+
+
+--
+-- Name: ai_conversations ai_conversations_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_conversations
+    ADD CONSTRAINT ai_conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ai_knowledge_chunks ai_knowledge_chunks_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_knowledge_chunks
+    ADD CONSTRAINT ai_knowledge_chunks_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.ai_knowledge_documents(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ai_knowledge_documents ai_knowledge_documents_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_knowledge_documents
+    ADD CONSTRAINT ai_knowledge_documents_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public."user"(id) ON DELETE SET NULL;
+
+
+--
+-- Name: ai_messages ai_messages_conversation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_messages
+    ADD CONSTRAINT ai_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.ai_conversations(id) ON DELETE CASCADE;
 
 
 --

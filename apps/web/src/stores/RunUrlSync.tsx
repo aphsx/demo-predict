@@ -22,10 +22,16 @@ export function RunUrlSync() {
     if (fromUrl) setRunId(fromUrl);
   }, [sp, setRunId]);
 
-  // Write the active run back into the URL.
+  // Write the active run back into the URL (or drop a stale ?run= param).
   useEffect(() => {
-    if (!runId) return;
     const params = new URLSearchParams(Array.from(sp.entries()));
+    if (!runId) {
+      if (!params.has("run")) return;
+      params.delete("run");
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      return;
+    }
     if (params.get("run") !== runId) {
       params.set("run", runId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });

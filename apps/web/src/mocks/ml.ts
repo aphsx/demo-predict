@@ -685,6 +685,45 @@ export function mockRunOutput(runId: string, accId: number): PredictionOutput {
   return row;
 }
 
+export function mockGenerateCustomerAiExplanation(
+  runId: string,
+  accId: number,
+  options: { force?: boolean } = {}
+) {
+  const row = mockRunOutput(runId, accId);
+  if (row.ai_status === "completed" && row.ai_explanation && !options.force) {
+    throw new Error("AI explanation already exists");
+  }
+
+  const recentUsage = mockUsageMonthly(runId, accId)
+    .filter((point) => point.total > 0)
+    .slice(-3)
+    .map((point) => `${point.month}: ${point.total.toLocaleString()}`)
+    .join(", ");
+
+  const explanation = [
+    `account ${accId} (${row.lifecycle_stage})`,
+    recentUsage ? `usage ล่าสุด ${recentUsage}` : "ไม่พบ usage ก่อน cutoff",
+    row.churn_probability != null
+      ? `ML churn ${(row.churn_probability * 100).toFixed(1)}%`
+      : "ML ไม่ประเมิน churn",
+    row.priority_reason,
+  ]
+    .filter(Boolean)
+    .join(" — ");
+
+  row.ai_status = "completed";
+  row.ai_explanation = explanation;
+
+  return {
+    acc_id: accId,
+    ai_status: "completed" as const,
+    ai_explanation: explanation,
+    ai_model: "mock_ai_v1",
+    ai_generated_at: new Date().toISOString(),
+  };
+}
+
 // ── Per-customer time series ────────────────────────────────────
 
 export function mockUsageMonthly(runId: string, accId: number): MonthlyUsagePoint[] {

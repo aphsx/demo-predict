@@ -2,20 +2,13 @@
 
 import { useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  RotateCcw,
-  Search,
-  Sparkles,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, RotateCcw, Search } from "lucide-react";
 import { StatusDialog } from "@/components/StatusDialog";
 import { Skeleton } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
 import type { PredictionOutput } from "@/lib/mlApi";
+import { shouldConfirmAiOverwrite } from "./customer-ai";
+import { GenAiButton } from "./GenAiButton";
 
 export const STAGES = ["Active Paid", "Active Free", "Churned", "Ghost"];
 
@@ -31,6 +24,7 @@ export type CustomerRow = Pick<
   | "total_revenue"
   | "priority_score"
   | "ai_status"
+  | "ai_explanation"
 >;
 
 export type CustomerSortKey =
@@ -63,8 +57,6 @@ const EMPTY_FILTERS: CustomerFilters = {
   churn_risk_level: "",
 };
 
-type AiGenerationStatus = "generating" | "generated";
-
 interface CustomersViewProps {
   rows: CustomerRow[];
   total: number;
@@ -77,6 +69,8 @@ interface CustomersViewProps {
   onFiltersChange: (filters: CustomerFilters) => void;
   onSortChange: (sort: CustomerSort | null) => void;
   onPageChange: (page: number) => void;
+  onGenerateAi: (accId: number, options?: { force?: boolean }) => Promise<void>;
+  aiError?: string | null;
 }
 
 function Inner({
@@ -91,10 +85,12 @@ function Inner({
   onFiltersChange,
   onSortChange,
   onPageChange,
+  onGenerateAi,
+  aiError = null,
 }: CustomersViewProps) {
   const router = useRouter();
 
-  const [aiGeneration, setAiGeneration] = useState<Record<number, AiGenerationStatus>>({});
+  const [generatingAccIds, setGeneratingAccIds] = useState<Set<number>>(() => new Set());
   const [pendingOverwriteAccId, setPendingOverwriteAccId] = useState<number | null>(null);
 
   const setFilter = (key: keyof CustomerFilters, value: string) => {
@@ -113,20 +109,26 @@ function Inner({
     onSortChange(null);
   };
 
-  const startAiGeneration = (accId: number) => {
-    setAiGeneration(current => ({ ...current, [accId]: "generating" }));
-    window.setTimeout(() => {
-      setAiGeneration(current => ({ ...current, [accId]: "generated" }));
-    }, 3000);
+  const runAiGeneration = async (accId: number, force = false) => {
+    setGeneratingAccIds((current) => new Set(current).add(accId));
+    try {
+      await onGenerateAi(accId, { force });
+    } finally {
+      setGeneratingAccIds((current) => {
+        const next = new Set(current);
+        next.delete(accId);
+        return next;
+      });
+    }
   };
-  const generateReason = (event: MouseEvent<HTMLButtonElement>, accId: number) => {
+
+  const handleGenAiClick = (event: MouseEvent<HTMLButtonElement>, row: CustomerRow) => {
     event.stopPropagation();
-    if (aiGeneration[accId] === "generated") {
-      setPendingOverwriteAccId(accId);
+    if (shouldConfirmAiOverwrite(row)) {
+      setPendingOverwriteAccId(row.acc_id);
       return;
     }
-
-    startAiGeneration(accId);
+    void runAiGeneration(row.acc_id);
   };
 
   const activeFilters = Object.entries(filters).filter(([_, value]) => value).length;
@@ -145,6 +147,11 @@ function Inner({
 
   return (
     <main className="px-8 py-6 pb-12">
+        {aiError ? (
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+            {aiError}
+          </div>
+        ) : null}
         <section className="surface-elev overflow-hidden">
           <div className="border-b border-gray-100 p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
@@ -208,7 +215,6 @@ function Inner({
               <div key={i} className="px-5 py-4"><Skeleton className="h-10" /></div>
             ))}
             {!pendingRows && rows.map((r) => {
-              const aiStatus = aiGeneration[r.acc_id];
               const churnPct = r.churn_probability != null ? r.churn_probability * 100 : null;
 
               return (
@@ -245,19 +251,11 @@ function Inner({
                   <MetricCell label="CLV 6m" value={r.predicted_clv_6m != null ? formatCurrency(r.predicted_clv_6m) : "—"} alignRight />
                   <MetricCell label="Revenue" value={r.total_revenue != null ? formatCurrency(r.total_revenue) : "—"} alignRight />
                   <div className="flex justify-start xl:justify-end">
-                    <button
-                      type="button"
-                      disabled={aiStatus === "generating"}
-                      onClick={(event) => generateReason(event, r.acc_id)}
-                      className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-[color:var(--moby-600)] px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-[color:var(--moby-800)] disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      {aiStatus === "generating" ? (
-                        <Loader2 size={13} className="animate-spin" />
-                      ) : (
-                        <Sparkles size={13} />
-                      )}
-                      {aiStatus === "generating" ? "Generating" : aiStatus === "generated" ? "Generated" : "Gen AI"}
-                    </button>
+                    <GenAiButton
+                      ai={r}
+                      inFlight={generatingAccIds.has(r.acc_id)}
+                      onClick={(event) => handleGenAiClick(event, r)}
+                    />
                   </div>
                 </div>
               );
@@ -310,7 +308,7 @@ function Inner({
           cancelLabel="ยกเลิก"
           onCancel={() => setPendingOverwriteAccId(null)}
           onConfirm={() => {
-            startAiGeneration(pendingOverwriteAccId);
+            void runAiGeneration(pendingOverwriteAccId, true);
             setPendingOverwriteAccId(null);
           }}
         />

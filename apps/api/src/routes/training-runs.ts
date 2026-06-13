@@ -84,12 +84,13 @@ async function fetchTrainingRun(id: string): Promise<TrainingRunRow | null> {
 
 export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
   .use(requireUser)
-  .get("/", async () => {
+  .get("/", async ({ userId }) => {
     const rows = await db
       .select(runSelect)
       .from(mlTrainingRuns)
       .leftJoin(trainDataSources, eq(mlTrainingRuns.sourceId, trainDataSources.id))
       .leftJoin(user, eq(mlTrainingRuns.createdBy, user.id))
+      .where(eq(mlTrainingRuns.createdBy, userId!))
       .orderBy(desc(mlTrainingRuns.createdAt));
     return rows.map(mapTrainingRun);
   })

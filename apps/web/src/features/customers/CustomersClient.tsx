@@ -15,7 +15,12 @@ import { Database } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useActiveRun } from "@/components/RunSelector";
 import { EmptyState, Skeleton } from "@/components/ui";
-import { fetchRunOutputs, type OutputsPage, type OutputsQuery } from "@/lib/mlApi";
+import {
+  fetchRunOutputs,
+  generateCustomerAiExplanation,
+  type OutputsPage,
+  type OutputsQuery,
+} from "@/lib/mlApi";
 import {
   CustomersView,
   type CustomerFilters,
@@ -101,6 +106,7 @@ function CustomersClientInner() {
   const [page, setPage] = useState<OutputsPage | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(
@@ -255,6 +261,27 @@ function CustomersClientInner() {
     );
   }
 
+  const handleGenerateAi = async (accId: number, options?: { force?: boolean }) => {
+    if (!effectiveRunId) return;
+    setAiError(null);
+    try {
+      const result = await generateCustomerAiExplanation(effectiveRunId, accId, options);
+      setPage((current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          data: current.data.map((row) =>
+            row.acc_id === accId
+              ? { ...row, ai_status: result.ai_status, ai_explanation: result.ai_explanation }
+              : row
+          ),
+        };
+      });
+    } catch (e: unknown) {
+      setAiError(e instanceof Error ? e.message : "สร้างคำอธิบาย AI ไม่สำเร็จ");
+    }
+  };
+
   return (
     <CustomersView
       rows={page.data}
@@ -268,6 +295,8 @@ function CustomersClientInner() {
       onFiltersChange={updateFilters}
       onSortChange={updateSort}
       onPageChange={updatePage}
+      onGenerateAi={handleGenerateAi}
+      aiError={aiError}
     />
   );
 }

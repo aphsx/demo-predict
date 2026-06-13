@@ -19,7 +19,7 @@ export function QuickPromptsAside({
   onPrompt: (label: string) => void;
 }) {
   return (
-    <aside className="hidden w-[240px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-200 p-5 xl:flex">
+    <aside className="hidden min-h-0 w-[240px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-200 p-5 xl:flex">
       {showQuick && (
         <div>
           <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
