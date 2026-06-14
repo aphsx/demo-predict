@@ -1,15 +1,13 @@
 /**
  * Single ordered reasoning layer for a customer.
  *
- * Before this module the UI had three overlapping "why" surfaces:
- *   1. priority_reason     — rule-based headline (why this account matters now)
- *   2. churn_factors       — model (SHAP) drivers behind the churn probability
- *   3. ai_explanation      — GenAI narrative that already folds in 1 + 2
+ * The UI shows two "why" surfaces, in fixed precedence:
+ *   1. drivers     — model (SHAP) factors behind the churn probability
+ *   2. narrative   — GenAI explanation
  *
- * They are now composed into ONE structure with a fixed precedence:
- *   headline (rule) → drivers (model) → narrative (AI)
- * so the customer page renders a single "เหตุผล" stack instead of repeating
- * the same justification in several places.
+ * There is intentionally NO rule-based text headline: priority is expressed as a
+ * number (priority_score). Any human-readable "why" comes from the AI narrative,
+ * grounded in the numeric model outputs and SHAP factors.
  */
 import type { ChurnFactor } from "@/lib/mlApi";
 
@@ -19,7 +17,6 @@ export type ReasonAiFields = {
 };
 
 export type ReasonInput = ReasonAiFields & {
-  priority_reason?: string | null;
   churn_factors?: ChurnFactor[] | null;
 };
 
@@ -35,7 +32,6 @@ export type ReasonNarrative = {
 };
 
 export type ReasoningLayer = {
-  headline: string | null;
   drivers: ReasonDriver[];
   narrative: ReasonNarrative;
 };
@@ -90,10 +86,8 @@ function narrativeFor(fields: ReasonAiFields): ReasonNarrative {
   return { kind: "empty", text: "ยังไม่มีคำอธิบายจาก AI" };
 }
 
-/** Compose the three sources into one ordered reasoning layer. */
+/** Compose model drivers + AI narrative into one ordered reasoning layer. */
 export function composeReasoning(input: ReasonInput): ReasoningLayer {
-  const headline = input.priority_reason?.trim() || null;
-
   const drivers: ReasonDriver[] = (input.churn_factors ?? [])
     .slice(0, 5)
     .map((factor: ChurnFactor) => ({
@@ -102,5 +96,5 @@ export function composeReasoning(input: ReasonInput): ReasoningLayer {
       valueText: formatFactorValue(factor.value),
     }));
 
-  return { headline, drivers, narrative: narrativeFor(input) };
+  return { drivers, narrative: narrativeFor(input) };
 }

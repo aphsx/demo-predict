@@ -23,7 +23,7 @@ database operations.
 | Topic | Decision |
 |---|---|
 | **LLM** | **Ollama Cloud** (`qwen3.5:397b-cloud`) for chat; an Ollama embedding model for RAG |
-| **Capabilities** | 3 core only: (1) Text-to-SQL over prediction data, (2) per-account investigation, (3) company/ML knowledge Q&A. No separate action/chart/export feature — insights surface inside answers via `priority_reason` / `churn_factors_json`. |
+| **Capabilities** | 3 core only: (1) Text-to-SQL over prediction data, (2) per-account investigation, (3) company/ML knowledge Q&A. No separate action/chart/export feature — insights surface inside answers via `priority_score` / `revenue_at_risk` / `churn_factors_json`. |
 | **RAG** | **Real vector RAG** via **pgvector** (not keyword), with inline source citations |
 | **Streaming** | Yes — token-by-token via SSE |
 | **History** | Full Postgres persistence — multi-conversation, sidebar, rename/delete |

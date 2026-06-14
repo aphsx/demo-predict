@@ -41,7 +41,6 @@ import {
   type RunSummary,
   type UrgencyLevel,
   type ValueTier,
-  type Segment,
 } from "../lib/ml-contract";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -184,8 +183,6 @@ function mapOutput(row: OutputRow): PredictionOutput {
     credit_urgency_level: (row.creditUrgencyLevel as UrgencyLevel | null) ?? null,
     revenue_at_risk: num(row.revenueAtRisk),
     priority_score: num(row.priorityScore) ?? 0,
-    priority_reason: row.priorityReason ?? "",
-    segment: (row.segment as Segment | null) ?? "monitor",
     ai_status: row.aiStatus as PredictionOutput["ai_status"],
     ai_explanation: row.aiExplanation,
     ai_recommended_message: row.aiRecommendedMessage,
@@ -348,8 +345,6 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
         churnProbability: o.churnProbability,
         predictedClv6m: o.predictedClv6m,
         priorityScore: o.priorityScore,
-        priorityReason: o.priorityReason,
-        segment: o.segment,
       })
       .from(o)
       .where(inRun)
@@ -415,8 +410,6 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
       churn_probability: num(row.churnProbability),
       predicted_clv_6m: num(row.predictedClv6m),
       priority_score: num(row.priorityScore) ?? 0,
-      priority_reason: row.priorityReason ?? "",
-      segment: (row.segment as Segment | null) ?? "monitor",
     })),
     model_versions:
       (run.modelVersionsJson as RunSummary["model_versions"] | null) ?? EMPTY_MODEL_VERSIONS,

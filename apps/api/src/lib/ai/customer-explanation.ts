@@ -100,7 +100,6 @@ Churn risk level: ${ml_output.churn_risk_level ?? "N/A"}
 Days since last activity: ${ml_output.days_since_last_activity ?? "N/A"}
 Usage trend: ${ml_output.usage_trend ?? "N/A"}
 Priority score: ${ml_output.priority_score ?? "N/A"}
-Priority reason: ${ml_output.priority_reason ?? "N/A"}
 Revenue at risk: ${ml_output.revenue_at_risk != null ? "฿" + ml_output.revenue_at_risk.toLocaleString() : "N/A"}
 Predicted CLV 6m: ${ml_output.predicted_clv_6m != null ? "฿" + ml_output.predicted_clv_6m.toLocaleString() : "N/A"}
 P(alive): ${ml_output.p_alive != null ? (ml_output.p_alive * 100).toFixed(1) + "%" : "N/A"}

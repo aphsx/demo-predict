@@ -34,8 +34,6 @@ export type CustomerDetail = {
   total_revenue: number;
   avg_transaction_value: number | null;
   ever_paid: boolean;
-  priority_reason: string;
-  segment: string;
   churn_factors: ChurnFactor[] | null;
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
@@ -47,12 +45,6 @@ export type UsageTrendPoint = {
   usage: number;
 };
 
-const SEGMENT_HINT: Record<string, string> = {
-  retain_now: "รีบติดต่อรักษา",
-  protect: "ดูแลความสัมพันธ์",
-  rescue_or_let_go: "win-back ต้นทุนต่ำ",
-  monitor: "เฝ้าดูตามรอบ",
-};
 const CHURN_COLOR = "#fc4c02";
 const CHURN_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${CHURN_COLOR} 100%)`;
 const BLUE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 100%)`;
@@ -121,7 +113,7 @@ export function CustomerDetailView({
                 <HeroMetric
                   label="Revenue risk"
                   value={customer.revenue_at_risk != null ? formatCurrency(customer.revenue_at_risk) : "—"}
-                  hint={SEGMENT_HINT[customer.segment] ?? "at risk"}
+                  hint="at risk"
                 />
                 <HeroMetric
                   label="Top-up risk"
@@ -230,17 +222,12 @@ export function CustomerDetailView({
 }
 
 function ReasoningStack({ reasoning }: { reasoning: ReasoningLayer }) {
-  const { headline, drivers, narrative } = reasoning;
+  const { drivers, narrative } = reasoning;
   return (
     <div className="space-y-5">
-      {headline && (
-        <ReasonSection label="ทำไมต้องสนใจ" order={1}>
-          <p className="text-[13px] leading-6 text-[color:var(--ink-2)]">{headline}</p>
-        </ReasonSection>
-      )}
-
       {drivers.length > 0 && (
-        <ReasonSection label="ปัจจัยจากโมเดล" order={2}>
+        <ReasonSection label="ปัจจัยจากโมเดล" order={1}>
+
           <ul className="space-y-2">
             {drivers.map((driver) => (
               <li
@@ -269,7 +256,7 @@ function ReasoningStack({ reasoning }: { reasoning: ReasoningLayer }) {
         </ReasonSection>
       )}
 
-      <ReasonSection label="บทวิเคราะห์ AI" order={3}>
+      <ReasonSection label="บทวิเคราะห์ AI" order={2}>
         {narrative.kind === "ready" ? (
           <div className="text-[13px] leading-6 text-[color:var(--ink-3)]">
             <MarkdownLite text={narrative.text} strongClassName="font-semibold text-[color:var(--ink-1)]" />

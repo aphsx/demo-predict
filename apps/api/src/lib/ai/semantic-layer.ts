@@ -124,8 +124,6 @@ export const SEMANTIC_TABLES: SemanticTable[] = [
       { name: "avg_transaction_value", type: "numeric", description: "Average transaction value." },
       { name: "ever_paid", type: "boolean", description: "Whether the customer has ever paid." },
       { name: "priority_score", type: "numeric", description: "Business priority score (0-100), a display rescale of revenue_at_risk; ranks customers by expected money at risk." },
-      { name: "priority_reason", type: "text", description: "Reason behind the priority score." },
-      { name: "segment", type: "text", description: "Actionable value×risk segment: retain_now, protect, rescue_or_let_go, or monitor." },
       { name: "output_status", type: "text", description: "Prediction output status." },
       { name: "created_at", type: "timestamp", description: "When the prediction output was created." },
     ],

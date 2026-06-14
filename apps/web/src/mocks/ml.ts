@@ -21,7 +21,6 @@ import type {
   ProfileSnapshot,
   RiskLevel,
   RunSummary,
-  Segment,
   TrainingRun,
   UrgencyLevel,
   ValueTier,
@@ -493,8 +492,6 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
     credit_urgency_level: urgency,
     revenue_at_risk: revenueAtRisk,
     priority_score: 0, // assigned below
-    priority_reason: "",
-    segment: "monitor", // assigned below
     ai_status: "not_requested",
     ai_explanation: null,
     ai_recommended_message: null,
@@ -514,7 +511,9 @@ function assignDerived(rows: PredictionOutput[]): void {
   });
 
   // priority score: rank by expected money at risk (revenue_at_risk = churn ×
-  // CLV); priority_score is a log rescale of it to 0..100 (contract §5.2).
+  // CLV); priority_score is a log rescale of it to 0..100 (contract §5.2). No
+  // text reason — the number is the only priority signal; the AI explanation
+  // produces any human-readable "why".
   const vars = rows.map((c) => Math.max(0, c.revenue_at_risk ?? 0));
   const logged = vars.map((v) => Math.log1p(v));
   const lo = Math.min(...logged);
@@ -522,41 +521,7 @@ function assignDerived(rows: PredictionOutput[]): void {
   rows.forEach((c, i) => {
     c.priority_score =
       hi - lo < 1e-9 ? 0 : Math.round((100 * (logged[i] - lo)) / (hi - lo) * 100) / 100;
-    c.segment = segmentOf(c.customer_value_tier, c.churn_risk_level);
-    c.priority_reason = reasonOf(c);
   });
-}
-
-function segmentOf(tier: string, risk: string | null): Segment {
-  const highValue = tier === "high";
-  const highRisk = risk === "high" || risk === "critical";
-  if (highValue && highRisk) return "retain_now";
-  if (highValue) return "protect";
-  if (highRisk) return "rescue_or_let_go";
-  return "monitor";
-}
-
-const SEGMENT_ACTION: Record<Segment, string> = {
-  retain_now: "→ รีบติดต่อรักษา",
-  protect: "→ ดูแลความสัมพันธ์",
-  rescue_or_let_go: "→ win-back อัตโนมัติต้นทุนต่ำ",
-  monitor: "→ เฝ้าดูตามรอบ",
-};
-
-function reasonOf(c: PredictionOutput): string {
-  const churn = c.churn_probability;
-  const clv = c.predicted_clv_6m;
-  let head: string;
-  if (churn != null && clv != null && clv > 0) {
-    head = `เสี่ยงเสียรายได้ ฿${Math.round(c.revenue_at_risk ?? 0).toLocaleString()} (churn ${(churn * 100).toFixed(0)}% × CLV ฿${Math.round(clv).toLocaleString()})`;
-  } else if (clv != null && clv > 0) {
-    head = `ลูกค้ามูลค่า ฿${Math.round(clv).toLocaleString()}`;
-  } else {
-    head = "ยังประเมินมูลค่าไม่ได้";
-  }
-  const urgency = c.credit_urgency_level;
-  const extra = urgency === "critical" || urgency === "warning" ? ` · เครดิตใกล้หมด (${urgency})` : "";
-  return `${head} ${SEGMENT_ACTION[c.segment]}${extra}`.trimEnd();
 }
 
 const populationCache = new Map<string, PredictionOutput[]>();
@@ -628,8 +593,6 @@ export function mockRunSummary(runId: string): RunSummary {
       churn_probability: c.churn_probability,
       predicted_clv_6m: c.predicted_clv_6m,
       priority_score: c.priority_score,
-      priority_reason: c.priority_reason,
-      segment: c.segment,
     }));
 
   return {
@@ -734,7 +697,9 @@ export function mockGenerateCustomerAiExplanation(
     row.churn_probability != null
       ? `ML churn ${(row.churn_probability * 100).toFixed(1)}%`
       : "ML ไม่ประเมิน churn",
-    row.priority_reason,
+    row.revenue_at_risk != null
+      ? `revenue at risk ฿${Math.round(row.revenue_at_risk).toLocaleString()}`
+      : null,
   ]
     .filter(Boolean)
     .join(" — ");

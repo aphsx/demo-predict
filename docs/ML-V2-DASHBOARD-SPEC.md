@@ -94,8 +94,6 @@ Header: ชื่อ run, `cutoff_date`, `total_customers`, เวลา predict
 | Credit urgency | `credit_urgency_level` + `estimated_days_until_topup` |
 | Last activity | `days_since_last_activity` |
 | Revenue (จริง) | `total_revenue` |
-| Segment | `segment` (retain_now / protect / rescue_or_let_go / monitor) |
-| Priority reason | `priority_reason` |
 
 **Filters:** lifecycle stage, risk level, value tier, credit urgency, `ever_paid`, ค้นหา `acc_id`
 **Default sort:** `priority_score desc`
@@ -120,7 +118,7 @@ join_date + อายุลูกค้า, status SMS/Email, เครดิต
 - ถ้าโมเดลไหน not eligible → แสดงเหตุผลจาก `model_eligibility_json` แทนตัวเลข (เช่น "ลูกค้า Ghost — ไม่อยู่ในเงื่อนไขโมเดล churn")
 
 **D. Priority**
-`priority_score`, `priority_reason`, `segment` (value×risk playbook)
+`priority_score` (ตัวเลขล้วน) — การแบ่งกลุ่มดูจาก value tier / risk level / urgency
 AI explanation (Phase 2): render เฉพาะ `ai_status='completed'`
 
 ## §2.4 หน้า Model Performance (`/model-performance`)
@@ -254,7 +252,7 @@ KPI "Active high risk" = count(*) WHERE lifecycle_stage='Active Paid'
 | Days until top-up | สูตรข้างบน | P | null ถ้า forecast ≤ 0 → UI แสดง "ไม่มีการใช้งานพอจะประเมิน" |
 | Last activity | `days_since_last_activity` | P | นับจาก cutoff ไม่ใช่จากวันนี้ — tooltip ต้องบอก |
 | Revenue / Purchases / Avg ticket | `total_revenue`, `n_purchases`, `avg_transaction_value` | P | ข้อมูลจริงสะสมถึง cutoff |
-| Priority score + เหตุผล + segment | `priority_score` (log rescale ของ `revenue_at_risk` = churn × CLV), `priority_reason`, `segment` (value×risk playbook) | P | เรียงตามเงินที่เสี่ยงจะเสีย ไม่ใช่น้ำหนักที่เดา — ดู OUTPUT-CONTRACT §5.2 |
+| Priority score | `priority_score` (log rescale ของ `revenue_at_risk` = churn × CLV) — ตัวเลขล้วน ไม่มี text reason | P | เรียงตามเงินที่เสี่ยงจะเสีย ไม่ใช่น้ำหนักที่เดา — ดู OUTPUT-CONTRACT §5.2 |
 | Churn factors (360) | `churn_factors_json` (top-5 SHAP) | P | แปล feature name → ภาษาคนด้วย mapping ฝั่ง UI (mapping คงที่ ไม่ใช่ logic) |
 | Profile (เครดิต/expire/status) | `profile_snapshot_json` | P | ค่า "ณ วัน export Excel" — ไม่ใช่ realtime, UI ติด label วันที่ |
 | กราฟ usage รายเดือน (360) | query `predict_clean_usage` ตรง | Q | ไม่เก็บใน outputs |
@@ -281,7 +279,7 @@ KPI "Active high risk" = count(*) WHERE lifecycle_stage='Active Paid'
   },
   "value_risk_matrix": [ { "value_tier": "high", "risk_level": "high", "count": 0, "clv_sum": 0 } ],
   "credit": { "demand_30d": 0, "by_urgency": { "critical": 0, "warning": 0, "monitor": 0, "stable": 0 }, "topup_due_7d": 0 },
-  "top_priority": [ { "acc_id": 0, "lifecycle_stage": "", "churn_probability": 0, "predicted_clv_6m": 0, "priority_score": 0, "priority_reason": "", "segment": "retain_now" } ],
+  "top_priority": [ { "acc_id": 0, "lifecycle_stage": "", "churn_probability": 0, "predicted_clv_6m": 0, "priority_score": 0 } ],
   "model_versions": { "churn": "", "clv": "", "credit": "" }    // footer "ทำนายโดยรุ่นไหน"
 }
 ```
@@ -304,7 +302,7 @@ KPI "Active high risk" = count(*) WHERE lifecycle_stage='Active Paid'
 | หน้า | มีแล้ว | ยังขาด / ต้องแก้ |
 |---|---|---|
 | `/` Overview | KPI 4 ใบ, lifecycle mix, revenue chart, risk + CLV + top-up widgets — **mock ทั้งหมด** | ต่อ `/summary` จริง; เพิ่ม Total customers KPI, Value×Risk matrix, Top 10 priority, run selector; แยก label actual vs forecast |
-| `/customers` | ตาราง acc_id / stage / churn / CLV / revenue + filter lifecycle | คอลัมน์ risk level, revenue_at_risk, value tier, credit urgency, last activity, priority reason; filter risk/tier/urgency; quick presets; sort ฝั่ง server; export CSV |
+| `/customers` | ตาราง acc_id / stage / churn / CLV / revenue + filter lifecycle | คอลัมน์ risk level, revenue_at_risk, value tier, credit urgency, last activity; filter risk/tier/urgency; quick presets; sort ฝั่ง server; export CSV |
 | `/customers/[id]` | hero metrics, usage chart, profile ย่อ | churn factors (SHAP) — หัวใจของหน้า, profile snapshot (เครดิต/expire), payment timeline, แถบ p10–p90 credit, เหตุผล not eligible, ซ่อน AI card ที่เป็น Mockup |
 | `/playbooks` | lane + การ์ด + done checkbox | **ลบ route ทั้งหน้า** (ตัดออกจาก scope — ดู §2) |
 | `/model-performance` | การ์ด 4 โมเดล — **ตัวเลข hardcode** | อ่านจาก `ml_model_evaluations`; แยก split, เทียบ baseline, calibration curve, lift table, threshold ที่ใช้ |

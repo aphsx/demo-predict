@@ -255,8 +255,6 @@ CREATE TABLE public.ml_prediction_outputs (
     avg_transaction_value numeric(14,2),
     ever_paid boolean DEFAULT false NOT NULL,
     priority_score numeric(5,2),
-    priority_reason text,
-    segment text,
     ai_explanation text,
     ai_reasoning_json jsonb,
     ai_recommended_message text,

@@ -35,16 +35,11 @@ from src.training.validation import (
 logger = logging.getLogger(__name__)
 
 # Priority score weights (OUTPUT-CONTRACT §5.2) — single source of truth.
-# Priority ranking key. v2 ranks by expected money at risk
-# (revenue_at_risk = churn_probability × predicted_clv_6m) instead of an
-# arbitrary 50/30/20 blend of incompatible units. Credit urgency stays a
-# separate timing signal (credit_urgency_level), not part of this score.
-SEGMENT_ACTION = {
-    "retain_now": "→ รีบติดต่อรักษา",
-    "protect": "→ ดูแลความสัมพันธ์",
-    "rescue_or_let_go": "→ win-back อัตโนมัติต้นทุนต่ำ",
-    "monitor": "→ เฝ้าดูตามรอบ",
-}
+# Priority ranking key. priority_score ranks by expected money at risk
+# (revenue_at_risk = churn_probability × predicted_clv_6m), log-rescaled to
+# 0..100 for display. Credit urgency stays a separate timing signal
+# (credit_urgency_level), not part of this score. No text reason is produced —
+# explanation text is the AI layer's job.
 TOPUP_CAP_DAYS = 365
 INSERT_CHUNK = 1000
 
@@ -479,31 +474,14 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     urgency.loc[with_days & (days_series <= 14)] = "critical"
     frame["credit_urgency_level"] = urgency
 
-    # priority score (§5.2) — rank by expected money at risk, not a guessed
-    # weighted blend. revenue_at_risk (= churn × CLV) is the ranking key; the
-    # 0..100 priority_score is just a log rescale of it for display, so sorting
-    # by priority_score equals sorting by revenue_at_risk.
+    # priority score (§5.2) — rank by expected money at risk. revenue_at_risk
+    # (= churn × CLV) is the ranking key; the 0..100 priority_score is just a
+    # log rescale of it for display, so sorting by priority_score equals sorting
+    # by revenue_at_risk. No text reason is generated here — the numeric score is
+    # the only priority signal; any human-readable "why" is produced by the AI
+    # explanation from the underlying numbers/SHAP factors.
     var = pd.to_numeric(frame["revenue_at_risk"], errors="coerce").fillna(0.0).clip(lower=0.0)
     frame["priority_score"] = _display_score(var)
-
-    # actionable segment: value tier × churn risk. Reuses the existing
-    # customer_value_tier / churn_risk_level buckets, so it stays consistent
-    # with the dashboard value×risk matrix instead of inventing new thresholds.
-    frame["segment"] = [
-        _segment(tier, level)
-        for tier, level in zip(frame["customer_value_tier"], frame["churn_risk_level"])
-    ]
-
-    frame["priority_reason"] = [
-        _priority_reason(var_value, prob, clv_value, seg, urgency)
-        for var_value, prob, clv_value, seg, urgency in zip(
-            var,
-            churn_prob,
-            clv,
-            frame["segment"],
-            frame["credit_urgency_level"],
-        )
-    ]
 
     return frame
 
@@ -519,44 +497,6 @@ def _display_score(value_at_risk: pd.Series) -> pd.Series:
     if high - low < 1e-9:
         return pd.Series(0.0, index=value_at_risk.index)
     return (100.0 * (logged - low) / (high - low)).round(2)
-
-
-def _segment(value_tier: Any, risk_level: Any) -> str:
-    """value × risk → one of four playbook segments.
-
-    "High value" = the top CLV tier; "high risk" = high/critical churn. These
-    are the same buckets the dashboard matrix uses.
-    """
-    high_value = value_tier == "high"
-    high_risk = risk_level in ("high", "critical")
-    if high_value and high_risk:
-        return "retain_now"
-    if high_value:
-        return "protect"
-    if high_risk:
-        return "rescue_or_let_go"
-    return "monitor"
-
-
-def _priority_reason(
-    value_at_risk: float,
-    churn_prob: float,
-    clv_value: float,
-    segment: str,
-    credit_urgency: Any,
-) -> str:
-    """One money-anchored line: how much is at stake, plus the play to run."""
-    if not pd.isna(churn_prob) and not pd.isna(clv_value) and clv_value > 0:
-        head = (
-            f"เสี่ยงเสียรายได้ ฿{value_at_risk:,.0f} "
-            f"(churn {churn_prob * 100:.0f}% × CLV ฿{clv_value:,.0f})"
-        )
-    elif not pd.isna(clv_value) and clv_value > 0:
-        head = f"ลูกค้ามูลค่า ฿{clv_value:,.0f}"
-    else:
-        head = "ยังประเมินมูลค่าไม่ได้"
-    extra = f" · เครดิตใกล้หมด ({credit_urgency})" if credit_urgency in ("critical", "warning") else ""
-    return f"{head} {SEGMENT_ACTION.get(segment, '')}{extra}".rstrip()
 
 # ── Persistence ──────────────────────────────────────────────────
 
@@ -607,8 +547,6 @@ def _build_output_rows(
                 "avg_transaction_value": _round_or_none(row["avg_transaction_value"], 2),
                 "ever_paid": bool(row["ever_paid"]),
                 "priority_score": _round_or_none(row["priority_score"], 2) or 0.0,
-                "priority_reason": row["priority_reason"],
-                "segment": row["segment"],
                 "output_status": "predicted" if all(
                     model["eligible"] for model in json.loads(eligibility).values()
                 ) else "partial",
@@ -680,8 +618,7 @@ OUTPUT_COLUMNS = [
     "credit_forecast_interval_json", "estimated_days_until_topup",
     "credit_urgency_level", "usage_trend",
     "days_since_last_activity", "n_purchases", "total_revenue",
-    "avg_transaction_value", "ever_paid", "priority_score", "priority_reason",
-    "segment",
+    "avg_transaction_value", "ever_paid", "priority_score",
     "output_status", "output_notes",
     "model_eligibility_json", "model_versions_json", "profile_snapshot_json",
 ]

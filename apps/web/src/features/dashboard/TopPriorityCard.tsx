@@ -2,27 +2,8 @@
 import Link from "next/link";
 import { StatusPill, lifecycleTone } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
-import type { RunSummary, Segment } from "@/lib/mlApi";
+import type { RunSummary } from "@/lib/mlApi";
 import { TEXT_SAFE } from "./palette";
-
-/** Short Thai action label + chip style per value×risk segment. */
-const SEGMENT_BADGE: Record<Segment, { label: string; className: string }> = {
-  retain_now: { label: "รีบรักษา", className: "bg-red-50 text-red-700 ring-red-200" },
-  protect: { label: "ดูแล", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
-  rescue_or_let_go: { label: "win-back", className: "bg-amber-50 text-amber-700 ring-amber-200" },
-  monitor: { label: "เฝ้าดู", className: "bg-gray-50 text-gray-600 ring-gray-200" },
-};
-
-function SegmentBadge({ segment }: { segment: Segment }) {
-  const badge = SEGMENT_BADGE[segment] ?? SEGMENT_BADGE.monitor;
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${badge.className}`}
-    >
-      {badge.label}
-    </span>
-  );
-}
 
 /** Top 10 priority customers (spec §2.1) — เรียงตาม priority_score */
 export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId: string }) {
@@ -53,8 +34,6 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
               <th className="px-3 py-2.5 text-right">Churn</th>
               <th className="px-3 py-2.5 text-right">CLV 6m</th>
               <th className="px-3 py-2.5 text-right">Score</th>
-              <th className="px-3 py-2.5">Action</th>
-              <th className="px-3 py-2.5">เหตุผล</th>
             </tr>
           </thead>
           <tbody>
@@ -80,10 +59,6 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
                 <td className="num px-3 py-2.5 text-right">
                   {c.priority_score.toFixed(0)}
                 </td>
-                <td className="px-3 py-2.5">
-                  <SegmentBadge segment={c.segment} />
-                </td>
-                <td className={`px-3 py-2.5 text-[color:var(--ink-4)] ${TEXT_SAFE}`}>{c.priority_reason}</td>
               </tr>
             ))}
           </tbody>
