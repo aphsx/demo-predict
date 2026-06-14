@@ -24,6 +24,13 @@ async function hasValidSession(request: NextRequest): Promise<boolean> {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Legacy/alternate home URL — dashboard lives at `/`.
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+    const url = request.nextUrl.clone();
+    url.pathname = pathname === "/dashboard" ? "/" : pathname.slice("/dashboard".length) || "/";
+    return NextResponse.redirect(url);
+  }
+
   // API routes are proxied to Elysia — auth is enforced there (requireUser).
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();

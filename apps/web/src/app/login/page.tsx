@@ -17,9 +17,16 @@ export default function LoginPage() {
   );
 }
 
+function sanitizeRedirectParam(path: string | null): string {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return "/";
+  // Dashboard is served at `/`; old links may still point here after OAuth.
+  if (path === "/dashboard" || path.startsWith("/dashboard/")) return "/";
+  return path;
+}
+
 function LoginForm() {
   const sp = useSearchParams();
-  const callbackURL = sp.get("redirect") || "/";
+  const callbackURL = sanitizeRedirectParam(sp.get("redirect"));
   const [busy, setBusy] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
 
