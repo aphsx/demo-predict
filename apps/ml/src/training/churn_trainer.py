@@ -497,8 +497,22 @@ def _tune_xgboost(
     )
 
 
+# Isotonic is a step function: it quantizes scores into a handful of plateaus
+# (k/n block rates), so every customer in a block gets an identical probability
+# and within-tier ranking is lost. Platt (sigmoid) keeps scores continuous.
+# Only prefer isotonic when it beats Platt on Brier by a *meaningful* margin —
+# a hair of Brier gain does not justify collapsing thousands of customers onto
+# ~100 distinct values. Both methods are monotonic, so ranking AUC is unchanged.
+ISOTONIC_BRIER_MARGIN = 0.02  # isotonic must be >=2% better in Brier to be chosen
+
+
 def _fit_calibrator(raw_val: np.ndarray, y_val: np.ndarray) -> FittedCalibrator:
-    """Platt vs isotonic on validation, lower Brier wins (§10)."""
+    """Platt vs isotonic on validation; Platt wins ties (§10).
+
+    Default to Platt for continuous, granular probabilities; switch to isotonic
+    only when it is decisively better calibrated (Brier margin), keeping the
+    overall calibration gate (ECE) satisfied either way.
+    """
 
     platt = LogisticRegression(max_iter=2000)
     platt.fit(raw_val.reshape(-1, 1), y_val)
@@ -509,7 +523,7 @@ def _fit_calibrator(raw_val: np.ndarray, y_val: np.ndarray) -> FittedCalibrator:
         isotonic = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
         isotonic.fit(raw_val, y_val)
         isotonic_brier = brier_score_loss(y_val, np.clip(isotonic.predict(raw_val), 0, 1))
-        if isotonic_brier < platt_brier:
+        if isotonic_brier < platt_brier * (1.0 - ISOTONIC_BRIER_MARGIN):
             return FittedCalibrator(method="isotonic", model=isotonic)
     return FittedCalibrator(method="platt", model=platt)
 
