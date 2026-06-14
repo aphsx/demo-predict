@@ -1,135 +1,82 @@
-# 1Moby Analytics — Full Stack
+# Moby Analytics
+
+Internal analytics platform for **1Moby**, a B2B SaaS messaging company (SMS/Email).
+It ingests a fixed-schema Excel export, then predicts customer **churn**, segments customers by
+**CLV / value tier**, and forecasts **credit consumption** — for ~5 internal users.
+
+> **New here?** Start with [`claude.md`](claude.md) for the full architecture, then
+> [`docs/README.md`](docs/README.md) for the documentation map.
 
 ## Stack
-- **ML/API**: Python + FastAPI + SQLAlchemy async
-- **Frontend**: Next.js 14 + Tailwind CSS + Recharts
-- **Database**: PostgreSQL 15
-- **Queue**: Redis + Arq (background job processing)
-- **Orchestration**: Docker Compose
 
----
+| Layer | Tech |
+|---|---|
+| **Frontend** (`apps/web`) | Next.js 16 (App Router) · React 18 · TypeScript · Tailwind · Better Auth client · recharts · gsap |
+| **API** (`apps/api`) | Elysia.js on Bun · Better Auth · Drizzle ORM (introspect-only) · ioredis |
+| **ML** (`apps/ml`) | Python 3.11 · FastAPI (health + internal job triggers) · LightGBM · XGBoost · SHAP · lifetimes · Optuna |
+| **Database** | PostgreSQL 15 (`pgvector/pgvector:pg15` image) · schema bootstrapped from `db/init/001_schema.sql` |
+| **Queue / progress** | Redis (Arq + Redis Streams for progress) |
+| **Monorepo** | Turborepo + Bun workspaces |
 
-## 2 Ways to Run
+## Run it
 
-### Docker (Recommended)
+### Docker (recommended)
+
 ```bash
-# 1. Setup
-cp .env.example .env
-
-# 2. Build + Start
-#    - First time: auto-train models if not exist
-#    - Next times: skip training (use existing models)
-docker-compose up --build
-
-# 3. Retrain manually (when you have new data)
-docker-compose exec ml python train.py /data/1Moby_Data.xlsx
+cp .env.example .env          # fill in secrets (Google OAuth, Ollama, etc.)
+docker compose up --build     # db, redis, ml, api, web
 ```
 
-### Local (No Docker)
+Fresh Postgres volumes initialize automatically from `db/init/001_schema.sql`.
+
+### Local dev (fast UI loop)
+
+Run the backing services in Docker and the frontend on the host:
+
 ```bash
-# 1. Database
-docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=moby1234 postgres:15-alpine
-
-# 2. Redis (for background jobs)
-docker run -d -p 6379:6379 redis:7-alpine
-
-# 3. ML API (Terminal 1)
-cd ml
-pip install -r requirements.txt
-python train.py data/1Moby_Data.xlsx   # first time or when data changes
-uvicorn api.main:app --port 8001 --reload
-
-# 4. Worker (Terminal 2)
-cd ml
-python -m arq worker.predict_worker.WorkerSettings
-
-# 5. Frontend (Terminal 3)
-cd web
-npm install
-npm run dev
+docker compose up -d db redis api    # add `ml` if you need training/prediction
+cd apps/web && bun install
+ELYSIA_URL=http://localhost:3001 bun run dev   # Next.js on :3000
 ```
 
-**URLs:**
-- Frontend: http://localhost:3001
-- API docs:  http://localhost:8001/docs
-- Database:  localhost:5433
+See [`docs/WEB-DEV-WORKFLOW.md`](docs/WEB-DEV-WORKFLOW.md) for the full UI workflow.
 
----
+## Service ports
 
-## Model Training Behavior
+| Service | Internal | External | Notes |
+|---|---|---|---|
+| `web` (Next.js) | `:3000` | `:3000` | proxy-rewrites `/api/*` → Elysia |
+| `api` (Elysia) | `:3001` | `:3001` | REST + Better Auth + SSE |
+| `ml` (FastAPI) | `:8000` | `:8001` | internal-only: `/health` + job triggers |
+| `db` (Postgres) | `:5432` | `:5433` | schema from `db/init/001_schema.sql` |
+| `redis` | `:6379` | — | Arq queue + progress Streams |
 
-| Situation | Action |
-|-----------|--------|
-| **Docker first run** | Auto-train if no models exist |
-| **Docker restart** | Skip training (use existing models) |
-| **Manual retrain** | `docker-compose exec ml python train.py <file>` |
-| **Local mode** | Manual train only |
-
-**Model files location:** `models/` (shared between ml and worker containers)
-
----
-
-## Architecture
+## How data flows
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                      Frontend                         │
-│                   (Next.js :3001)                    │
-└──────────────────────┬──────────────────────────────┘
-                       │ rewrite /api/* → ml:8000
-┌──────────────────────▼──────────────────────────────┐
-│                      ML API                          │
-│                (FastAPI :8001)                       │
-│  - REST endpoints                                    │
-│  - SSE status streaming                              │
-└──────────────────────┬──────────────────────────────┘
-                       │
-         ┌─────────────┴─────────────┐
-         │                           │
-┌────────▼─────────┐    ┌───────────▼──────────┐
-│     Worker        │    │        Redis          │
-│  (Arq background)│    │    (Job queue)         │
-│  - Prediction     │    │                       │
-└───────────────────┘    └───────────────────────┘
-         │
-┌────────▼─────────┐
-│    PostgreSQL     │
-│   (prediction DB) │
-└───────────────────┘
+Excel (8 sheets) ─import→ {train,predict}_raw_* ─clean→ {train,predict}_clean_*
+
+TRAINING   train_clean_*  → gates → labels + features → temporal split
+           → baselines + candidates (Optuna) → calibration → evaluation
+           → promotion gate → artifacts + ml_model_versions (alias "production")
+
+PREDICTION predict_clean_* → features → lifecycle rules → champion models
+           → derived fields → ml_prediction_outputs (1 row / customer / run)
+
+WEB        Overview ▸ Customers ▸ Customer 360 ▸ Model Performance ▸ Runs ▸ Training ▸ AI Assistant
 ```
 
----
+Elysia owns all REST + auth + SSE. The ML FastAPI service is internal-only: Elysia triggers training
+and prediction over `/internal/*` (token-gated), which spawn `apps/ml/train_v2.py` / `predict_v2.py`.
+There are **3 ML models** (churn, CLV, credit) plus rule-based lifecycle — win-back and conversion
+models were permanently cut.
 
-## Pages
-- `/`              → Dashboard + KPI + Charts
-- `/runs`          → จัดการ Prediction Runs + Upload
-- `/customers`     → ตารางลูกค้า + filter + pagination
-- `/customers/[id]`→ Customer 360 detail
+## Documentation
 
-## API Endpoints
-- `GET  /runs`                           → list runs
-- `POST /runs`                           → create run
-- `POST /runs/{id}/upload`               → upload + trigger predict
-- `GET  /runs/{id}/predictions`          → paginated results
-- `GET  /runs/{id}/predictions/{acc_id}`  → customer 360
-- `GET  /runs/{id}/summary`               → dashboard KPIs
-- `GET  /runs/{id}/stream`                → SSE status streaming
-- `GET  /health`                         → health check + model status
-
----
-
-## Retrain Models
-
-When you have new data:
-```bash
-# In Docker
-docker-compose exec ml python train.py /data/your_data.xlsx
-
-# Locally (in ml/ directory)
-python train.py data/your_data.xlsx
-```
-
-Check model status:
-```bash
-curl http://localhost:8001/health
-```
+| Doc | Purpose |
+|---|---|
+| [`claude.md`](claude.md) | Architecture, schema, conventions — the project's source of truth |
+| [`docs/README.md`](docs/README.md) | Index of all docs |
+| [`docs/ML-V2-*.md`](docs/) | ML v2 design: overview, dashboard spec, output contract, training pipeline |
+| [`docs/AI-ASSISTANT.md`](docs/AI-ASSISTANT.md) | AI chat assistant architecture + build plan |
+| [`moby-data-prep/`](moby-data-prep/) | Excel import contract, naming convention, raw/clean schemas |

@@ -186,7 +186,7 @@ name · status pill (pending / in_progress / completed / failed) · predict sour
 
 ## §2.7 หน้า AI Assistant (`/ai-chat`)
 
-ฟีเจอร์แยก — spec หลักอยู่ `AI-ASSISTANT-ARCHITECTURE.md` สิ่งที่ต้องแก้ให้สอดคล้อง ML v2:
+ฟีเจอร์แยก — spec หลักอยู่ `AI-ASSISTANT.md` สิ่งที่ต้องแก้ให้สอดคล้อง ML v2:
 - ลบ quick link ที่ชี้ `/playbooks` (หน้าโดนลบ) — เหลือ Customers / Model Performance
 - Quick prompts ปรับเป็นคำถามที่ตอบได้จริงจาก `ml_prediction_outputs` (เช่น "ลูกค้าเสี่ยงสูงที่ CLV เกิน 10k มีใครบ้าง")
 - Evidence panel แสดง SQL ที่รันจริง (มีอยู่แล้ว — คงไว้)

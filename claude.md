@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file guides Claude Code (claude.ai/code) when working in this repository. It is the
+single source of truth for architecture and conventions. When prose here disagrees with code,
+trust the code and fix this file.
 
 # Moby Analytics — Project Context
 
@@ -8,13 +10,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Internal analytics platform for **1Moby**, a B2B SaaS messaging company (SMS/Email service).
 ~5 internal users. Analyzes uploaded Excel data to predict customer churn, segment customers
-by CLV/RFM, and forecast credit consumption.
+by CLV / value tier, and forecast credit consumption.
 
 **Deployment target:** Local Docker first. Production decision deferred.
 
 ## Commands
 
-Package manager is **Bun** (`packageManager: bun@1.0.0`); the monorepo is driven by **Turborepo**. Run from repo root unless noted.
+Package manager is **Bun** (`packageManager: bun@1.0.0`); the monorepo is driven by **Turborepo**.
+Run from repo root unless noted.
 
 ```bash
 # Install all workspaces
@@ -28,7 +31,7 @@ docker compose up -d db redis        # just the backing services for local dev
 # Run everything in dev via Turbo (web :3000, api :3001)
 bun run dev
 bun run build                        # turbo build (web: next build; api: none)
-bun run lint                         # turbo lint — NOTE: no per-app lint scripts defined yet, so this is currently a no-op
+bun run lint                         # turbo lint — no per-app lint scripts yet, currently a no-op
 
 # Per-app dev (cd into the app)
 cd apps/web && bun run dev           # Next.js on :3000
@@ -37,7 +40,9 @@ cd apps/api && bun run db:introspect # Drizzle reflects current PG schema into s
 
 # ML service (Python 3.11). Run inside the container or a venv with apps/ml/requirements.txt installed.
 cd apps/ml
-uvicorn api.main:app --port 8000 --reload      # FastAPI health/internal surface only
+uvicorn api.main:app --port 8000 --reload      # FastAPI health + internal job triggers only
+python train_v2.py   --help                    # training CLI (src/training/runner.py)
+python predict_v2.py --help                    # prediction CLI (src/prediction/runner.py)
 ```
 
 ### Tests / verification
@@ -55,33 +60,32 @@ python scripts/profile_training_dataset.py     # dataset profiling / label viabi
 ```
 
 When asked whether an ML rebuild task is "good enough / complete / ready", use the `ml-contract-review`
-Cursor skill (`.cursor/skills/ml-contract-review/`) and the specs under `docs/ML-*.md`.
+Cursor skill (`.cursor/skills/ml-contract-review/`) and the specs under `docs/ML-V2-*.md`.
 
 ## Tech Stack
 
-<<<<<<< Updated upstream
-- **Frontend:** Next.js 14 (App Router) + TypeScript + Tailwind CSS + Better Auth client
-- **API:** Elysia.js on Bun + Better Auth (server) + Drizzle ORM + ioredis
-- **ML Worker:** Python + Arq consumer + FastAPI (internal routes only: `/health`, `/internal/explain`, `/internal/train`)
-=======
-- **Frontend:** Next.js 16 (App Router) + React 18 + TypeScript + Tailwind CSS + Better Auth client (`recharts` for charts, `gsap` for animation). Note: prose in this repo sometimes says "Next.js 14" — `apps/web/package.json` is the source of truth.
-- **API:** Elysia.js on Bun + Better Auth (server) + Drizzle ORM
-- **ML Runtime:** Python + FastAPI health/internal surface; ML v2 training/prediction runner is being rebuilt
->>>>>>> Stashed changes
-- **ML libs:** LightGBM, XGBoost, SHAP, lifetimes (BG-NBD/Gamma-Gamma), scikit-learn, Optuna
-- **Database:** PostgreSQL 15
-- **Queue:** Arq (Python-native Redis task queue) for job dispatch; Redis Streams for progress events
-- **Storage:** Local filesystem (`./models` volume) in dev; R2 deferred
-- **Monorepo:** Turborepo + Bun workspaces
+- **Frontend:** Next.js 16 (App Router) + React 18 + TypeScript + Tailwind CSS + Better Auth client.
+  Charts via `recharts`, animation via `gsap`, state via `zustand`, typed API client via `@elysiajs/eden`.
+- **API:** Elysia.js on Bun + Better Auth (server) + Drizzle ORM (introspect-only) + ioredis.
+- **ML:** Python 3.11. FastAPI exposes `/health` + internal job triggers only; the actual training and
+  prediction run as CLIs (`train_v2.py`, `predict_v2.py`) under `apps/ml/src/{training,prediction}/`.
+- **ML libs:** LightGBM, XGBoost, SHAP, lifetimes (BG-NBD/Gamma-Gamma), scikit-learn, Optuna.
+- **Database:** PostgreSQL 15 (`pgvector/pgvector:pg15` image; the `vector` extension is reserved for
+  AI-chat RAG but not yet enabled — see `docs/AI-ASSISTANT.md`).
+- **Queue / progress:** Redis — Arq for job dispatch (Python-native), Redis Streams for progress events.
+- **Storage:** Local filesystem (`./models` volume) in dev; R2 deferred.
+- **Monorepo:** Turborepo + Bun workspaces.
 
-## Canonical ML v2 Documentation
+## Canonical Documentation
 
-The single source of truth for ML v2 design lives in `docs/` (older ML/design docs were deleted):
+The documentation map lives in [`docs/README.md`](docs/README.md). The ML v2 design is canonical:
 
 - `docs/ML-V2-OVERVIEW.md` — system overview, scope, build phases
 - `docs/ML-V2-DASHBOARD-SPEC.md` — what every web page/widget shows, field-by-field
 - `docs/ML-V2-OUTPUT-CONTRACT.md` — `ml_prediction_outputs` field contract + derived-field formulas
-- `docs/ML-V2-TRAINING-PIPELINE.md` — training pipeline, anti-leakage suite, metrics, promotion gate, retraining policy
+- `docs/ML-V2-TRAINING-PIPELINE.md` — training pipeline, anti-leakage suite, metrics, promotion gate, retraining
+- `docs/AI-ASSISTANT.md` — AI chat assistant (separate feature)
+- `moby-data-prep/docs/*` — Excel import contract, table naming, raw/clean schemas
 
 When implementing anything ML- or dashboard-related, follow these docs over any legacy code.
 
@@ -90,34 +94,34 @@ When implementing anything ML- or dashboard-related, follow these docs over any 
 ```
 moby-analytics/
 ├── apps/
-<<<<<<< Updated upstream
-│   ├── web/           # Next.js 14 — frontend + proxy rewrite to Elysia
-│   ├── api/           # Elysia.js (Bun) — REST + auth + orchestration + SSE
-│   └── ml/            # Python — FastAPI (internal) + Arq worker + train CLI
-=======
-│   ├── web/           # Next.js — frontend + proxy rewrite to Elysia (src/app/* routes)
-│   ├── api/           # Elysia.js (Bun) — auth + import/clean REST (src/routes/{train,predict}-data.ts)
-│   └── ml/            # Python — FastAPI health + ML v2 rebuild modules
-│       ├── api/       #   FastAPI app (main.py = health only; keep tiny)
-│       ├── src/training/  # Active ML v2 rebuild: data, features, labels, preprocessing, validation, repository
+│   ├── web/           # Next.js 16 — frontend + proxy rewrite to Elysia (src/app/* routes)
+│   ├── api/           # Elysia.js (Bun) — REST + auth + SSE + import/clean orchestration
+│   │   └── src/routes/  # prediction-runs, training-runs, model-performance,
+│   │                    #   train-data, predict-data, ai-chat
+│   └── ml/            # Python — FastAPI (internal) + ML v2 training/prediction runners
+│       ├── api/       #   FastAPI app (main.py = health + /internal job triggers; keep tiny)
+│       ├── src/training/    # gates, labels, features, preprocessing, datasets, baselines,
+│       │                    #   {churn,clv,credit}_trainer, metrics, registry, runner
+│       ├── src/prediction/  # prediction runner → ml_prediction_outputs
+│       ├── train_v2.py / predict_v2.py   # CLI entrypoints
 │       └── scripts/   #   verify_*.py contract checks + profile_training_dataset.py
-├── db/init/           # Single PostgreSQL bootstrap schema
-├── moby-data-prep/    # Excel import contract docs/config
->>>>>>> Stashed changes
+├── db/init/           # Single PostgreSQL bootstrap schema (001_schema.sql)
+├── moby-data-prep/    # Excel import contract docs/config + import CLI
 ├── packages/
 │   └── types/         # Shared TypeScript types (stub; populate as routes solidify)
-├── docs/              # ML-*.md specs (SRS, FEATURE-SPEC, QUALITY-GATES, TASKS, EXPERIMENT-PLAN, DB-REBUILD-PLAN)
-├── models/            # ML model artifacts (.pkl, metrics.json, training_log.txt)
+├── docs/              # ML-V2-*.md + AI-ASSISTANT.md + WEB-DEV-WORKFLOW.md (see docs/README.md)
+├── models/            # ML model artifacts (.pkl, metrics.json, model_card)
 ├── data/              # Training Excel files
 ├── docker-compose.yml
 ├── turbo.json
 ├── package.json       # Bun workspace root
-└── CLAUDE.md
+└── claude.md
 ```
 
-Note: schema is a single bootstrap file at `db/init/001_schema.sql`, mounted into Postgres
-as `/docker-entrypoint-initdb.d/001_schema.sql` for fresh Docker volumes. Drizzle only reflects
-that schema for query building; do not run `drizzle-kit generate` or push schema from Drizzle.
+Schema is a single bootstrap file at `db/init/001_schema.sql`, mounted into Postgres as
+`/docker-entrypoint-initdb.d/001_schema.sql` for fresh Docker volumes. Drizzle only reflects that
+schema for query building — **never run `drizzle-kit generate` or push schema from Drizzle**. There is
+**no Alembic / migration framework**; schema changes are made directly in `001_schema.sql`.
 
 ## Service Ports
 
@@ -125,25 +129,25 @@ that schema for query building; do not run `drizzle-kit generate` or push schema
 |---|---|---|---|
 | Next.js (`web`) | `:3000` | `:3000` | Proxy rewrites `/api/*` → Elysia |
 | Elysia (`api`) | `:3001` | `:3001` | REST + Better Auth + SSE |
-| FastAPI (`ml`) | `:8000` | `:8001` | Internal routes only |
-| PostgreSQL (`db`) | `:5432` | `:5433` | Alembic manages schema |
+| FastAPI (`ml`) | `:8000` | `:8001` | Internal routes only (`/health`, `/internal/*`) |
+| PostgreSQL (`db`) | `:5432` | `:5433` | Bootstrap from `db/init/001_schema.sql` |
 | Redis | `:6379` | — | Arq queue + progress Streams |
 
 ## Traffic Flow
 
 ```
 Browser → Next.js :3000
-  /api/auth/* → Next.js (dead handler — will be removed next)
-  /api/*      → Elysia :3001 (Next.js proxy rewrite via ELYSIA_URL)
+  /api/*  → Elysia :3001 (Next.js proxy rewrite via ELYSIA_URL)
 
 Elysia :3001
-  → PostgreSQL (Drizzle)
-  → Redis (Arq enqueue + progress XREAD)
-  → FastAPI :8000/internal/explain  (SHAP, token-gated)
-  → FastAPI :8000/internal/train    (training trigger, token-gated)
+  → PostgreSQL (Drizzle / pg)
+  → Redis (progress Streams XADD/XREAD; Arq enqueue)
+  → FastAPI :8000/internal/training-runs    (token-gated, spawns train_v2.py)
+  → FastAPI :8000/internal/prediction-runs  (token-gated, spawns predict_v2.py)
+  → Ollama (AI chat / insights)
 
 FastAPI :8000/health  ← Docker healthcheck
-Arq worker            ← arq:queue (Redis), writes results to PostgreSQL
+ML runners            ← write results to PostgreSQL (ml_* tables)
 ```
 
 ## Data Model
@@ -161,91 +165,99 @@ The user uploads a **fixed-schema Excel file with exactly 8 sheets**. Schema is 
 | `Email_usage (API)`  | year, month, acc_id, usage                                                          |
 | `Email_usage (OTP)`  | year, month, acc_id, usage                                                          |
 
-## PostgreSQL Schema (Drizzle — reflects `db/init/001_schema.sql`)
+See `moby-data-prep/docs/` for the full import contract and table-naming rules.
 
-Tables:
+## PostgreSQL Schema (Drizzle reflects `db/init/001_schema.sql`)
 
-- `user`, `session`, `account`, `verification` — Better Auth (camelCase column names)
-- `model_versions` — trained model registry
-- `prediction_runs` — one run per "Run Analysis" click
-- `raw_customers`, `raw_payments`, `raw_usage` — parsed Excel rows (scoped per run)
-- `predictions` — all ML output per customer per run (flat wide table)
+Table families:
+
+- **Better Auth:** `user`, `session`, `account`, `verification` (camelCase column names, quoted identifiers).
+- **Data sources / raw:** `train_data_sources`, `predict_data_sources`, `train_raw_sheet_*`,
+  `predict_raw_sheet_*` (8 sheet mirrors each).
+- **Clean:** `train_clean_*`, `predict_clean_*` (customers / payments / usage).
+- **ML v2:** `ml_training_runs`, `ml_prediction_runs`, `ml_prediction_outputs` (flat wide output, 1 row
+  per customer per run), `ml_model_versions`, `ml_model_evaluations`, `ml_model_aliases`,
+  `ml_model_activation_history`, `ml_feature_sets`, `ml_data_validation_reports`.
+- **AI chat:** `ai_conversations`, `ai_messages`. (Knowledge/vector tables are planned — see
+  `docs/AI-ASSISTANT.md`.)
 
 Key design decisions:
 
-- Raw data is scoped per run (`run_id` FK with CASCADE). Re-uploading clears and re-inserts.
-- All ML output goes into a single `predictions` table (not split by model type).
-- `model_version_id` on `prediction_runs` is present but currently not set by the pipeline.
-- Better Auth tables use camelCase column names (quoted identifiers in PG) — Drizzle schema
-  preserves this in `apps/api/src/db/schema.ts`.
+- Raw/clean data is scoped per source (`source_id` FK with CASCADE). Re-uploading clears and re-inserts.
+- All ML output goes into a single `ml_prediction_outputs` table (not split by model type).
+- Champion selection is via `ml_model_aliases` (`production` alias, one per model_type).
+- Better Auth tables use camelCase column names — Drizzle schema preserves this in
+  `apps/api/src/db/schema.ts`.
 
-## ML v2 Components (see docs/ML-V2-OVERVIEW.md — canonical)
+## ML v2 Components (see `docs/ML-V2-OVERVIEW.md` — canonical)
 
-| Component           | Type                              | Output                                              |
-| ------------------- | --------------------------------- | --------------------------------------------------- |
-| **Lifecycle**       | Rule-based (not ML)               | `lifecycle_stage`, `sub_stage`                      |
-| **Churn**           | LightGBM + calibration + SHAP     | `churn_probability`, `churn_risk_level`, factors    |
-| **CLV**             | BG-NBD + Gamma-Gamma vs ML regressor | `predicted_clv_6m`, `p_alive`                    |
-| **Credit Forecast** | LightGBM quantile regression      | `predicted_credit_usage_30d/90d`, days-until-topup  |
+| Component           | Type                                 | Output                                              |
+| ------------------- | ------------------------------------ | --------------------------------------------------- |
+| **Lifecycle**       | Rule-based (not ML)                  | `lifecycle_stage`, `sub_stage`                      |
+| **Churn**           | LightGBM + calibration + SHAP        | `churn_probability`, `churn_risk_level`, factors    |
+| **CLV**             | BG-NBD + Gamma-Gamma vs ML regressor | `predicted_clv_6m`, `p_alive`                       |
+| **Credit Forecast** | LightGBM quantile regression         | `predicted_credit_usage_30d/90d`, days-until-topup  |
 
 Win-back and conversion models (`comeback_probability`, `conversion_probability`)
-were **permanently cut** from ML v2 — do not reintroduce them.
+were **permanently cut** — do not reintroduce them.
 
-## Job Flow
+## Job Flow (prediction run)
 
-1. User creates a run (`POST /runs`) — status: `pending`
-2. User uploads Excel (`POST /runs/:id/upload`) — Elysia parses, batch-inserts raw rows, sets status `processing`, enqueues Arq job
-3. Arq worker consumes `arq:queue`, runs the full 5-model pipeline via `MobyPredictor`
-4. Worker writes progress to Redis Stream `progress:{run_id}` (XADD)
-5. Elysia's SSE endpoint (`GET /runs/:id/stream`) XREADs from that stream and pushes to browser
-6. Worker saves predictions to `predictions` table, updates run status to `done`/`failed`
+1. User imports predict data on `/runs` (`POST /predict-data-sources/import`) — raw + clean in one job;
+   progress streamed via Redis Stream `predict-import:{source_id}`.
+2. User creates a run (`POST /prediction-runs`) with `{ predict_source_id, name, cutoff_date }`.
+3. Elysia calls FastAPI `/internal/prediction-runs` (token-gated), which spawns `predict_v2.py`.
+4. The prediction runner loads `predict_clean_*` → gates → features → lifecycle + eligibility →
+   champion models (churn / clv / credit) → SHAP (churn) → derived fields → **batch insert** into
+   `ml_prediction_outputs` (one row per customer).
+5. Run status moves `in_progress` → `completed` / `failed` (every exception ends in `failed` + `error_message`).
+
+Training follows the same shape via `POST /training-runs` → `/internal/training-runs` → `train_v2.py`
+(see `docs/ML-V2-TRAINING-PIPELINE.md`).
 
 ## Architectural Decisions
 
 | Decision | Rationale |
 |---|---|
-| **Elysia (not FastAPI) owns REST** | Single process boundaries: ML pipeline code is Python-only; Elysia handles TypeScript-native concerns (typed API, SSE, Drizzle). |
-| **Arq for jobs** | Python-native queue; the only consumer is Python. No need for cross-language Streams protocol. |
-| **Redis Streams for progress** | Worker pushes structured events; SSE endpoint XREADs without polling. |
-| **FastAPI is internal-only** | SHAP and training require Python. Elysia proxies these via X-Internal-Token. FastAPI never serves the browser directly. |
-| **Drizzle in introspect mode** | `db/init/001_schema.sql` owns schema; Drizzle reflects it. `drizzle-kit generate` is never run. |
-| **SSE not WebSockets** | Server pushes only. Auto-reconnect built-in. Works behind any proxy. |
+| **Elysia (not FastAPI) owns REST** | ML pipeline code is Python-only; Elysia handles TypeScript-native concerns (typed API, SSE, Drizzle). |
+| **FastAPI is internal-only** | Training/prediction/SHAP require Python. Elysia proxies via `INTERNAL_SERVICE_TOKEN`. FastAPI never serves the browser directly. |
+| **ML runs as spawned CLIs** | `train_v2.py` / `predict_v2.py` are launched from FastAPI internal endpoints; results land in `ml_*` tables. |
+| **Redis Streams for progress** | Workers push structured events; SSE / polling endpoints read without busy-looping. |
+| **SSE not WebSockets** | Server pushes only (AI chat tokens, run progress). Auto-reconnect, works behind any proxy. |
+| **Drizzle in introspect mode** | `db/init/001_schema.sql` owns schema; Drizzle reflects it. No `drizzle-kit generate`, no Alembic. |
 | **PostgreSQL not MongoDB** | Data is relational. All ML output is tabular. |
 
-## Route Map (Elysia)
+## Route Map (Elysia — all keys snake_case, all routes `requireUser`)
 
 ```
-Auth (Better Auth)
-  /api/auth/*                     Better Auth native handler
+Auth
+  /api/auth/*                       Better Auth native handler
 
-Runs
-  GET    /runs                    list user's runs
-  POST   /runs                    create run
-  GET    /runs/:id                get run
-  DELETE /runs/:id                delete run + cascade
+Prediction runs
+  GET    /prediction-runs                       list runs
+  POST   /prediction-runs                       create run { predict_source_id, name, cutoff_date }
+  GET    /prediction-runs/:id                   run detail + progress
+  DELETE /prediction-runs/:id                   owner only, cascade
+  GET    /prediction-runs/:id/summary           dashboard aggregates (SQL-side)
+  GET    /prediction-runs/:id/outputs           paginated customer table (sort/filter)
+  GET    /prediction-runs/:id/outputs/:acc_id   Customer 360 (output + profile snapshot)
+  GET    /prediction-runs/:id/customers/:acc_id/usage-monthly | payments
 
-Upload
-  POST   /runs/:id/upload         parse Excel, batch-insert, enqueue Arq job
+Data sources
+  POST   /predict-data-sources/import           import predict Excel (raw + clean)
+  POST   /train-data-sources/import             import train Excel (raw + clean)
 
-Predictions
-  GET    /runs/:id/predictions    paginated list (filters: lifecycle_stage, search)
-  GET    /runs/:id/predictions/:acc_id   single customer
-  GET    /runs/:id/predictions/:acc_id/explain   SHAP (proxied to FastAPI)
-  GET    /runs/:id/summary        dashboard aggregates
-  GET    /runs/:id/export         CSV download
+Training / models
+  POST   /training-runs                         trigger training { train_source_id, cutoff_date, horizon_days }
+  GET    /training-runs/:id                     progress + gate results + metrics
+  GET    /model-performance                     champion per model_type + evaluations + baselines
 
-SSE
-  GET    /runs/:id/stream         Redis Streams XREAD → text/event-stream
-
-Training / Admin
-  GET    /model-metrics           metrics.json from models volume
-  GET    /training-log            training_log.txt from models volume
-  GET    /model-versions          model version history
-  GET    /model-versions/active   latest active version per model type
-  POST   /model-versions/train    trigger training (proxied to FastAPI)
+AI chat
+  GET/POST/PATCH/DELETE /ai-chat/conversations[/:id]
+  POST   /ai-chat/conversations/:id/messages    SSE token stream (persists msg + evidence)
 
 Health
-  GET    /health                  model file check + DB ping
+  GET    /health
 ```
 
 ## Code Style Rules
@@ -254,20 +266,20 @@ Health
 
 - Strict mode on. No `any`.
 - Elysia: use `t.Object({...})` for input validation. Group routes by resource in `apps/api/src/routes/`.
-- Drizzle: prefer query builder over raw `sql`. Use explicit snake_case column aliases in `select()` so response shapes match what the frontend expects.
+- Drizzle: prefer query builder over raw `sql`. Use explicit snake_case column aliases in `select()`.
 - Shared types live in `packages/types`. Do not redefine across apps.
-- Response keys must be snake_case (matches the existing frontend and prior FastAPI contract).
+- Response keys must be snake_case (matches the frontend contract).
 
 ### Python (ml)
 
 - Type hints on every function signature.
-- One module per pipeline (`churn.py`, `clv.py`, `forecast.py`). No god files.
-- Feature engineering separated from training/inference (`src/features.py`).
-- `apps/ml/api/main.py` is now tiny — keep it that way. Resist adding user-facing logic here.
+- One module per concern (`features.py`, `labels.py`, `{churn,clv,credit}_trainer.py`). No god files.
+- Feature engineering separated from training/inference.
+- `apps/ml/api/main.py` stays tiny — health + internal triggers only. No user-facing logic.
 
 ### Universal
 
-- Every async operation must handle failure. Jobs must update `status='failed'` with `error_message` on exception.
+- Every async operation must handle failure. Runs must update `status='failed'` with `error_message` on exception.
 - Never log sensitive data (session tokens, API keys, user PII).
 - Environment variables from `process.env` / `os.environ` only. Never hardcode.
 - Magic strings (queue names, stream keys, status values) extracted to constants.
@@ -286,42 +298,44 @@ ALLOWED_ORIGINS          # http://localhost:3000
 INTERNAL_SERVICE_TOKEN   # shared with ml service
 ML_INTERNAL_URL          # http://ml:8000
 MODEL_DIR                # /app/models
+OLLAMA_API_KEY / OLLAMA_HOST / OLLAMA_MODEL        # AI chat + insights
+OLLAMA_EMBED_MODEL / AI_RAG_TOP_K                  # RAG (planned)
 ```
 
-### ml (FastAPI + worker + train)
+### ml (FastAPI + runners)
 ```
 DATABASE_URL
 REDIS_HOST / REDIS_PORT
 MODEL_DIR
 DATA_DIR
 INTERNAL_SERVICE_TOKEN   # shared with api service
-GEMINI_API_KEY           # Phase 2 (LLM insights — not yet built)
 ```
 
 ### web (Next.js)
 ```
 ELYSIA_URL               # http://api:3001 (Docker internal, for rewrites)
-NEXT_PUBLIC_AUTH_URL     # http://localhost:3001 (browser-visible)
+NEXT_PUBLIC_AUTH_URL     # http://localhost:3000 (browser-visible)
 ```
 
 ## What To Build Next (Phase 2)
 
-- **LLM / Gemini insights** — `GET /runs/:id/explanation`, Gemini API call after ML pipeline completes, persisted in a new `explanations` table. The AI Chat page currently returns hardcoded demo responses; replace with real streaming.
-- **R2 integration** — store `.pkl` files in Cloudflare R2 keyed by `dataset_id` (currently local filesystem)
-- **Eden Treaty** — typed API client from web → Elysia (currently plain `fetch` + manual types in `web/src/lib/api.ts`)
-- **Real email notifications** on pipeline completion
+- **AI chat RAG** — enable the `vector` extension + knowledge tables, ingest `docs/`, real retrieval
+  (see `docs/AI-ASSISTANT.md`).
+- **R2 integration** — store `.pkl` artifacts in Cloudflare R2 (currently local filesystem).
+- **Realized-outcome loop** — measure predictions against actuals once a horizon completes
+  (see `docs/ML-V2-TRAINING-PIPELINE.md` §15).
+- **Real email notifications** on pipeline completion.
 
 ## What NOT to Change
 
-- `apps/ml/src/` — ML pipeline code. Belongs to the original author. Touch only to fix bugs, never to refactor style.
-- `apps/ml/worker/predict_worker.py` — Arq worker. Same constraint.
+- `apps/ml/src/` — ML pipeline code. Touch only to fix bugs, never to refactor style.
 - `db/init/001_schema.sql` — single schema bootstrap; edit deliberately and keep Drizzle in sync.
-- `apps/ml/train.py` — Training CLI.
+- `train_v2.py` / `predict_v2.py` — ML CLI entrypoints.
 
 ## Always Check
 
-- Is the run status updated to `running`/`done`/`failed` at the right points?
+- Is the run status updated to `in_progress`/`completed`/`failed` at the right points?
 - Are all Elysia routes using `requireUser` and scoped by `userId`?
-- Does `verifyRunOwnership` return 403 (not bypass) when `run.userId` is null?
+- Does run-ownership verification return 403 (not bypass) when ownership is null?
 - Are uploaded files validated (size, MIME, required sheet presence) before inserting?
 - Are batch inserts used (never row-by-row `for` loops)?

@@ -5,12 +5,14 @@ the single bootstrap schema at `db/init/001_schema.sql`.
 
 Data preparation for 1Moby ML — **separate table families** for train, predict, and clean.
 
-| Purpose | Layer | Catalog | Sheet tables (×8) |
+| Purpose | Layer | Catalog | Sheet / typed tables (×8 / ×3) |
 |---------|-------|---------|-------------------|
 | **Train** | raw | `train_data_sources` | `train_raw_sheet_*` |
-| Predict | raw | `predict_data_sources` *(future)* | `predict_raw_sheet_*` |
-| Train | clean | `train_clean_runs` *(future)* | `train_clean_*` |
-| Predict | clean | `predict_clean_runs` *(future)* | `predict_clean_*` |
+| Predict | raw | `predict_data_sources` | `predict_raw_sheet_*` |
+| Train | clean | `train_data_sources` (`clean_manifest`) | `train_clean_*` (customers / payments / usage) |
+| Predict | clean | `predict_data_sources` (`clean_manifest`) | `predict_clean_*` (customers / payments / usage) |
+
+All four families are implemented; the live schema lives in `db/init/001_schema.sql`.
 
 See [docs/naming-convention.md](docs/naming-convention.md).
 

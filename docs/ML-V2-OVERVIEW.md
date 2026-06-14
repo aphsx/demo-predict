@@ -15,9 +15,10 @@
 | `ML-V2-TRAINING-PIPELINE.md` | **ข้อ 3** — ขั้นตอนเทรนทั้งหมด: กัน leak, เลือกโมเดล, วัดผล (F1 ฯลฯ), retrain, champion/challenger |
 
 เอกสารที่ยังใช้อยู่ (ไม่เกี่ยวกับ ML core):
-- `DATA-PIPELINE-MIGRATION.md` — สถานะ import/clean pipeline (เสร็จแล้ว)
-- `AI-ASSISTANT-ARCHITECTURE.md` — AI chat (ฟีเจอร์แยก)
+- `../moby-data-prep/docs/` — import/clean pipeline: naming convention, raw/clean schema (เสร็จแล้ว)
+- `AI-ASSISTANT.md` — AI chat (ฟีเจอร์แยก)
 - `WEB-DEV-WORKFLOW.md` — วิธีรัน dev
+- `README.md` (โฟลเดอร์ docs) — สารบัญเอกสารทั้งหมด
 
 ## ภาพรวมระบบ (end-to-end)
 
