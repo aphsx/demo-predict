@@ -9,17 +9,12 @@ import {
 /*  PageHeader (in-page sub header)          */
 /* ────────────────────────────────────────── */
 export function PageHeader({
-  eyebrow, title, actions,
+  title, actions,
 }: { eyebrow?: ReactNode; title: ReactNode; actions?: ReactNode }) {
   return (
     <div className="px-8 pt-6 pb-2 flex items-end justify-between gap-4 flex-wrap">
       <div>
-        {eyebrow && (
-          <div className="text-[11px] font-semibold uppercase tracking-[.16em] text-[color:var(--ink-5)] mb-1">
-            {eyebrow}
-          </div>
-        )}
-        <h2 className="text-[20px] font-semibold text-[color:var(--ink-1)] leading-tight">{title}</h2>
+        <h2 className="type-display text-[24px] leading-tight">{title}</h2>
       </div>
       <div className="flex items-center gap-2">{actions}</div>
     </div>
@@ -35,10 +30,10 @@ export function SectionCard({
   return (
     <section className={`surface ${className}`}>
       {(title || right) && (
-        <header className="flex items-center justify-between gap-3 px-5 py-3 border-b border-[color:var(--line-2)]">
+        <header className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100">
           <div>
-            {title && <h3 className="text-[13px] font-semibold text-[color:var(--ink-1)]">{title}</h3>}
-            {hint && <p className="text-[11.5px] text-[color:var(--ink-5)] mt-0.5">{hint}</p>}
+            {title && <h3 className="type-section-title text-[15px]">{title}</h3>}
+            {hint && <p className="type-meta text-[12px] mt-0.5">{hint}</p>}
           </div>
           {right}
         </header>
@@ -82,13 +77,13 @@ export function KpiCard({
       />
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[.10em] text-[color:var(--ink-5)]">
+          <div className="type-label">
             {label}
           </div>
-          <div className="num text-[28px] font-semibold text-[color:var(--ink-1)] mt-1.5">
+          <div className="num mt-1.5 text-[28px] text-[color:var(--ink-1)]">
             {formatted}
           </div>
-          {hint && <div className="text-[11.5px] text-[color:var(--ink-4)] mt-0.5">{hint}</div>}
+          {hint && <div className="type-meta text-[12px] mt-0.5">{hint}</div>}
         </div>
         {delta !== undefined && <DeltaPill value={delta} label={deltaLabel} />}
       </div>
@@ -116,7 +111,7 @@ const ACCENTS = {
 export function DeltaPill({ value, label }: { value: number; label?: string }) {
   const up = value > 0, flat = value === 0;
   const Icon = flat ? Minus : up ? TrendingUp : TrendingDown;
-  const color = flat ? "text-[color:var(--ink-4)] bg-[color:var(--surface-2)]"
+  const color = flat ? "text-[color:var(--ink-4)] bg-gray-50"
     : up ? "text-[color:var(--ok)] bg-[color:var(--ok-bg)]"
     : "text-[color:var(--danger)] bg-[color:var(--danger-bg)]";
   return (
@@ -131,14 +126,16 @@ export function DeltaPill({ value, label }: { value: number; label?: string }) {
 /* ────────────────────────────────────────── */
 /*  StatusPill                                */
 /* ────────────────────────────────────────── */
-const PILL_TONES: Record<string, { fg: string; bg: string }> = {
-  ok:       { fg: "var(--ok)",       bg: "var(--ok-bg)" },
-  warn:     { fg: "var(--warn)",     bg: "var(--warn-bg)" },
-  danger:   { fg: "var(--danger)",   bg: "var(--danger-bg)" },
-  info:     { fg: "var(--info)",     bg: "var(--info-bg)" },
-  neutral:  { fg: "var(--ink-3)",    bg: "var(--surface-2)" },
-  brand:    { fg: "var(--moby-700)", bg: "var(--moby-50)" },
-  violet:   { fg: "#6d28d9",         bg: "#f5f3ff" },
+const PILL_TONES: Record<string, { fg: string; border: string }> = {
+  ok:       { fg: "var(--ok)",       border: "#bbf7d0" },
+  warn:     { fg: "var(--warn)",     border: "#fde68a" },
+  danger:   { fg: "var(--danger)",   border: "#fecaca" },
+  info:     { fg: "var(--info)",     border: "#bae6fd" },
+  neutral:  { fg: "#9ca3af",         border: "#e5e7eb" },
+  brand:    { fg: "var(--moby-600)", border: "var(--moby-100)" },
+  violet:   { fg: "#6d28d9",         border: "#ddd6fe" },
+  warm:     { fg: "#ffa400",         border: "#fde68a" },
+  orange:   { fg: "#fc4c02",         border: "#fed7aa" },
 };
 
 export function StatusPill({
@@ -146,7 +143,7 @@ export function StatusPill({
 }: { tone?: keyof typeof PILL_TONES; icon?: any; children: ReactNode; dot?: boolean }) {
   const t = PILL_TONES[tone];
   return (
-    <span className="pill" style={{ color: t.fg, background: t.bg }}>
+    <span className="pill" style={{ color: t.fg, background: "transparent", borderColor: t.border }}>
       {dot && !Icon && <span className="dot" />}
       {Icon && <Icon size={11} />}
       {children}
@@ -157,18 +154,20 @@ export function StatusPill({
 /* ────────────────────────────────────────── */
 /*  Lifecycle / churn / urgency mappers     */
 /* ────────────────────────────────────────── */
+/* Tone mapping follows the dashboard brand palettes (palette.ts):
+   Paid/Low/Stable = blue, Free/Medium/Warning = #FFA400, Churned/High/Critical = #FC4C02 */
 export const lifecycleTone = (s: string): keyof typeof PILL_TONES =>
   s === "Active Paid" ? "brand"
-  : s === "Active Free" ? "violet"
-  : s === "Churned" ? "warn"
+  : s === "Active Free" ? "warm"
+  : s === "Churned" ? "orange"
   : s === "Ghost" ? "neutral"
   : "neutral";
 
 export const churnTone = (t: string): keyof typeof PILL_TONES =>
-  t === "High" ? "danger" : t === "Medium" ? "warn" : t === "Low" ? "ok" : "neutral";
+  t === "High" ? "orange" : t === "Medium" ? "warm" : t === "Low" ? "brand" : "neutral";
 
 export const urgencyTone = (u: string): keyof typeof PILL_TONES =>
-  u === "Critical" ? "danger" : u === "Warning" ? "warn" : u === "Monitor" ? "info" : u === "Stable" ? "ok" : "neutral";
+  u === "Critical" ? "orange" : u === "Warning" ? "warm" : u === "Monitor" ? "neutral" : u === "Stable" ? "brand" : "neutral";
 
 /* ────────────────────────────────────────── */
 /*  StackBar — compact horizontal stack      */
@@ -235,17 +234,17 @@ export function ProgressMeter({
 }: { value: number; max?: number; tone?: "blue" | "rose" | "emerald" | "amber" | "slate"; label?: string; showValue?: boolean }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   const color = ({
-    blue: "var(--moby-600)", rose: "var(--danger)", emerald: "var(--ok)", amber: "var(--warn)", slate: "var(--ink-4)"
+    blue: "var(--moby-600)", rose: "var(--danger)", emerald: "var(--ok)", amber: "var(--warn)", slate: "#6b7280"
   } as const)[tone];
   return (
     <div>
       {(label || showValue) && (
         <div className="flex items-baseline justify-between mb-1">
           {label && <span className="text-[11.5px] text-[color:var(--ink-4)]">{label}</span>}
-          {showValue && <span className="num text-[12px] text-[color:var(--ink-2)]">{pct.toFixed(0)}%</span>}
+          {showValue && <span className="num text-[12px]">{pct.toFixed(0)}%</span>}
         </div>
       )}
-      <div className="w-full h-1.5 rounded-full bg-[color:var(--surface-2)] overflow-hidden">
+      <div className="w-full h-1.5 rounded-full bg-gray-50 overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
       </div>
     </div>
@@ -260,7 +259,7 @@ export function EmptyState({
 }: { title: string; hint?: string; icon?: any; action?: ReactNode }) {
   return (
     <div className="surface-soft py-10 px-6 text-center">
-      <div className="inline-flex w-10 h-10 rounded-full bg-white border border-[color:var(--line)] items-center justify-center text-[color:var(--ink-4)] mb-3">
+      <div className="inline-flex items-center justify-center text-[color:var(--ink-4)] mb-3">
         <Icon size={18} />
       </div>
       <div className="text-[13.5px] font-medium text-[color:var(--ink-2)]">{title}</div>
@@ -284,7 +283,7 @@ export function ActionChip({ children, onClick }: { children: ReactNode; onClick
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-[12px] font-medium text-[color:var(--moby-700)] hover:text-[color:var(--moby-800)] hover:underline underline-offset-2"
+      className="inline-flex items-center gap-1 text-[12px] font-medium text-[color:var(--ink-3)] hover:text-[color:var(--moby-600)] hover:underline underline-offset-2"
     >
       {children}
       <ArrowRight size={12} />
@@ -304,16 +303,9 @@ export function AlertItem({
     info:   <Activity size={14} className="text-[color:var(--info)]" />,
     ok:     <CheckCircle2 size={14} className="text-[color:var(--ok)]" />,
   };
-  const bgMap = {
-    danger: "var(--danger-bg)", warn: "var(--warn-bg)",
-    info: "var(--info-bg)",     ok: "var(--ok-bg)",
-  } as const;
   return (
-    <div className="flex gap-3 px-4 py-3 border-b border-[color:var(--line-2)] last:border-0">
-      <div
-        className="shrink-0 w-7 h-7 rounded-full grid place-items-center"
-        style={{ background: bgMap[severity] }}
-      >
+    <div className="flex gap-3 px-4 py-3 border-b border-gray-100 last:border-0">
+      <div className="shrink-0 pt-0.5">
         {iconMap[severity]}
       </div>
       <div className="flex-1 min-w-0">

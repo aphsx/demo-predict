@@ -1,18 +1,14 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { auth } from "./auth";
-import { runsRoutes } from "./routes/runs";
-import { predictionsRoutes } from "./routes/predictions";
-import { trainingRoutes } from "./routes/training";
-import { uploadsRoutes } from "./routes/uploads";
-import { explanationsRoutes } from "./routes/explanations";
-import { eventsRoutes } from "./routes/events";
-import { insightsRoutes } from "./routes/insights";
+import { trainDataRoutes } from "./routes/train-data";
+import { predictDataRoutes } from "./routes/predict-data";
+import { aiChatRoutes } from "./routes/ai-chat";
+import { predictionRunRoutes } from "./routes/prediction-runs";
+import { trainingRunRoutes } from "./routes/training-runs";
+import { modelPerformanceRoutes } from "./routes/model-performance";
 
-const PORT      = Number(process.env.PORT ?? 3001);
-const MODEL_DIR = process.env.MODEL_DIR ?? "/app/models";
+const PORT = Number(process.env.PORT ?? 3001);
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000")
   .split(",")
@@ -28,29 +24,23 @@ const app = new Elysia()
   )
   // Better Auth handles all /api/auth/* routes; returns null for everything else
   .mount(auth.handler)
-  // Phase 4a routes (read-only)
-  .use(runsRoutes)
-  .use(predictionsRoutes)
-  // Phase 4b routes (training/admin — all now require auth)
-  .use(trainingRoutes)
-  // Phase 4d routes (Excel upload + Arq enqueue)
-  .use(uploadsRoutes)
-  // Phase 4e routes (SHAP explain — proxied to FastAPI /internal/explain)
-  .use(explanationsRoutes)
-  // Phase 4g routes (SSE — Redis Streams XREAD with DB fallback)
-  .use(eventsRoutes)
-  // Phase 2 — LLM insights (Gemini)
-  .use(insightsRoutes)
+  // Train raw import -> train_data_sources + train_raw_sheet_* + train_clean_*
+  .use(trainDataRoutes)
+  // Predict raw import -> predict_data_sources + predict_raw_sheet_* + predict_clean_*
+  .use(predictDataRoutes)
+  // Isolated LLM chat API. UI wiring will be rebuilt separately.
+  .use(aiChatRoutes)
+  // ML v2 — prediction runs + outputs/summary (spec §4/§7)
+  .use(predictionRunRoutes)
+  // ML v2 — training runs (spec §2.6)
+  .use(trainingRunRoutes)
+  // ML v2 — champion model performance (spec §2.4)
+  .use(modelPerformanceRoutes)
   .get("/health", () => {
-    const churn      = existsSync(join(MODEL_DIR, "churn_model.pkl"));
-    const winback    = existsSync(join(MODEL_DIR, "winback_model.pkl"));
-    const conversion = existsSync(join(MODEL_DIR, "conversion_model.pkl"));
-    const allOk      = churn && winback && conversion;
     return {
-      status:  allOk ? "ok" : "degraded",
-      db:      "connected",
-      models:  { churn, winback, conversion },
-      message: allOk ? null : "Models not trained — run: python train.py <data_file>",
+      status: "ok",
+      db: "connected",
+      message: "ML v2 API: prediction-runs, training-runs, model-performance.",
     };
   })
   .listen(PORT);

@@ -2,10 +2,19 @@
 Async database connection — SQLAlchemy + asyncpg
 """
 import os
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://moby:moby1234@db:5432/moby")
+
+def get_database_url() -> str:
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise RuntimeError("DATABASE_URL environment variable is required.")
+    return url
+
+
+DATABASE_URL = get_database_url()
 # SQLAlchemy needs postgresql+asyncpg://
 ASYNC_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
