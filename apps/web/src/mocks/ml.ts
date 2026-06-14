@@ -21,6 +21,7 @@ import type {
   ProfileSnapshot,
   RiskLevel,
   RunSummary,
+  Segment,
   TrainingRun,
   UrgencyLevel,
   ValueTier,
@@ -493,6 +494,7 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
     revenue_at_risk: revenueAtRisk,
     priority_score: 0, // assigned below
     priority_reason: "",
+    segment: "monitor", // assigned below
     ai_status: "not_requested",
     ai_explanation: null,
     ai_recommended_message: null,
@@ -511,26 +513,50 @@ function assignDerived(rows: PredictionOutput[]): void {
     c.customer_value_tier = pct < 0.1 ? "high" : pct < 0.5 ? "mid" : "low";
   });
 
-  // priority score: 50×risk + 30×value pct + 20×credit (contract §5.2)
-  const clvRank = new Map<number, number>();
-  sorted.forEach((c, i) => clvRank.set(c.acc_id, 1 - i / Math.max(sorted.length - 1, 1)));
-  for (const c of rows) {
-    const pRisk = c.churn_probability ?? 0;
-    const pValue = clvRank.get(c.acc_id) ?? 0;
-    const pCredit =
-      c.estimated_days_until_topup === null
-        ? 0
-        : Math.max(0, 1 - c.estimated_days_until_topup / 90);
-    c.priority_score = Math.round((50 * pRisk + 30 * pValue + 20 * pCredit) * 100) / 100;
+  // priority score: rank by expected money at risk (revenue_at_risk = churn ×
+  // CLV); priority_score is a log rescale of it to 0..100 (contract §5.2).
+  const vars = rows.map((c) => Math.max(0, c.revenue_at_risk ?? 0));
+  const logged = vars.map((v) => Math.log1p(v));
+  const lo = Math.min(...logged);
+  const hi = Math.max(...logged);
+  rows.forEach((c, i) => {
+    c.priority_score =
+      hi - lo < 1e-9 ? 0 : Math.round((100 * (logged[i] - lo)) / (hi - lo) * 100) / 100;
+    c.segment = segmentOf(c.customer_value_tier, c.churn_risk_level);
+    c.priority_reason = reasonOf(c);
+  });
+}
 
-    const drivers: [number, string][] = [
-      [50 * pRisk, `เสี่ยง churn ${(pRisk * 100).toFixed(0)}%`],
-      [30 * pValue, `มูลค่าสูง (CLV อันดับ ${(pValue * 100).toFixed(0)} pct)`],
-      [20 * pCredit, `เครดิตใกล้หมดใน ${c.estimated_days_until_topup ?? "-"} วัน`],
-    ];
-    drivers.sort((a, b) => b[0] - a[0]);
-    c.priority_reason = drivers[0][0] > 0 ? drivers[0][1] : "ไม่มีสัญญาณเร่งด่วน";
+function segmentOf(tier: string, risk: string | null): Segment {
+  const highValue = tier === "high";
+  const highRisk = risk === "high" || risk === "critical";
+  if (highValue && highRisk) return "retain_now";
+  if (highValue) return "protect";
+  if (highRisk) return "rescue_or_let_go";
+  return "monitor";
+}
+
+const SEGMENT_ACTION: Record<Segment, string> = {
+  retain_now: "→ รีบติดต่อรักษา",
+  protect: "→ ดูแลความสัมพันธ์",
+  rescue_or_let_go: "→ win-back อัตโนมัติต้นทุนต่ำ",
+  monitor: "→ เฝ้าดูตามรอบ",
+};
+
+function reasonOf(c: PredictionOutput): string {
+  const churn = c.churn_probability;
+  const clv = c.predicted_clv_6m;
+  let head: string;
+  if (churn != null && clv != null && clv > 0) {
+    head = `เสี่ยงเสียรายได้ ฿${Math.round(c.revenue_at_risk ?? 0).toLocaleString()} (churn ${(churn * 100).toFixed(0)}% × CLV ฿${Math.round(clv).toLocaleString()})`;
+  } else if (clv != null && clv > 0) {
+    head = `ลูกค้ามูลค่า ฿${Math.round(clv).toLocaleString()}`;
+  } else {
+    head = "ยังประเมินมูลค่าไม่ได้";
   }
+  const urgency = c.credit_urgency_level;
+  const extra = urgency === "critical" || urgency === "warning" ? ` · เครดิตใกล้หมด (${urgency})` : "";
+  return `${head} ${SEGMENT_ACTION[c.segment]}${extra}`.trimEnd();
 }
 
 const populationCache = new Map<string, PredictionOutput[]>();
@@ -603,6 +629,7 @@ export function mockRunSummary(runId: string): RunSummary {
       predicted_clv_6m: c.predicted_clv_6m,
       priority_score: c.priority_score,
       priority_reason: c.priority_reason,
+      segment: c.segment,
     }));
 
   return {

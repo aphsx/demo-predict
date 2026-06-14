@@ -36,6 +36,8 @@ export type LifecycleStage = "Active Paid" | "Active Free" | "Churned" | "Ghost"
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 export type ValueTier = "high" | "mid" | "low" | "none";
 export type UrgencyLevel = "critical" | "warning" | "monitor" | "stable";
+/** Actionable value×risk playbook segment (priority ranking is by money). */
+export type Segment = "retain_now" | "protect" | "rescue_or_let_go" | "monitor";
 
 export interface ChurnFactor {
   feature: string;
@@ -101,6 +103,7 @@ export interface PredictionOutput {
   revenue_at_risk: number | null;
   priority_score: number;
   priority_reason: string;
+  segment: Segment;
   // AI (phase 2)
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
@@ -145,6 +148,7 @@ export interface RunSummary {
     predicted_clv_6m: number | null;
     priority_score: number;
     priority_reason: string;
+    segment: Segment;
   }[];
   model_versions: { churn: string; clv: string; credit: string };
 }

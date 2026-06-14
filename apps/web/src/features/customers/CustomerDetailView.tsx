@@ -35,6 +35,7 @@ export type CustomerDetail = {
   avg_transaction_value: number | null;
   ever_paid: boolean;
   priority_reason: string;
+  segment: string;
   churn_factors: ChurnFactor[] | null;
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
@@ -46,6 +47,12 @@ export type UsageTrendPoint = {
   usage: number;
 };
 
+const SEGMENT_HINT: Record<string, string> = {
+  retain_now: "รีบติดต่อรักษา",
+  protect: "ดูแลความสัมพันธ์",
+  rescue_or_let_go: "win-back ต้นทุนต่ำ",
+  monitor: "เฝ้าดูตามรอบ",
+};
 const CHURN_COLOR = "#fc4c02";
 const CHURN_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${CHURN_COLOR} 100%)`;
 const BLUE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 100%)`;
@@ -114,7 +121,7 @@ export function CustomerDetailView({
                 <HeroMetric
                   label="Revenue risk"
                   value={customer.revenue_at_risk != null ? formatCurrency(customer.revenue_at_risk) : "—"}
-                  hint="at risk"
+                  hint={SEGMENT_HINT[customer.segment] ?? "at risk"}
                 />
                 <HeroMetric
                   label="Top-up risk"

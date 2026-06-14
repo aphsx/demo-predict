@@ -82,8 +82,9 @@
 | Field | Type | สูตร |
 |---|---|---|
 | `revenue_at_risk` | NUMERIC(14,2) | `churn_probability × predicted_clv_6m` — ดูนิยามเต็ม §5.1 |
-| `priority_score` | NUMERIC(5,2) | 0–100 — ดู §5.2 |
-| `priority_reason` | TEXT | ประโยคสั้นจาก rule ที่ดันคะแนน เช่น "เสี่ยง churn 82% × CLV ฿45k" |
+| `priority_score` | NUMERIC(5,2) | 0–100 — log rescale ของ `revenue_at_risk` (ดู §5.2) |
+| `priority_reason` | TEXT | ประโยคผูกกับเงิน เช่น "เสี่ยงเสียรายได้ ฿168,000 (churn 35% × CLV ฿480,000) → ดูแลความสัมพันธ์" |
+| `segment` | TEXT | playbook value×risk: `retain_now` / `protect` / `rescue_or_let_go` / `monitor` (ดู §5.2) |
 
 ### 3.8 AI explanation (Phase 2 — โครงรองรับไว้แล้ว)
 
@@ -120,20 +121,33 @@
 
 "มาจากใคร" → ตาราง Top customers เรียง `revenue_at_risk desc` + Value × Risk matrix (DASHBOARD §2.1) เปิดดูรายคนได้เสมอ
 
-### §5.2 Priority score (0–100)
+### §5.2 Priority score (0–100) + segment
 
-จัดอันดับ "ใครควรถูกติดต่อก่อน" รวม 3 แรงขับ:
+จัดอันดับ "ใครควรถูกติดต่อก่อน" โดย **อิงเงินที่เสี่ยงจะเสียจริง** ไม่ใช่น้ำหนักที่เดาเอา:
 
 ```
-priority_score = 50 × P_risk + 30 × P_value + 20 × P_credit
-
-P_risk   = churn_probability (0 ถ้า not eligible)
-P_value  = percentile rank ของ predicted_clv_6m ในหมู่ active ของ run (0–1)
-P_credit = max(0, 1 − estimated_days_until_topup/90) (0 ถ้า null)
+ranking key = revenue_at_risk = churn_probability × predicted_clv_6m   (หน่วย ฿)
+priority_score = log rescale ของ revenue_at_risk → 0..100 (เพื่อแสดงผลเท่านั้น
+                 ลำดับเท่ากับการเรียงด้วย revenue_at_risk ทุกประการ)
 ```
 
-น้ำหนักเก็บใน config ของ prediction runner (constant เดียว ไม่กระจายตามโค้ด) — ปรับได้เมื่อทีมขายให้ feedback
-`priority_reason` = ระบุ component ที่สูงสุด แปลงเป็นข้อความ
+เหตุผลที่เลิกใช้สูตร `50×risk + 30×value + 20×credit` เดิม:
+- ผสมหน่วยไม่เข้ากัน (ความน่าจะเป็นดิบ + percentile rank) → ลูกค้ามูลค่าสูงกว่า 10 เท่าขยับคะแนนนิดเดียว
+- น้ำหนัก 50/30/20 ไม่เคย validate กับผลลัพธ์
+- `churn.fillna(0.0)` ทำให้ลูกค้าที่ทำนาย churn ไม่ได้ถูกนับว่า "ปลอดภัย" (แก้แล้ว)
+
+**Credit urgency ไม่อยู่ในคะแนน** อีกต่อไป — มันคือสัญญาณ "จังหวะขายต่อ" (`credit_urgency_level`) คนละ action กับ retention จึงแยกออก
+
+**`segment`** = ตาราง value × risk (ใช้ bucket เดิม `customer_value_tier` × `churn_risk_level`):
+
+| value \ risk | high/critical churn | else |
+|---|---|---|
+| tier `high` | `retain_now` (รีบรักษา) | `protect` (ดูแล) |
+| else | `rescue_or_let_go` (win-back ถูกๆ) | `monitor` (เฝ้าดู) |
+
+`priority_reason` = ประโยคเดียวผูกกับเงิน + action ของ segment + ธงเครดิตถ้า critical/warning
+
+> threshold ของ segment (tier `high` = top CLV, risk `high`/`critical`) ปรับได้เมื่อ calibrate จาก churn rate จริงของ run ที่ผ่านมา
 
 ### §5.3 Action workflow removed
 
