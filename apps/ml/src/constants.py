@@ -63,6 +63,13 @@ class ValueTier:
     NONE: Final = "none"
 
 
+class AiStatus:
+    NOT_REQUESTED: Final = "not_requested"
+    PENDING: Final = "pending"
+    COMPLETED: Final = "completed"
+    FAILED: Final = "failed"
+
+
 class Segment:
     PROTECT: Final = "Protect"
     STABILIZE: Final = "Stabilize"

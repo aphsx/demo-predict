@@ -17,7 +17,6 @@ import numpy as np
 import optuna
 import pandas as pd
 from lifetimes import BetaGeoFitter, GammaGammaFitter
-from sklearn.metrics import mean_absolute_error
 from scipy.stats import spearmanr
 
 from src.training.baselines import ClvSegmentMeanBaseline, clv_carryover_scores
@@ -30,6 +29,7 @@ logger = logging.getLogger(__name__)
 RANDOM_SEED = 42
 TWEEDIE_TRIALS = 50
 BGNBD_PENALIZERS = [0.001, 0.01, 0.1]
+EARLY_STOPPING_ROUNDS = 50
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -196,7 +196,7 @@ def train_clv(
             x_train,
             y_train,
             eval_set=[(x_val, y_val)],
-            callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
+            callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
         )
         predictions = np.clip(model.predict(x_val), 0, None)
         corr = spearmanr(y_val.to_numpy(), predictions).statistic
@@ -283,7 +283,7 @@ def backtest_clv(
             x_train,
             y_train,
             eval_set=[(x_val, y_val)],
-            callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
+            callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
         )
         predictions = np.clip(model.predict(transform_features(dataset.features("test"), preprocessor)), 0, None)
     else:

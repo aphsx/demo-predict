@@ -30,6 +30,15 @@ export const LIFECYCLE_STAGE = {
 } as const;
 export type LifecycleStage = (typeof LIFECYCLE_STAGE)[keyof typeof LIFECYCLE_STAGE];
 
+export const SUB_STAGE = {
+  ACTIVE_PAID: "Active Paid",
+  ACTIVE_FREE: "Active Free",
+  CHURNED_PAID: "Churned Paid",
+  CHURNED_FREE: "Churned Free",
+  GHOST: "Ghost",
+} as const;
+export type SubStage = (typeof SUB_STAGE)[keyof typeof SUB_STAGE];
+
 export const RISK_LEVEL = {
   LOW: "low",
   MEDIUM: "medium",

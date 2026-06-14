@@ -32,6 +32,7 @@ import xgboost as xgb
 
 from src.training.baselines import credit_last_30d_carryover, credit_moving_avg_90d
 from src.training.datasets import SplitFrame
+from src.training.labels import CREDIT_HORIZONS
 from src.training.metrics import credit_metrics, interval_coverage, pinball_loss, smape
 from src.training.preprocessing import PreprocessorConfig, transform_features
 from sklearn.metrics import mean_absolute_error
@@ -39,8 +40,9 @@ from sklearn.metrics import mean_absolute_error
 logger = logging.getLogger(__name__)
 
 RANDOM_SEED = 42
+EARLY_STOPPING_ROUNDS = 50
 QUANTILES = [0.10, 0.25, 0.50, 0.75, 0.90]
-HORIZONS = {30: "future_credit_usage_30d", 90: "future_credit_usage_90d"}
+HORIZONS = CREDIT_HORIZONS  # single source in labels.py
 CREDIT_TRIALS = 30
 TARGET_COVERAGE = 0.80
 URGENT_TOPUP_DAYS = 14
@@ -353,7 +355,7 @@ def _train_horizon(
             x_train,
             target_train,
             eval_set=[(x_val, target_val)],
-            callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
+            callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
         )
         predictions = np.clip(np.expm1(model.predict(x_val) + anchor_val), 0, None)
         return pinball_loss(y_val, predictions, 0.50)
@@ -397,7 +399,7 @@ def _fit_quantile_models(
             x_train,
             target_train,
             eval_set=[(x_val, target_val)],
-            callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
+            callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
         )
         models[alpha] = model
     return models

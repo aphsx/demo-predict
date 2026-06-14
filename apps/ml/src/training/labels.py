@@ -6,6 +6,13 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+# Single source for the credit-usage forecast horizons → label-column mapping.
+# credit_trainer imports this so the days and the column names are defined once.
+CREDIT_HORIZONS: dict[int, str] = {
+    30: "future_credit_usage_30d",
+    90: "future_credit_usage_90d",
+}
+
 
 @dataclass(frozen=True)
 class LabelConfig:
@@ -84,12 +91,11 @@ def build_credit_usage_labels(
 
     cutoff = _timestamp(cutoff_date)
     account_ids = sorted(_known_account_ids(customers, payments, usage, cutoff))
-    future_usage_30d = _future_usage_sum(usage, cutoff, cutoff + pd.Timedelta(days=30))
-    future_usage_90d = _future_usage_sum(usage, cutoff, cutoff + pd.Timedelta(days=90))
 
     rows = pd.DataFrame({"acc_id": account_ids})
-    rows["future_credit_usage_30d"] = rows["acc_id"].map(future_usage_30d).fillna(0.0)
-    rows["future_credit_usage_90d"] = rows["acc_id"].map(future_usage_90d).fillna(0.0)
+    for days, column in CREDIT_HORIZONS.items():
+        usage_sum = _future_usage_sum(usage, cutoff, cutoff + pd.Timedelta(days=days))
+        rows[column] = rows["acc_id"].map(usage_sum).fillna(0.0)
     rows["eligible_for_credit"] = True
     return rows
 

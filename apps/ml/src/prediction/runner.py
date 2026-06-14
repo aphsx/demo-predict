@@ -480,10 +480,12 @@ def _apply_descriptive(
         "otp_usage_share",
     ]
 
+    # Dict lookup + records iteration instead of iterrows()/.loc per row (perf).
+    snap_map = snapshot_source.to_dict("index")
+    snapshot_cols = ["acc_id", "customer_age_days", "usage_total_180d", *share_columns]
     snapshots: list[dict[str, Any]] = []
-    for _, row in frame.iterrows():
-        acc_id = int(row["acc_id"])
-        customer = snapshot_source.loc[acc_id] if acc_id in snapshot_source.index else None
+    for row in frame[snapshot_cols].to_dict("records"):
+        customer = snap_map.get(int(row["acc_id"]))
         snapshots.append(
             {
                 "join_date": _date_or_none(customer["join_date"]) if customer is not None else None,
@@ -658,7 +660,8 @@ def _build_output_rows(
 ) -> list[dict[str, Any]]:
     model_versions_json = json.dumps(model_versions, ensure_ascii=False)
     rows: list[dict[str, Any]] = []
-    for _, row in frame.iterrows():
+    # records iteration instead of iterrows() — same values, no per-row Series.
+    for row in frame.to_dict("records"):
         eligibility = _eligibility_json(row)
         interval = None
         if not pd.isna(row["credit_p10_30d"]):
@@ -712,7 +715,7 @@ def _build_output_rows(
     return rows
 
 
-def _eligibility_json(row: pd.Series) -> str:
+def _eligibility_json(row: dict[str, Any]) -> str:
     stage = row["lifecycle_stage"]
     churn_reason = {
         "Active Paid": ("eligible", "ลูกค้า Active Paid"),

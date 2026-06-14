@@ -43,6 +43,10 @@ logger = logging.getLogger(__name__)
 RANDOM_SEED = 42
 LGBM_TRIALS = 100
 XGB_TRIALS = 50
+EARLY_STOPPING_ROUNDS = 50
+# Usable band for the high-risk decision threshold (§13): clip the max-F2 point
+# so it never lands in an unusable extreme.
+HIGH_THRESHOLD_BAND = (0.35, 0.85)
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -197,7 +201,7 @@ def finalize_churn_candidate(
 
     # ── Threshold from calibrated OOF (§13, clipped to a usable band) ──
     f2_threshold = select_threshold_max_fbeta(training.y_trval, calibrated_oof, beta=2.0)
-    high_threshold = float(np.clip(f2_threshold, 0.35, 0.85))
+    high_threshold = float(np.clip(f2_threshold, *HIGH_THRESHOLD_BAND))
     thresholds = risk_thresholds_from_high(high_threshold)
 
     validation_metrics = churn_metrics(
@@ -281,7 +285,7 @@ def refit_for_backtest(
     _, oof = _cv_oof(champion, x_trval, y_trval)
     calibrator = _fit_calibrator(oof, y_trval)
     f2_threshold = select_threshold_max_fbeta(y_trval, calibrator.transform(oof), beta=2.0)
-    high_threshold = float(np.clip(f2_threshold, 0.35, 0.85))
+    high_threshold = float(np.clip(f2_threshold, *HIGH_THRESHOLD_BAND))
 
     model = clone_candidate_model(champion, y_trval)
     model.fit(x_trval, y_trval)
@@ -403,7 +407,7 @@ def _tune_lightgbm(
             y_train,
             eval_set=[(x_val, y_val)],
             eval_metric="average_precision",
-            callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
+            callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
         )
         return float(average_precision_score(y_val, model.predict_proba(x_val)[:, 1]))
 

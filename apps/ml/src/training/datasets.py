@@ -25,6 +25,11 @@ from src.training.labels import LabelConfig, build_label_set
 
 RANDOM_SEED = 42
 
+# Split: train / validation / test = 60 / 20 / 20.
+# First carve off the holdout (val+test), then halve it into val and test.
+HOLDOUT_FRACTION = 0.40
+TEST_WITHIN_HOLDOUT = 0.50
+
 SPLIT_TRAIN = "train"
 SPLIT_VALIDATION = "validation"
 SPLIT_TEST = "test"
@@ -173,13 +178,13 @@ def _assign_split(frame: pd.DataFrame, stratify: pd.Series, seed: int) -> pd.Dat
     stratify_values = np.asarray(stratify)
     train_idx, rest_idx = train_test_split(
         indices,
-        test_size=0.40,
+        test_size=HOLDOUT_FRACTION,
         random_state=seed,
         stratify=stratify_values,
     )
     validation_idx, test_idx = train_test_split(
         rest_idx,
-        test_size=0.50,
+        test_size=TEST_WITHIN_HOLDOUT,
         random_state=seed,
         stratify=stratify_values[rest_idx],
     )
