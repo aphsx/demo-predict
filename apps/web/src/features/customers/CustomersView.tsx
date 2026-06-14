@@ -310,8 +310,8 @@ function Inner({
         <StatusDialog
           open
           tone="warning"
-          title="AI data มีอยู่แล้ว"
-          message={`Account ${pendingOverwriteAccId} มี reason จาก AI อยู่แล้ว ต้องการ generate ใหม่และเขียนทับข้อมูลเดิมไหม?`}
+          title="มีข้อมูลจาก AI อยู่แล้ว"
+          message={`Account ${pendingOverwriteAccId} มีเหตุผลที่ได้จาก AI อยู่แล้ว ต้องการ generate ใหม่และเขียนทับข้อมูลเดิมไหม?`}
           confirmLabel="เขียนทับ"
           cancelLabel="ยกเลิก"
           onCancel={() => setPendingOverwriteAccId(null)}

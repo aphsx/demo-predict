@@ -137,7 +137,7 @@ export function RunsTable({
         <StatusDialog
           open
           tone="warning"
-          title="ยืนยันการลบ prediction run"
+          title="ยืนยันการลบผลลัพธ์ทำนายรอบนี้"
           confirmLabel="ลบ run"
           cancelLabel="ยกเลิก"
           loading={deletingId === pendingDeleteRun.id}
