@@ -586,7 +586,7 @@ export function mockRunSummary(runId: string): RunSummary {
 
   const topPriority = [...rows]
     .sort((a, b) => b.priority_score - a.priority_score)
-    .slice(0, 10)
+    .slice(0, 5)
     .map((c) => ({
       acc_id: c.acc_id,
       lifecycle_stage: c.lifecycle_stage,

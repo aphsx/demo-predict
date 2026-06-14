@@ -353,7 +353,7 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
       .from(o)
       .where(inRun)
       .orderBy(sql`${o.priorityScore} DESC NULLS LAST`, asc(o.accId))
-      .limit(10),
+      .limit(5),
     monthlyActual(run.predictSourceId, run.cutoffDate),
     churnThresholds(),
   ]);
