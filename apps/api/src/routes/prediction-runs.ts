@@ -26,6 +26,7 @@ import {
   EMPTY_MODEL_VERSIONS,
   monthKeysBeforeCutoff,
   num,
+  TOP_PRIORITY_LIMIT,
   UUID_RE,
   type ChurnFactor,
   type LifecycleStage,
@@ -353,7 +354,7 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
       .from(o)
       .where(inRun)
       .orderBy(sql`${o.priorityScore} DESC NULLS LAST`, asc(o.accId))
-      .limit(5),
+      .limit(TOP_PRIORITY_LIMIT),
     monthlyActual(run.predictSourceId, run.cutoffDate),
     churnThresholds(),
   ]);

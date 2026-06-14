@@ -230,6 +230,9 @@ export const DEFAULT_RISK_THRESHOLDS = { medium: 0.3, high: 0.6, critical: 0.85 
 
 export const EMPTY_MODEL_VERSIONS = { churn: "", clv: "", credit: "" };
 
+/** Dashboard overview widget — docs/ML-V2-DASHBOARD-SPEC.md §2.1 */
+export const TOP_PRIORITY_LIMIT = 5;
+
 /** Last 12 calendar months strictly before the cutoff month, as YYYY-MM keys. */
 export function monthKeysBeforeCutoff(cutoffDate: string): string[] {
   const cutoff = new Date(`${cutoffDate}T00:00:00Z`);

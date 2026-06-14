@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/format";
 import type { RunSummary } from "@/lib/mlApi";
+import { TOP_PRIORITY_LIMIT } from "@/lib/mlApi";
 import {
   LifecycleRowPill,
   MetricCell,
@@ -47,7 +48,7 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
       </div>
 
       <div className="divide-y divide-gray-100">
-        {summary.top_priority.map((c) => {
+        {summary.top_priority.slice(0, TOP_PRIORITY_LIMIT).map((c) => {
           const churnPct = c.churn_probability != null ? c.churn_probability * 100 : null;
 
           return (

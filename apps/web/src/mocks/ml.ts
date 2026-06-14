@@ -25,6 +25,7 @@ import type {
   UrgencyLevel,
   ValueTier,
 } from "@/lib/mlApi";
+import { TOP_PRIORITY_LIMIT } from "@/lib/mlApi";
 import type { PredictDataSource, PredictImportDone } from "@/lib/api";
 
 // ── Seeded PRNG (mulberry32) — stable across reloads ───────────
@@ -586,7 +587,7 @@ export function mockRunSummary(runId: string): RunSummary {
 
   const topPriority = [...rows]
     .sort((a, b) => b.priority_score - a.priority_score)
-    .slice(0, 5)
+    .slice(0, TOP_PRIORITY_LIMIT)
     .map((c) => ({
       acc_id: c.acc_id,
       lifecycle_stage: c.lifecycle_stage,
