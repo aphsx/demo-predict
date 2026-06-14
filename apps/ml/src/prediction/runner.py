@@ -53,6 +53,11 @@ logger = logging.getLogger(__name__)
 TOPUP_CAP_DAYS = 365
 INSERT_CHUNK = 1000
 
+# CLV hybrid tail correction (REMEDIATION-PLAN P1). All relative/scale-free.
+CLV_TAIL_QUANTILE = 0.90  # only the top-decile whales may borrow the BG/NBD estimate
+CLV_TAIL_MIN_POPULATION = 50  # below this, percentile tail detection is unreliable
+CLV_TAIL_MIN_FREQUENCY = 2.0  # never blend single-payment customers
+
 
 def _features_for_bundle(frame: pd.DataFrame, bundle: dict[str, Any]) -> pd.DataFrame:
     feature_names = list(bundle["preprocessor"].feature_names)
@@ -297,6 +302,40 @@ def _churn_shap_factors(
     return factors
 
 
+def _blend_clv_tail(
+    tweedie_pred: np.ndarray,
+    *,
+    bg_clv: np.ndarray,
+    freq: np.ndarray,
+    revenue: np.ndarray,
+) -> np.ndarray:
+    """Lift the whale tail of a Tweedie CLV with BG/NBD (REMEDIATION-PLAN P1).
+
+    The Tweedie tree cannot isolate the few very high-frequency / high-revenue
+    payers into pure leaves, so it pools them down and under-predicts whales.
+    BG/NBD scales with monetary value (no ceiling), so for the top-decile tail
+    take the higher of the two. Kept tight (top decile) because BG/NBD
+    over-predicts the body. Tail is defined relatively (quantiles), so it adapts
+    to any dataset scale; skipped on tiny runs where percentiles are unreliable.
+    """
+
+    if len(tweedie_pred) < CLV_TAIL_MIN_POPULATION:
+        return tweedie_pred
+
+    tail = np.zeros(len(tweedie_pred), dtype=bool)
+    fok = freq[np.isfinite(freq)]
+    if fok.size:
+        cut = max(float(np.quantile(fok, CLV_TAIL_QUANTILE)), CLV_TAIL_MIN_FREQUENCY)
+        tail |= np.nan_to_num(freq, nan=0.0) >= cut
+    rok = revenue[np.isfinite(revenue)]
+    if rok.size:
+        tail |= np.nan_to_num(revenue, nan=0.0) >= float(np.quantile(rok, CLV_TAIL_QUANTILE))
+
+    blended = tweedie_pred.copy()
+    blended[tail] = np.maximum(tweedie_pred[tail], bg_clv[tail])
+    return blended
+
+
 def _apply_clv(
     frame: pd.DataFrame,
     clv_bundle: dict[str, Any],
@@ -327,34 +366,20 @@ def _apply_clv(
         if model_object["champion"] == "lgbm_tweedie":
             x = transform_features(features_raw[clv_mask], clv_bundle["preprocessor"])
             tweedie_pred = np.clip(model_object["tweedie"].predict(x), 0, None)
-            # Hybrid tail correction (REMEDIATION-PLAN P1): the Tweedie tree
-            # saturates for the few very high-frequency payers — it cannot
-            # isolate them into pure leaves, so whales get pooled down and
-            # massively under-predicted (top-decile revenue capture ~0.38).
-            # BG/NBD scales with monetary value and has no ceiling, so for the
-            # top-decile-frequency tail take the higher of the two. Validated:
-            # lifts tail capture to ~0.69 with no change to the body.
             if bgnbd is not None:
-                # Tail = top-decile by frequency OR by lifetime revenue, so both
-                # frequent payers and infrequent big-ticket payers are covered.
-                # Kept tight (top 10%) on purpose: BG/NBD over-predicts the body,
-                # so only the genuine whales may borrow its (uncapped) estimate.
-                freq = pd.to_numeric(
-                    features_raw["payment_count_all"], errors="coerce"
-                ).to_numpy()[clv_mask]
-                rev = pd.to_numeric(
-                    features_raw["total_revenue_all"], errors="coerce"
-                ).to_numpy()[clv_mask]
-                bg_clv = eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy()
-                tail = np.zeros(len(tweedie_pred), dtype=bool)
-                fok = freq[np.isfinite(freq)]
-                if fok.size:
-                    tail |= np.nan_to_num(freq, nan=0.0) >= max(float(np.quantile(fok, 0.90)), 2.0)
-                rok = rev[np.isfinite(rev)]
-                if rok.size:
-                    tail |= np.nan_to_num(rev, nan=0.0) >= float(np.quantile(rok, 0.90))
-                tweedie_pred = tweedie_pred.copy()
-                tweedie_pred[tail] = np.maximum(tweedie_pred[tail], bg_clv[tail])
+                tweedie_pred = _blend_clv_tail(
+                    tweedie_pred,
+                    bg_clv=eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy(),
+                    freq=pd.to_numeric(features_raw["payment_count_all"], errors="coerce").to_numpy()[clv_mask],
+                    revenue=pd.to_numeric(features_raw["total_revenue_all"], errors="coerce").to_numpy()[clv_mask],
+                )
+            else:
+                # No BG/NBD in the bundle → the whale tail stays capped. Surface
+                # it rather than degrade silently (REMEDIATION-PLAN P1).
+                logger.warning(
+                    "CLV champion is lgbm_tweedie without a BG/NBD bundle; "
+                    "high-value tail will be under-predicted (no hybrid correction)."
+                )
             predicted[clv_mask] = tweedie_pred
 
     frame["predicted_clv_6m"] = predicted
@@ -564,34 +589,40 @@ def _apply_segments(frame: pd.DataFrame) -> pd.DataFrame:
     p_alive = pd.to_numeric(frame["p_alive"], errors="coerce")
     change = pd.to_numeric(frame.get("usage_change_90d_pct"), errors="coerce").fillna(0.0)
 
+    stage = frame["lifecycle_stage"]
+    sub_stage = frame["sub_stage"]
     valuable = tier.isin([ValueTier.HIGH, ValueTier.MID])
     at_risk = risk.isin([RiskLevel.HIGH, RiskLevel.CRITICAL]) | (p_alive < 0.20)
     watch = ~at_risk & (risk.eq(RiskLevel.MEDIUM) | (p_alive < 0.50))
     growing = change > 0.10
 
-    def assign(i: int) -> str:
-        stage = frame["lifecycle_stage"].iat[i]
-        if stage == LifecycleStage.GHOST:
-            return Segment.GHOST
-        if stage == LifecycleStage.CHURNED:
-            return (
-                Segment.REACTIVATE
-                if frame["sub_stage"].iat[i] == SubStage.CHURNED_PAID
-                else Segment.DORMANT
-            )
-        if valuable.iat[i]:
-            if at_risk.iat[i]:
-                return Segment.PROTECT
-            if watch.iat[i]:
-                return Segment.STABILIZE
-            return Segment.GROW
-        if at_risk.iat[i]:
-            return Segment.SALVAGE_LOW
-        if watch.iat[i]:
-            return Segment.WATCH_LOW
-        return Segment.DEVELOP if growing.iat[i] else Segment.MAINTAIN
-
-    frame["segment"] = [assign(i) for i in range(len(frame))]
+    is_churned = stage.eq(LifecycleStage.CHURNED)
+    # Conditions are evaluated in priority order (first match wins). The
+    # lifecycle checks come first, so churned/ghost rows never fall through to
+    # the active value/health tiers below.
+    conditions = [
+        stage.eq(LifecycleStage.GHOST),
+        is_churned & sub_stage.eq(SubStage.CHURNED_PAID),
+        is_churned,
+        valuable & at_risk,
+        valuable & watch,
+        valuable,
+        at_risk,
+        watch,
+        growing,
+    ]
+    choices = [
+        Segment.GHOST,
+        Segment.REACTIVATE,
+        Segment.DORMANT,
+        Segment.PROTECT,
+        Segment.STABILIZE,
+        Segment.GROW,
+        Segment.SALVAGE_LOW,
+        Segment.WATCH_LOW,
+        Segment.DEVELOP,
+    ]
+    frame["segment"] = np.select(conditions, choices, default=Segment.MAINTAIN)
 
     # Global action_rank: by segment priority, then by money inside each segment
     # (revenue-at-risk for retention plays, forward CLV for growth/value plays).

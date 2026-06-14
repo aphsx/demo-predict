@@ -164,6 +164,25 @@ metrics.
 4. **P5** — wire segments once P1 makes the money-ranking trustworthy.
 5. **P6** — update docs/metrics alongside the retrain.
 
+## Production-readiness recheck
+
+Cleaned this pass (behavior-preserving, validated against the reference run):
+- CLV hybrid extracted to `_blend_clv_tail` with named constants (`CLV_TAIL_QUANTILE`,
+  `CLV_TAIL_MIN_POPULATION`, `CLV_TAIL_MIN_FREQUENCY`) + a **small-population guard** so
+  single/tiny scoring runs don't blend on meaningless percentiles.
+- `_apply_segments` vectorized with `np.select` (removed the ~30k-row Python loop).
+- `_apply_clv` now **warns** when a Tweedie champion ships without a BG/NBD bundle
+  (tail would silently stay capped).
+- pyflakes clean (no unused imports / undefined names) on the edited modules.
+
+Flagged for follow-up (not changed — needs tests / out of bug-fix scope):
+- **Perf**: `_build_output_rows` and `_apply_descriptive` use `frame.iterrows()` — fine at
+  ~30k rows (seconds), but scales poorly. Move to `itertuples`/vectorized JSON if runs grow.
+- **No Python↔TS constants sync test**: `constants.py` and `constants.ts` must match (verified
+  manually 29/29). Add a tiny CI check so they can't drift.
+- **Small-population runs**: value tier / segment / priority use run-relative percentiles, so
+  scoring very few customers yields noisy tiers (batch scoring assumed). Documented, not a bug.
+
 ## Out of scope (decided against)
 - Swapping churn champion to a tree — rejected by the promotion gate (unstable across
   backtest cutoffs); not a fix.
