@@ -26,11 +26,15 @@ then rank inside each group.
 
 ## Axis 1 — Value tier (active customers only)
 
-Percentile of `predicted_clv_6m` among active customers with CLV > 0:
+Reuses the existing `customer_value_tier` (percentile of `predicted_clv_6m` among active
+customers with CLV > 0), so there is a single value-tier definition in the system:
 
-- **A** — top 20% (pct ≥ 0.80)
-- **B** — next 30% (0.50 ≤ pct < 0.80)
-- **C** — bottom 50%
+- **high** — top 10% (pct ≥ 0.90)
+- **mid** — next 40% (0.50 ≤ pct < 0.90)
+- **low** — bottom 50%
+
+"Valuable" (segments 1–3) = high **or** mid (top 50%). The 0.90 / 0.50 cuts live in
+`_apply_derived`; treat them as the tunable knob.
 
 (`total_revenue` is used only as a tie-break in ranking, not for the tier — we prioritize
 forward value over past spend.)
@@ -103,11 +107,23 @@ saves come first, then proactive holds, then expansion, then long-tail.
 Active = 4,233 of 30,697. The 648 **Protect** customers concentrate ~4.06M THB of
 six-month revenue at risk — that is the list to work first.
 
-## Integration notes (next step, not yet wired)
+## Integration status (wired)
 
-To make these first-class outputs, add two columns to `ml_prediction_outputs`
-(`segment text`, `action_rank int`) in `db/init/001_schema.sql`, compute them in
-`apps/ml/src/prediction/runner.py` `_apply_derived` (all inputs are already on `frame`),
-and surface `segment` as a filter on the `/runs/:id/outputs` table. The reference
-implementation is `segmentation.py` (kept alongside this spec). Thresholds (0.80/0.50
-value cuts, p_alive 0.20/0.50, momentum ±10%) are the tunable knobs.
+Shipped in code:
+- `db/init/001_schema.sql` — `ml_prediction_outputs` has `segment text`, `action_rank integer`,
+  `needs_review boolean`.
+- `apps/ml/src/prediction/runner.py` — `_apply_segments` computes `segment` + global
+  `action_rank`; `needs_review` set in `_apply_derived`; all persisted in `_build_output_rows`.
+- `apps/api/src/db/schema.ts` — Drizzle columns added (`segment`, `actionRank`, `needsReview`).
+- `apps/api/src/lib/ml-contract.ts` + `routes/prediction-runs.ts` — fields in `PredictionOutput`,
+  exposed in the outputs mapper, `action_rank` added to the sort whitelist.
+
+Remaining (manual / next):
+- Run `bun run db:introspect` so the generated Drizzle schema matches the new SQL, then
+  `bun run build` / typecheck the API + web.
+- Re-run a prediction (or retrain) to populate the new columns for existing runs.
+- Web UI: show `segment` as a column/filter and `needs_review` as a badge on
+  `/runs/:id/outputs` (web `PredictionOutput` type + table).
+
+Thresholds (0.80/0.50 value cuts, p_alive 0.20/0.50, momentum ±10%) are the tunable knobs.
+Reference implementation: `docs/segmentation.py`.

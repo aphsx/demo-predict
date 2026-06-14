@@ -4,7 +4,17 @@
  * Keys are snake_case; keep both files in sync.
  */
 
-export type RunStatus = "pending" | "in_progress" | "completed" | "failed";
+// Wire-format enums derive from the single source in ./constants (which mirrors
+// apps/ml/src/constants.py). A typo against these unions is now a compile error.
+import type {
+  RunStatus as RunStatusT,
+  LifecycleStage as LifecycleStageT,
+  RiskLevel as RiskLevelT,
+  ValueTier as ValueTierT,
+  UrgencyLevel as UrgencyLevelT,
+} from "./constants";
+
+export type RunStatus = RunStatusT;
 
 export interface PredictionRun {
   id: string;
@@ -22,10 +32,10 @@ export interface PredictionRun {
   progress: { step: string; pct: number } | null;
 }
 
-export type LifecycleStage = "Active Paid" | "Active Free" | "Churned" | "Ghost";
-export type RiskLevel = "low" | "medium" | "high" | "critical";
-export type ValueTier = "high" | "mid" | "low" | "none";
-export type UrgencyLevel = "critical" | "warning" | "monitor" | "stable";
+export type LifecycleStage = LifecycleStageT;
+export type RiskLevel = RiskLevelT;
+export type ValueTier = ValueTierT;
+export type UrgencyLevel = UrgencyLevelT;
 
 export interface ChurnFactor {
   feature: string;
@@ -84,6 +94,9 @@ export interface PredictionOutput {
   credit_urgency_level: UrgencyLevel | null;
   revenue_at_risk: number | null;
   priority_score: number;
+  segment: string | null;
+  action_rank: number | null;
+  needs_review: boolean;
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
   ai_recommended_message: string | null;

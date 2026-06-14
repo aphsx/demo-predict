@@ -17,6 +17,16 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, text
 
+from src.constants import (
+    LifecycleStage,
+    OutputStatus,
+    RiskLevel,
+    RunStatus,
+    Segment,
+    SubStage,
+    UrgencyLevel,
+    ValueTier,
+)
 from src.training import repository
 from src.training.artifacts import load_artifacts
 from src.training.data import database_url, load_predict_clean
@@ -42,8 +52,6 @@ logger = logging.getLogger(__name__)
 # explanation text is the AI layer's job.
 TOPUP_CAP_DAYS = 365
 INSERT_CHUNK = 1000
-
-DEFAULT_THRESHOLDS = {"medium": 0.30, "high": 0.60, "critical": 0.85}
 
 
 def _features_for_bundle(frame: pd.DataFrame, bundle: dict[str, Any]) -> pd.DataFrame:
@@ -82,7 +90,7 @@ def run_prediction(prediction_run_id: str) -> None:
         logger.exception("prediction run %s failed", prediction_run_id)
         _update_run(
             prediction_run_id,
-            status="failed",
+            status=RunStatus.FAILED,
             error_message=f"{type(exc).__name__}: {exc}",
             progress={"step": "failed", "pct": 100},
             mark_finished=True,
@@ -99,7 +107,7 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
         logger.info("[%s] %d%% %s", prediction_run_id[:8], pct, step)
         _update_run(prediction_run_id, progress={"step": step, "pct": pct})
 
-    _update_run(prediction_run_id, status="in_progress", mark_started=True)
+    _update_run(prediction_run_id, status=RunStatus.IN_PROGRESS, mark_started=True)
     progress("load data", 5)
 
     # ── Champions (alias `production` only) ───────────────────────
@@ -141,9 +149,9 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     # Eligibility matrix per OUTPUT-CONTRACT §2 (overrides features.py flags
     # for Churned/Ghost on clv + credit).
     stage = frame["lifecycle_stage"]
-    frame["el_churn"] = stage.eq("Active Paid")
-    frame["el_clv"] = stage.isin(["Active Paid", "Active Free"])
-    frame["el_credit"] = stage.isin(["Active Paid", "Active Free"])
+    frame["el_churn"] = stage.eq(LifecycleStage.ACTIVE_PAID)
+    frame["el_clv"] = stage.isin(list(LifecycleStage.ACTIVE))
+    frame["el_credit"] = stage.isin(list(LifecycleStage.ACTIVE))
 
     for model_type, champion in champions.items():
         _feature_contract_guard(model_type, champion["bundle"], frame)
@@ -152,7 +160,14 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     progress("churn model", 35)
     churn_bundle = champions["churn"]["bundle"]
     churn_features = _features_for_bundle(frame, churn_bundle)
-    thresholds = churn_bundle.get("thresholds") or DEFAULT_THRESHOLDS
+    thresholds = churn_bundle.get("thresholds")
+    if not thresholds:
+        # Fail loud: a churn champion without its trained risk thresholds is a
+        # broken artifact. Guessing with defaults would silently mislabel risk.
+        raise RuntimeError(
+            "Churn champion is missing risk thresholds (thresholds.json); "
+            "refusing to guess — retrain/repromote the churn model."
+        )
     churn_prob = np.full(len(frame), np.nan)
     churn_mask = frame["el_churn"].to_numpy()
     if churn_mask.any():
@@ -209,7 +224,7 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
 
     _update_run(
         prediction_run_id,
-        status="completed",
+        status=RunStatus.COMPLETED,
         total_customers=int(len(frame)),
         model_versions=model_versions,
         progress={"step": "completed", "pct": 100},
@@ -311,7 +326,36 @@ def _apply_clv(
                 )
         if model_object["champion"] == "lgbm_tweedie":
             x = transform_features(features_raw[clv_mask], clv_bundle["preprocessor"])
-            predicted[clv_mask] = np.clip(model_object["tweedie"].predict(x), 0, None)
+            tweedie_pred = np.clip(model_object["tweedie"].predict(x), 0, None)
+            # Hybrid tail correction (REMEDIATION-PLAN P1): the Tweedie tree
+            # saturates for the few very high-frequency payers — it cannot
+            # isolate them into pure leaves, so whales get pooled down and
+            # massively under-predicted (top-decile revenue capture ~0.38).
+            # BG/NBD scales with monetary value and has no ceiling, so for the
+            # top-decile-frequency tail take the higher of the two. Validated:
+            # lifts tail capture to ~0.69 with no change to the body.
+            if bgnbd is not None:
+                # Tail = top-decile by frequency OR by lifetime revenue, so both
+                # frequent payers and infrequent big-ticket payers are covered.
+                # Kept tight (top 10%) on purpose: BG/NBD over-predicts the body,
+                # so only the genuine whales may borrow its (uncapped) estimate.
+                freq = pd.to_numeric(
+                    features_raw["payment_count_all"], errors="coerce"
+                ).to_numpy()[clv_mask]
+                rev = pd.to_numeric(
+                    features_raw["total_revenue_all"], errors="coerce"
+                ).to_numpy()[clv_mask]
+                bg_clv = eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy()
+                tail = np.zeros(len(tweedie_pred), dtype=bool)
+                fok = freq[np.isfinite(freq)]
+                if fok.size:
+                    tail |= np.nan_to_num(freq, nan=0.0) >= max(float(np.quantile(fok, 0.90)), 2.0)
+                rok = rev[np.isfinite(rev)]
+                if rok.size:
+                    tail |= np.nan_to_num(rev, nan=0.0) >= float(np.quantile(rok, 0.90))
+                tweedie_pred = tweedie_pred.copy()
+                tweedie_pred[tail] = np.maximum(tweedie_pred[tail], bg_clv[tail])
+            predicted[clv_mask] = tweedie_pred
 
     frame["predicted_clv_6m"] = predicted
     frame["p_alive"] = np.clip(p_alive, 0.0, 1.0)
@@ -344,12 +388,19 @@ def _apply_credit(
         x = transform_features(features_raw[credit_mask], credit_bundle["preprocessor"])
         q30 = horizons[30].predict_quantiles(x, credit_anchor_log(features_raw[credit_mask], 30))
         q90 = horizons[90].predict_quantiles(x, credit_anchor_log(features_raw[credit_mask], 90))
-        frame.loc[credit_mask, "predicted_credit_usage_30d"] = q30[0.50]
-        frame.loc[credit_mask, "predicted_credit_usage_90d"] = q90[0.50]
-        frame.loc[credit_mask, "credit_p10_30d"] = q30[0.10]
-        frame.loc[credit_mask, "credit_p90_30d"] = q30[0.90]
-        frame.loc[credit_mask, "credit_p10_90d"] = q90[0.10]
-        frame.loc[credit_mask, "credit_p90_90d"] = q90[0.90]
+        # The 30d and 90d quantiles come from independent heads, so a longer
+        # horizon can occasionally fall below a shorter one. Cumulative usage is
+        # non-decreasing in time, so enforce 90d >= 30d per quantile (cheap,
+        # removes the ~3% cross-horizon inversions seen in the audit).
+        p50_30 = np.asarray(q30[0.50], dtype=float)
+        p10_30 = np.asarray(q30[0.10], dtype=float)
+        p90_30 = np.asarray(q30[0.90], dtype=float)
+        frame.loc[credit_mask, "predicted_credit_usage_30d"] = p50_30
+        frame.loc[credit_mask, "predicted_credit_usage_90d"] = np.maximum(q90[0.50], p50_30)
+        frame.loc[credit_mask, "credit_p10_30d"] = p10_30
+        frame.loc[credit_mask, "credit_p90_30d"] = p90_30
+        frame.loc[credit_mask, "credit_p10_90d"] = np.maximum(q90[0.10], p10_30)
+        frame.loc[credit_mask, "credit_p90_90d"] = np.maximum(q90[0.90], p90_30)
         if topup_model is not None:
             # AFT model trained on the censored days_until_next_topup label —
             # replaces the balance/burn heuristic (kept as fallback for older
@@ -434,14 +485,14 @@ def _apply_descriptive(
 
 def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     # value tier (§3.5): percentile of CLV among active customers of the run
-    active_mask = frame["lifecycle_stage"].isin(["Active Paid", "Active Free"])
+    active_mask = frame["lifecycle_stage"].isin(list(LifecycleStage.ACTIVE))
     clv = pd.to_numeric(frame["predicted_clv_6m"], errors="coerce")
-    tier = pd.Series("none", index=frame.index, dtype="object")
+    tier = pd.Series(ValueTier.NONE, index=frame.index, dtype="object")
     pool = active_mask & clv.notna() & (clv > 0)
     if pool.any():
         rank = clv[pool].rank(pct=True)
         tier.loc[pool] = np.select(
-            [rank >= 0.90, rank >= 0.50], ["high", "mid"], default="low"
+            [rank >= 0.90, rank >= 0.50], [ValueTier.HIGH, ValueTier.MID], default=ValueTier.LOW
         )
     frame["customer_value_tier"] = tier
 
@@ -466,12 +517,12 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
 
     urgency = pd.Series([None] * len(frame), index=frame.index, dtype="object")
     credit_eligible = frame["el_credit"]
-    urgency.loc[credit_eligible] = "stable"
+    urgency.loc[credit_eligible] = UrgencyLevel.STABLE
     with_days = credit_eligible & pd.Series(days, index=frame.index).notna()
     days_series = pd.Series(days, index=frame.index)
-    urgency.loc[with_days & (days_series <= 90)] = "monitor"
-    urgency.loc[with_days & (days_series <= 30)] = "warning"
-    urgency.loc[with_days & (days_series <= 14)] = "critical"
+    urgency.loc[with_days & (days_series <= 90)] = UrgencyLevel.MONITOR
+    urgency.loc[with_days & (days_series <= 30)] = UrgencyLevel.WARNING
+    urgency.loc[with_days & (days_series <= 14)] = UrgencyLevel.CRITICAL
     frame["credit_urgency_level"] = urgency
 
     # priority score (§5.2) — rank by expected money at risk. revenue_at_risk
@@ -483,6 +534,74 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     var = pd.to_numeric(frame["revenue_at_risk"], errors="coerce").fillna(0.0).clip(lower=0.0)
     frame["priority_score"] = _display_score(var)
 
+    # needs_review (§5.3) — surface the churn/p_alive disagreement. A valuable
+    # customer whose recent usage has collapsed and whose p_alive is near zero
+    # is at risk even when the churn score is low (it leans on long payment
+    # history). Flag = high churn risk OR (valuable AND p_alive low AND usage
+    # declining), so a human looks before we treat the low churn score as safe.
+    risk_level = frame["churn_risk_level"].astype("object")
+    p_alive = pd.to_numeric(frame["p_alive"], errors="coerce")
+    usage_change = pd.to_numeric(frame.get("usage_change_90d_pct"), errors="coerce")
+    valuable = frame["customer_value_tier"].isin([ValueTier.HIGH, ValueTier.MID])
+    churn_at_risk = risk_level.isin([RiskLevel.HIGH, RiskLevel.CRITICAL])
+    silent_decline = valuable & (p_alive < 0.20) & (usage_change < -0.10)
+    needs_review = (churn_at_risk | silent_decline) & active_mask
+    frame["needs_review"] = needs_review.fillna(False).astype(bool)
+
+    frame = _apply_segments(frame)
+    return frame
+
+
+# Prioritization segments — value × health + sales-timing, see
+# docs/CUSTOMER-SEGMENTS.md. Names/order are the single source in src.constants.
+
+
+def _apply_segments(frame: pd.DataFrame) -> pd.DataFrame:
+    """Assign an actionable segment + a global action_rank per customer (§5.4)."""
+
+    tier = frame["customer_value_tier"]
+    risk = frame["churn_risk_level"].astype("object")
+    p_alive = pd.to_numeric(frame["p_alive"], errors="coerce")
+    change = pd.to_numeric(frame.get("usage_change_90d_pct"), errors="coerce").fillna(0.0)
+
+    valuable = tier.isin([ValueTier.HIGH, ValueTier.MID])
+    at_risk = risk.isin([RiskLevel.HIGH, RiskLevel.CRITICAL]) | (p_alive < 0.20)
+    watch = ~at_risk & (risk.eq(RiskLevel.MEDIUM) | (p_alive < 0.50))
+    growing = change > 0.10
+
+    def assign(i: int) -> str:
+        stage = frame["lifecycle_stage"].iat[i]
+        if stage == LifecycleStage.GHOST:
+            return Segment.GHOST
+        if stage == LifecycleStage.CHURNED:
+            return (
+                Segment.REACTIVATE
+                if frame["sub_stage"].iat[i] == SubStage.CHURNED_PAID
+                else Segment.DORMANT
+            )
+        if valuable.iat[i]:
+            if at_risk.iat[i]:
+                return Segment.PROTECT
+            if watch.iat[i]:
+                return Segment.STABILIZE
+            return Segment.GROW
+        if at_risk.iat[i]:
+            return Segment.SALVAGE_LOW
+        if watch.iat[i]:
+            return Segment.WATCH_LOW
+        return Segment.DEVELOP if growing.iat[i] else Segment.MAINTAIN
+
+    frame["segment"] = [assign(i) for i in range(len(frame))]
+
+    # Global action_rank: by segment priority, then by money inside each segment
+    # (revenue-at-risk for retention plays, forward CLV for growth/value plays).
+    seg_rank = frame["segment"].map({s: i for i, s in enumerate(Segment.ORDER)})
+    rar = pd.to_numeric(frame["revenue_at_risk"], errors="coerce").fillna(0.0)
+    clv = pd.to_numeric(frame["predicted_clv_6m"], errors="coerce").fillna(0.0)
+    money = np.where(frame["segment"].isin(Segment.RETENTION), rar, clv)
+    order = pd.DataFrame({"seg": seg_rank.to_numpy(), "money": -money}, index=frame.index)
+    ranked = order.sort_values(["seg", "money"]).index
+    frame["action_rank"] = pd.Series(range(1, len(frame) + 1), index=ranked).reindex(frame.index)
     return frame
 
 
@@ -547,9 +666,12 @@ def _build_output_rows(
                 "avg_transaction_value": _round_or_none(row["avg_transaction_value"], 2),
                 "ever_paid": bool(row["ever_paid"]),
                 "priority_score": _round_or_none(row["priority_score"], 2) or 0.0,
-                "output_status": "predicted" if all(
+                "segment": _str_or_none(row.get("segment")),
+                "action_rank": _int_or_none(row.get("action_rank")),
+                "needs_review": bool(row.get("needs_review", False)),
+                "output_status": OutputStatus.PREDICTED if all(
                     model["eligible"] for model in json.loads(eligibility).values()
-                ) else "partial",
+                ) else OutputStatus.PARTIAL,
                 "output_notes": _output_notes(json.loads(eligibility)),
                 "model_eligibility_json": eligibility,
                 "model_versions_json": model_versions_json,
