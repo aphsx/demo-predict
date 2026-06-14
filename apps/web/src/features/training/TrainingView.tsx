@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
-import { Layers3 } from "lucide-react";
+import { Layers3, UploadCloud } from "lucide-react";
 import { notifyStatusDialog } from "@/components/GlobalStatusDialogHost";
 import { StatusDialog } from "@/components/StatusDialog";
 import { Skeleton } from "@/components/ui";
@@ -256,7 +255,7 @@ export function TrainingView() {
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 sm:min-w-[170px]"
                 style={{ background: IMPORT_ACCENT }}
               >
-                <Image src="/icons/import.svg" alt="" width={16} height={17} aria-hidden />
+                <UploadCloud size={16} aria-hidden />
                 Upload and clean
               </button>
             </div>

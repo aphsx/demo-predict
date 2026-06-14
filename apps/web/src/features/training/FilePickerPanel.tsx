@@ -1,6 +1,5 @@
 import { type RefObject } from "react";
-import Image from "next/image";
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, UploadCloud } from "lucide-react";
 import { BRAND_BLUE, formatFileSize } from "./training-utils";
 
 export function FilePickerPanel({
@@ -82,7 +81,7 @@ export function FilePickerPanel({
         className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
         style={{ background: BRAND_BLUE }}
       >
-        <Image src="/icons/upload-icon.svg" alt="" width={14} height={14} aria-hidden />
+        <UploadCloud size={14} aria-hidden />
         {pendingFile ? "Change file" : "Choose file"}
       </button>
     </div>
