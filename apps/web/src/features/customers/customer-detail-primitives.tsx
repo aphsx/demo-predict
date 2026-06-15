@@ -1,32 +1,25 @@
 "use client";
 
-import type { ElementType, ReactNode } from "react";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  CreditCard,
-  Gem,
-  TrendingDown,
-} from "lucide-react";
+import type { ReactNode } from "react";
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { MarkdownLite } from "@/components/chat/markdown-lite";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
-import type { ChurnFactor } from "@/lib/ml-api";
 import { composeReasoning } from "./reasoning";
 import type { CustomerDetail } from "./customer-detail-view";
 
 const CHURN_COLOR = "#fc4c02";
-const CHURN_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${CHURN_COLOR} 100%)`;
-const BLUE_GRADIENT = `linear-gradient(90deg, ${MOBY_BRAND.blue} 0%, ${MOBY_BRAND.blueLight} 100%)`;
 
 // ── Layout ──────────────────────────────────────────────────────────────────
 
 export function Panel({
   title,
+  headerRight,
   children,
   className,
   bodyClassName,
 }: {
   title: string;
+  headerRight?: ReactNode;
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
@@ -34,9 +27,14 @@ export function Panel({
   return (
     <section className={`surface-elev flex min-h-0 flex-col overflow-hidden ${className ?? ""}`}>
       <div className="shrink-0 border-b border-gray-100 px-5 py-4">
-        <h2 className="text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
-          {title}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <h2 className="text-[20px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+            {title}
+          </h2>
+          {headerRight ? (
+            <div className="flex flex-wrap items-center justify-end gap-1">{headerRight}</div>
+          ) : null}
+        </div>
       </div>
       <div className={`p-5 ${bodyClassName ?? ""}`}>{children}</div>
     </section>
@@ -97,56 +95,6 @@ export function FactCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function BrandMeter({
-  label,
-  value,
-  max,
-  gradient,
-  formatValue,
-  hideValue = false,
-  trackClassName = "bg-[rgba(13,17,35,0.08)]",
-}: {
-  label?: string;
-  value: number;
-  max: number;
-  gradient: string;
-  formatValue?: (value: number) => string;
-  hideValue?: boolean;
-  trackClassName?: string;
-}) {
-  const pct = Math.max(0, Math.min(100, (value / max) * 100));
-  return (
-    <div>
-      {(label || !hideValue) && (
-        <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
-          {label && <span className="font-medium text-[color:var(--ink-4)]">{label}</span>}
-          {!hideValue && (
-            <span className="num font-semibold">
-              {formatValue ? formatValue(value) : `${pct.toFixed(0)}%`}
-            </span>
-          )}
-        </div>
-      )}
-      <div className={`relative h-3 overflow-hidden rounded-full ${trackClassName}`}>
-        <div
-          className="h-full rounded-full transition-[width] duration-300"
-          style={{
-            width: `${pct}%`,
-            backgroundImage: gradient,
-            boxShadow: "0 0 18px rgba(252,76,2,0.16)",
-          }}
-        />
-        <div
-          className="pointer-events-none absolute inset-0 opacity-20"
-          style={{
-            backgroundImage: "linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.42) 50%, transparent 82%)",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ── Pills ────────────────────────────────────────────────────────────────────
 
 export function LifecycleDetailPill({ stage }: { stage: string }) {
@@ -187,44 +135,6 @@ export function HighValueMedal() {
       alt="High value customer"
       className="h-6 w-6 shrink-0"
     />
-  );
-}
-
-// ── Signals section ──────────────────────────────────────────────────────────
-
-export function SignalRow({
-  icon: Icon,
-  label,
-  value,
-  meterValue,
-  gradient,
-  accentColor = MOBY_BRAND.blue,
-}: {
-  icon: ElementType;
-  label: string;
-  value: string;
-  meterValue: number;
-  gradient: string;
-  accentColor?: string;
-}) {
-  return (
-    <div className="rounded-[24px] border border-gray-200 bg-white p-4">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold text-[color:var(--ink-1)]">{label}</p>
-          <p className="num mt-2 whitespace-nowrap text-[26px] font-semibold tracking-[-0.04em]">
-            {value}
-          </p>
-        </div>
-        <span
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-gray-50"
-          style={{ color: accentColor }}
-        >
-          <Icon size={17} />
-        </span>
-      </div>
-      <BrandMeter value={meterValue} max={100} gradient={gradient} hideValue />
-    </div>
   );
 }
 
@@ -314,7 +224,4 @@ export function isHighValueTier(tier: string | null): boolean {
   return (tier ?? "").toLowerCase().includes("high");
 }
 
-export { CHURN_COLOR, CHURN_GRADIENT, BLUE_GRADIENT };
-
-// Re-export icon refs used in the main view's SignalRow calls
-export { TrendingDown, Gem, CreditCard };
+export { CHURN_COLOR };

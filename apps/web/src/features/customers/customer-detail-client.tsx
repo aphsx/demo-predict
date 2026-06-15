@@ -9,7 +9,8 @@ import Link from "next/link";
 import { Database } from "lucide-react";
 import { useActiveRun } from "@/components/run-selector";
 import { EmptyState, Skeleton } from "@/components/ui";
-import { fetchCustomerUsageMonthly, fetchRunOutput } from "@/lib/ml-api";
+import { fetchCustomerPayments, fetchCustomerUsageMonthly, fetchRunOutput } from "@/lib/ml-api";
+import type { PaymentEvent } from "@/lib/ml-api";
 import {
   CustomerDetailView,
   type CustomerDetail,
@@ -32,6 +33,7 @@ export function CustomerDetailClient({
       : runId;
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [usageTrend, setUsageTrend] = useState<UsageTrendPoint[]>([]);
+  const [payments, setPayments] = useState<PaymentEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,15 +48,18 @@ export function CustomerDetailClient({
     let alive = true;
     setCustomer(null);
     setUsageTrend([]);
+    setPayments([]);
     setError(null);
     Promise.all([
       fetchRunOutput(effectiveRunId, accId),
       fetchCustomerUsageMonthly(effectiveRunId, accId),
+      fetchCustomerPayments(effectiveRunId, accId),
     ])
-      .then(([output, usage]) => {
+      .then(([output, usage, paymentEvents]) => {
         if (!alive) return;
         setCustomer(output);
-        setUsageTrend(usage.map((point) => ({ month: point.month, usage: point.total })));
+        setUsageTrend(usage);
+        setPayments(paymentEvents);
       })
       .catch((e: unknown) =>
         alive && setError(e instanceof Error ? e.message : "โหลดข้อมูลลูกค้าไม่สำเร็จ")
@@ -112,6 +117,7 @@ export function CustomerDetailClient({
       accId={accId}
       customer={customer}
       usageTrend={usageTrend}
+      payments={payments}
       runId={effectiveRun?.id}
       customersHref={customersHref}
     />

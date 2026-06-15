@@ -3,15 +3,11 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
-import type { ChurnFactor } from "@/lib/ml-api";
+import type { ChurnFactor, PaymentEvent } from "@/lib/ml-api";
+import { CustomerPaymentChart } from "./customer-payment-chart";
 import {
-  BrandMeter,
-  BLUE_GRADIENT,
   CHURN_COLOR,
-  CHURN_GRADIENT,
-  CreditCard,
   FactCard,
-  Gem,
   HeroMetric,
   HighValueMedal,
   isHighValueTier,
@@ -19,12 +15,9 @@ import {
   MiniStatCard,
   Panel,
   ReasoningStack,
-  SignalRow,
   SolidDetailPill,
-  TrendingDown,
 } from "./customer-detail-primitives";
-import { UsageLineChart } from "./customer-usage-chart";
-import type { UsageTrendPoint } from "./customer-usage-chart";
+import { UsageCreditPanel, type UsageTrendPoint } from "./customer-usage-chart";
 
 export type { UsageTrendPoint };
 
@@ -56,18 +49,20 @@ export function CustomerDetailView({
   accId,
   customer,
   usageTrend,
+  payments,
   runId,
   customersHref,
 }: {
   accId: string;
   customer: CustomerDetail;
   usageTrend: UsageTrendPoint[];
+  payments: PaymentEvent[];
   runId?: string;
   customersHref?: string;
 }) {
   const churnPct = customer.churn_probability != null ? customer.churn_probability * 100 : null;
   const latestUsage = usageTrend.at(-1);
-  const peakUsage = usageTrend.length > 0 ? Math.max(...usageTrend.map((point) => point.usage)) : null;
+  const peakUsage = usageTrend.length > 0 ? Math.max(...usageTrend.map((point) => point.total)) : null;
   const showSubStage =
     Boolean(customer.sub_stage) && customer.sub_stage !== customer.lifecycle_stage;
   const customerListHref = customersHref ?? (runId ? `/customers?run=${encodeURIComponent(runId)}` : "/customers");
@@ -124,34 +119,25 @@ export function CustomerDetailView({
             </div>
           </Panel>
 
-          <Panel title="การใช้งาน Credit">
-            <div className="space-y-4">
-              {usageTrend.length > 0 ? (
-                <UsageLineChart data={usageTrend} compact />
-              ) : (
-                <div className="rounded-[24px] border border-gray-200 bg-white p-6 text-center text-[13px] text-[color:var(--ink-4)]">
-                  ไม่มีข้อมูล usage สำหรับ account นี้
-                </div>
-              )}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <MiniStatCard
-                  label="Latest usage"
-                  value={latestUsage?.usage.toLocaleString() ?? "—"}
-                  hint={latestUsage ? `${latestUsage.month} credits` : "ไม่มีข้อมูล usage"}
-                />
-                <MiniStatCard
-                  label="Peak usage"
-                  value={peakUsage != null ? peakUsage.toLocaleString() : "—"}
-                  hint="last 6 months"
-                />
-                <MiniStatCard
-                  label="Inactive"
-                  value={customer.days_since_last_activity != null ? `${customer.days_since_last_activity}d` : "—"}
-                  hint="since last activity"
-                />
-              </div>
+          <UsageCreditPanel data={usageTrend}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <MiniStatCard
+                label="Latest usage"
+                value={latestUsage?.total.toLocaleString() ?? "—"}
+                hint={latestUsage ? `${latestUsage.month} credits` : "ไม่มีข้อมูล usage"}
+              />
+              <MiniStatCard
+                label="Peak usage"
+                value={peakUsage != null ? peakUsage.toLocaleString() : "—"}
+                hint="last 6 months"
+              />
+              <MiniStatCard
+                label="Inactive"
+                value={customer.days_since_last_activity != null ? `${customer.days_since_last_activity}d` : "—"}
+                hint="since last activity"
+              />
             </div>
-          </Panel>
+          </UsageCreditPanel>
 
           <div className="flex min-h-0 max-h-[min(28rem,55vh)] flex-col self-stretch xl:max-h-none">
             <Panel
@@ -164,7 +150,7 @@ export function CustomerDetailView({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)] xl:items-start">
           <Panel title="Compact profile">
             <div className="grid grid-cols-2 gap-3">
               <FactCard label="Lifecycle" value={customer.lifecycle_stage} />
@@ -174,34 +160,19 @@ export function CustomerDetailView({
                 label="Avg txn"
                 value={customer.avg_transaction_value != null ? formatCurrency(customer.avg_transaction_value) : "—"}
               />
+              <FactCard
+                label="Credit demand 30d"
+                value={customer.predicted_credit_usage_30d != null ? customer.predicted_credit_usage_30d.toLocaleString() : "—"}
+              />
+              <FactCard
+                label="Credit demand 90d"
+                value={customer.predicted_credit_usage_90d != null ? customer.predicted_credit_usage_90d.toLocaleString() : "—"}
+              />
             </div>
           </Panel>
 
-          <Panel title="What changed the decision">
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <SignalRow
-                icon={TrendingDown}
-                label="Churn pressure"
-                value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
-                meterValue={churnPct ?? 0}
-                gradient={CHURN_GRADIENT}
-                accentColor={CHURN_COLOR}
-              />
-              <SignalRow
-                icon={Gem}
-                label="Commercial value"
-                value={customer.predicted_clv_6m != null ? formatCurrency(customer.predicted_clv_6m) : "—"}
-                meterValue={customer.predicted_clv_6m != null ? 78 : 0}
-                gradient={BLUE_GRADIENT}
-              />
-              <SignalRow
-                icon={CreditCard}
-                label="Credit demand"
-                value={customer.predicted_credit_usage_90d != null ? customer.predicted_credit_usage_90d.toLocaleString() : "—"}
-                meterValue={customer.predicted_credit_usage_90d != null ? 100 : 0}
-                gradient={BLUE_GRADIENT}
-              />
-            </div>
+          <Panel title="ประวัติการชำระเงิน">
+            <CustomerPaymentChart payments={payments} />
           </Panel>
         </div>
       </section>

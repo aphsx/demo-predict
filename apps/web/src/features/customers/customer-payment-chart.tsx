@@ -1,47 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
-  Line,
-  LineChart,
+  Cell,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { formatMonth } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
-import type { MonthlyUsagePoint } from "@/lib/ml-api";
-import { Panel } from "./customer-detail-primitives";
+import type { PaymentEvent } from "@/lib/ml-api";
 
-export type UsageTrendPoint = MonthlyUsagePoint;
-
-const DEFAULT_VISIBLE = 6;
+const DEFAULT_VISIBLE = 12;
 const MIN_VISIBLE = 1;
+const CHART_HEIGHT = 220;
 const Y_AXIS_WIDTH = 40;
 
-type SeriesKey = "total" | "sms" | "email" | "bc" | "api" | "otp";
+type MonthlyPayment = {
+  month: string;
+  amount: number;
+  credit_add: number;
+  count: number;
+};
 
 type Viewport = {
   start: number;
   count: number;
 };
-
-interface SeriesDef {
-  key: SeriesKey;
-  label: string;
-  color: string;
-  group: "total" | "channel" | "source";
-}
-
-const SERIES: SeriesDef[] = [
-  { key: "total", label: "รวม", color: MOBY_BRAND.blue, group: "total" },
-  { key: "sms", label: "SMS", color: MOBY_BRAND.orange, group: "channel" },
-  { key: "email", label: "Email", color: "#10b981", group: "channel" },
-  { key: "bc", label: "BC", color: "#8b5cf6", group: "source" },
-  { key: "api", label: "API", color: "#06b6d4", group: "source" },
-  { key: "otp", label: "OTP", color: MOBY_BRAND.orangeWarm, group: "source" },
-];
 
 function formatCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -64,126 +52,38 @@ function defaultViewport(total: number): Viewport {
   return { start: Math.max(0, total - count), count };
 }
 
-function formatRangeLabel(data: readonly UsageTrendPoint[], viewport: Viewport): string {
-  if (data.length === 0) return "";
-  const from = Math.min(data.length - 1, Math.max(0, Math.floor(viewport.start)));
-  const to = Math.min(data.length - 1, Math.max(0, Math.ceil(viewport.start + viewport.count) - 1));
-  if (from === to) return formatMonth(data[from].month);
-  return `${formatMonth(data[from].month)} – ${formatMonth(data[to].month)}`;
-}
-
-function visibleYMax(
-  data: readonly UsageTrendPoint[],
-  viewport: Viewport,
-  keys: readonly SeriesKey[],
-): number {
+function visibleYMax(monthly: readonly MonthlyPayment[], viewport: Viewport): number {
   const from = Math.max(0, Math.floor(viewport.start));
-  const to = Math.min(data.length, Math.ceil(viewport.start + viewport.count));
-  let max = 1;
-  for (const row of data.slice(from, to)) {
-    for (const key of keys) {
-      max = Math.max(max, row[key]);
-    }
+  const to = Math.min(monthly.length, Math.ceil(viewport.start + viewport.count));
+  const slice = monthly.slice(from, to);
+  return Math.max(...slice.map((row) => row.amount), 1);
+}
+
+function formatRangeLabel(monthly: readonly MonthlyPayment[], viewport: Viewport): string {
+  if (monthly.length === 0) return "";
+  const from = Math.min(monthly.length - 1, Math.max(0, Math.floor(viewport.start)));
+  const to = Math.min(monthly.length - 1, Math.max(0, Math.ceil(viewport.start + viewport.count) - 1));
+  if (from === to) return formatMonth(monthly[from].month);
+  return `${formatMonth(monthly[from].month)} – ${formatMonth(monthly[to].month)}`;
+}
+
+/** Aggregate individual payment events into per-month buckets (chronological). */
+function aggregateByMonth(payments: readonly PaymentEvent[]): MonthlyPayment[] {
+  const byMonth = new Map<string, MonthlyPayment>();
+  for (const p of payments) {
+    const month = p.payment_date.slice(0, 7); // YYYY-MM
+    const bucket = byMonth.get(month) ?? { month, amount: 0, credit_add: 0, count: 0 };
+    bucket.amount += p.amount;
+    bucket.credit_add += p.credit_add;
+    bucket.count += 1;
+    byMonth.set(month, bucket);
   }
-  return max;
+  return [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
 }
 
-function useUsageSeries() {
-  const [active, setActive] = useState<Set<SeriesKey>>(() => new Set<SeriesKey>(["total"]));
-
-  const toggle = (key: SeriesKey) => {
-    setActive((current) => {
-      const next = new Set(current);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      if (next.size === 0) next.add("total");
-      return next;
-    });
-  };
-
-  return { active, toggle };
-}
-
-export function UsageSeriesToggles({
-  active,
-  onToggle,
-}: {
-  active: ReadonlySet<SeriesKey>;
-  onToggle: (key: SeriesKey) => void;
-}) {
-  return (
-    <>
-      {SERIES.map((s, index) => {
-        const isActive = active.has(s.key);
-        const showDivider = index > 0 && SERIES[index - 1].group !== s.group;
-        return (
-          <span key={s.key} className="flex items-center gap-1">
-            {showDivider ? <span className="mx-0.5 h-3.5 w-px bg-gray-200" aria-hidden /> : null}
-            <button
-              type="button"
-              onClick={() => onToggle(s.key)}
-              className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10.5px] font-semibold transition-colors ${
-                isActive
-                  ? "border-transparent text-white"
-                  : "border-gray-200 bg-white text-[color:var(--ink-4)] hover:bg-gray-50"
-              }`}
-              style={isActive ? { backgroundColor: s.color } : undefined}
-            >
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: isActive ? "rgba(255,255,255,0.9)" : s.color }}
-              />
-              {s.label}
-            </button>
-          </span>
-        );
-      })}
-    </>
-  );
-}
-
-export function UsageCreditPanel({
-  data,
-  children,
-}: {
-  data: readonly UsageTrendPoint[];
-  children: ReactNode;
-}) {
-  const { active, toggle } = useUsageSeries();
-
-  return (
-    <Panel
-      title="การใช้งาน Credit"
-      headerRight={<UsageSeriesToggles active={active} onToggle={toggle} />}
-    >
-      <div className="space-y-4">
-        {data.length > 0 ? (
-          <UsageLineChart data={data} active={active} compact />
-        ) : (
-          <div className="rounded-[24px] border border-gray-200 bg-white p-6 text-center text-[13px] text-[color:var(--ink-4)]">
-            ไม่มีข้อมูล usage สำหรับ account นี้
-          </div>
-        )}
-        {children}
-      </div>
-    </Panel>
-  );
-}
-
-export function UsageLineChart({
-  data,
-  active,
-  compact = false,
-}: {
-  data: readonly UsageTrendPoint[];
-  active: ReadonlySet<SeriesKey>;
-  compact?: boolean;
-}) {
-  const chartHeight = compact ? 220 : 280;
-  const [viewport, setViewport] = useState<Viewport>(() => defaultViewport(data.length));
+export function CustomerPaymentChart({ payments }: { payments: readonly PaymentEvent[] }) {
+  const monthly = useMemo(() => aggregateByMonth(payments), [payments]);
+  const [viewport, setViewport] = useState<Viewport>(() => defaultViewport(monthly.length));
   const [dragging, setDragging] = useState(false);
   const [plotWidth, setPlotWidth] = useState(0);
   const chartAreaRef = useRef<HTMLDivElement>(null);
@@ -194,14 +94,14 @@ export function UsageLineChart({
   );
 
   useEffect(() => {
-    setViewport(defaultViewport(data.length));
-  }, [data]);
+    setViewport(defaultViewport(monthly.length));
+  }, [payments]);
 
   const applyViewport = useCallback(
     (next: Viewport) => {
-      setViewport(clampViewport(next.start, next.count, data.length));
+      setViewport(clampViewport(next.start, next.count, monthly.length));
     },
-    [data.length],
+    [monthly.length],
   );
 
   const syncPlotWidth = useCallback(() => {
@@ -215,11 +115,11 @@ export function UsageLineChart({
     const observer = new ResizeObserver(syncPlotWidth);
     observer.observe(plotRef.current);
     return () => observer.disconnect();
-  }, [syncPlotWidth, data.length]);
+  }, [syncPlotWidth, payments.length]);
 
   useEffect(() => {
     const el = chartAreaRef.current;
-    if (!el || data.length <= 1) return;
+    if (!el || monthly.length <= 1) return;
 
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -229,7 +129,7 @@ export function UsageLineChart({
       setViewport((current) => {
         if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
           const monthDelta = (event.deltaX / width) * current.count;
-          return clampViewport(current.start + monthDelta, current.count, data.length);
+          return clampViewport(current.start + monthDelta, current.count, monthly.length);
         }
 
         const ratio = (event.clientX - rect.left) / width;
@@ -237,23 +137,33 @@ export function UsageLineChart({
         const nextCount = current.count * factor;
         const anchor = current.start + ratio * current.count;
         const nextStart = anchor - ratio * nextCount;
-        return clampViewport(nextStart, nextCount, data.length);
+        return clampViewport(nextStart, nextCount, monthly.length);
       });
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [data.length]);
+  }, [monthly.length, payments.length]);
 
-  const activeSeries = SERIES.filter((s) => active.has(s.key));
-  const activeKeys = activeSeries.map((s) => s.key);
-  const rangeLabel = formatRangeLabel(data, viewport);
-  const canNavigate = data.length > 1;
-  const maxTotal = Math.max(...data.map((row) => row.total), 1);
-  const yMax = visibleYMax(data, viewport, activeKeys);
+  if (payments.length === 0) {
+    return (
+      <div className="rounded-[24px] border border-gray-200 bg-white p-6 text-center text-[13px] text-[color:var(--ink-4)]">
+        ไม่มีประวัติการชำระเงินสำหรับ account นี้
+      </div>
+    );
+  }
+
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const totalCredits = payments.reduce((sum, p) => sum + p.credit_add, 0);
+  const avgTicket = totalPaid / payments.length;
+
+  const rangeLabel = formatRangeLabel(monthly, viewport);
+  const canNavigate = monthly.length > 1;
+  const maxAmount = Math.max(...monthly.map((row) => row.amount), 1);
+  const yMax = visibleYMax(monthly, viewport);
 
   const slotWidth = plotWidth > 0 ? plotWidth / viewport.count : 0;
-  const innerWidth = Math.max(plotWidth, data.length * slotWidth);
+  const innerWidth = Math.max(plotWidth, monthly.length * slotWidth);
   const offsetX = viewport.start * slotWidth;
 
   const panByPixels = (dx: number, base: Viewport) => {
@@ -301,7 +211,7 @@ export function UsageLineChart({
     const track = event.currentTarget;
     const trackWidth = track.clientWidth || 1;
     const dx = event.clientX - drag.startX;
-    const monthDelta = (dx / trackWidth) * data.length;
+    const monthDelta = (dx / trackWidth) * monthly.length;
 
     if (drag.mode === "move") {
       applyViewport({ start: drag.viewport.start + monthDelta, count: drag.viewport.count });
@@ -329,15 +239,16 @@ export function UsageLineChart({
     if (!canNavigate || navDragRef.current || event.target !== event.currentTarget) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = (event.clientX - rect.left) / rect.width;
-    const center = ratio * data.length;
+    const center = ratio * monthly.length;
     applyViewport({ start: center - viewport.count / 2, count: viewport.count });
   };
 
-  const thumbLeftPct = (viewport.start / data.length) * 100;
-  const thumbWidthPct = (viewport.count / data.length) * 100;
+  const thumbLeftPct = (viewport.start / monthly.length) * 100;
+  const thumbWidthPct = (viewport.count / monthly.length) * 100;
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+      <div className="min-w-0 flex-1 space-y-2">
         <div className="flex items-center justify-between gap-2 px-1">
           <p className="text-[11.5px] font-medium text-[color:var(--ink-4)]">{rangeLabel}</p>
           {canNavigate ? (
@@ -355,12 +266,12 @@ export function UsageLineChart({
           onPointerUp={endChartDrag}
           onPointerCancel={endChartDrag}
         >
-          <div className="flex" style={{ height: chartHeight }}>
+          <div className="flex" style={{ height: CHART_HEIGHT }}>
             <div className="shrink-0" style={{ width: Y_AXIS_WIDTH }}>
-              <LineChart
+              <BarChart
                 width={Y_AXIS_WIDTH}
-                height={chartHeight}
-                data={[{ total: 0 }]}
+                height={CHART_HEIGHT}
+                data={[{ amount: 0 }]}
                 margin={{ top: 8, right: 0, bottom: 0, left: 0 }}
               >
                 <YAxis
@@ -368,12 +279,12 @@ export function UsageLineChart({
                   axisLine={false}
                   tickLine={false}
                   width={Y_AXIS_WIDTH}
-                  tickFormatter={formatCompact}
+                  tickFormatter={(v: number) => `฿${formatCompact(v)}`}
                   stroke="#999999"
                   fontSize={10}
                   tickCount={5}
                 />
-              </LineChart>
+              </BarChart>
             </div>
 
             <div ref={plotRef} className="min-w-0 flex-1 overflow-hidden">
@@ -385,10 +296,10 @@ export function UsageLineChart({
                     transform: `translateX(${-offsetX}px)`,
                   }}
                 >
-                  <LineChart
+                  <BarChart
                     width={innerWidth}
-                    height={chartHeight}
-                    data={[...data]}
+                    height={CHART_HEIGHT}
+                    data={[...monthly]}
                     margin={{ top: 8, right: 12, bottom: 0, left: 0 }}
                   >
                     <CartesianGrid vertical={false} stroke="#f3f4f6" />
@@ -404,8 +315,15 @@ export function UsageLineChart({
                     />
                     <YAxis hide domain={[0, yMax]} />
                     <Tooltip
+                      cursor={{ fill: "rgba(0,107,255,0.06)" }}
                       labelFormatter={(label: string) => formatMonth(label)}
-                      formatter={(value: number, name: string) => [value.toLocaleString(), name]}
+                      formatter={(value: number, _name, item) => {
+                        const row = item?.payload as MonthlyPayment | undefined;
+                        return [
+                          `฿${value.toLocaleString()} · ${row?.count ?? 0} payments · ${formatCompact(row?.credit_add ?? 0)} credits`,
+                          "Paid",
+                        ];
+                      }}
                       contentStyle={{
                         borderRadius: 12,
                         border: "1px solid #e5e7eb",
@@ -413,20 +331,17 @@ export function UsageLineChart({
                         boxShadow: "var(--shadow-1)",
                       }}
                     />
-                    {activeSeries.map((s) => (
-                      <Line
-                        key={s.key}
-                        type="monotone"
-                        dataKey={s.key}
-                        name={s.label}
-                        stroke={s.color}
-                        strokeWidth={s.key === "total" ? 4 : 2.5}
-                        dot={{ r: 3, strokeWidth: 2, fill: "white" }}
-                        activeDot={{ r: 5 }}
-                        isAnimationActive={false}
-                      />
-                    ))}
-                  </LineChart>
+                    <Bar
+                      dataKey="amount"
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={Math.max(10, slotWidth * 0.62)}
+                      isAnimationActive={false}
+                    >
+                      {monthly.map((row) => (
+                        <Cell key={row.month} fill={MOBY_BRAND.blue} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </div>
               ) : null}
             </div>
@@ -442,11 +357,11 @@ export function UsageLineChart({
             onClick={onNavigatorTrackClick}
           >
             <div className="pointer-events-none absolute inset-x-1 inset-y-2 flex items-end gap-px">
-              {data.map((row) => (
+              {monthly.map((row) => (
                 <div
                   key={row.month}
                   className="min-w-0 flex-1 rounded-sm bg-[color:var(--moby-200)]"
-                  style={{ height: `${Math.max(18, (row.total / maxTotal) * 100)}%`, opacity: 0.55 }}
+                  style={{ height: `${Math.max(18, (row.amount / maxAmount) * 100)}%`, opacity: 0.55 }}
                 />
               ))}
             </div>
@@ -467,6 +382,25 @@ export function UsageLineChart({
             </div>
           </div>
         ) : null}
+      </div>
+
+      <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-1 lg:w-[148px]">
+        <PaymentStat label="Total paid" value={`฿${formatCompact(totalPaid)}`} hint={`${payments.length} payments`} />
+        <PaymentStat label="Avg ticket" value={`฿${formatCompact(avgTicket)}`} hint="per payment" />
+        <PaymentStat label="Credits bought" value={formatCompact(totalCredits)} hint="total top-up" />
+      </div>
+    </div>
+  );
+}
+
+function PaymentStat({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 lg:p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] lg:text-[10.5px]">
+        {label}
+      </p>
+      <p className="num mt-1 text-[17px] font-semibold lg:text-[20px]">{value}</p>
+      <p className="mt-0.5 text-[10.5px] text-[color:var(--ink-4)] lg:mt-1 lg:text-[11.5px]">{hint}</p>
     </div>
   );
 }
