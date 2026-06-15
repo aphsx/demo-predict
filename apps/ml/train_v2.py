@@ -1,31 +1,14 @@
 #!/usr/bin/env python3
-"""ML v2 training CLI.
+"""Compatibility shim — CLI entrypoint moved to src/cli/train.py.
 
-Usage:
-  python train_v2.py --training-run-id <uuid>
-
-The run row in `ml_training_runs` must already exist (created by the Elysia
-API or inserted manually). The runner drives it to completed/failed.
+Prefer: python -m src.cli.train --training-run-id <uuid>
 """
-import argparse
-import logging
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Run one ML v2 training run")
-    parser.add_argument("--training-run-id", required=True)
-    args = parser.parse_args()
-
-    from src.training.runner import run_training
-
-    run_training(args.training_run_id)
-
+from src.cli.train import main  # noqa: E402
 
 if __name__ == "__main__":
     main()

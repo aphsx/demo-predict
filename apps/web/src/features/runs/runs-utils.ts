@@ -4,7 +4,7 @@
  */
 
 import type { PredictDataSource } from "@/lib/api";
-import type { RunStatus } from "@/lib/mlApi";
+import type { RunStatus } from "@/lib/ml-api";
 
 export type PillTone = "ok" | "warn" | "danger" | "info" | "neutral" | "brand" | "violet";
 
@@ -14,7 +14,7 @@ export const RUN_POLL_MS = 3000;
 // ── predict_data_sources.import_status ──────────────────────────
 
 export function importStatusTone(status: string): PillTone {
-  if (status === "ready") return "ok";
+  if (status === "ready") return "brand";
   if (status === "failed") return "danger";
   if (status === "importing" || status === "cleaning") return "info";
   return "neutral";
@@ -31,9 +31,9 @@ export function importStatusLabel(status: string): string {
 // ── ml_prediction_runs.status ───────────────────────────────────
 
 export const runStatusTone: Record<RunStatus, PillTone> = {
-  pending: "neutral",
+  pending: "warm",
   in_progress: "info",
-  completed: "ok",
+  completed: "brand",
   failed: "danger",
 };
 

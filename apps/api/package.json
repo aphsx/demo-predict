@@ -8,6 +8,7 @@
     "db:introspect": "drizzle-kit introspect"
   },
   "dependencies": {
+    "@moby/types": "workspace:*",
     "@elysiajs/cors": "^1.2.0",
     "better-auth": "^1.2.0",
     "drizzle-orm": "^0.44.0",

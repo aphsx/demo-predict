@@ -260,7 +260,6 @@ CREATE TABLE public.ml_prediction_outputs (
     needs_review boolean DEFAULT false NOT NULL,
     ai_explanation text,
     ai_reasoning_json jsonb,
-    ai_recommended_message text,
     ai_generated_at timestamp with time zone,
     ai_model text,
     ai_status text DEFAULT 'not_requested'::text NOT NULL,
@@ -1153,6 +1152,9 @@ CREATE TABLE public."user" (
     email text NOT NULL,
     "emailVerified" boolean DEFAULT false NOT NULL,
     image text,
+    "givenName" text,
+    "familyName" text,
+    locale text,
     "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
     "updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );

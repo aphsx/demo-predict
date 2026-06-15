@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CustomerDetailClient } from "@/features/customers/CustomerDetailClient";
+import { CustomerDetailClient } from "@/features/customers/customer-detail-client";
 
 export const metadata: Metadata = { title: "Customer 360 · 1Moby Intelligence" };
 

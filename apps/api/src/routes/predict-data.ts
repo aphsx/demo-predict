@@ -6,12 +6,11 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { predictDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
-import { UUID_RE } from "../lib/ml-contract";
+import { denyNotFound } from "../lib/access-control";
+import { UUID_RE, MAX_UPLOAD_BYTES } from "../lib/constants";
 import { importPredictExcel, type PredictImportResult } from "../lib/predict-import";
 import { abortPredictDataSource } from "../lib/abort-data-source";
 import { cleanPredictFromRaw } from "../lib/predict-clean";
-
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 function mapSource(row: {
   id: string;
@@ -91,10 +90,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
       .where(eq(predictDataSources.id, params.id))
       .limit(1);
 
-    if (rows.length === 0) {
-      set.status = 404;
-      return { message: "Predict data source not found" };
-    }
+    if (rows.length === 0) return denyNotFound(set, "Predict data source not found");
     return mapSource(rows[0]);
   })
   // Suggested prediction cutoff = day after the latest observed activity
@@ -102,19 +98,13 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
   .get(
     "/:id/suggested-cutoff",
     async ({ params, set }) => {
-      if (!UUID_RE.test(params.id)) {
-        set.status = 404;
-        return { message: "Predict data source not found" };
-      }
+      if (!UUID_RE.test(params.id)) return denyNotFound(set, "Predict data source not found");
       const [source] = await db
         .select({ id: predictDataSources.id })
         .from(predictDataSources)
         .where(eq(predictDataSources.id, params.id))
         .limit(1);
-      if (!source) {
-        set.status = 404;
-        return { message: "Predict data source not found" };
-      }
+      if (!source) return denyNotFound(set, "Predict data source not found");
 
       const [row] = await db.execute<{
         suggested_cutoff: string | null;

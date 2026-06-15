@@ -28,6 +28,9 @@
       ],
       "@moby/api": [
         "../api/src/index.ts"
+      ],
+      "@moby/types": [
+        "../../packages/types/src/index.ts"
       ]
     }
   },

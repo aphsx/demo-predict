@@ -3,7 +3,7 @@
  * (docs/ML-V2-DASHBOARD-SPEC.md §4). The card components render this shape;
  * the adapter is the only place that maps contract → view-model.
  */
-import type { RunSummary } from "@/lib/mlApi";
+import type { RunSummary } from "@/lib/ml-api";
 
 export type MonthlyRevenuePoint = {
   month: string; // YYYY-MM

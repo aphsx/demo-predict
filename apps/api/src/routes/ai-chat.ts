@@ -20,9 +20,9 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { aiConversations, aiMessages } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
+import { denyNotFound } from "../lib/access-control";
 import { orchestrate, sseError, generateConversationTitle } from "../lib/ai/orchestrator";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { UUID_RE } from "../lib/constants";
 const MAX_MESSAGE_CHARS = 12_000;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -86,10 +86,10 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
   .get(
     "/conversations/:id",
     async ({ params, userId, set }) => {
-      if (!UUID_RE.test(params.id)) { set.status = 404; return { message: "Not found" }; }
+      if (!UUID_RE.test(params.id)) return denyNotFound(set, "Not found");
 
       const conv = await getConversation(params.id, userId!);
-      if (!conv) { set.status = 404; return { message: "Conversation not found" }; }
+      if (!conv) return denyNotFound(set, "Conversation not found");
 
       const msgs = await db
         .select({
@@ -114,10 +114,10 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
   .patch(
     "/conversations/:id",
     async ({ params, body, userId, set }) => {
-      if (!UUID_RE.test(params.id)) { set.status = 404; return { message: "Not found" }; }
+      if (!UUID_RE.test(params.id)) return denyNotFound(set, "Not found");
 
       const conv = await getConversation(params.id, userId!);
-      if (!conv) { set.status = 404; return { message: "Conversation not found" }; }
+      if (!conv) return denyNotFound(set, "Conversation not found");
 
       const updates: { title?: string; archived?: boolean; updatedAt: Date } = { updatedAt: new Date() };
       if (body.title !== undefined) updates.title = body.title.trim().slice(0, 100) || conv.title;
@@ -144,10 +144,10 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
   .delete(
     "/conversations/:id",
     async ({ params, userId, set }) => {
-      if (!UUID_RE.test(params.id)) { set.status = 404; return { message: "Not found" }; }
+      if (!UUID_RE.test(params.id)) return denyNotFound(set, "Not found");
 
       const conv = await getConversation(params.id, userId!);
-      if (!conv) { set.status = 404; return { message: "Conversation not found" }; }
+      if (!conv) return denyNotFound(set, "Conversation not found");
 
       await db.delete(aiConversations).where(eq(aiConversations.id, params.id));
       set.status = 204;
@@ -160,16 +160,10 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
   .post(
     "/conversations/:id/messages",
     async ({ params, body, userId, set }) => {
-      if (!UUID_RE.test(params.id)) {
-        set.status = 404;
-        return { message: "Conversation not found" };
-      }
+      if (!UUID_RE.test(params.id)) return denyNotFound(set, "Conversation not found");
 
       const conv = await getConversation(params.id, userId!);
-      if (!conv) {
-        set.status = 404;
-        return { message: "Conversation not found" };
-      }
+      if (!conv) return denyNotFound(set, "Conversation not found");
 
       const userMessage = body.message.trim();
       if (!userMessage) {

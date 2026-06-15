@@ -8,6 +8,7 @@
     "start": "next start -p 3000"
   },
   "dependencies": {
+    "@moby/types": "workspace:*",
     "@elysiajs/eden": "^1.4.9",
     "better-auth": "^1.2.0",
     "clsx": "^2.1.0",

@@ -7,7 +7,7 @@ import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
 import { canMutateOwnedRecord, denyMutation } from "../lib/access-control";
 import { requireUser } from "../lib/auth-middleware";
-import { UUID_RE } from "../lib/ml-contract";
+import { UUID_RE, MAX_UPLOAD_BYTES } from "../lib/constants";
 import { importTrainExcel, prepareTrainDataSource, type TrainImportResult } from "../lib/train-import";
 import type { TrainImportProgressEvent } from "../lib/train-import-progress";
 import { abortTrainDataSource, releaseStaleTrainImports } from "../lib/abort-data-source";
@@ -19,8 +19,6 @@ import {
   publishTrainPipelineProgress,
   readLatestTrainImportStreamEntry,
 } from "../lib/train-import-stream";
-
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 function runTrainImportJob(
   sourceId: string,

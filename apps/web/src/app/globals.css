@@ -95,15 +95,15 @@
   --ink-5: #999999;     /* labels */
   --ink-6: #d1d5db;     /* gray-300: disabled */
 
-  /* Semantic */
-  --ok:       #059669;
-  --ok-bg:    #ecfdf5;
-  --warn:     #d97706;
-  --warn-bg:  #fffbeb;
-  --danger:   #dc2626;
-  --danger-bg:#fef2f2;
-  --info:     #0369a1;
-  --info-bg:  #f0f9ff;
+  /* Semantic — 1Moby palette (no generic green) */
+  --ok:       #006bff;
+  --ok-bg:    #eff6ff;
+  --warn:     #ffa400;
+  --warn-bg:  #fff8eb;
+  --danger:   #fc4c02;
+  --danger-bg:#fff4ed;
+  --info:     #1893f0;
+  --info-bg:  #eff6ff;
 
   /* Lifecycle palette — 1Moby brand (must match dashboard LIFECYCLE_PALETTE) */
   --c-paid:    #006bff;

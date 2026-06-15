@@ -1,9 +1,12 @@
 import type { TrainDataSource } from "@/lib/api";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 
-export const IMPORT_ACCENT = MOBY_BRAND.orange;
-export const IMPORT_PROGRESS_BG = `linear-gradient(90deg, ${MOBY_BRAND.orangeWarm} 0%, ${MOBY_BRAND.orange} 100%)`;
+export const IMPORT_ACCENT = MOBY_BRAND.blue;
+export const IMPORT_PROGRESS_BG = `linear-gradient(90deg, ${MOBY_BRAND.blueLight} 0%, ${MOBY_BRAND.blue} 100%)`;
 export const BRAND_BLUE = MOBY_BRAND.blue;
+
+export const PRIMARY_BUTTON_CLS =
+  "inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[color:var(--moby-600)] px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(0,107,255,0.14)] hover:bg-[color:var(--moby-800)] disabled:opacity-50";
 
 export type CleanCounts = {
   customers: number;
@@ -24,8 +27,8 @@ export function getCleanCounts(source: TrainDataSource | null): CleanCounts | nu
   };
 }
 
-export function statusTone(status: string): "ok" | "danger" | "neutral" | "info" {
-  if (status === "ready") return "ok";
+export function statusTone(status: string): "brand" | "danger" | "neutral" | "info" {
+  if (status === "ready") return "brand";
   if (status === "failed") return "danger";
   if (status === "cleaning" || status === "importing") return "info";
   return "neutral";

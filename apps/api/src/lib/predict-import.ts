@@ -25,8 +25,13 @@ import {
   type PredictSheetName,
 } from "./predict-excel-contract";
 import type { CleanManifest } from "./clean-manifest";
+import {
+  validateWorkbookSheets as validateWorkbookSheetsCore,
+  parseSheetRows as parseSheetRowsCore,
+  insertSheetRows as insertSheetRowsCore,
+  type CellJson,
+} from "./data-import/excel-core";
 
-type CellJson = string | number | boolean | null | Record<string, unknown>;
 type RawInsertTable = PgTable;
 
 const PREDICT_RAW_TABLE_BY_NAME: Record<string, RawInsertTable> = {
@@ -48,122 +53,20 @@ export interface PredictImportResult {
   clean_manifest?: CleanManifest;
 }
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
-function trimHeader(value: unknown): string | null {
-  if (value == null) return null;
-  const s = String(value).trim();
-  return s.length > 0 ? s : null;
-}
-
-function cellToJson(value: unknown): CellJson {
-  if (value == null) return null;
-  if (value instanceof Date) {
-    const serial = (value.getTime() - Date.UTC(1899, 11, 30)) / 86_400_000;
-    return { _excel: "datetime", iso: value.toISOString(), serial };
-  }
-  if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-  return String(value);
-}
-
-function rowIsEmpty(values: unknown[]): boolean {
-  for (const v of values) {
-    if (v == null) continue;
-    if (typeof v === "string" && !v.trim()) continue;
-    return false;
-  }
-  return true;
-}
-
-function buildPayload(headers: (string | null)[], row: unknown[]): Record<string, CellJson> {
-  const payload: Record<string, CellJson> = {};
-  for (let i = 0; i < headers.length; i++) {
-    const key = headers[i];
-    if (key == null) continue;
-    payload[key] = cellToJson(i < row.length ? row[i] : null);
-  }
-  return payload;
-}
-
-function validateHeaders(sheetName: string, headers: (string | null)[], required: string[]): void {
-  const present = new Set(headers.filter((h): h is string => h != null));
-  for (const req of required) {
-    if (!present.has(req)) {
-      throw new Error(
-        `Sheet "${sheetName}": missing required header "${req}". Found: ${[...present].sort().join(", ")}`
-      );
-    }
-  }
-}
-
 function validateWorkbookSheets(sheetNames: string[]): void {
-  const expected = new Set(Object.keys(PREDICT_SHEET_CONFIG));
-  for (const req of PREDICT_REQUIRED_SHEETS) {
-    if (!sheetNames.includes(req)) {
-      throw new Error(`Missing required sheet: ${req}`);
-    }
-  }
-  const unexpected = sheetNames.filter((name) => !expected.has(name));
-  if (unexpected.length > 0) {
-    throw new Error(`Unexpected sheet(s): ${unexpected.join(", ")}. Expected exactly 8 fixed-schema sheets.`);
-  }
+  validateWorkbookSheetsCore(sheetNames, PREDICT_SHEET_CONFIG, PREDICT_REQUIRED_SHEETS);
 }
 
-function parseSheetRows(
-  buffer: Buffer,
-  sheetName: PredictSheetName,
-  skipEmpty: boolean
-): { excel_row: number; row_payload: Record<string, CellJson> }[] {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const ws = wb.Sheets[sheetName];
-  if (!ws) throw new Error(`Sheet not found: ${sheetName}`);
-
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, {
-    header: 1,
-    defval: null,
-    raw: false,
-  }) as unknown[][];
-
-  if (rows.length === 0) return [];
-
-  const headers = (rows[0] as unknown[]).map(trimHeader);
-  validateHeaders(sheetName, headers, PREDICT_SHEET_CONFIG[sheetName].requiredHeaders);
-
-  const out: { excel_row: number; row_payload: Record<string, CellJson> }[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const excelRow = i + 1;
-    const values = rows[i] as unknown[];
-    if (skipEmpty && rowIsEmpty(values)) continue;
-    out.push({ excel_row: excelRow, row_payload: buildPayload(headers, values) });
-  }
-  return out;
+function parseSheetRows(buffer: Buffer, sheetName: PredictSheetName, skipEmpty: boolean) {
+  return parseSheetRowsCore(buffer, sheetName, PREDICT_SHEET_CONFIG[sheetName].requiredHeaders, skipEmpty);
 }
 
 async function insertSheetRows(
   table: RawInsertTable,
   sourceId: string,
   rows: { excel_row: number; row_payload: Record<string, CellJson> }[]
-): Promise<number> {
-  if (rows.length === 0) return 0;
-
-  let inserted = 0;
-  for (const batch of chunk(rows, PREDICT_IMPORT_BATCH_SIZE)) {
-    await db.insert(table).values(
-      batch.map((r) => ({
-        sourceId,
-        excelRow: r.excel_row,
-        rowPayload: r.row_payload,
-      }))
-    );
-    inserted += batch.length;
-  }
-  return inserted;
+) {
+  return insertSheetRowsCore(table, sourceId, rows, PREDICT_IMPORT_BATCH_SIZE);
 }
 
 export async function importPredictExcel(params: {

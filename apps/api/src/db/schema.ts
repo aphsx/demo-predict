@@ -30,6 +30,9 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("emailVerified").notNull().default(false),
   image: text("image"),
+  givenName: text("givenName"),
+  familyName: text("familyName"),
+  locale: text("locale"),
   createdAt: timestamp("createdAt", { withTimezone: true }).notNull().default(sql`NOW()`),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
@@ -594,7 +597,6 @@ export const mlPredictionOutputs = pgTable(
     needsReview: boolean("needs_review").notNull().default(false),
     aiExplanation: text("ai_explanation"),
     aiReasoningJson: jsonb("ai_reasoning_json"),
-    aiRecommendedMessage: text("ai_recommended_message"),
     aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
     aiModel: text("ai_model"),
     aiStatus: text("ai_status").notNull().default("not_requested"),

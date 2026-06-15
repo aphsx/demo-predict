@@ -76,9 +76,9 @@ import sys
 APP_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _spawn_job(script: str, flag: str, run_id: str) -> int:
+def _spawn_job(module: str, flag: str, run_id: str) -> int:
     process = subprocess.Popen(
-        [sys.executable, str(APP_ROOT / script), flag, run_id],
+        [sys.executable, "-m", module, flag, run_id],
         cwd=str(APP_ROOT),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -94,7 +94,7 @@ async def internal_training_run(request: Request):
     training_run_id = body.get("training_run_id")
     if not training_run_id:
         raise HTTPException(400, "training_run_id is required")
-    pid = _spawn_job("train_v2.py", "--training-run-id", training_run_id)
+    pid = _spawn_job("src.cli.train", "--training-run-id", training_run_id)
     return {"accepted": True, "training_run_id": training_run_id, "pid": pid}
 
 
@@ -105,5 +105,5 @@ async def internal_prediction_run(request: Request):
     prediction_run_id = body.get("prediction_run_id")
     if not prediction_run_id:
         raise HTTPException(400, "prediction_run_id is required")
-    pid = _spawn_job("predict_v2.py", "--prediction-run-id", prediction_run_id)
+    pid = _spawn_job("src.cli.predict", "--prediction-run-id", prediction_run_id)
     return {"accepted": True, "prediction_run_id": prediction_run_id, "pid": pid}

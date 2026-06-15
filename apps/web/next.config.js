@@ -5,6 +5,9 @@ const nextConfig = {
   turbopack: {
     root: path.resolve(__dirname, "../../"),
   },
+  // @moby/types ships raw TypeScript (main: ./src/index.ts); transpile it so
+  // runtime exports (e.g. USER_PROFILE_FIELDS) work in the browser bundle.
+  transpilePackages: ["@moby/types"],
   async rewrites() {
     const elysiaUrl = process.env.ELYSIA_URL || "http://api:3001";
     return [

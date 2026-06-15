@@ -90,3 +90,12 @@ export const SEGMENT_ORDER: readonly Segment[] = [
   SEGMENT.PROTECT, SEGMENT.STABILIZE, SEGMENT.GROW, SEGMENT.DEVELOP, SEGMENT.MAINTAIN,
   SEGMENT.WATCH_LOW, SEGMENT.SALVAGE_LOW, SEGMENT.REACTIVATE, SEGMENT.DORMANT, SEGMENT.GHOST,
 ];
+
+// ── Shared validation patterns ──────────────────────────────────
+
+export const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
