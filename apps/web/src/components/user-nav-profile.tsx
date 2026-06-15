@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { StatusDialog } from "@/components/status-dialog";
@@ -53,31 +54,37 @@ export default function UserNavProfile() {
     <>
       <div className="border-t border-gray-200 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          {user.image ? (
-            <img
-              src={user.image}
-              alt=""
-              referrerPolicy="no-referrer"
-              className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-gray-200"
-            />
-          ) : (
-            <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--moby-600)] text-xs font-semibold text-white"
-              aria-hidden
-            >
-              {initials(displayName)}
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium text-[color:var(--ink-1)]">
-              {displayName}
-            </p>
-            {user.email && (
-              <p className="truncate text-[11.5px] text-[color:var(--ink-4)]">
-                {user.email}
-              </p>
+          <Link
+            href="/profile"
+            title="จัดการบัญชี"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg -mx-1 px-1 py-1 transition-colors hover:bg-gray-50"
+          >
+            {user.image ? (
+              <img
+                src={user.image}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-gray-200"
+              />
+            ) : (
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--moby-600)] text-xs font-semibold text-white"
+                aria-hidden
+              >
+                {initials(displayName)}
+              </span>
             )}
-          </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium text-[color:var(--ink-1)]">
+                {displayName}
+              </p>
+              {user.email && (
+                <p className="truncate text-[11.5px] text-[color:var(--ink-4)]">
+                  {user.email}
+                </p>
+              )}
+            </div>
+          </Link>
           <button
             type="button"
             onClick={() => setConfirmLogout(true)}

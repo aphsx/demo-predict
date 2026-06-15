@@ -17,6 +17,7 @@ const EXACT_ROUTE_TITLES: Record<string, string> = {
   "/runs": "Prediction runs",
   "/training": "Model Training",
   "/model-performance": "Model Metrics",
+  "/profile": "My Account",
 };
 
 function getRouteTitle(pathname: string) {

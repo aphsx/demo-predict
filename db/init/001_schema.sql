@@ -1152,6 +1152,9 @@ CREATE TABLE public."user" (
     email text NOT NULL,
     "emailVerified" boolean DEFAULT false NOT NULL,
     image text,
+    "givenName" text,
+    "familyName" text,
+    locale text,
     "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
     "updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );

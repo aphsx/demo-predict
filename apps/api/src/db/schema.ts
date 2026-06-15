@@ -30,6 +30,9 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("emailVerified").notNull().default(false),
   image: text("image"),
+  givenName: text("givenName"),
+  familyName: text("familyName"),
+  locale: text("locale"),
   createdAt: timestamp("createdAt", { withTimezone: true }).notNull().default(sql`NOW()`),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
