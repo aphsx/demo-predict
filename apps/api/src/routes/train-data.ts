@@ -5,7 +5,7 @@ import Elysia, { t } from "elysia";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
-import { canMutateOwnedRecord, denyMutation } from "../lib/access-control";
+import { requireOwnedForMutation } from "../lib/access-control";
 import { requireUser } from "../lib/auth-middleware";
 import { UUID_RE } from "../lib/constants";
 import { prepareTrainDataSource } from "../lib/train-import";
@@ -223,14 +223,11 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         .where(eq(trainDataSources.id, params.id))
         .limit(1);
 
-      if (!row) {
-        set.status = 404;
-        return { message: "Train data source not found" };
-      }
-
-      if (!canMutateOwnedRecord(userId, row.importedBy)) {
-        return denyMutation(set, "You can view this training data source, but only the importer can delete it.");
-      }
+      const denied = requireOwnedForMutation(row, row?.importedBy, userId, set, {
+        notFound: "Train data source not found",
+        forbidden: "You can view this training data source, but only the importer can delete it.",
+      });
+      if (denied) return denied;
 
       await db.delete(trainDataSources).where(eq(trainDataSources.id, params.id));
       return { deleted: true };
