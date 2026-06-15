@@ -408,3 +408,6 @@ export const LIFECYCLE_STAGES: LifecycleStage[] = ["Active Paid", "Active Free",
 export const RISK_LEVELS: RiskLevel[] = ["low", "medium", "high", "critical"];
 export const VALUE_TIERS: ValueTier[] = ["high", "mid", "low", "none"];
 export const URGENCY_LEVELS: UrgencyLevel[] = ["critical", "warning", "monitor", "stable"];
+
+/** Dashboard overview widget — keep in sync with apps/api/src/lib/ml-contract.ts */
+export const TOP_PRIORITY_LIMIT = 5;

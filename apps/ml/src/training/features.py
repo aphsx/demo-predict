@@ -173,13 +173,13 @@ FEATURE_METADATA: FeatureSchema = {
     "usage_change_90d_pct": {
         "source": "usage.usage",
         "lookback_window": "180d_before_cutoff",
-        "formula": "(usage_recent_90d - usage_prev_90d) / usage_prev_90d",
+        "formula": "signed_log1p((usage_recent_90d - usage_prev_90d) / usage_prev_90d)",
         "null_handling": "0 for no usage, 1 for new recent usage without previous usage",
     },
     "usage_decay_ratio": {
         "source": "usage.usage",
         "lookback_window": "180d_before_cutoff",
-        "formula": "usage_recent_90d / usage_prev_90d",
+        "formula": "signed_log1p(usage_recent_90d / usage_prev_90d)",
         "null_handling": "0 for no usage, 1 for new recent usage without previous usage",
     },
     "usage_slope_6m": {
@@ -381,6 +381,7 @@ def feature_code_hash(feature_names: list[str] | None = None) -> str:
             "ensure_feature_columns": inspect.getsource(_ensure_feature_columns),
             "apply_feature_defaults": inspect.getsource(_apply_feature_defaults),
             "safe_pct_change": inspect.getsource(_safe_pct_change),
+            "signed_log1p": inspect.getsource(_signed_log1p),
             "activity_ratio": inspect.getsource(_activity_ratio),
             "safe_ratio": inspect.getsource(_safe_ratio),
             "nullable_ratio": inspect.getsource(_nullable_ratio),
@@ -523,13 +524,16 @@ def build_usage_features(usage: pd.DataFrame, cutoff_date: pd.Timestamp) -> pd.D
     rows["usage_total_180d"] = rows["acc_id"].map(recent_180.groupby("acc_id")["usage"].sum())
     rows["usage_recent_90d"] = rows["acc_id"].map(recent_90.groupby("acc_id")["usage"].sum())
     rows["usage_prev_90d"] = rows["acc_id"].map(prev_90.groupby("acc_id")["usage"].sum())
-    rows["usage_change_90d_pct"] = _safe_pct_change(
-        rows["usage_recent_90d"],
-        rows["usage_prev_90d"],
+    # Signed log1p compression: these ratios explode when the prior-90d usage is
+    # tiny (a customer ramping from ~0 yields values in the tens of thousands),
+    # which dominates a linear model and falsely flags fast-growing customers as
+    # high churn. log1p tames the tail with no dataset-dependent cap (parameter
+    # free, scale-robust) and preserves ordering. Validated: OOF AUC unchanged.
+    rows["usage_change_90d_pct"] = _signed_log1p(
+        _safe_pct_change(rows["usage_recent_90d"], rows["usage_prev_90d"])
     )
-    rows["usage_decay_ratio"] = _activity_ratio(
-        rows["usage_recent_90d"],
-        rows["usage_prev_90d"],
+    rows["usage_decay_ratio"] = _signed_log1p(
+        _activity_ratio(rows["usage_recent_90d"], rows["usage_prev_90d"])
     )
     rows["usage_active_months_180d"] = rows["acc_id"].map(
         recent_180[recent_180["usage"] > 0].groupby("acc_id")["period"].nunique()
@@ -985,6 +989,12 @@ def _apply_feature_defaults(feature_df: pd.DataFrame) -> pd.DataFrame:
         if feature_name in feature_df.columns:
             feature_df[feature_name] = feature_df[feature_name].fillna(0.0)
     return feature_df
+
+
+def _signed_log1p(series: pd.Series) -> pd.Series:
+    """Compress a heavy-tailed ratio while keeping sign and order: sign·log1p|x|."""
+    values = pd.to_numeric(series, errors="coerce").fillna(0.0)
+    return np.sign(values) * np.log1p(values.abs())
 
 
 def _safe_pct_change(numerator: pd.Series, denominator: pd.Series) -> pd.Series:

@@ -1,20 +1,66 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { notifyStatusDialog } from "@/components/GlobalStatusDialogHost";
 import type { TrainDataSource } from "@/lib/api";
 import {
   createTrainingRun,
   fetchTrainingRuns,
   fetchTrainSuggestedCutoff,
+  type RunStatus,
   type TrainingRun,
 } from "@/lib/mlApi";
 import { getDisplayError } from "@/lib/ui-error";
 import { getTimestamp } from "./training-utils";
+import { promotedSummary } from "./training-run-utils";
 import { TrainRunPanel } from "./TrainRunPanel";
 import { TrainingHistoryTable } from "./TrainingHistoryTable";
 import { TrainingResultCards } from "./TrainingResultCards";
 
 const POLL_INTERVAL_MS = 3_000;
+
+function isActiveRunStatus(status: RunStatus) {
+  return status === "in_progress" || status === "pending";
+}
+
+function applyTrainingRuns(
+  runs: TrainingRun[],
+  knownStatuses: Map<string, RunStatus>
+): TrainingRun[] {
+  const sorted = runs
+    .slice()
+    .sort((a, b) => getTimestamp(b.started_at) - getTimestamp(a.started_at));
+
+  for (const run of sorted) {
+    const previous = knownStatuses.get(run.id);
+    if (previous === undefined) {
+      knownStatuses.set(run.id, run.status);
+      continue;
+    }
+    if (previous === run.status) continue;
+
+    if (isActiveRunStatus(previous) && run.status === "completed") {
+      const promoted = promotedSummary(run.results);
+      notifyStatusDialog({
+        tone: "success",
+        title: "เทรนโมเดลสำเร็จ",
+        message: promoted
+          ? `Training pipeline เสร็จแล้ว (${promoted})`
+          : "Training pipeline เสร็จแล้ว — ดูผลลัพธ์ด้านล่าง",
+      });
+    } else if (isActiveRunStatus(previous) && run.status === "failed") {
+      notifyStatusDialog({
+        tone: "error",
+        title: "เทรนโมเดลไม่สำเร็จ",
+        message: run.error_message ?? "เกิดข้อผิดพลาดระหว่าง training pipeline",
+      });
+    }
+
+    knownStatuses.set(run.id, run.status);
+  }
+
+  return sorted;
+}
 
 /**
  * ML v2 training section (spec §2.6) — train panel + latest result cards +
@@ -32,6 +78,7 @@ export function TrainingRunsSection({
   const [error, setError] = useState<string | null>(null);
   const [suggestedCutoff, setSuggestedCutoff] = useState<string | null>(null);
   const [latestDataDate, setLatestDataDate] = useState<string | null>(null);
+  const knownStatusesRef = useRef<Map<string, RunStatus>>(new Map());
 
   const selectedSourceId = selectedSource?.id ?? null;
   useEffect(() => {
@@ -56,9 +103,7 @@ export function TrainingRunsSection({
   const load = useCallback(async () => {
     try {
       const data = await fetchTrainingRuns();
-      setRuns(
-        data.slice().sort((a, b) => getTimestamp(b.started_at) - getTimestamp(a.started_at))
-      );
+      setRuns(applyTrainingRuns(data, knownStatusesRef.current));
     } catch (e) {
       setError(getDisplayError(e, "โหลด training history ไม่สำเร็จ"));
     }
@@ -91,6 +136,7 @@ export function TrainingRunsSection({
         cutoff_date: input.cutoff_date,
         horizon_days: input.horizon_days,
       });
+      knownStatusesRef.current.set(run.id, run.status);
       // Show the new run as in-progress immediately; polling keeps it fresh.
       setRuns((prev) => [run, ...prev.filter((item) => item.id !== run.id)]);
     } catch (e) {

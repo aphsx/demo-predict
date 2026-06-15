@@ -9,6 +9,14 @@ import { formatCurrency } from "@/lib/format";
 import type { PredictionOutput } from "@/lib/mlApi";
 import { shouldConfirmAiOverwrite } from "./customer-ai";
 import { GenAiButton } from "./GenAiButton";
+import {
+  CUSTOMER_ROW_GRID,
+  CUSTOMER_ROW_HEADER_GRID,
+  HighValueMedal,
+  isHighValueTier,
+  LifecycleRowPill,
+  MetricCell,
+} from "./customerRowUi";
 
 export const STAGES = ["Active Paid", "Active Free", "Churned", "Ghost"];
 
@@ -200,7 +208,7 @@ function Inner({
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_110px_150px_150px_120px] gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] max-xl:hidden">
+          <div className={`grid gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] max-xl:hidden ${CUSTOMER_ROW_HEADER_GRID}`}>
             <SortableHeader label="Account" sortKey="acc_id" activeSort={sort} onSort={cycleSort} />
             <SortableHeader label="Lifecycle" sortKey="lifecycle_stage" activeSort={sort} onSort={cycleSort} />
             <SortableHeader label="Churn" sortKey="churn_probability" activeSort={sort} onSort={cycleSort} />
@@ -222,7 +230,7 @@ function Inner({
                   key={r.acc_id}
                   role="button"
                   tabIndex={0}
-                  className="grid w-full cursor-pointer grid-cols-1 gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50 xl:grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_110px_150px_150px_120px] xl:items-center xl:gap-4"
+                  className={`grid w-full cursor-pointer gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50 xl:items-center xl:gap-4 ${CUSTOMER_ROW_GRID}`}
                   onClick={() => router.push(customerHref(r.acc_id))}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") router.push(customerHref(r.acc_id));
@@ -302,8 +310,8 @@ function Inner({
         <StatusDialog
           open
           tone="warning"
-          title="AI data มีอยู่แล้ว"
-          message={`Account ${pendingOverwriteAccId} มี reason จาก AI อยู่แล้ว ต้องการ generate ใหม่และเขียนทับข้อมูลเดิมไหม?`}
+          title="มีข้อมูลจาก AI อยู่แล้ว"
+          message={`Account ${pendingOverwriteAccId} มีเหตุผลที่ได้จาก AI อยู่แล้ว ต้องการ generate ใหม่และเขียนทับข้อมูลเดิมไหม?`}
           confirmLabel="เขียนทับ"
           cancelLabel="ยกเลิก"
           onCancel={() => setPendingOverwriteAccId(null)}
@@ -314,32 +322,6 @@ function Inner({
         />
       )}
     </main>
-  );
-}
-
-function MetricCell({
-  label,
-  value,
-  alignRight = false,
-  valueColor,
-}: {
-  label: string;
-  value: string;
-  alignRight?: boolean;
-  valueColor?: string;
-}) {
-  return (
-    <div className={alignRight ? "xl:text-right" : undefined}>
-      <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">
-        {label}
-      </p>
-      <p
-        className="num mt-0.5 text-[14px] font-semibold xl:mt-0"
-        style={valueColor ? { color: valueColor } : undefined}
-      >
-        {value}
-      </p>
-    </div>
   );
 }
 
@@ -372,39 +354,6 @@ function SortableHeader({
       <span>{label}</span>
       <Icon size={12} className={isActive ? "opacity-100" : "opacity-25"} />
     </button>
-  );
-}
-
-function LifecycleRowPill({ stage }: { stage: string }) {
-  return (
-    <span
-      className="inline-flex h-[26px] w-[92px] items-center justify-center rounded-full text-[11px] font-semibold text-white"
-      style={{ backgroundColor: lifecycleButtonColor(stage) }}
-    >
-      {stage}
-    </span>
-  );
-}
-
-function lifecycleButtonColor(stage: string): string {
-  if (stage === "Active Paid") return "#006bff";
-  if (stage === "Active Free") return "#ffa400";
-  if (stage === "Churned") return "#fc4c02";
-  if (stage === "Ghost") return "#9ca3af";
-  return "#9ca3af";
-}
-
-function isHighValueTier(tier: string | null): boolean {
-  return (tier ?? "").toLowerCase().includes("high");
-}
-
-function HighValueMedal() {
-  return (
-    <img
-      src="/assets/images/achievement-award-medal-icon.svg"
-      alt="High value customer"
-      className="h-5 w-5 shrink-0"
-    />
   );
 }
 

@@ -1,12 +1,23 @@
 "use client";
+
 import Link from "next/link";
-import { StatusPill, lifecycleTone } from "@/components/ui";
+import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/format";
 import type { RunSummary } from "@/lib/mlApi";
+import { TOP_PRIORITY_LIMIT } from "@/lib/mlApi";
+import {
+  LifecycleRowPill,
+  MetricCell,
+  TOP_PRIORITY_ROW_GRID,
+  TOP_PRIORITY_ROW_HEADER_GRID,
+} from "@/features/customers/customerRowUi";
 import { TEXT_SAFE } from "./palette";
 
-/** Top 10 priority customers (spec §2.1) — เรียงตาม priority_score */
+/** Top 5 priority customers (spec §2.1) — เรียงตาม priority_score */
 export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId: string }) {
+  const router = useRouter();
+  const customerHref = (accId: number) => `/customers/${accId}?run=${runId}`;
+
   return (
     <section className="surface-elev overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-4 sm:px-5">
@@ -25,44 +36,55 @@ export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId
           ดูทั้งหมด →
         </Link>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-[12.5px]">
-          <thead>
-            <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-[.08em] text-[color:var(--ink-5)]">
-              <th className="px-4 py-2.5 sm:px-5">Account</th>
-              <th className="px-3 py-2.5">Lifecycle</th>
-              <th className="px-3 py-2.5 text-right">Churn</th>
-              <th className="px-3 py-2.5 text-right">CLV 6m</th>
-              <th className="px-3 py-2.5 text-right">Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summary.top_priority.map((c) => (
-              <tr key={c.acc_id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                <td className="px-4 py-2.5 sm:px-5">
-                  <Link
-                    href={`/customers/${c.acc_id}?run=${runId}`}
-                    className="num font-medium text-[color:var(--ink-2)] hover:underline underline-offset-2"
-                  >
-                    {c.acc_id}
-                  </Link>
-                </td>
-                <td className="px-3 py-2.5">
-                  <StatusPill tone={lifecycleTone(c.lifecycle_stage)}>{c.lifecycle_stage}</StatusPill>
-                </td>
-                <td className="num px-3 py-2.5 text-right">
-                  {c.churn_probability === null ? "—" : `${(c.churn_probability * 100).toFixed(1)}%`}
-                </td>
-                <td className="num px-3 py-2.5 text-right">
-                  {c.predicted_clv_6m === null ? "—" : formatCurrency(c.predicted_clv_6m)}
-                </td>
-                <td className="num px-3 py-2.5 text-right">
-                  {c.priority_score.toFixed(0)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <div
+        className={`grid gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] max-xl:hidden ${TOP_PRIORITY_ROW_HEADER_GRID}`}
+      >
+        <span>Account</span>
+        <span>Lifecycle</span>
+        <span>Churn</span>
+        <span className="text-right">Score</span>
+        <span className="text-right">CLV 6m</span>
+      </div>
+
+      <div className="divide-y divide-gray-100">
+        {summary.top_priority.slice(0, TOP_PRIORITY_LIMIT).map((c) => {
+          const churnPct = c.churn_probability != null ? c.churn_probability * 100 : null;
+
+          return (
+            <div
+              key={c.acc_id}
+              role="button"
+              tabIndex={0}
+              className={`grid w-full cursor-pointer gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50 xl:items-center xl:gap-4 ${TOP_PRIORITY_ROW_GRID}`}
+              onClick={() => router.push(customerHref(c.acc_id))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") router.push(customerHref(c.acc_id));
+              }}
+            >
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">
+                  Account
+                </p>
+                <p className="num text-[18px] font-semibold text-[color:var(--ink-2)]">{c.acc_id}</p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <LifecycleRowPill stage={c.lifecycle_stage ?? "—"} />
+              </div>
+              <MetricCell
+                label="Churn"
+                value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
+                valueColor="#fc4c02"
+              />
+              <MetricCell label="Score" value={c.priority_score.toFixed(0)} alignRight />
+              <MetricCell
+                label="CLV 6m"
+                value={c.predicted_clv_6m != null ? formatCurrency(c.predicted_clv_6m) : "—"}
+                alignRight
+              />
+            </div>
+          );
+        })}
       </div>
     </section>
   );
