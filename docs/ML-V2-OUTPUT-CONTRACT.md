@@ -86,7 +86,7 @@
 
 ### 3.8 AI explanation (Phase 2 — โครงรองรับไว้แล้ว)
 
-`ai_explanation`, `ai_reasoning_json`, `ai_recommended_message`, `ai_generated_at`, `ai_model`, `ai_status` (default `not_requested`) — เติมทีหลังแบบ per-customer ไม่ block prediction run
+`ai_explanation`, `ai_reasoning_json`, `ai_generated_at`, `ai_model`, `ai_status` (default `not_requested`) — เติมทีหลังแบบ per-customer ไม่ block prediction run
 
 ### 3.9 Meta
 

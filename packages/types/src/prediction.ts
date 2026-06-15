@@ -83,7 +83,6 @@ export interface PredictionOutput {
   needs_review: boolean;
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
-  ai_recommended_message: string | null;
   output_status: "predicted" | "partial" | "insufficient_data";
   model_eligibility: { churn: ModelEligibility; clv: ModelEligibility; credit: ModelEligibility };
   model_versions: { churn: string; clv: string; credit: string };

@@ -498,7 +498,6 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
     needs_review: false,
     ai_status: "not_requested",
     ai_explanation: null,
-    ai_recommended_message: null,
     output_status: stage === "Active Paid" ? "predicted" : "partial",
     model_eligibility: eligibility,
     model_versions: MODEL_VERSIONS,

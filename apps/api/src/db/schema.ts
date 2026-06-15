@@ -594,7 +594,6 @@ export const mlPredictionOutputs = pgTable(
     needsReview: boolean("needs_review").notNull().default(false),
     aiExplanation: text("ai_explanation"),
     aiReasoningJson: jsonb("ai_reasoning_json"),
-    aiRecommendedMessage: text("ai_recommended_message"),
     aiGeneratedAt: timestamp("ai_generated_at", { withTimezone: true }),
     aiModel: text("ai_model"),
     aiStatus: text("ai_status").notNull().default("not_requested"),

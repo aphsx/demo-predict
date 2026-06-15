@@ -170,7 +170,6 @@ export function mapOutput(row: OutputRow): PredictionOutput {
     needs_review: row.needsReview ?? false,
     ai_status: row.aiStatus as PredictionOutput["ai_status"],
     ai_explanation: row.aiExplanation,
-    ai_recommended_message: row.aiRecommendedMessage,
     output_status: row.outputStatus as PredictionOutput["output_status"],
     model_eligibility: {
       churn: eligibility?.churn ?? FALLBACK_ELIGIBILITY,

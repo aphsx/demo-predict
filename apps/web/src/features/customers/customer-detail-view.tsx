@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
-import type { ChurnFactor, PaymentEvent } from "@/lib/ml-api";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
+import { formatCompactCurrency, formatCurrency } from "@/lib/format";
+import { MOBY_BRAND } from "@/lib/login-brand-colors";
+import type { ChurnFactor, PaymentEvent, ProfileSnapshot } from "@/lib/ml-api";
 import { CustomerPaymentChart } from "./customer-payment-chart";
+import { CustomerProfilePanel } from "./customer-profile-panel";
 import {
   CHURN_COLOR,
   FactCard,
@@ -27,22 +29,35 @@ export type CustomerDetail = {
   churn_probability: number | null;
   churn_risk_level: string | null;
   predicted_clv_6m: number | null;
+  p_alive: number | null;
   customer_value_tier: string;
   revenue_at_risk: number | null;
   predicted_credit_usage_30d: number | null;
   predicted_credit_usage_90d: number | null;
+  credit_forecast_interval: { p10_30d: number; p90_30d: number; p10_90d: number; p90_90d: number } | null;
   estimated_days_until_topup: number | null;
   credit_urgency_level: string | null;
-  usage_trend: string;
+  usage_trend: "increasing" | "stable" | "declining" | "no_usage";
   days_since_last_activity: number | null;
   n_purchases: number;
   total_revenue: number;
   avg_transaction_value: number | null;
   ever_paid: boolean;
+  segment: string | null;
+  action_rank: number | null;
+  needs_review: boolean;
+  profile_snapshot: ProfileSnapshot;
   churn_factors: ChurnFactor[] | null;
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
   output_status: string;
+};
+
+const USAGE_TREND_BADGE: Record<CustomerDetail["usage_trend"], { label: string; color: string } | null> = {
+  increasing: { label: "ใช้งานเพิ่มขึ้น", color: "#10b981" },
+  declining: { label: "ใช้งานลดลง", color: CHURN_COLOR },
+  stable: { label: "ใช้งานคงที่", color: "#9ca3af" },
+  no_usage: null,
 };
 
 export function CustomerDetailView({
@@ -61,11 +76,21 @@ export function CustomerDetailView({
   customersHref?: string;
 }) {
   const churnPct = customer.churn_probability != null ? customer.churn_probability * 100 : null;
+  const pAlivePct = customer.p_alive != null ? customer.p_alive * 100 : null;
   const latestUsage = usageTrend.at(-1);
   const peakUsage = usageTrend.length > 0 ? Math.max(...usageTrend.map((point) => point.total)) : null;
   const showSubStage =
     Boolean(customer.sub_stage) && customer.sub_stage !== customer.lifecycle_stage;
   const customerListHref = customersHref ?? (runId ? `/customers?run=${encodeURIComponent(runId)}` : "/customers");
+
+  const trend = USAGE_TREND_BADGE[customer.usage_trend];
+  const creditRange = (point: number | null, p10: number | null, p90: number | null): string => {
+    if (point == null) return "—";
+    const base = formatCompactCurrency(point);
+    if (p10 == null || p90 == null) return base;
+    return `${base} (${formatCompactCurrency(p10)}–${formatCompactCurrency(p90)})`;
+  };
+  const interval = customer.credit_forecast_interval;
 
   return (
     <main className="px-8 py-6 pb-12">
@@ -76,6 +101,13 @@ export function CustomerDetailView({
         <ArrowLeft size={11} /> Customers
       </Link>
 
+      {customer.needs_review && (
+        <div className="mt-3 flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-800">
+          <AlertTriangle size={15} className="shrink-0" />
+          ลูกค้ารายนี้ถูกตั้งค่าให้ตรวจสอบด้วยมือ (needs review) — ผลโมเดลอาจไม่น่าเชื่อถือเต็มที่
+        </div>
+      )}
+
       <section className="mt-4 space-y-5">
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)_340px] xl:items-start">
           <Panel title={`Account ${accId}`}>
@@ -83,6 +115,12 @@ export function CustomerDetailView({
               <div className="flex flex-wrap items-center gap-2">
                 {isHighValueTier(customer.customer_value_tier) ? <HighValueMedal /> : null}
                 <LifecycleDetailPill stage={customer.lifecycle_stage} />
+                {customer.segment && (
+                  <SolidDetailPill color={MOBY_BRAND.dark}>
+                    {customer.segment}
+                    {customer.action_rank != null ? ` · #${customer.action_rank}` : ""}
+                  </SolidDetailPill>
+                )}
                 {showSubStage && (
                   <SolidDetailPill color="#9ca3af">{customer.sub_stage}</SolidDetailPill>
                 )}
@@ -90,6 +128,9 @@ export function CustomerDetailView({
                   <SolidDetailPill color={CHURN_COLOR} dot>
                     {customer.churn_risk_level} churn risk
                   </SolidDetailPill>
+                )}
+                {trend && (
+                  <SolidDetailPill color={trend.color}>{trend.label}</SolidDetailPill>
                 )}
               </div>
 
@@ -99,6 +140,12 @@ export function CustomerDetailView({
                   value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
                   hint={customer.churn_risk_level ?? "not eligible"}
                   valueColor={CHURN_COLOR}
+                />
+                <HeroMetric
+                  label="P(alive)"
+                  value={pAlivePct != null ? `${pAlivePct.toFixed(0)}%` : "—"}
+                  hint="ยังใช้บริการอยู่ (BG/NBD)"
+                  valueColor={MOBY_BRAND.blue}
                 />
                 <HeroMetric
                   label="CLV 6m"
@@ -161,20 +208,24 @@ export function CustomerDetailView({
                 value={customer.avg_transaction_value != null ? formatCurrency(customer.avg_transaction_value) : "—"}
               />
               <FactCard
-                label="Credit demand 30d"
-                value={customer.predicted_credit_usage_30d != null ? customer.predicted_credit_usage_30d.toLocaleString() : "—"}
+                label="Credit 30d (p10–90)"
+                value={creditRange(customer.predicted_credit_usage_30d, interval?.p10_30d ?? null, interval?.p90_30d ?? null)}
               />
               <FactCard
-                label="Credit demand 90d"
-                value={customer.predicted_credit_usage_90d != null ? customer.predicted_credit_usage_90d.toLocaleString() : "—"}
+                label="Credit 90d (p10–90)"
+                value={creditRange(customer.predicted_credit_usage_90d, interval?.p10_90d ?? null, interval?.p90_90d ?? null)}
               />
             </div>
           </Panel>
 
-          <Panel title="ประวัติการชำระเงิน">
-            <CustomerPaymentChart payments={payments} />
+          <Panel title="โปรไฟล์ลูกค้า">
+            <CustomerProfilePanel snapshot={customer.profile_snapshot} />
           </Panel>
         </div>
+
+        <Panel title="ประวัติการชำระเงิน">
+          <CustomerPaymentChart payments={payments} />
+        </Panel>
       </section>
     </main>
   );
