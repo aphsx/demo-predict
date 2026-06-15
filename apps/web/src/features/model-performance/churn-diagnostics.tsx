@@ -6,9 +6,9 @@
  * nothing is computed client-side.
  */
 
-import type { ModelPerfEntry } from "@/lib/mlApi";
+import type { ModelPerfEntry } from "@/lib/ml-api";
 import { StatusPill } from "@/components/ui";
-import { metricInfo } from "./metricInfo";
+import { metricInfo } from "./metric-info";
 
 const PANEL_TITLE = "text-[12px] font-semibold text-[color:var(--ink-2)]";
 const PANEL_HINT = "text-[11px] text-[color:var(--ink-5)] mt-0.5";

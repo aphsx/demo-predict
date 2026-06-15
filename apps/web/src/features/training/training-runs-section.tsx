@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { notifyStatusDialog } from "@/components/GlobalStatusDialogHost";
+import { notifyStatusDialog } from "@/components/global-status-dialog-host";
 import type { TrainDataSource } from "@/lib/api";
 import {
   createTrainingRun,
@@ -9,13 +9,13 @@ import {
   fetchTrainSuggestedCutoff,
   type RunStatus,
   type TrainingRun,
-} from "@/lib/mlApi";
+} from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
 import { getTimestamp } from "./training-utils";
 import { promotedSummary } from "./training-run-utils";
-import { TrainRunPanel } from "./TrainRunPanel";
-import { TrainingHistoryTable } from "./TrainingHistoryTable";
-import { TrainingResultCards } from "./TrainingResultCards";
+import { TrainRunPanel } from "./train-run-panel";
+import { TrainingHistoryTable } from "./training-history-table";
+import { TrainingResultCards } from "./training-result-cards";
 
 const POLL_INTERVAL_MS = 3_000;
 

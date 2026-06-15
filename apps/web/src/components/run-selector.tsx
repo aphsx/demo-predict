@@ -6,8 +6,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Calendar, ChevronDown } from "lucide-react";
-import { useRunStore } from "@/stores/runStore";
-import { fetchPredictionRuns, type PredictionRun } from "@/lib/mlApi";
+import { useRunStore } from "@/stores/run-store";
+import { fetchPredictionRuns, type PredictionRun } from "@/lib/ml-api";
 
 export function useActiveRun() {
   const { runId, setRunId } = useRunStore();

@@ -3,12 +3,12 @@
 import { useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, RotateCcw, Search } from "lucide-react";
-import { StatusDialog } from "@/components/StatusDialog";
+import { StatusDialog } from "@/components/status-dialog";
 import { Skeleton } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
-import type { PredictionOutput } from "@/lib/mlApi";
+import type { PredictionOutput } from "@/lib/ml-api";
 import { shouldConfirmAiOverwrite } from "./customer-ai";
-import { GenAiButton } from "./GenAiButton";
+import { GenAiButton } from "./gen-ai-button";
 import {
   CUSTOMER_ROW_GRID,
   CUSTOMER_ROW_HEADER_GRID,
@@ -16,7 +16,7 @@ import {
   isHighValueTier,
   LifecycleRowPill,
   MetricCell,
-} from "./customerRowUi";
+} from "./customer-row-ui";
 
 export const STAGES = ["Active Paid", "Active Free", "Churned", "Ghost"];
 
@@ -222,52 +222,16 @@ function Inner({
             {pendingRows && [...Array(8)].map((_, i) => (
               <div key={i} className="px-5 py-4"><Skeleton className="h-10" /></div>
             ))}
-            {!pendingRows && rows.map((r) => {
-              const churnPct = r.churn_probability != null ? r.churn_probability * 100 : null;
-
-              return (
-                <div
-                  key={r.acc_id}
-                  role="button"
-                  tabIndex={0}
-                  className={`grid w-full cursor-pointer gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50 xl:items-center xl:gap-4 ${CUSTOMER_ROW_GRID}`}
-                  onClick={() => router.push(customerHref(r.acc_id))}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") router.push(customerHref(r.acc_id));
-                  }}
-                >
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">Account</p>
-                    <div className="flex items-center gap-2">
-                      <p className="num text-[18px] font-semibold text-[color:var(--ink-2)]">{r.acc_id}</p>
-                      {isHighValueTier(r.customer_value_tier) ? <HighValueMedal /> : null}
-                    </div>
-                    <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">
-                      {r.n_purchases ?? 0} purchases
-                    </p>
-                  </div>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <LifecycleRowPill stage={r.lifecycle_stage ?? "—"} />
-                    {r.sub_stage && <span className="truncate text-[12px] text-[color:var(--ink-4)]">{r.sub_stage}</span>}
-                  </div>
-                  <MetricCell
-                    label="Churn"
-                    value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
-                    valueColor="#fc4c02"
-                  />
-                  <MetricCell label="Score" value={r.priority_score.toFixed(0)} alignRight />
-                  <MetricCell label="CLV 6m" value={r.predicted_clv_6m != null ? formatCurrency(r.predicted_clv_6m) : "—"} alignRight />
-                  <MetricCell label="Revenue" value={r.total_revenue != null ? formatCurrency(r.total_revenue) : "—"} alignRight />
-                  <div className="flex justify-start xl:justify-end">
-                    <GenAiButton
-                      ai={r}
-                      inFlight={generatingAccIds.has(r.acc_id)}
-                      onClick={(event) => handleGenAiClick(event, r)}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+            {!pendingRows && rows.map((r) => (
+              <CustomerTableRow
+                key={r.acc_id}
+                row={r}
+                href={customerHref(r.acc_id)}
+                inFlight={generatingAccIds.has(r.acc_id)}
+                onNavigate={(href) => router.push(href)}
+                onGenAiClick={(event) => handleGenAiClick(event, r)}
+              />
+            ))}
             {!pendingRows && rows.length === 0 && (
               <div className="px-5 py-12 text-center">
                 <p className="text-[15px] font-semibold text-[color:var(--ink-2)]">No customers match this view</p>
@@ -322,6 +286,51 @@ function Inner({
         />
       )}
     </main>
+  );
+}
+
+function CustomerTableRow({
+  row: r,
+  href,
+  inFlight,
+  onNavigate,
+  onGenAiClick,
+}: {
+  row: CustomerRow;
+  href: string;
+  inFlight: boolean;
+  onNavigate: (href: string) => void;
+  onGenAiClick: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  const churnPct = r.churn_probability != null ? r.churn_probability * 100 : null;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`grid w-full cursor-pointer gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50 xl:items-center xl:gap-4 ${CUSTOMER_ROW_GRID}`}
+      onClick={() => onNavigate(href)}
+      onKeyDown={(event) => { if (event.key === "Enter") onNavigate(href); }}
+    >
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">Account</p>
+        <div className="flex items-center gap-2">
+          <p className="num text-[18px] font-semibold text-[color:var(--ink-2)]">{r.acc_id}</p>
+          {isHighValueTier(r.customer_value_tier) ? <HighValueMedal /> : null}
+        </div>
+        <p className="mt-0.5 text-[11.5px] text-[color:var(--ink-5)]">{r.n_purchases ?? 0} purchases</p>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <LifecycleRowPill stage={r.lifecycle_stage ?? "—"} />
+        {r.sub_stage && <span className="truncate text-[12px] text-[color:var(--ink-4)]">{r.sub_stage}</span>}
+      </div>
+      <MetricCell label="Churn" value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"} valueColor="#fc4c02" />
+      <MetricCell label="Score" value={r.priority_score.toFixed(0)} alignRight />
+      <MetricCell label="CLV 6m" value={r.predicted_clv_6m != null ? formatCurrency(r.predicted_clv_6m) : "—"} alignRight />
+      <MetricCell label="Revenue" value={r.total_revenue != null ? formatCurrency(r.total_revenue) : "—"} alignRight />
+      <div className="flex justify-start xl:justify-end">
+        <GenAiButton ai={r} inFlight={inFlight} onClick={onGenAiClick} />
+      </div>
+    </div>
   );
 }
 

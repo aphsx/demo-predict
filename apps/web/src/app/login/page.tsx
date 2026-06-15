@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Lock, Mail } from "lucide-react";
 import { signIn } from "@/lib/auth-client";
-import { LoginBackground } from "@/components/LoginBackground";
+import { LoginBackground } from "@/components/login-background";
 import { INTRO_ASSETS, MOBY_BRAND } from "@/lib/login-brand-colors";
 
 type Provider = "google";

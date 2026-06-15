@@ -4,7 +4,7 @@
  */
 
 import type { PredictDataSource } from "@/lib/api";
-import type { RunStatus } from "@/lib/mlApi";
+import type { RunStatus } from "@/lib/ml-api";
 
 export type PillTone = "ok" | "warn" | "danger" | "info" | "neutral" | "brand" | "violet";
 

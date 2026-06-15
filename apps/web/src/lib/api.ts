@@ -6,6 +6,9 @@
  * ML runtime. Add new wrappers here only after the matching Elysia route exists.
  */
 
+import type { TrainDataSource, PredictDataSource } from "@moby/types";
+export type { TrainDataSource, PredictDataSource };
+
 // Helpers
 
 const IS_ML_MOCK = process.env.NEXT_PUBLIC_ML_USE_MOCK === "1";
@@ -50,26 +53,6 @@ async function parseJson(res: Response): Promise<unknown> {
 // Train raw data import
 // train_data_sources + train_raw_sheet_*. NOT uploadFile (/runs).
 // See docs/DATA-PIPELINE-MIGRATION.md
-
-export interface TrainDataSource {
-  id: string;
-  name: string;
-  client_label: string | null;
-  original_filename: string;
-  file_checksum_sha256: string;
-  file_size_bytes: number | null;
-  import_status: string;
-  imported_at: string | null;
-  sheet_manifest: Record<string, number> | null;
-  clean_manifest: Record<string, unknown> | null;
-  cleaned_at: string | null;
-  notes: string | null;
-  error_message: string | null;
-  imported_by: string | null;
-  importer_name: string | null;
-  importer_email: string | null;
-  created_at: string;
-}
 
 export async function fetchTrainDataSources(): Promise<TrainDataSource[]> {
   const res = await apiFetch("/api/train-data-sources");
@@ -358,26 +341,6 @@ export async function uploadTrainDataFile(
 
 // Predict raw data import
 // predict_data_sources + predict_raw_sheet_* + predict_clean_*.
-
-export interface PredictDataSource {
-  id: string;
-  name: string;
-  client_label: string | null;
-  original_filename: string;
-  file_checksum_sha256: string;
-  file_size_bytes: number | null;
-  import_status: string;
-  imported_at: string | null;
-  sheet_manifest: Record<string, number> | null;
-  clean_manifest: Record<string, unknown> | null;
-  cleaned_at: string | null;
-  notes: string | null;
-  error_message: string | null;
-  imported_by: string | null;
-  importer_name: string | null;
-  importer_email: string | null;
-  created_at: string;
-}
 
 export interface PredictImportDone {
   source_id: string;

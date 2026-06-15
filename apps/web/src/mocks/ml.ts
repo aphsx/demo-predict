@@ -24,8 +24,8 @@ import type {
   TrainingRun,
   UrgencyLevel,
   ValueTier,
-} from "@/lib/mlApi";
-import { TOP_PRIORITY_LIMIT } from "@/lib/mlApi";
+} from "@/lib/ml-api";
+import { TOP_PRIORITY_LIMIT } from "@/lib/ml-api";
 import type { PredictDataSource, PredictImportDone } from "@/lib/api";
 
 // ── Seeded PRNG (mulberry32) — stable across reloads ───────────
@@ -493,6 +493,9 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
     credit_urgency_level: urgency,
     revenue_at_risk: revenueAtRisk,
     priority_score: 0, // assigned below
+    segment: null,
+    action_rank: null,
+    needs_review: false,
     ai_status: "not_requested",
     ai_explanation: null,
     ai_recommended_message: null,

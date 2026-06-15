@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { formatCompactCurrency } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
-import type { RunSummary } from "@/lib/mlApi";
-import { HighValueMedal } from "@/features/customers/customerRowUi";
+import type { RunSummary } from "@/lib/ml-api";
+import { HighValueMedal } from "@/features/customers/customer-row-ui";
 import { TEXT_SAFE } from "./palette";
 
 const RISKS = ["low", "medium", "high", "critical"] as const;

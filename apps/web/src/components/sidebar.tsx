@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, Database,
   Activity, MessageSquareMore,
 } from "lucide-react";
-import UserNavProfile from "./UserNavProfile";
+import UserNavProfile from "./user-nav-profile";
 
 type Item = { href: string; label: string; icon: any };
 

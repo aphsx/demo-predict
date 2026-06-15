@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/format";
-import type { RunSummary } from "@/lib/mlApi";
-import { TOP_PRIORITY_LIMIT } from "@/lib/mlApi";
+import type { RunSummary } from "@/lib/ml-api";
+import { TOP_PRIORITY_LIMIT } from "@/lib/ml-api";
 import {
   LifecycleRowPill,
   MetricCell,
   TOP_PRIORITY_ROW_GRID,
   TOP_PRIORITY_ROW_HEADER_GRID,
-} from "@/features/customers/customerRowUi";
+} from "@/features/customers/customer-row-ui";
 import { TEXT_SAFE } from "./palette";
 
 /** Top 5 priority customers (spec §2.1) — เรียงตาม priority_score */

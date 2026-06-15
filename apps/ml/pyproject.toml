@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "moby-ml"
+version = "2.0.0"
+description = "1Moby Analytics ML v2 — training, prediction, and internal FastAPI service"
+requires-python = ">=3.11"
+
+[project.scripts]
+moby-train   = "src.cli.train:main"
+moby-predict = "src.cli.predict:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "api*"]

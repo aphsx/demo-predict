@@ -6,11 +6,11 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { fetchPredictDataSources, type PredictDataSource } from "@/lib/api";
-import { fetchPredictionRuns, type PredictionRun } from "@/lib/mlApi";
+import { fetchPredictionRuns, type PredictionRun } from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
-import { CreateRunPanel } from "./CreateRunPanel";
-import { PredictSourcesSection } from "./PredictSourcesSection";
-import { RunsTable } from "./RunsTable";
+import { CreateRunPanel } from "./create-run-panel";
+import { PredictSourcesSection } from "./predict-sources-section";
+import { RunsTable } from "./runs-table";
 import { RUN_POLL_MS } from "./runs-utils";
 
 export function RunsView() {

@@ -7,15 +7,14 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { mlTrainingRuns, trainDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
+import { denyNotFound } from "../lib/access-control";
 import { triggerMlJob } from "../lib/ml-internal";
 import {
-  UUID_RE,
   type RunStatus,
   type TrainingRun,
   type TrainingRunResult,
 } from "../lib/ml-contract";
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+import { DATE_RE, UUID_RE } from "../lib/constants";
 const DEFAULT_HORIZON_DAYS = 180;
 const ACTIVE_WINDOW_DAYS = 180;
 
@@ -110,10 +109,7 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
         .from(trainDataSources)
         .where(eq(trainDataSources.id, body.train_source_id))
         .limit(1);
-      if (!source) {
-        set.status = 404;
-        return { message: "Train data source not found" };
-      }
+      if (!source) return denyNotFound(set, "Train data source not found");
       if (source.importStatus !== "ready") {
         set.status = 400;
         return { message: "Train data source must be ready before training" };
@@ -231,10 +227,7 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
     "/:id",
     async ({ params, set }) => {
       const run = await fetchTrainingRun(params.id);
-      if (!run) {
-        set.status = 404;
-        return { message: "Training run not found" };
-      }
+      if (!run) return denyNotFound(set, "Training run not found");
       return mapTrainingRun(run);
     },
     { params: t.Object({ id: t.String() }) }

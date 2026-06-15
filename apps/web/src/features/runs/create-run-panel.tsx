@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { Play, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { SectionCard } from "@/components/ui";
 import type { PredictDataSource } from "@/lib/api";
-import { createPredictionRun, fetchPredictSuggestedCutoff } from "@/lib/mlApi";
+import { createPredictionRun, fetchPredictSuggestedCutoff } from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
 import { defaultRunName, todayISO } from "./runs-utils";
 

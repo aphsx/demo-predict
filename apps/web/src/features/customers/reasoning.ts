@@ -9,7 +9,7 @@
  * number (priority_score). Any human-readable "why" comes from the AI narrative,
  * grounded in the numeric model outputs and SHAP factors.
  */
-import type { ChurnFactor } from "@/lib/mlApi";
+import type { ChurnFactor } from "@/lib/ml-api";
 
 export type ReasonAiFields = {
   ai_status: "not_requested" | "pending" | "completed" | "failed";

@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { Activity } from "lucide-react";
 import { EmptyState, PageHeader, Skeleton } from "@/components/ui";
-import { fetchModelPerformance, type ModelPerfEntry } from "@/lib/mlApi";
-import { ChurnDiagnostics } from "./ChurnDiagnostics";
-import { metricInfo } from "./metricInfo";
+import { fetchModelPerformance, type ModelPerfEntry } from "@/lib/ml-api";
+import { ChurnDiagnostics } from "./churn-diagnostics";
+import { metricInfo } from "./metric-info";
 
 export function ModelPerformanceView() {
   const [entries, setEntries] = useState<ModelPerfEntry[] | null>(null);

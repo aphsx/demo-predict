@@ -9,15 +9,15 @@ import {
   Users,
 } from "lucide-react";
 import { formatCredits, formatCurrency, formatNumber } from "@/lib/format";
-import type { RunSummary } from "@/lib/mlApi";
-import { CreditUrgencyCard } from "./CreditUrgencyCard";
-import { LifecycleMixCard } from "./LifecycleMixCard";
-import { MetricCard } from "./MetricCard";
-import { MonthlyRevenueCard } from "./MonthlyRevenueCard";
-import { RiskCard } from "./RiskCard";
-import { TopPriorityCard } from "./TopPriorityCard";
-import { ValueCard } from "./ValueCard";
-import { ValueRiskMatrixCard } from "./ValueRiskMatrixCard";
+import type { RunSummary } from "@/lib/ml-api";
+import { CreditUrgencyCard } from "./credit-urgency-card";
+import { LifecycleMixCard } from "./lifecycle-mix-card";
+import { MetricCard } from "./metric-card";
+import { MonthlyRevenueCard } from "./monthly-revenue-card";
+import { RiskCard } from "./risk-card";
+import { TopPriorityCard } from "./top-priority-card";
+import { ValueCard } from "./value-card";
+import { ValueRiskMatrixCard } from "./value-risk-matrix-card";
 import { TEXT_SAFE } from "./palette";
 import { fromRunSummary } from "./types";
 

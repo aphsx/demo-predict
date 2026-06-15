@@ -1,6 +1,6 @@
 import type { DashboardOverview } from "./types";
 import { formatCredits, formatNumber } from "@/lib/format";
-import { RiskListRow } from "./RiskCard";
+import { RiskListRow } from "./risk-card";
 import { CREDIT_PALETTE, TEXT_SAFE } from "./palette";
 
 export function CreditUrgencyCard({ overview }: { overview: DashboardOverview }) {

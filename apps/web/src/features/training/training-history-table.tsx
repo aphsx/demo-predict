@@ -2,7 +2,7 @@
 
 import { History } from "lucide-react";
 import { EmptyState, ProgressMeter, StatusPill } from "@/components/ui";
-import type { TrainingRun } from "@/lib/mlApi";
+import type { TrainingRun } from "@/lib/ml-api";
 import { formatDate } from "./training-utils";
 import {
   primaryResultSummary,

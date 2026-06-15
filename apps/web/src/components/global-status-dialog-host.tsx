@@ -1,7 +1,7 @@
 "use client";
 
-import { StatusDialog } from "@/components/StatusDialog";
-import { useStatusDialogStore, type StatusDialogPayload } from "@/stores/statusDialogStore";
+import { StatusDialog } from "@/components/status-dialog";
+import { useStatusDialogStore, type StatusDialogPayload } from "@/stores/status-dialog-store";
 
 export type GlobalStatusDialogPayload = StatusDialogPayload;
 

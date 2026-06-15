@@ -1,12 +1,12 @@
 "use client";
 import { ReactNode, Suspense } from "react";
 import { usePathname } from "next/navigation";
-import Sidebar from "./Sidebar";
-import AIChatWidget from "./AIChatWidget";
-import { MobyIntroSplash } from "./MobyIntroSplash";
-import { GlobalStatusDialogHost } from "./GlobalStatusDialogHost";
-import RunSelector from "./RunSelector";
-import { RunUrlSync } from "@/stores/RunUrlSync";
+import Sidebar from "./sidebar";
+import AIChatWidget from "./ai-chat-widget";
+import { MobyIntroSplash } from "./moby-intro-splash";
+import { GlobalStatusDialogHost } from "./global-status-dialog-host";
+import RunSelector from "./run-selector";
+import { RunUrlSync } from "@/stores/run-url-sync";
 
 const BARE_ROUTES = ["/login"];
 

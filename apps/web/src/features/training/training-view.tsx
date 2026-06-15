@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Layers3, UploadCloud } from "lucide-react";
-import { notifyStatusDialog } from "@/components/GlobalStatusDialogHost";
-import { StatusDialog } from "@/components/StatusDialog";
+import { notifyStatusDialog } from "@/components/global-status-dialog-host";
+import { StatusDialog } from "@/components/status-dialog";
 import { Skeleton } from "@/components/ui";
 import {
   deleteTrainDataSource,
@@ -12,10 +12,10 @@ import {
   type TrainDataSource,
 } from "@/lib/api";
 import { getDisplayError } from "@/lib/ui-error";
-import { FilePickerPanel } from "./FilePickerPanel";
-import { ModelTrainingPanel } from "./ModelTrainingPanel";
-import { ProgressCard } from "./ProgressCard";
-import { TrainingRunsSection } from "./TrainingRunsSection";
+import { FilePickerPanel } from "./file-picker-panel";
+import { ModelTrainingPanel } from "./model-training-panel";
+import { ProgressCard } from "./progress-card";
+import { TrainingRunsSection } from "./training-runs-section";
 import {
   IMPORT_ACCENT,
   getTimestamp,

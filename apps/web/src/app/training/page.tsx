@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { TrainingView } from "@/features/training/TrainingView";
+import { TrainingView } from "@/features/training/training-view";
 
 export const metadata: Metadata = { title: "Training Data · 1Moby Intelligence" };
 

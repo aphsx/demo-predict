@@ -6,7 +6,10 @@
     "moduleResolution": "bundler",
     "types": ["bun-types"],
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@moby/types": ["../../packages/types/src/index.ts"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules"]

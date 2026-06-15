@@ -7,9 +7,9 @@ import {
   Bot, Send, Plus, Trash2, Edit3, X, ChevronDown, ChevronRight,
   Database, Loader2, AlertCircle, MessageSquare, User,
 } from "lucide-react";
-import { MarkdownLite } from "@/components/chat/MarkdownLite";
-import { TypingDots } from "@/components/chat/TypingDots";
-import { useChatStore, formatTime, type ChatEvidence, type Conversation } from "@/stores/chatStore";
+import { MarkdownLite } from "@/components/chat/markdown-lite";
+import { TypingDots } from "@/components/chat/typing-dots";
+import { useChatStore, formatTime, type ChatEvidence, type Conversation } from "@/stores/chat-store";
 
 // ── Layout constants ───────────────────────────────────────────────────────────
 

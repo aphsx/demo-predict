@@ -7,13 +7,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, ListChecks, RefreshCw, Trash2 } from "lucide-react";
-import { StatusDialog } from "@/components/StatusDialog";
+import { StatusDialog } from "@/components/status-dialog";
 import {
   EmptyState, ProgressMeter, SectionCard, Skeleton,
 } from "@/components/ui";
-import { deletePredictionRun, retryPredictionRun, type PredictionRun } from "@/lib/mlApi";
+import { deletePredictionRun, retryPredictionRun, type PredictionRun } from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
-import { useRunStore } from "@/stores/runStore";
+import { useRunStore } from "@/stores/run-store";
 import { formatDate, formatDateTime, runStatusLabel } from "./runs-utils";
 
 const COLUMNS = 8;

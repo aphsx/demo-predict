@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Play, RefreshCw, SlidersHorizontal } from "lucide-react";
-import { MockBadge } from "@/components/RunSelector";
+import { MockBadge } from "@/components/run-selector";
 import { StatusPill } from "@/components/ui";
 import type { TrainDataSource } from "@/lib/api";
 import { IMPORT_ACCENT } from "./training-utils";

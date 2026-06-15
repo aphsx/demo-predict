@@ -28,10 +28,10 @@ import {
   RotateCcw, ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
-import { MarkdownLite } from "@/components/chat/MarkdownLite";
-import { TypingDots } from "@/components/chat/TypingDots";
+import { MarkdownLite } from "@/components/chat/markdown-lite";
+import { TypingDots } from "@/components/chat/typing-dots";
 import { formatTime } from "@/lib/format";
-import { useChatStore, type ChatMsg } from "@/stores/chatStore";
+import { useChatStore, type ChatMsg } from "@/stores/chat-store";
 
 /* ─────────────────────────────────────────────
    Suggested chips  (only shown on first load)

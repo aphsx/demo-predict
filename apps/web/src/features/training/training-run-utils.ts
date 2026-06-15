@@ -1,4 +1,4 @@
-import type { RunStatus, TrainingRunResult } from "@/lib/mlApi";
+import type { RunStatus, TrainingRunResult } from "@/lib/ml-api";
 
 export const DEFAULT_HORIZON_DAYS = 180;
 

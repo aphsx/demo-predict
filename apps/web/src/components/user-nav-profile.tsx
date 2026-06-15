@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
-import { StatusDialog } from "@/components/StatusDialog";
+import { StatusDialog } from "@/components/status-dialog";
 import { signOut, useSession } from "@/lib/auth-client";
 
 function initials(name: string) {

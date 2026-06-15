@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Shell from "@/components/Shell";
+import Shell from "@/components/shell";
 
 export const metadata: Metadata = {
   title: "1Moby Intelligence",

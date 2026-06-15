@@ -7,14 +7,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Database } from "lucide-react";
-import { useActiveRun } from "@/components/RunSelector";
+import { useActiveRun } from "@/components/run-selector";
 import { EmptyState, Skeleton } from "@/components/ui";
-import { fetchCustomerUsageMonthly, fetchRunOutput } from "@/lib/mlApi";
+import { fetchCustomerUsageMonthly, fetchRunOutput } from "@/lib/ml-api";
 import {
   CustomerDetailView,
   type CustomerDetail,
   type UsageTrendPoint,
-} from "./CustomerDetailView";
+} from "./customer-detail-view";
 
 export function CustomerDetailClient({
   accId,

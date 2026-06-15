@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { StatusDialogTone } from "@/components/StatusDialog";
+import type { StatusDialogTone } from "@/components/status-dialog";
 
 export type StatusDialogPayload = {
   tone: StatusDialogTone;

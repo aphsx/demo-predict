@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useRunStore } from "./runStore";
+import { useRunStore } from "./run-store";
 
 /**
  * Keeps the run store and the `?run=` query param in sync.

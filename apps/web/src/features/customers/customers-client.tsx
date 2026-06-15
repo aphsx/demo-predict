@@ -13,21 +13,21 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { Database } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useActiveRun } from "@/components/RunSelector";
+import { useActiveRun } from "@/components/run-selector";
 import { EmptyState, Skeleton } from "@/components/ui";
 import {
   fetchRunOutputs,
   generateCustomerAiExplanation,
   type OutputsPage,
   type OutputsQuery,
-} from "@/lib/mlApi";
+} from "@/lib/ml-api";
 import {
   CustomersView,
   type CustomerFilters,
   type CustomerSort,
   type CustomerSortDirection,
   type CustomerSortKey,
-} from "./CustomersView";
+} from "./customers-view";
 
 // Server-side sort keeps the most important customers in the fetched page;
 // filters are applied server-side so every lifecycle stage is reachable.

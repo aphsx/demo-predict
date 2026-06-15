@@ -40,9 +40,10 @@ cd apps/api && bun run db:introspect # Drizzle reflects current PG schema into s
 
 # ML service (Python 3.11). Run inside the container or a venv with apps/ml/requirements.txt installed.
 cd apps/ml
-uvicorn api.main:app --port 8000 --reload      # FastAPI health + internal job triggers only
-python train_v2.py   --help                    # training CLI (src/training/runner.py)
-python predict_v2.py --help                    # prediction CLI (src/prediction/runner.py)
+uvicorn api.main:app --port 8000 --reload          # FastAPI health + internal job triggers only
+python -m src.cli.train   --help                   # training CLI  (src/training/runner.py)
+python -m src.cli.predict --help                   # prediction CLI (src/prediction/runner.py)
+# Legacy shims still work: python train_v2.py / predict_v2.py
 ```
 
 ### Tests / verification
@@ -100,15 +101,19 @@ moby-analytics/
 │   │                    #   train-data, predict-data, ai-chat
 │   └── ml/            # Python — FastAPI (internal) + ML v2 training/prediction runners
 │       ├── api/       #   FastAPI app (main.py = health + /internal job triggers; keep tiny)
-│       ├── src/training/    # gates, labels, features, preprocessing, datasets, baselines,
-│       │                    #   {churn,clv,credit}_trainer, metrics, registry, runner
-│       ├── src/prediction/  # prediction runner → ml_prediction_outputs
-│       ├── train_v2.py / predict_v2.py   # CLI entrypoints
-│       └── scripts/   #   verify_*.py contract checks + profile_training_dataset.py
+│       ├── src/
+│       │   ├── cli/         #   train.py / predict.py — CLI entry points (run via -m src.cli.*)
+│       │   ├── training/    #   gates, labels, features, preprocessing, datasets, baselines,
+│       │   │                #     {churn,clv,credit}_trainer, metrics, registry, runner
+│       │   ├── prediction/  #   prediction runner → ml_prediction_outputs
+│       │   └── constants.py
+│       ├── train_v2.py / predict_v2.py   # compat shims → src/cli/train.py / predict.py
+│       ├── pyproject.toml   # Python package metadata + console_scripts
+│       └── scripts/         #   verify_*.py contract checks + profile_training_dataset.py
 ├── db/init/           # Single PostgreSQL bootstrap schema (001_schema.sql)
 ├── moby-data-prep/    # Excel import contract docs/config + import CLI
 ├── packages/
-│   └── types/         # Shared TypeScript types (stub; populate as routes solidify)
+│   └── types/         # Shared TypeScript types (@moby/types) — single source for web + api
 ├── docs/              # ML-V2-*.md + AI-ASSISTANT.md + WEB-DEV-WORKFLOW.md (see docs/README.md)
 ├── models/            # ML model artifacts (.pkl, metrics.json, model_card)
 ├── data/              # Training Excel files
@@ -142,8 +147,8 @@ Browser → Next.js :3000
 Elysia :3001
   → PostgreSQL (Drizzle / pg)
   → Redis (progress Streams XADD/XREAD; Arq enqueue)
-  → FastAPI :8000/internal/training-runs    (token-gated, spawns train_v2.py)
-  → FastAPI :8000/internal/prediction-runs  (token-gated, spawns predict_v2.py)
+  → FastAPI :8000/internal/training-runs    (token-gated, spawns python -m src.cli.train)
+  → FastAPI :8000/internal/prediction-runs  (token-gated, spawns python -m src.cli.predict)
   → Ollama (AI chat / insights)
 
 FastAPI :8000/health  ← Docker healthcheck
@@ -265,10 +270,12 @@ Health
 ### TypeScript (web + api)
 
 - Strict mode on. No `any`.
+- File naming: **kebab-case** for all files in `apps/web/src/` (e.g. `my-component.tsx`, `my-store.ts`). Export names stay PascalCase/camelCase.
 - Elysia: use `t.Object({...})` for input validation. Group routes by resource in `apps/api/src/routes/`.
 - Drizzle: prefer query builder over raw `sql`. Use explicit snake_case column aliases in `select()`.
-- Shared types live in `packages/types`. Do not redefine across apps.
+- Shared types live in `packages/types` (`@moby/types`). Do not redefine across apps — import from there.
 - Response keys must be snake_case (matches the frontend contract).
+- Shared Excel parsing utilities are in `apps/api/src/lib/data-import/excel-core.ts` — do not duplicate in `train-import.ts` / `predict-import.ts`.
 
 ### Python (ml)
 
@@ -328,9 +335,9 @@ NEXT_PUBLIC_AUTH_URL     # http://localhost:3000 (browser-visible)
 
 ## What NOT to Change
 
-- `apps/ml/src/` — ML pipeline code. Touch only to fix bugs, never to refactor style.
+- `apps/ml/src/training/` and `apps/ml/src/prediction/` — ML pipeline code. Touch only to fix bugs, never to refactor style.
 - `db/init/001_schema.sql` — single schema bootstrap; edit deliberately and keep Drizzle in sync.
-- `train_v2.py` / `predict_v2.py` — ML CLI entrypoints.
+- `apps/ml/src/cli/train.py` / `apps/ml/src/cli/predict.py` — CLI entrypoints (spawned by FastAPI via `python -m`). `train_v2.py`/`predict_v2.py` are compat shims that forward to these.
 
 ## Always Check
 

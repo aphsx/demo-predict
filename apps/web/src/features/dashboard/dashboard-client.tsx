@@ -7,10 +7,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Database } from "lucide-react";
-import { useActiveRun } from "@/components/RunSelector";
+import { useActiveRun } from "@/components/run-selector";
 import { EmptyState, Skeleton } from "@/components/ui";
-import { fetchRunSummary, type RunSummary } from "@/lib/mlApi";
-import { DashboardView } from "./DashboardView";
+import { fetchRunSummary, type RunSummary } from "@/lib/ml-api";
+import { DashboardView } from "./dashboard-view";
 
 export function DashboardClient() {
   const { run, runId, loading: runsLoading } = useActiveRun();

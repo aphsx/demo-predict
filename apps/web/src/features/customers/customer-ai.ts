@@ -1,4 +1,4 @@
-import type { PredictionOutput } from "@/lib/mlApi";
+import type { PredictionOutput } from "@/lib/ml-api";
 
 type AiFields = Pick<PredictionOutput, "ai_status" | "ai_explanation">;
 

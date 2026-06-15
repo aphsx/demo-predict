@@ -1,6 +1,6 @@
 import type { DashboardOverview } from "./types";
 import { formatCurrency } from "@/lib/format";
-import { RiskListRow } from "./RiskCard";
+import { RiskListRow } from "./risk-card";
 import {
   BRAND_BLUE_GRADIENT,
   BRAND_ORANGE_GRADIENT,

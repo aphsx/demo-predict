@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, Check, X } from "lucide-react";
 import { StatusPill } from "@/components/ui";
-import type { TrainingRun, TrainingRunResult } from "@/lib/mlApi";
+import type { TrainingRun, TrainingRunResult } from "@/lib/ml-api";
 import { formatDate } from "./training-utils";
 import { MODEL_TYPE_LABELS, beatsBaseline, formatMetric } from "./training-run-utils";
 
