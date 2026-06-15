@@ -67,21 +67,18 @@ import type {
 
 // ── Plumbing ────────────────────────────────────────────────────────────────
 
-export const IS_ML_MOCK = process.env.NEXT_PUBLIC_ML_USE_MOCK === "1";
+import {
+  IS_ML_MOCK,
+  isApiError,
+  loadMlMock as mock,
+  redirectingFetch,
+} from "./http";
 
-function isApiError(data: unknown): data is { message: string } {
-  return (
-    typeof data === "object" && data !== null &&
-    "message" in data && typeof (data as { message: unknown }).message === "string"
-  );
-}
+// Re-exported so views can read the mock flag from `@/lib/ml-api`.
+export { IS_ML_MOCK } from "./http";
 
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { credentials: "include" });
-  if (res.status === 401 && typeof window !== "undefined") {
-    window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-    throw new Error("Unauthorized");
-  }
+  const res = await redirectingFetch(url);
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     throw new Error(isApiError(body) ? body.message : `Request failed (${res.status})`);
@@ -89,6 +86,7 @@ async function getJson<T>(url: string): Promise<T> {
   return body as T;
 }
 
+// Note: mutations intentionally do not redirect on 401 (preserves prior behavior).
 async function sendJson<T>(url: string, method: string, payload?: unknown): Promise<T> {
   const res = await fetch(url, {
     method,
@@ -101,11 +99,6 @@ async function sendJson<T>(url: string, method: string, payload?: unknown): Prom
     throw new Error(isApiError(body) ? body.message : `Request failed (${res.status})`);
   }
   return body as T;
-}
-
-// Mock provider is loaded lazily so the real-API path never bundles it eagerly.
-async function mock() {
-  return import("@/mocks/ml");
 }
 
 // ── Client functions (spec §7) ──────────────────────────────────────────────
