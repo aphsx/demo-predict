@@ -2,7 +2,7 @@
  * [NEW] Predict raw + clean API — Excel → predict_raw_sheet_* → predict_clean_*.
  */
 import Elysia, { t } from "elysia";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { predictDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
@@ -12,6 +12,7 @@ import { importPredictExcel, type PredictImportResult } from "../lib/predict-imp
 import { abortPredictDataSource } from "../lib/abort-data-source";
 import { cleanPredictFromRaw } from "../lib/predict-clean";
 import { isXlsxFilename, mapDataSourceRow } from "../lib/data-import/data-source-dto";
+import { getPredictCutoffSuggestion } from "../lib/clean-cutoff";
 
 const sourceSelect = {
   id: predictDataSources.id,
@@ -67,29 +68,14 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
         .limit(1);
       if (!source) return denyNotFound(set, "Predict data source not found");
 
-      const [row] = await db.execute<{
-        suggested_cutoff: string | null;
-        latest_data_date: string | null;
-      }>(sql`
-        SELECT to_char(latest + 1, 'YYYY-MM-DD') AS suggested_cutoff,
-               to_char(latest, 'YYYY-MM-DD') AS latest_data_date
-        FROM (
-          SELECT GREATEST(
-            (SELECT MAX(payment_date)::date
-             FROM predict_clean_payments WHERE source_id = ${params.id}),
-            (SELECT MAX(make_date(year, month, 1))
-             FROM predict_clean_usage
-             WHERE source_id = ${params.id} AND year IS NOT NULL AND month IS NOT NULL)
-          ) AS latest
-        ) s
-      `);
-      if (!row?.suggested_cutoff) {
+      const { cutoff_date, latest_data_date } = await getPredictCutoffSuggestion(params.id);
+      if (!cutoff_date) {
         set.status = 400;
         return { message: "No clean activity data for this source yet" };
       }
       return {
-        suggested_cutoff: row.suggested_cutoff,
-        latest_data_date: row.latest_data_date,
+        suggested_cutoff: cutoff_date,
+        latest_data_date: latest_data_date,
       };
     },
     { params: t.Object({ id: t.String() }) }

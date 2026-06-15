@@ -2,12 +2,13 @@
  * [NEW] Train raw data API — import 8-sheet Excel into train_data_sources + train_raw_sheet_*.
  */
 import Elysia, { t } from "elysia";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
 import { requireOwnedForMutation } from "../lib/access-control";
 import { requireUser } from "../lib/auth-middleware";
 import { UUID_RE } from "../lib/constants";
+import { getTrainCutoffSuggestion } from "../lib/clean-cutoff";
 import { prepareTrainDataSource } from "../lib/train-import";
 import { releaseStaleTrainImports } from "../lib/abort-data-source";
 import {
@@ -183,29 +184,17 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
       }
 
       const HORIZON_DAYS = 180;
-      const [row] = await db.execute<{
-        suggested_cutoff: string | null;
-        latest_data_date: string | null;
-      }>(sql`
-        SELECT to_char(date_trunc('month', (latest - ${HORIZON_DAYS}::int)::timestamp)::date, 'YYYY-MM-DD') AS suggested_cutoff,
-               to_char(latest, 'YYYY-MM-DD') AS latest_data_date
-        FROM (
-          SELECT GREATEST(
-            (SELECT MAX(payment_date)::date
-             FROM train_clean_payments WHERE source_id = ${params.id}),
-            (SELECT MAX(make_date(year, month, 1))
-             FROM train_clean_usage
-             WHERE source_id = ${params.id} AND year IS NOT NULL AND month IS NOT NULL)
-          ) AS latest
-        ) s
-      `);
-      if (!row?.suggested_cutoff || !row.latest_data_date) {
+      const { cutoff_date, latest_data_date } = await getTrainCutoffSuggestion(
+        params.id,
+        HORIZON_DAYS
+      );
+      if (!cutoff_date || !latest_data_date) {
         set.status = 400;
         return { message: "No clean activity data for this source yet" };
       }
       return {
-        suggested_cutoff: row.suggested_cutoff,
-        latest_data_date: row.latest_data_date,
+        suggested_cutoff: cutoff_date,
+        latest_data_date: latest_data_date,
         horizon_days: HORIZON_DAYS,
       };
     },
