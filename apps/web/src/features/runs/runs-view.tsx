@@ -52,10 +52,10 @@ export function RunsView() {
   }, [load, runs]);
 
   return (
-    <main className="px-8 py-6 pb-12">
-      <div className="space-y-5">
+    <main className="min-w-0 px-4 py-6 pb-12 sm:px-6 lg:px-8">
+      <div className="space-y-6">
         {error && (
-          <div className="rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
+          <div className="rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
             {error}
           </div>
         )}

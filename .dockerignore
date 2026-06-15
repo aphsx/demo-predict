@@ -1,0 +1,25 @@
+# dependencies / build artifacts
+node_modules
+**/node_modules
+.next
+**/.next
+out
+**/out
+dist
+.turbo
+**/.turbo
+*.tsbuildinfo
+apps/web/bun.lock
+
+# unrelated services
+apps/ml
+
+# runtime / local data
+models
+data
+.git
+
+# docs and import tooling (not needed in api/web images)
+*.md
+docs
+moby-data-prep

@@ -31,7 +31,7 @@ export function ModelTrainingPanel({
             <p className="type-label">
               Model training
             </p>
-            <h2 className="type-section-title mt-1 text-[22px]">
+            <h2 className="type-section-title mt-1 text-[20px]">
               Select dataset and train
             </h2>
             <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
@@ -44,7 +44,7 @@ export function ModelTrainingPanel({
       <div className="p-5">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {selectedSource ? (
-            <StatusPill tone="neutral" dot={false}>
+            <StatusPill tone="brand" dot={false}>
               Selected: {selectedSource.name}
             </StatusPill>
           ) : (
@@ -61,7 +61,7 @@ export function ModelTrainingPanel({
             hint="Upload one Excel file above. The system will import raw data and clean it automatically."
           />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <div className="overflow-x-auto rounded-[22px] border border-gray-200">
             <table className="table-base">
               <thead>
                 <tr>
@@ -125,7 +125,7 @@ function DatasetTableRow({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-[color:var(--ink-1)]">{source.name}</span>
               {selected && (
-                <StatusPill tone="neutral" dot={false}>
+                <StatusPill tone="brand" dot={false}>
                   Selected
                 </StatusPill>
               )}

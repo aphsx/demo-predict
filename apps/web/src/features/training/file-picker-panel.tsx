@@ -1,6 +1,6 @@
 import { type RefObject } from "react";
 import { FileSpreadsheet, UploadCloud } from "lucide-react";
-import { BRAND_BLUE, formatFileSize } from "./training-utils";
+import { formatFileSize, PRIMARY_BUTTON_CLS } from "./training-utils";
 
 export function FilePickerPanel({
   pendingFile,
@@ -14,7 +14,7 @@ export function FilePickerPanel({
   onFileChange: (file: File) => void;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-[var(--shadow-1)]">
       <input
         ref={fileInputRef}
         type="file"
@@ -41,7 +41,7 @@ export function FilePickerPanel({
         </div>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-lg border border-gray-200">
+      <div className="mt-5 overflow-hidden rounded-2xl border border-gray-200">
         <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
           <p className="type-label">
             Selected file
@@ -78,8 +78,7 @@ export function FilePickerPanel({
         type="button"
         disabled={importing}
         onClick={() => fileInputRef.current?.click()}
-        className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-        style={{ background: BRAND_BLUE }}
+        className={`mt-4 w-full ${PRIMARY_BUTTON_CLS} disabled:cursor-not-allowed disabled:opacity-60`}
       >
         <UploadCloud size={14} aria-hidden />
         {pendingFile ? "Change file" : "Choose file"}

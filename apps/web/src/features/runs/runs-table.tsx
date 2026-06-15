@@ -9,24 +9,17 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, ListChecks, RefreshCw, Trash2 } from "lucide-react";
 import { StatusDialog } from "@/components/status-dialog";
 import {
-  EmptyState, ProgressMeter, SectionCard, Skeleton,
+  EmptyState, ProgressMeter, SectionCard, Skeleton, StatusPill,
 } from "@/components/ui";
 import { deletePredictionRun, retryPredictionRun, type PredictionRun } from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
 import { useRunStore } from "@/stores/run-store";
-import { formatDate, formatDateTime, runStatusLabel } from "./runs-utils";
+import { formatDate, formatDateTime, runStatusLabel, runStatusTone } from "./runs-utils";
 
 const COLUMNS = 8;
 
 const actionBtnCls =
-  "h-7 px-2.5 rounded-md border border-[color:var(--moby-100)] bg-white text-[11.5px] text-[color:var(--moby-600)] hover:border-[color:var(--moby-200)] inline-flex items-center gap-1 disabled:opacity-40";
-
-const RUN_STATUS_COLOR: Record<PredictionRun["status"], string> = {
-  pending: "#ffa400",
-  in_progress: "#1893f0",
-  completed: "#059669",
-  failed: "#fc4c02",
-};
+  "inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12px] font-semibold text-[color:var(--moby-600)] hover:bg-gray-50 disabled:opacity-40";
 
 export function RunsTable({
   runs,
@@ -79,11 +72,12 @@ export function RunsTable({
   return (
     <>
       <SectionCard
+        eyebrow="Run history"
         title="Prediction runs"
         hint="หนึ่งแถวต่อหนึ่งรอบทำนาย — เปิด run ที่ completed เพื่อดู dashboard"
       >
         {error && (
-          <div className="mb-3 rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-3 py-2 text-[12.5px] text-[color:var(--danger)]">
+          <div className="mb-4 rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
             {error}
           </div>
         )}
@@ -101,7 +95,7 @@ export function RunsTable({
             hint="เลือก predict source ที่ ready แล้วกด Create run ด้านบน"
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-[22px] border border-gray-200">
             <table className="table-base">
               <thead>
                 <tr>
@@ -171,7 +165,9 @@ function RunRow({
         <td className="font-medium text-[color:var(--ink-1)]">{run.name}</td>
         <td>
           <div className="flex items-center gap-2">
-            <RunStatusBadge status={run.status} />
+            <StatusPill tone={runStatusTone[run.status]} loading={inProgress}>
+              {runStatusLabel[run.status]}
+            </StatusPill>
             {run.status === "failed" && run.error_message && (
               <span
                 className="text-[11px] text-[color:var(--danger)] truncate max-w-[220px]"
@@ -210,7 +206,7 @@ function RunRow({
               type="button"
               onClick={onDelete}
               disabled={deleting}
-              className="h-7 w-7 grid place-items-center rounded-md text-[color:var(--ink-4)] hover:text-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] disabled:opacity-40"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--ink-4)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-40"
               title="Delete run"
             >
               {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
@@ -228,19 +224,5 @@ function RunRow({
         </tr>
       )}
     </>
-  );
-}
-
-function RunStatusBadge({ status }: { status: PredictionRun["status"] }) {
-  const inProgress = status === "in_progress";
-
-  return (
-    <span
-      className="inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold text-white"
-      style={{ backgroundColor: RUN_STATUS_COLOR[status] }}
-    >
-      {inProgress ? <RefreshCw size={12} className="animate-spin" /> : null}
-      {runStatusLabel[status]}
-    </span>
   );
 }

@@ -19,16 +19,16 @@ export function ProgressCard({
       : "Importing raw data";
 
   return (
-    <div className="mt-5 rounded-lg border border-[rgba(252,76,2,0.22)] bg-white p-4">
+    <div className="mt-5 rounded-2xl border border-[color:var(--moby-200)] bg-white p-4">
       <div className="flex items-center gap-3">
-        <span className="shrink-0 text-[#fc4c02]">
+        <span className="shrink-0 text-[color:var(--moby-600)]">
           <RefreshCw size={15} className="animate-spin" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[13px] font-semibold text-[color:var(--ink-1)]">{label}</p>
             {!training && (
-              <span className="num text-[13px] font-semibold text-[#fc4c02]">
+              <span className="num text-[13px] font-semibold text-[color:var(--moby-600)]">
                 {progress}%
               </span>
             )}
@@ -65,7 +65,7 @@ function GradientProgressBar({
         style={{
           width: indeterminate ? "100%" : `${Math.max(0, Math.min(100, value))}%`,
           backgroundImage: IMPORT_PROGRESS_BG,
-          boxShadow: "0 0 18px rgba(252,76,2,0.18)",
+          boxShadow: "0 0 18px rgba(0,107,255,0.18)",
         }}
       />
       <div

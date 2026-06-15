@@ -16,10 +16,8 @@ export function TrainingHistoryTable({ runs }: { runs: TrainingRun[] }) {
   return (
     <section className="surface-elev overflow-hidden">
       <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-          Training history
-        </p>
-        <h2 className="mt-1 text-[16px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+        <p className="type-label">Training history</p>
+        <h2 className="type-section-title mt-1 text-[20px]">
           ครั้งที่แล้วเทรนเมื่อไหร่ ด้วย data ไหน
         </h2>
       </div>

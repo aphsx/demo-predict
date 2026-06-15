@@ -17,9 +17,8 @@ import {
   importStatusTone,
 } from "./runs-utils";
 
-const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-[color:var(--moby-100)] bg-white text-[13px] text-[color:var(--ink-2)] outline-none transition-colors focus:border-[color:var(--moby-500)]";
-const labelCls = "text-[11px] font-medium text-[color:var(--ink-4)] block mb-1";
+const fieldCls =
+  "mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)] outline-none transition-colors focus:border-[color:var(--moby-500)] disabled:opacity-50";
 
 function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -49,22 +48,22 @@ function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
   };
 
   return (
-    <div className="rounded-lg border border-[color:var(--moby-100)] bg-[color:var(--moby-50)]/50 p-4">
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 sm:p-5">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto] lg:items-end">
         <div>
-          <label className={labelCls}>Excel file (.xlsx)</label>
-          <div className="flex items-center gap-2">
+          <span className="type-label">Excel file (.xlsx)</span>
+          <div className="mt-1.5 flex items-center gap-2">
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={busy}
-              className="h-9 px-3 rounded-lg border border-[color:var(--moby-100)] bg-white text-[12.5px] text-[color:var(--moby-600)] hover:border-[color:var(--moby-200)] inline-flex items-center gap-1.5 disabled:opacity-40 shrink-0"
+              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-3.5 text-[12.5px] font-semibold text-[color:var(--moby-600)] shadow-[var(--shadow-1)] hover:bg-gray-50 disabled:opacity-40"
             >
-              <FileSpreadsheet size={13} />
+              <FileSpreadsheet size={14} />
               เลือกไฟล์
             </button>
             <span
-              className="text-[12px] text-[color:var(--ink-4)] truncate"
+              className="min-w-0 truncate text-[12px] text-[color:var(--ink-4)]"
               title={file?.name ?? undefined}
             >
               {file ? file.name : "ยังไม่ได้เลือกไฟล์"}
@@ -82,38 +81,42 @@ function ImportPanel({ onImported }: { onImported: () => Promise<void> }) {
             />
           </div>
         </div>
-        <div>
-          <label className={labelCls}>Name</label>
+
+        <label className="block">
+          <span className="type-label">Name</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={file ? file.name.replace(/\.xlsx$/i, "") : "e.g. Customers 2026-06"}
             disabled={busy}
-            className={inputCls}
+            className={fieldCls}
           />
-        </div>
-        <div>
-          <label className={labelCls}>Client label</label>
+        </label>
+
+        <label className="block">
+          <span className="type-label">Client label</span>
           <input
             value={clientLabel}
             onChange={(e) => setClientLabel(e.target.value)}
             placeholder="optional"
             disabled={busy}
-            className={inputCls}
+            className={fieldCls}
           />
-        </div>
+        </label>
+
         <button
           type="button"
           onClick={() => void doImport()}
           disabled={busy || !file}
-          className="h-9 px-3.5 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-800)] inline-flex items-center gap-1.5 disabled:opacity-50"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[color:var(--moby-600)] px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(0,107,255,0.14)] hover:bg-[color:var(--moby-800)] disabled:opacity-50 lg:min-w-[130px]"
         >
-          {busy ? <RefreshCw size={13} className="animate-spin" /> : <UploadCloud size={13} />}
+          {busy ? <RefreshCw size={16} className="animate-spin" /> : <UploadCloud size={16} />}
           {busy ? "Importing…" : "Import"}
         </button>
       </div>
+
       {error && (
-        <div className="mt-3 rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-3 py-2 text-[12.5px] text-[color:var(--danger)]">
+        <div className="mt-4 rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
           {error}
         </div>
       )}
@@ -132,10 +135,11 @@ export function PredictSourcesSection({
 }) {
   return (
     <SectionCard
+      eyebrow="Data import"
       title="Predict data sources"
       hint="Import Excel (fixed 8-sheet schema) เพื่อใช้สร้าง prediction run"
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
         <ImportPanel onImported={onRefresh} />
 
         {loading ? (
@@ -151,7 +155,7 @@ export function PredictSourcesSection({
             hint="Import ไฟล์ Excel ด้านบนเพื่อเริ่มต้น"
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-[22px] border border-gray-200">
             <table className="table-base">
               <thead>
                 <tr>
@@ -179,7 +183,7 @@ export function PredictSourcesSection({
                           </StatusPill>
                           {s.import_status === "failed" && s.error_message && (
                             <span
-                              className="text-[11px] text-[color:var(--danger)] truncate max-w-[220px]"
+                              className="max-w-[220px] truncate text-[11px] text-[color:var(--danger)]"
                               title={s.error_message}
                             >
                               {s.error_message}
@@ -187,13 +191,13 @@ export function PredictSourcesSection({
                           )}
                         </div>
                       </td>
-                      <td className="text-right num">
+                      <td className="num text-right">
                         {counts ? counts.customers.toLocaleString() : "—"}
                       </td>
-                      <td className="text-right num">
+                      <td className="num text-right">
                         {counts ? counts.payments.toLocaleString() : "—"}
                       </td>
-                      <td className="text-right num">
+                      <td className="num text-right">
                         {counts ? counts.usage.toLocaleString() : "—"}
                       </td>
                       <td className="text-[11.5px] text-[color:var(--ink-4)]">

@@ -2,7 +2,7 @@
 import { ReactNode } from "react";
 import {
   TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle2,
-  Clock, Activity, ArrowRight
+  Clock, Activity, ArrowRight, RefreshCw,
 } from "lucide-react";
 
 /* ────────────────────────────────────────── */
@@ -25,20 +25,37 @@ export function PageHeader({
 /*  SectionCard                              */
 /* ────────────────────────────────────────── */
 export function SectionCard({
-  title, hint, right, children, className = "",
-}: { title?: ReactNode; hint?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
+  title,
+  hint,
+  eyebrow,
+  right,
+  children,
+  className = "",
+}: {
+  title?: ReactNode;
+  hint?: ReactNode;
+  eyebrow?: ReactNode;
+  right?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <section className={`surface ${className}`}>
-      {(title || right) && (
-        <header className="flex items-center justify-between gap-3 px-5 py-3 border-b border-gray-100">
-          <div>
-            {title && <h3 className="type-section-title text-[15px]">{title}</h3>}
-            {hint && <p className="type-meta text-[12px] mt-0.5">{hint}</p>}
+    <section className={`surface-elev overflow-hidden ${className}`}>
+      {(title || right || eyebrow) && (
+        <header className="border-b border-gray-100 px-5 py-4 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              {eyebrow ? <p className="type-label">{eyebrow}</p> : null}
+              {title ? <h2 className="type-section-title mt-1 text-[20px]">{title}</h2> : null}
+              {hint ? (
+                <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">{hint}</p>
+              ) : null}
+            </div>
+            {right ? <div className="flex shrink-0 flex-wrap items-center gap-2">{right}</div> : null}
           </div>
-          {right}
         </header>
       )}
-      <div className="p-5">{children}</div>
+      <div className="p-5 sm:p-6">{children}</div>
     </section>
   );
 }
@@ -101,7 +118,7 @@ const ACCENTS = {
   violet:  "#7c3aed",
   amber:   "#d97706",
   rose:    "#e11d48",
-  emerald: "#059669",
+  emerald: "var(--moby-600)",
   slate:   "#64748b",
 };
 
@@ -124,28 +141,40 @@ export function DeltaPill({ value, label }: { value: number; label?: string }) {
 }
 
 /* ────────────────────────────────────────── */
-/*  StatusPill                                */
+/*  StatusPill — solid fill, matches /customers lifecycle badges */
 /* ────────────────────────────────────────── */
-const PILL_TONES: Record<string, { fg: string; border: string }> = {
-  ok:       { fg: "var(--ok)",       border: "#bbf7d0" },
-  warn:     { fg: "var(--warn)",     border: "#fde68a" },
-  danger:   { fg: "var(--danger)",   border: "#fecaca" },
-  info:     { fg: "var(--info)",     border: "#bae6fd" },
-  neutral:  { fg: "#9ca3af",         border: "#e5e7eb" },
-  brand:    { fg: "var(--moby-600)", border: "var(--moby-100)" },
-  violet:   { fg: "#6d28d9",         border: "#ddd6fe" },
-  warm:     { fg: "#ffa400",         border: "#fde68a" },
-  orange:   { fg: "#fc4c02",         border: "#fed7aa" },
+const PILL_TONES: Record<string, string> = {
+  ok:      "#006bff",
+  brand:   "#006bff",
+  warn:    "#ffa400",
+  danger:  "#fc4c02",
+  info:    "#1893f0",
+  neutral: "#9ca3af",
+  violet:  "#7c3aed",
+  warm:    "#ffa400",
+  orange:  "#fc4c02",
 };
 
 export function StatusPill({
-  tone = "neutral", icon: Icon, children, dot = true,
-}: { tone?: keyof typeof PILL_TONES; icon?: any; children: ReactNode; dot?: boolean }) {
-  const t = PILL_TONES[tone];
+  tone = "neutral",
+  icon: Icon,
+  children,
+  loading = false,
+}: {
+  tone?: keyof typeof PILL_TONES;
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  children: ReactNode;
+  /** @deprecated dots removed — kept for call-site compat */
+  dot?: boolean;
+  loading?: boolean;
+}) {
+  const bg = PILL_TONES[tone] ?? PILL_TONES.neutral;
   return (
-    <span className="pill" style={{ color: t.fg, background: "transparent", borderColor: t.border }}>
-      {dot && !Icon && <span className="dot" />}
-      {Icon && <Icon size={11} />}
+    <span
+      className="inline-flex h-[26px] items-center justify-center gap-1 rounded-full px-2.5 text-[11px] font-semibold text-white"
+      style={{ backgroundColor: bg }}
+    >
+      {loading ? <RefreshCw size={11} className="animate-spin" /> : Icon ? <Icon size={11} /> : null}
       {children}
     </span>
   );

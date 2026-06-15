@@ -5,7 +5,7 @@ import { Play, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { MockBadge } from "@/components/run-selector";
 import { StatusPill } from "@/components/ui";
 import type { TrainDataSource } from "@/lib/api";
-import { IMPORT_ACCENT } from "./training-utils";
+import { PRIMARY_BUTTON_CLS } from "./training-utils";
 import { DEFAULT_HORIZON_DAYS } from "./training-run-utils";
 
 const CUTOFF_HELPER =
@@ -51,11 +51,9 @@ export function TrainRunPanel({
       <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-              ML v2 training
-            </p>
+            <p className="type-label">ML v2 training</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h2 className="text-[22px] font-semibold tracking-[-0.035em] text-[color:var(--ink-1)]">
+              <h2 className="type-section-title text-[20px]">
                 Train models
               </h2>
               <MockBadge />
@@ -69,8 +67,7 @@ export function TrainRunPanel({
             type="button"
             disabled={!canTrain}
             onClick={() => onTrain({ cutoff_date: cutoffDate, horizon_days: horizonDays })}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(252,76,2,0.14)] disabled:opacity-50 xl:min-w-[170px]"
-            style={{ background: IMPORT_ACCENT }}
+            className={`${PRIMARY_BUTTON_CLS} xl:min-w-[170px]`}
           >
             {creating ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
             {creating ? "Starting..." : "Train"}
@@ -95,7 +92,7 @@ export function TrainRunPanel({
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-5)]">
                 Training cutoff
               </span>
-              <StatusPill tone={cutoffTouched ? "warn" : "ok"} dot={false}>
+              <StatusPill tone={cutoffTouched ? "warn" : "brand"} dot={false}>
                 {cutoffMode}
               </StatusPill>
             </div>

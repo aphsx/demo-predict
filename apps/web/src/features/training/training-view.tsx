@@ -17,7 +17,7 @@ import { ModelTrainingPanel } from "./model-training-panel";
 import { ProgressCard } from "./progress-card";
 import { TrainingRunsSection } from "./training-runs-section";
 import {
-  IMPORT_ACCENT,
+  PRIMARY_BUTTON_CLS,
   getTimestamp,
   wait,
 } from "./training-utils";
@@ -182,10 +182,12 @@ export function TrainingView() {
         <section className="surface-elev overflow-hidden">
           <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
             <p className="type-label">New dataset</p>
-            <h2 className="type-section-title mt-1 text-[22px]">
+            <h2 className="type-section-title mt-1 text-[20px]">
               Upload and clean dataset
             </h2>
-           
+            <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
+              นำเข้า Excel 8 sheets แล้วระบบจะ import raw และ clean ให้อัตโนมัติ
+            </p>
           </div>
           <div className="p-5 sm:p-6">
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
@@ -200,7 +202,7 @@ export function TrainingView() {
                 }}
               />
 
-              <div className="flex flex-col rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="flex flex-col rounded-2xl border border-gray-200 bg-gray-50 p-4 sm:p-5">
                 <div className="grid grid-cols-1 gap-4">
                   <label className="block">
                     <span className="type-label">Dataset name</span>
@@ -209,7 +211,7 @@ export function TrainingView() {
                       value={importName}
                       onChange={(e) => setImportName(e.target.value)}
                       placeholder="e.g. Bangkok University Q1"
-                      className="mt-1.5 h-11 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)]"
+                      className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
                     />
                   </label>
 
@@ -220,12 +222,12 @@ export function TrainingView() {
                       value={importClient}
                       onChange={(e) => setImportClient(e.target.value)}
                       placeholder="optional"
-                      className="mt-1.5 h-11 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)]"
+                      className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
                     />
                   </label>
                 </div>
 
-                <div className="mt-5 rounded-lg border border-gray-200 bg-white p-3">
+                <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-3.5">
                   <div className="flex items-center gap-3 text-[12px] text-[color:var(--ink-4)]">
                     <span className="shrink-0 text-[color:var(--moby-600)]">
                       <Layers3 size={15} />
@@ -252,8 +254,7 @@ export function TrainingView() {
                 type="button"
                 disabled={importing || !pendingFile}
                 onClick={() => pendingFile && void handleImportFile(pendingFile)}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-[13px] font-semibold text-white disabled:opacity-50 sm:min-w-[170px]"
-                style={{ background: IMPORT_ACCENT }}
+                className={`${PRIMARY_BUTTON_CLS} sm:min-w-[170px]`}
               >
                 <UploadCloud size={16} aria-hidden />
                 Upload and clean

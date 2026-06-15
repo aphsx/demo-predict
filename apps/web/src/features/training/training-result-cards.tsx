@@ -15,10 +15,8 @@ export function TrainingResultCards({ run }: { run: TrainingRun }) {
     <section className="surface-elev overflow-hidden">
       <div className="flex flex-col gap-2 border-b border-gray-100 px-5 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-6">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-5)]">
-            Latest training result
-          </p>
-          <h2 className="mt-1 text-[16px] font-semibold tracking-[-0.02em] text-[color:var(--ink-1)]">
+          <p className="type-label">Latest training result</p>
+          <h2 className="type-section-title mt-1 text-[20px]">
             {run.dataset_name} · cutoff <span className="num">{run.cutoff_date}</span>
           </h2>
           <p className="mt-0.5 text-[12px] text-[color:var(--ink-5)]">
@@ -53,7 +51,7 @@ function ResultCard({ result }: { result: TrainingRunResult }) {
           {MODEL_TYPE_LABELS[result.model_type]}
         </h3>
         {result.promoted ? (
-          <StatusPill tone="ok" dot={false} icon={Check}>
+          <StatusPill tone="brand" dot={false} icon={Check}>
             Promoted {result.new_version ?? ""}
           </StatusPill>
         ) : (
@@ -78,7 +76,7 @@ function ResultCard({ result }: { result: TrainingRunResult }) {
             calibration ECE <span className="num">{formatMetric(result.calibration_ece)}</span>
           </span>
         )}
-        <span className={result.leakage_passed ? "text-[color:var(--ok)]" : "text-[color:var(--danger)]"}>
+        <span className={result.leakage_passed ? "text-[color:var(--moby-600)]" : "text-[color:var(--danger)]"}>
           leakage tests {result.leakage_passed ? "✓" : "✗"}
         </span>
       </div>

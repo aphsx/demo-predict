@@ -14,9 +14,8 @@ import { createPredictionRun, fetchPredictSuggestedCutoff } from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
 import { defaultRunName, todayISO } from "./runs-utils";
 
-const inputCls =
-  "w-full h-9 px-3 rounded-lg border border-[color:var(--moby-100)] bg-white text-[13px] text-[color:var(--ink-2)] outline-none transition-colors focus:border-[color:var(--moby-500)] disabled:opacity-50";
-const labelCls = "text-[11px] font-medium text-[color:var(--ink-4)] block mb-1";
+const fieldCls =
+  "mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)] outline-none transition-colors focus:border-[color:var(--moby-500)] disabled:opacity-50";
 
 export function CreateRunPanel({
   sources,
@@ -37,14 +36,12 @@ export function CreateRunPanel({
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep a valid selection as the source list changes.
   useEffect(() => {
     if (sourceId && readySources.some((s) => s.id === sourceId)) return;
     setSourceId(readySources[0]?.id ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readySources.map((s) => s.id).join(",")]);
 
-  // Default run name follows the selected source until the user edits it.
   const selected = readySources.find((s) => s.id === sourceId) ?? null;
   useEffect(() => {
     if (nameTouched) return;
@@ -52,8 +49,6 @@ export function CreateRunPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, nameTouched]);
 
-  // Default cutoff = API-suggested cutoff of the selected source.
-  // The user can still override it; switching source re-applies the suggestion.
   useEffect(() => {
     if (!selected) return;
     setCutoffTouched(false);
@@ -102,17 +97,29 @@ export function CreateRunPanel({
 
   return (
     <SectionCard
+      eyebrow="Prediction runs"
       title="Create prediction run"
       hint="เลือก source ที่ import เสร็จแล้ว ระบบจะรัน lifecycle / churn / CLV / credit forecast ให้ทุกลูกค้า"
+      right={
+        <button
+          type="button"
+          onClick={() => void create()}
+          disabled={!canCreate}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-[color:var(--moby-600)] px-4 text-[13px] font-semibold text-white shadow-[0_16px_34px_rgba(0,107,255,0.14)] hover:bg-[color:var(--moby-800)] disabled:opacity-50 sm:min-w-[150px]"
+        >
+          {creating ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
+          {creating ? "Creating…" : "Create run"}
+        </button>
+      }
     >
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_auto] gap-3 items-start">
-        <div>
-          <label className={labelCls}>Predict source</label>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.95fr)]">
+        <label className="block">
+          <span className="type-label">Predict source</span>
           <select
             value={sourceId}
             onChange={(e) => setSourceId(e.target.value)}
             disabled={creating || readySources.length === 0}
-            className={inputCls}
+            className={fieldCls}
           >
             {readySources.length === 0 && <option value="">ยังไม่มี source ที่ ready</option>}
             {readySources.map((s) => (
@@ -122,9 +129,10 @@ export function CreateRunPanel({
               </option>
             ))}
           </select>
-        </div>
-        <div>
-          <label className={labelCls}>Run name</label>
+        </label>
+
+        <label className="block">
+          <span className="type-label">Run name</span>
           <input
             value={name}
             onChange={(e) => {
@@ -133,51 +141,40 @@ export function CreateRunPanel({
             }}
             placeholder="ชื่อ run"
             disabled={creating || readySources.length === 0}
-            className={inputCls}
+            className={fieldCls}
           />
-        </div>
-        <div>
-          <label className={labelCls}>Prediction cutoff</label>
-          <div className="min-h-9 rounded-lg border border-[color:var(--moby-100)] bg-white px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[13px] font-semibold text-[color:var(--ink-2)]">
-                {cutoff || "Waiting for source"}
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
-                {cutoffTouched ? "Manual" : "Auto"}
-              </span>
-            </div>
-            <p className="mt-1 text-[11px] leading-4 text-[color:var(--ink-5)]">
-              {latestDataDate
-                ? `ข้อมูลล่าสุด ${latestDataDate}; predict as-of วันถัดไป`
-                : "ระบบเลือกจากวันที่ข้อมูลล่าสุดของ source"}
-            </p>
+        </label>
+
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="type-label">Prediction cutoff</span>
+            <span className="rounded-full bg-white px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
+              {cutoffTouched ? "Manual" : "Auto"}
+            </span>
           </div>
-        </div>
-        <div className="md:pt-5">
-          <button
-            type="button"
-            onClick={() => void create()}
-            disabled={!canCreate}
-            className="h-9 px-3.5 rounded-lg bg-[color:var(--moby-600)] text-white text-[13px] hover:bg-[color:var(--moby-800)] inline-flex items-center gap-1.5 disabled:opacity-50"
-          >
-            {creating ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
-            {creating ? "Creating…" : "Create run"}
-          </button>
+          <p className="num mt-2 text-[22px] font-semibold tracking-[-0.03em] text-[color:var(--ink-1)]">
+            {cutoff || "Waiting for source"}
+          </p>
+          <p className="mt-1 text-[12px] leading-5 text-[color:var(--ink-4)]">
+            {latestDataDate
+              ? `ข้อมูลล่าสุด ${latestDataDate}; predict as-of วันถัดไป`
+              : "ระบบเลือกจากวันที่ข้อมูลล่าสุดของ source"}
+          </p>
         </div>
       </div>
-      <div className="mt-3">
+
+      <div className="mt-4">
         <button
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[color:var(--moby-100)] bg-white px-3 text-[12px] text-[color:var(--ink-4)] hover:bg-gray-50"
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-medium text-[color:var(--ink-3)] hover:bg-gray-50"
         >
           <SlidersHorizontal size={13} />
           Advanced
         </button>
         {showAdvanced && (
-          <label className="mt-3 block max-w-[240px]">
-            <span className={labelCls}>Manual cutoff override</span>
+          <label className="mt-3 block max-w-[260px]">
+            <span className="type-label">Manual cutoff override</span>
             <input
               type="date"
               value={cutoff}
@@ -186,16 +183,17 @@ export function CreateRunPanel({
                 setCutoffTouched(true);
               }}
               disabled={creating || readySources.length === 0}
-              className={inputCls}
+              className={fieldCls}
             />
-            <p className="mt-1 text-[11px] leading-4 text-[color:var(--ink-5)]">
+            <p className="mt-1.5 text-[12px] leading-5 text-[color:var(--ink-4)]">
               ใช้เฉพาะกรณีต้อง replay prediction ณ วันอื่นของ dataset เดิม
             </p>
           </label>
         )}
       </div>
+
       {error && (
-        <div className="mt-3 rounded-lg border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-3 py-2 text-[12.5px] text-[color:var(--danger)]">
+        <div className="mt-4 rounded-2xl border border-[color:var(--danger)] bg-[color:var(--danger-bg)] px-4 py-3 text-[13px] text-[color:var(--danger)]">
           {error}
         </div>
       )}

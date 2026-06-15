@@ -20,8 +20,8 @@ export function formatMetric(value: number): string {
   return Number(value.toFixed(3)).toString();
 }
 
-export function runStatusTone(status: RunStatus): "ok" | "danger" | "info" | "neutral" {
-  if (status === "completed") return "ok";
+export function runStatusTone(status: RunStatus): "brand" | "danger" | "info" | "neutral" {
+  if (status === "completed") return "brand";
   if (status === "failed") return "danger";
   if (status === "in_progress") return "info";
   return "neutral";
