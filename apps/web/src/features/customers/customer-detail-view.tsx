@@ -109,7 +109,7 @@ export function CustomerDetailView({
       )}
 
       <section className="mt-4 space-y-5">
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)_340px] xl:items-start">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)] xl:items-start">
           <Panel title={`Account ${accId}`}>
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
@@ -185,8 +185,18 @@ export function CustomerDetailView({
               />
             </div>
           </UsageCreditPanel>
+        </div>
 
-          <div className="flex min-h-0 max-h-[min(28rem,55vh)] flex-col self-stretch xl:max-h-none">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)_340px] xl:grid-rows-[auto_auto] xl:items-start">
+          <Panel title="โปรไฟล์ลูกค้า" className="xl:row-span-2">
+            <CustomerProfilePanel snapshot={customer.profile_snapshot} />
+          </Panel>
+
+          <Panel title="ประวัติการชำระเงิน" className="xl:col-start-2 xl:row-start-1">
+            <CustomerPaymentChart payments={payments} />
+          </Panel>
+
+          <div className="flex min-h-0 flex-col self-stretch xl:col-start-3 xl:row-span-2 xl:row-start-1">
             <Panel
               title="เหตุผล"
               className="flex min-h-0 flex-1 flex-col"
@@ -195,10 +205,8 @@ export function CustomerDetailView({
               <ReasoningStack customer={customer} />
             </Panel>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)] xl:items-start">
-          <Panel title="Compact profile">
+          <Panel title="Compact profile" className="xl:col-start-2 xl:row-start-2">
             <div className="grid grid-cols-2 gap-3">
               <FactCard label="Lifecycle" value={customer.lifecycle_stage} />
               <FactCard label="Purchases" value={customer.n_purchases.toLocaleString()} />
@@ -217,15 +225,7 @@ export function CustomerDetailView({
               />
             </div>
           </Panel>
-
-          <Panel title="โปรไฟล์ลูกค้า">
-            <CustomerProfilePanel snapshot={customer.profile_snapshot} />
-          </Panel>
         </div>
-
-        <Panel title="ประวัติการชำระเงิน">
-          <CustomerPaymentChart payments={payments} />
-        </Panel>
       </section>
     </main>
   );
