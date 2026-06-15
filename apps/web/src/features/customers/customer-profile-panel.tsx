@@ -10,12 +10,6 @@ function formatDate(value: string | null): string {
   return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 }
 
-function formatCompact(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${Math.round(value / 1_000)}K`;
-  return Math.round(value).toLocaleString();
-}
-
 function daysAgo(value: string | null): string | null {
   if (!value) return null;
   const d = new Date(value);
@@ -70,7 +64,7 @@ export function CustomerProfilePanel({ snapshot }: { snapshot: ProfileSnapshot }
             Usage share · 180d
           </p>
           <span className="num text-[11.5px] text-[color:var(--ink-4)]">
-            {formatCompact(snapshot.usage_total_180d)} credits
+            {snapshot.usage_total_180d.toLocaleString()} credits
           </span>
         </div>
         <div className="space-y-2.5">
@@ -125,7 +119,7 @@ function ServiceCard({
         ) : null}
       </div>
       <p className="num mt-2 text-[18px] font-semibold text-[color:var(--ink-1)]">
-        {formatCompact(credit)}
+        {credit.toLocaleString()}
       </p>
       <p className="text-[10.5px] text-[color:var(--ink-5)]">credits · หมดอายุ {formatDate(expire)}</p>
     </div>

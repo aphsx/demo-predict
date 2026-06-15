@@ -320,7 +320,7 @@ export function CustomerPaymentChart({ payments }: { payments: readonly PaymentE
                       formatter={(value: number, _name, item) => {
                         const row = item?.payload as MonthlyPayment | undefined;
                         return [
-                          `฿${value.toLocaleString()} · ${row?.count ?? 0} payments · ${formatCompact(row?.credit_add ?? 0)} credits`,
+                          `฿${value.toLocaleString()} · ${row?.count ?? 0} payments · ${(row?.credit_add ?? 0).toLocaleString()} credits`,
                           "Paid",
                         ];
                       }}
@@ -387,7 +387,7 @@ export function CustomerPaymentChart({ payments }: { payments: readonly PaymentE
       <div className="grid shrink-0 grid-cols-3 gap-2 lg:grid-cols-1 lg:w-[148px]">
         <PaymentStat label="Total paid" value={`฿${formatCompact(totalPaid)}`} hint={`${payments.length} payments`} />
         <PaymentStat label="Avg ticket" value={`฿${formatCompact(avgTicket)}`} hint="per payment" />
-        <PaymentStat label="Credits bought" value={formatCompact(totalCredits)} hint="total top-up" />
+        <PaymentStat label="Credits bought" value={totalCredits.toLocaleString()} hint="total top-up" />
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
-import { formatCompactCurrency, formatCurrency } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 import type { ChurnFactor, PaymentEvent, ProfileSnapshot } from "@/lib/ml-api";
 import { CustomerPaymentChart } from "./customer-payment-chart";
@@ -86,9 +86,9 @@ export function CustomerDetailView({
   const trend = USAGE_TREND_BADGE[customer.usage_trend];
   const creditRange = (point: number | null, p10: number | null, p90: number | null): string => {
     if (point == null) return "—";
-    const base = formatCompactCurrency(point);
+    const base = point.toLocaleString();
     if (p10 == null || p90 == null) return base;
-    return `${base} (${formatCompactCurrency(p10)}–${formatCompactCurrency(p90)})`;
+    return `${base} (${p10.toLocaleString()}–${p90.toLocaleString()})`;
   };
   const interval = customer.credit_forecast_interval;
 
