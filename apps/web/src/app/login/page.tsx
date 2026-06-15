@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Lock, Mail } from "lucide-react";
-import { signIn } from "@/lib/auth-client";
+import { signIn, sanitizeRedirectParam } from "@/lib/auth";
 import { LoginBackground } from "@/components/login-background";
 import { INTRO_ASSETS, MOBY_BRAND } from "@/lib/login-brand-colors";
 
@@ -15,13 +15,6 @@ export default function LoginPage() {
       <LoginForm />
     </Suspense>
   );
-}
-
-function sanitizeRedirectParam(path: string | null): string {
-  if (!path || !path.startsWith("/") || path.startsWith("//")) return "/";
-  // Dashboard is served at `/`; old links may still point here after OAuth.
-  if (path === "/dashboard" || path.startsWith("/dashboard/")) return "/";
-  return path;
 }
 
 function LoginForm() {

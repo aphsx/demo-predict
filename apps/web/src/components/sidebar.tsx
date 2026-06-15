@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { AiBadge } from "@/components/ai-badge";
 import { usePathname } from "next/navigation";
 import { INTRO_ASSETS } from "@/lib/login-brand-colors";
 import {
@@ -95,12 +96,7 @@ export default function Sidebar() {
                       <Icon size={17} strokeWidth={active ? 2.2 : 1.9}
                         className={active ? "text-[color:var(--moby-600)]" : "text-[color:var(--ink-4)]"} />
                       <span>{it.label}</span>
-                      {it.href === "/ai-chat" && !active && (
-                        <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide
-                          bg-gradient-to-r from-[color:var(--moby-600)] to-[color:var(--moby-800)] text-white">
-                          AI
-                        </span>
-                      )}
+                      {it.href === "/ai-chat" && !active && <AiBadge className="ml-auto" />}
                       {active && <span className="ml-auto w-1.5 h-5 rounded-full bg-[color:var(--moby-600)]" />}
                     </Link>
                   </li>

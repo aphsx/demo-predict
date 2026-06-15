@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
+import { AiBadge } from "@/components/ai-badge";
 import { formatCurrency } from "@/lib/format";
 import { MOBY_BRAND } from "@/lib/login-brand-colors";
 import type { ChurnFactor, PaymentEvent, ProfileSnapshot } from "@/lib/ml-api";
@@ -189,6 +190,7 @@ export function CustomerDetailView({
           <div className="flex min-h-0 flex-col xl:row-span-2">
             <Panel
               title="เหตุผล"
+              headerRight={<AiBadge />}
               className="flex min-h-0 flex-1 flex-col"
               bodyClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain"
             >

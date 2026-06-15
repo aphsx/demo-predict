@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { StatusDialog } from "@/components/status-dialog";
-import { signOut, useSession } from "@/lib/auth-client";
+import { signOut, useSession } from "@/lib/auth";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);

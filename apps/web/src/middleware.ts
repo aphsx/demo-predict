@@ -1,25 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasValidSession } from "@/lib/auth/session";
 
 const PUBLIC_PATHS = ["/login"];
-
-const ELYSIA_URL = process.env.ELYSIA_URL ?? "http://localhost:3001";
-
-async function hasValidSession(request: NextRequest): Promise<boolean> {
-  const cookie = request.headers.get("cookie");
-  if (!cookie) return false;
-
-  try {
-    const res = await fetch(`${ELYSIA_URL}/api/auth/get-session`, {
-      headers: { cookie },
-      cache: "no-store",
-    });
-    if (!res.ok) return false;
-    const session = (await res.json()) as { user?: { id?: string } } | null;
-    return Boolean(session?.user?.id);
-  } catch {
-    return false;
-  }
-}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

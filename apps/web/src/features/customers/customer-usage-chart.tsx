@@ -435,33 +435,33 @@ export function UsageLineChart({
 
         {canNavigate ? (
           <div
-            className="relative h-9 rounded-xl border border-gray-200 bg-gray-50 px-1 touch-none select-none"
+            className="relative h-6 rounded-lg border border-gray-200 bg-gray-50 px-0.5 touch-none select-none"
             onPointerMove={onNavigatorPointerMove}
             onPointerUp={endNavigatorDrag}
             onPointerCancel={endNavigatorDrag}
             onClick={onNavigatorTrackClick}
           >
-            <div className="pointer-events-none absolute inset-x-1 inset-y-2 flex items-end gap-px">
+            <div className="pointer-events-none absolute inset-x-0.5 inset-y-1 flex items-end gap-px">
               {data.map((row) => (
                 <div
                   key={row.month}
                   className="min-w-0 flex-1 rounded-sm bg-[color:var(--moby-200)]"
-                  style={{ height: `${Math.max(18, (row.total / maxTotal) * 100)}%`, opacity: 0.55 }}
+                  style={{ height: `${Math.max(10, (row.total / maxTotal) * 100)}%`, opacity: 0.55 }}
                 />
               ))}
             </div>
 
             <div
-              className="absolute inset-y-1 rounded-lg border border-[color:var(--moby-500)] bg-[color:var(--moby-500)]/10"
+              className="absolute inset-y-0.5 rounded-md border border-[color:var(--moby-500)] bg-[color:var(--moby-500)]/10"
               style={{ left: `${thumbLeftPct}%`, width: `${thumbWidthPct}%` }}
               onPointerDown={(event) => onNavigatorPointerDown(event, "move")}
             >
               <div
-                className="absolute inset-y-0 left-0 w-2 cursor-ew-resize rounded-l-lg bg-[color:var(--moby-500)]/25"
+                className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize rounded-l-md bg-[color:var(--moby-500)]/25"
                 onPointerDown={(event) => onNavigatorPointerDown(event, "resize-left")}
               />
               <div
-                className="absolute inset-y-0 right-0 w-2 cursor-ew-resize rounded-r-lg bg-[color:var(--moby-500)]/25"
+                className="absolute inset-y-0 right-0 w-1.5 cursor-ew-resize rounded-r-md bg-[color:var(--moby-500)]/25"
                 onPointerDown={(event) => onNavigatorPointerDown(event, "resize-right")}
               />
             </div>

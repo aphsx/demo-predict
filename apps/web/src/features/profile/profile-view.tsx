@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, Loader2, Trash2 } from "lucide-react";
 import { StatusDialog } from "@/components/status-dialog";
-import { deleteUser, updateUser, useSession } from "@/lib/auth-client";
+import { deleteUser, updateUser, useSession } from "@/lib/auth";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
