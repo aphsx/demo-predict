@@ -1,4 +1,9 @@
-/** 1Moby brand colors — from 1moby.com intro CSS */
+/**
+ * App-wide 1Moby design tokens (brand colors + intro assets), sourced from the
+ * 1moby.com intro CSS. Despite the filename, these are used across the whole app,
+ * not just the login page — `MOBY_BRAND` is the single source for brand colors
+ * (see features/dashboard/palette.ts for derived gradients/palettes).
+ */
 export const MOBY_BRAND = {
   dark: "#1D1F2A",
   blue: "#006BFF",
@@ -6,17 +11,6 @@ export const MOBY_BRAND = {
   orange: "#FC4C02",
   orangeWarm: "#FFA400",
   radialGlow: "rgba(7, 29, 126, 0.608)",
-} as const;
-
-/** @deprecated use MOBY_BRAND */
-export const LOGIN_BRAND = {
-  blue: MOBY_BRAND.blue,
-  blueLight: MOBY_BRAND.blueLight,
-  blueGlow: MOBY_BRAND.blueLight,
-  dark: MOBY_BRAND.dark,
-  darkDeep: "#000000",
-  orange: MOBY_BRAND.orangeWarm,
-  orangeDeep: MOBY_BRAND.orange,
 } as const;
 
 export const INTRO_ASSETS = {
