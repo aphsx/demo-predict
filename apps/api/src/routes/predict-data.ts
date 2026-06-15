@@ -11,46 +11,7 @@ import { UUID_RE, MAX_UPLOAD_BYTES } from "../lib/constants";
 import { importPredictExcel, type PredictImportResult } from "../lib/predict-import";
 import { abortPredictDataSource } from "../lib/abort-data-source";
 import { cleanPredictFromRaw } from "../lib/predict-clean";
-
-function mapSource(row: {
-  id: string;
-  name: string;
-  clientLabel: string | null;
-  originalFilename: string;
-  fileChecksumSha256: string;
-  fileSizeBytes: number | null;
-  importStatus: string;
-  importedAt: Date | null;
-  sheetManifest: unknown;
-  cleanManifest: unknown;
-  cleanedAt: Date | null;
-  notes: string | null;
-  errorMessage: string | null;
-  importedBy: string | null;
-  createdAt: Date;
-  importerName?: string | null;
-  importerEmail?: string | null;
-}) {
-  return {
-    id: row.id,
-    name: row.name,
-    client_label: row.clientLabel,
-    original_filename: row.originalFilename,
-    file_checksum_sha256: row.fileChecksumSha256,
-    file_size_bytes: row.fileSizeBytes,
-    import_status: row.importStatus,
-    imported_at: row.importedAt?.toISOString() ?? null,
-    sheet_manifest: row.sheetManifest,
-    clean_manifest: row.cleanManifest,
-    cleaned_at: row.cleanedAt?.toISOString() ?? null,
-    notes: row.notes,
-    error_message: row.errorMessage,
-    imported_by: row.importedBy,
-    importer_name: row.importerName ?? null,
-    importer_email: row.importerEmail ?? null,
-    created_at: row.createdAt.toISOString(),
-  };
-}
+import { isXlsxFilename, mapDataSourceRow } from "../lib/data-import/data-source-dto";
 
 const sourceSelect = {
   id: predictDataSources.id,
@@ -80,7 +41,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
       .from(predictDataSources)
       .leftJoin(user, eq(predictDataSources.importedBy, user.id))
       .orderBy(desc(predictDataSources.createdAt));
-    return rows.map(mapSource);
+    return rows.map(mapDataSourceRow);
   })
   .get("/:id", async ({ params, set }) => {
     const rows = await db
@@ -91,7 +52,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
       .limit(1);
 
     if (rows.length === 0) return denyNotFound(set, "Predict data source not found");
-    return mapSource(rows[0]);
+    return mapDataSourceRow(rows[0]);
   })
   // Suggested prediction cutoff = day after the latest observed activity
   // (payments + usage months) in the source's clean tables.
@@ -137,7 +98,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
     "/import",
     async ({ body, userId, set }) => {
       const filename = body.file.name ?? "upload.xlsx";
-      if (!filename.toLowerCase().endsWith(".xlsx")) {
+      if (!isXlsxFilename(filename)) {
         set.status = 400;
         return { message: "Only .xlsx files are supported" };
       }
