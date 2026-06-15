@@ -9,6 +9,7 @@
  */
 
 import { create } from "zustand";
+import { redirectingFetch } from "@/lib/http";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -85,18 +86,10 @@ let controller: AbortController | null = null;
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 
-function redirectToLogin(): never {
-  if (typeof window !== "undefined") {
-    window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-  }
-  throw new Error("Unauthorized");
-}
-
-async function chatFetch(path: string, opts?: RequestInit): Promise<Response> {
-  const res = await fetch(path, { credentials: "include", ...opts });
-  if (res.status === 401) redirectToLogin();
-  return res;
-}
+// Cookie-credentialed fetch that redirects to /login on 401 (shared with the
+// other web clients via lib/http). This store is client-only, so the redirect
+// always fires before the throw propagates.
+const chatFetch = redirectingFetch;
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await chatFetch(path);
