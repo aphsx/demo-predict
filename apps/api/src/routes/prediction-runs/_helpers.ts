@@ -10,7 +10,7 @@ import {
   predictDataSources,
   user,
 } from "../../db/schema";
-import { canReadOwnedRecord, denyNotFound } from "../../lib/access-control";
+import { requireOwnedForRead } from "../../lib/access-control";
 import {
   EMPTY_MODEL_VERSIONS,
   num,
@@ -98,10 +98,7 @@ export function requireOwnedRun(
   userId: string | null | undefined,
   set: { status?: number | string }
 ) {
-  if (!run || !canReadOwnedRecord(userId, run.createdBy)) {
-    return denyNotFound(set, "Prediction run not found");
-  }
-  return null;
+  return requireOwnedForRead(run, run?.createdBy, userId, set, "Prediction run not found");
 }
 
 // ── Output row mapping ─────────────────────────────────────────

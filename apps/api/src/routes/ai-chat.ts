@@ -21,7 +21,7 @@ import { db } from "../db/client";
 import { aiConversations, aiMessages } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { denyNotFound } from "../lib/access-control";
-import { orchestrate, sseError, generateConversationTitle } from "../lib/ai/orchestrator";
+import { orchestrate, sseError, generateConversationTitle } from "../lib/ai";
 import { UUID_RE } from "../lib/constants";
 const MAX_MESSAGE_CHARS = 12_000;
 

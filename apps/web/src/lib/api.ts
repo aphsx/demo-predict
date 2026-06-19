@@ -7,37 +7,18 @@
  */
 
 import type { TrainDataSource, PredictDataSource } from "@moby/types";
+import {
+  IS_ML_MOCK,
+  isApiError,
+  loadMlMock as mockMl,
+  redirectingFetch as apiFetch,
+} from "./http";
 export type { TrainDataSource, PredictDataSource };
 
 // Helpers
 
-const IS_ML_MOCK = process.env.NEXT_PUBLIC_ML_USE_MOCK === "1";
-
-async function mockMl() {
-  return import("@/mocks/ml");
-}
-
-function isApiError(data: unknown): data is { message: string } {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "message" in data &&
-    typeof (data as { message: unknown }).message === "string"
-  );
-}
-
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
-}
-
-/** Manual fetch — used only for file upload, SSE, and streaming routes. */
-async function apiFetch(url: string, opts?: RequestInit): Promise<Response> {
-  const res = await fetch(url, { credentials: "include", ...opts });
-  if (res.status === 401 && typeof window !== "undefined") {
-    window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
-    throw new Error("Unauthorized");
-  }
-  return res;
 }
 
 async function parseJson(res: Response): Promise<unknown> {

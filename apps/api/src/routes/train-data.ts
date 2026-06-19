@@ -2,87 +2,25 @@
  * [NEW] Train raw data API — import 8-sheet Excel into train_data_sources + train_raw_sheet_*.
  */
 import Elysia, { t } from "elysia";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
-import { canMutateOwnedRecord, denyMutation } from "../lib/access-control";
+import { requireOwnedForMutation } from "../lib/access-control";
 import { requireUser } from "../lib/auth-middleware";
-import { UUID_RE, MAX_UPLOAD_BYTES } from "../lib/constants";
-import { importTrainExcel, prepareTrainDataSource, type TrainImportResult } from "../lib/train-import";
-import type { TrainImportProgressEvent } from "../lib/train-import-progress";
-import { abortTrainDataSource, releaseStaleTrainImports } from "../lib/abort-data-source";
-import { cleanTrainFromRaw } from "../lib/train-clean";
-import { mapRawImportProgress } from "../lib/train-pipeline-progress";
+import { UUID_RE } from "../lib/constants";
+import { getTrainCutoffSuggestion } from "../lib/clean-cutoff";
+import { prepareTrainDataSource } from "../lib/train-import";
+import { releaseStaleTrainImports } from "../lib/abort-data-source";
 import {
-  publishTrainImportDone,
-  publishTrainImportError,
   publishTrainPipelineProgress,
   readLatestTrainImportStreamEntry,
 } from "../lib/train-import-stream";
-
-function runTrainImportJob(
-  sourceId: string,
-  params: {
-    buffer: Buffer;
-    filename: string;
-    name: string;
-    client_label: string | null;
-    notes: string | null;
-    imported_by: string;
-  }
-): void {
-  void (async () => {
-    try {
-      const result = await runTrainImportPipeline({ ...params, sourceId });
-      await publishTrainImportDone(sourceId, result);
-    } catch (e) {
-      const err = e as Error & { code?: string; source_id?: string };
-      if (err.code === "DUPLICATE_FILE") return;
-      await publishTrainImportError(sourceId, err.message ?? "Import failed");
-      await abortTrainDataSource(sourceId);
-    }
-  })();
-}
-
-function mapSource(row: {
-  id: string;
-  name: string;
-  clientLabel: string | null;
-  originalFilename: string;
-  fileChecksumSha256: string;
-  fileSizeBytes: number | null;
-  importStatus: string;
-  importedAt: Date | null;
-  sheetManifest: unknown;
-  cleanManifest: unknown;
-  cleanedAt: Date | null;
-  notes: string | null;
-  errorMessage: string | null;
-  importedBy: string | null;
-  createdAt: Date;
-  importerName?: string | null;
-  importerEmail?: string | null;
-}) {
-  return {
-    id: row.id,
-    name: row.name,
-    client_label: row.clientLabel,
-    original_filename: row.originalFilename,
-    file_checksum_sha256: row.fileChecksumSha256,
-    file_size_bytes: row.fileSizeBytes,
-    import_status: row.importStatus,
-    imported_at: row.importedAt?.toISOString() ?? null,
-    sheet_manifest: row.sheetManifest,
-    clean_manifest: row.cleanManifest,
-    cleaned_at: row.cleanedAt?.toISOString() ?? null,
-    notes: row.notes,
-    error_message: row.errorMessage,
-    imported_by: row.importedBy,
-    importer_name: row.importerName ?? null,
-    importer_email: row.importerEmail ?? null,
-    created_at: row.createdAt.toISOString(),
-  };
-}
+import {
+  readImportBuffer,
+  runTrainImportJob,
+  runTrainImportPipeline,
+} from "../lib/train-import-orchestrator";
+import { isXlsxFilename, mapDataSourceRow } from "../lib/data-import/data-source-dto";
 
 const sourceSelect = {
   id: trainDataSources.id,
@@ -104,71 +42,6 @@ const sourceSelect = {
   importerEmail: user.email,
 };
 
-async function publishRawProgress(
-  sourceId: string,
-  event: TrainImportProgressEvent
-): Promise<void> {
-  await publishTrainPipelineProgress(sourceId, {
-    progress: mapRawImportProgress(event.progress),
-    step: event.step,
-    phase: "raw",
-    sheet: event.sheet,
-    rows: event.rows,
-  });
-}
-
-async function runTrainImportPipeline(params: {
-  buffer: Buffer;
-  filename: string;
-  name: string;
-  client_label: string | null;
-  notes: string | null;
-  imported_by: string;
-  sourceId: string;
-}): Promise<TrainImportResult> {
-  const sourceId = params.sourceId;
-  try {
-    await publishRawProgress(sourceId, { progress: 0, step: "Reading workbook…" });
-    const rawResult = await importTrainExcel({
-      buffer: params.buffer,
-      filename: params.filename,
-      name: params.name,
-      client_label: params.client_label,
-      notes: params.notes,
-      imported_by: params.imported_by,
-      sourceId,
-      deferReadyCatalog: true,
-      onProgress: (event) => {
-        void publishRawProgress(sourceId, event);
-      },
-    });
-
-    const cleanManifest = await cleanTrainFromRaw(sourceId, (event) => {
-      void publishTrainPipelineProgress(sourceId, event);
-    });
-
-    return {
-      ...rawResult,
-      import_status: "ready",
-      clean_manifest: cleanManifest,
-    };
-  } catch (e) {
-    const err = e as Error & { code?: string };
-    if (sourceId && err.code !== "DUPLICATE_FILE") {
-      await abortTrainDataSource(sourceId);
-    }
-    throw e;
-  }
-}
-
-async function readImportBuffer(file: File): Promise<Buffer> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-  if (buffer.length > MAX_UPLOAD_BYTES) {
-    throw new Error(`File exceeds ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB limit`);
-  }
-  return buffer;
-}
-
 export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
   .use(requireUser)
   .get("/", async () => {
@@ -179,7 +52,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
       .leftJoin(user, eq(trainDataSources.importedBy, user.id))
       .orderBy(desc(trainDataSources.createdAt));
 
-    return rows.map(mapSource);
+    return rows.map(mapDataSourceRow);
   })
   .get(
     "/:id/import/progress",
@@ -288,7 +161,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
       set.status = 404;
       return { message: "Train data source not found" };
     }
-    return mapSource(rows[0]);
+    return mapDataSourceRow(rows[0]);
   })
   // Gate 3 suggestion: latest training cutoff whose label horizon is fully
   // observed. Python checks `max_activity >= cutoff + horizon`, so the latest
@@ -311,29 +184,17 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
       }
 
       const HORIZON_DAYS = 180;
-      const [row] = await db.execute<{
-        suggested_cutoff: string | null;
-        latest_data_date: string | null;
-      }>(sql`
-        SELECT to_char(date_trunc('month', (latest - ${HORIZON_DAYS}::int)::timestamp)::date, 'YYYY-MM-DD') AS suggested_cutoff,
-               to_char(latest, 'YYYY-MM-DD') AS latest_data_date
-        FROM (
-          SELECT GREATEST(
-            (SELECT MAX(payment_date)::date
-             FROM train_clean_payments WHERE source_id = ${params.id}),
-            (SELECT MAX(make_date(year, month, 1))
-             FROM train_clean_usage
-             WHERE source_id = ${params.id} AND year IS NOT NULL AND month IS NOT NULL)
-          ) AS latest
-        ) s
-      `);
-      if (!row?.suggested_cutoff || !row.latest_data_date) {
+      const { cutoff_date, latest_data_date } = await getTrainCutoffSuggestion(
+        params.id,
+        HORIZON_DAYS
+      );
+      if (!cutoff_date || !latest_data_date) {
         set.status = 400;
         return { message: "No clean activity data for this source yet" };
       }
       return {
-        suggested_cutoff: row.suggested_cutoff,
-        latest_data_date: row.latest_data_date,
+        suggested_cutoff: cutoff_date,
+        latest_data_date: latest_data_date,
         horizon_days: HORIZON_DAYS,
       };
     },
@@ -351,14 +212,11 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         .where(eq(trainDataSources.id, params.id))
         .limit(1);
 
-      if (!row) {
-        set.status = 404;
-        return { message: "Train data source not found" };
-      }
-
-      if (!canMutateOwnedRecord(userId, row.importedBy)) {
-        return denyMutation(set, "You can view this training data source, but only the importer can delete it.");
-      }
+      const denied = requireOwnedForMutation(row, row?.importedBy, userId, set, {
+        notFound: "Train data source not found",
+        forbidden: "You can view this training data source, but only the importer can delete it.",
+      });
+      if (denied) return denied;
 
       await db.delete(trainDataSources).where(eq(trainDataSources.id, params.id));
       return { deleted: true };
@@ -369,7 +227,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
     "/import",
     async ({ body, userId, set }) => {
       const filename = body.file.name ?? "upload.xlsx";
-      if (!filename.toLowerCase().endsWith(".xlsx")) {
+      if (!isXlsxFilename(filename)) {
         set.status = 400;
         return { message: "Only .xlsx files are supported" };
       }
@@ -418,7 +276,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
     "/import/async",
     async ({ body, userId, set }) => {
       const filename = body.file.name ?? "upload.xlsx";
-      if (!filename.toLowerCase().endsWith(".xlsx")) {
+      if (!isXlsxFilename(filename)) {
         set.status = 400;
         return { message: "Only .xlsx files are supported" };
       }

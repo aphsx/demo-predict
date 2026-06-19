@@ -9,6 +9,7 @@ import { mlTrainingRuns, trainDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
 import { denyNotFound } from "../lib/access-control";
 import { triggerMlJob } from "../lib/ml-internal";
+import { getTrainCutoffSuggestion } from "../lib/clean-cutoff";
 import {
   type RunStatus,
   type TrainingRun,
@@ -121,21 +122,8 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
       }
       // Month-aligned: usage data is monthly, so a mid-month cutoff makes the
       // credit 30d label window catch usage periods inconsistently.
-      const [suggested] = await db.execute<{ cutoff_date: string | null }>(sql`
-        SELECT to_char(date_trunc('month', (latest - ${horizonDays}::int)::timestamp)::date, 'YYYY-MM-DD') AS cutoff_date
-        FROM (
-          SELECT GREATEST(
-            (SELECT MAX(payment_date)::date
-             FROM train_clean_payments WHERE source_id = ${body.train_source_id}),
-            (SELECT MAX(make_date(year, month, 1))
-             FROM train_clean_usage
-             WHERE source_id = ${body.train_source_id}
-               AND year IS NOT NULL
-               AND month IS NOT NULL)
-          ) AS latest
-        ) s
-      `);
-      const cutoffDate = body.cutoff_date ?? suggested?.cutoff_date;
+      const suggested = await getTrainCutoffSuggestion(body.train_source_id, horizonDays);
+      const cutoffDate = body.cutoff_date ?? suggested.cutoff_date;
       if (!cutoffDate) {
         set.status = 400;
         return { message: "No clean activity data for this source yet" };

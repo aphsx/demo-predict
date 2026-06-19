@@ -5,8 +5,11 @@ import { mlPredictionOutputs } from "../../db/schema";
 import { requireUser } from "../../lib/auth-middleware";
 import { denyNotFound } from "../../lib/access-control";
 import { UUID_RE } from "../../lib/constants";
-import { createCustomerAiExplanation } from "../../lib/ai/customer-ai-service";
-import { loadCustomerPayments, loadCustomerUsageMonthly } from "../../lib/ai/customer-dataset";
+import {
+  createCustomerAiExplanation,
+  loadCustomerPayments,
+  loadCustomerUsageMonthly,
+} from "../../lib/ai";
 import { fetchRun, mapOutput, requireOwnedRun } from "./_helpers";
 
 export const customer360Routes = new Elysia()

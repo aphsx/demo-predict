@@ -1,4 +1,7 @@
-import type { RunStatus, TrainingRunResult } from "@/lib/ml-api";
+import type { TrainingRunResult } from "@/lib/ml-api";
+
+// Run status tone/label live in the shared module (single source for runs + training).
+export { runStatusTone, runStatusLabel } from "@/lib/run-status";
 
 export const DEFAULT_HORIZON_DAYS = 180;
 
@@ -18,20 +21,6 @@ export function defaultCutoffDate(): string {
 /** 0.712 → "0.712", 0.5700 → "0.57" */
 export function formatMetric(value: number): string {
   return Number(value.toFixed(3)).toString();
-}
-
-export function runStatusTone(status: RunStatus): "brand" | "danger" | "info" | "neutral" {
-  if (status === "completed") return "brand";
-  if (status === "failed") return "danger";
-  if (status === "in_progress") return "info";
-  return "neutral";
-}
-
-export function runStatusLabel(status: RunStatus): string {
-  if (status === "completed") return "Completed";
-  if (status === "failed") return "Failed";
-  if (status === "in_progress") return "In progress";
-  return "Pending";
 }
 
 export function beatsBaseline(result: TrainingRunResult): boolean {

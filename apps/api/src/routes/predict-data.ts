@@ -2,7 +2,7 @@
  * [NEW] Predict raw + clean API — Excel → predict_raw_sheet_* → predict_clean_*.
  */
 import Elysia, { t } from "elysia";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { predictDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
@@ -11,46 +11,8 @@ import { UUID_RE, MAX_UPLOAD_BYTES } from "../lib/constants";
 import { importPredictExcel, type PredictImportResult } from "../lib/predict-import";
 import { abortPredictDataSource } from "../lib/abort-data-source";
 import { cleanPredictFromRaw } from "../lib/predict-clean";
-
-function mapSource(row: {
-  id: string;
-  name: string;
-  clientLabel: string | null;
-  originalFilename: string;
-  fileChecksumSha256: string;
-  fileSizeBytes: number | null;
-  importStatus: string;
-  importedAt: Date | null;
-  sheetManifest: unknown;
-  cleanManifest: unknown;
-  cleanedAt: Date | null;
-  notes: string | null;
-  errorMessage: string | null;
-  importedBy: string | null;
-  createdAt: Date;
-  importerName?: string | null;
-  importerEmail?: string | null;
-}) {
-  return {
-    id: row.id,
-    name: row.name,
-    client_label: row.clientLabel,
-    original_filename: row.originalFilename,
-    file_checksum_sha256: row.fileChecksumSha256,
-    file_size_bytes: row.fileSizeBytes,
-    import_status: row.importStatus,
-    imported_at: row.importedAt?.toISOString() ?? null,
-    sheet_manifest: row.sheetManifest,
-    clean_manifest: row.cleanManifest,
-    cleaned_at: row.cleanedAt?.toISOString() ?? null,
-    notes: row.notes,
-    error_message: row.errorMessage,
-    imported_by: row.importedBy,
-    importer_name: row.importerName ?? null,
-    importer_email: row.importerEmail ?? null,
-    created_at: row.createdAt.toISOString(),
-  };
-}
+import { isXlsxFilename, mapDataSourceRow } from "../lib/data-import/data-source-dto";
+import { getPredictCutoffSuggestion } from "../lib/clean-cutoff";
 
 const sourceSelect = {
   id: predictDataSources.id,
@@ -80,7 +42,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
       .from(predictDataSources)
       .leftJoin(user, eq(predictDataSources.importedBy, user.id))
       .orderBy(desc(predictDataSources.createdAt));
-    return rows.map(mapSource);
+    return rows.map(mapDataSourceRow);
   })
   .get("/:id", async ({ params, set }) => {
     const rows = await db
@@ -91,7 +53,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
       .limit(1);
 
     if (rows.length === 0) return denyNotFound(set, "Predict data source not found");
-    return mapSource(rows[0]);
+    return mapDataSourceRow(rows[0]);
   })
   // Suggested prediction cutoff = day after the latest observed activity
   // (payments + usage months) in the source's clean tables.
@@ -106,29 +68,14 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
         .limit(1);
       if (!source) return denyNotFound(set, "Predict data source not found");
 
-      const [row] = await db.execute<{
-        suggested_cutoff: string | null;
-        latest_data_date: string | null;
-      }>(sql`
-        SELECT to_char(latest + 1, 'YYYY-MM-DD') AS suggested_cutoff,
-               to_char(latest, 'YYYY-MM-DD') AS latest_data_date
-        FROM (
-          SELECT GREATEST(
-            (SELECT MAX(payment_date)::date
-             FROM predict_clean_payments WHERE source_id = ${params.id}),
-            (SELECT MAX(make_date(year, month, 1))
-             FROM predict_clean_usage
-             WHERE source_id = ${params.id} AND year IS NOT NULL AND month IS NOT NULL)
-          ) AS latest
-        ) s
-      `);
-      if (!row?.suggested_cutoff) {
+      const { cutoff_date, latest_data_date } = await getPredictCutoffSuggestion(params.id);
+      if (!cutoff_date) {
         set.status = 400;
         return { message: "No clean activity data for this source yet" };
       }
       return {
-        suggested_cutoff: row.suggested_cutoff,
-        latest_data_date: row.latest_data_date,
+        suggested_cutoff: cutoff_date,
+        latest_data_date: latest_data_date,
       };
     },
     { params: t.Object({ id: t.String() }) }
@@ -137,7 +84,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
     "/import",
     async ({ body, userId, set }) => {
       const filename = body.file.name ?? "upload.xlsx";
-      if (!filename.toLowerCase().endsWith(".xlsx")) {
+      if (!isXlsxFilename(filename)) {
         set.status = 400;
         return { message: "Only .xlsx files are supported" };
       }

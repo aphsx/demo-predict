@@ -7,31 +7,16 @@ import { MobyIntroSplash } from "./moby-intro-splash";
 import { GlobalStatusDialogHost } from "./global-status-dialog-host";
 import RunSelector from "./run-selector";
 import { RunUrlSync } from "@/stores/run-url-sync";
-
-const BARE_ROUTES = ["/login"];
-
-const EXACT_ROUTE_TITLES: Record<string, string> = {
-  "/": "Dashboard",
-  "/ai-chat": "AI Assistant",
-  "/customers": "Customers",
-  "/runs": "Prediction runs",
-  "/training": "Model Training",
-  "/model-performance": "Model Metrics",
-  "/profile": "My Account",
-};
-
-function getRouteTitle(pathname: string) {
-  if (pathname.startsWith("/customers/")) return "Customer detail";
-  return EXACT_ROUTE_TITLES[pathname];
-}
-
-function shouldShowRunSelector(pathname: string) {
-  return pathname === "/" || pathname === "/customers" || pathname.startsWith("/customers/");
-}
+import {
+  getRouteTitle,
+  isBareRoute,
+  shouldHideAiWidget,
+  shouldShowRunSelector,
+} from "@/lib/nav";
 
 export default function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const bare = BARE_ROUTES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const bare = isBareRoute(pathname);
 
   if (bare) {
     return (
@@ -43,7 +28,7 @@ export default function Shell({ children }: { children: ReactNode }) {
     );
   }
 
-  const hideWidget = pathname.startsWith("/ai-chat");
+  const hideWidget = shouldHideAiWidget(pathname);
   const routeTitle = getRouteTitle(pathname);
   const showRunSelector = shouldShowRunSelector(pathname);
 

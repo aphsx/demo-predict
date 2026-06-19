@@ -165,8 +165,8 @@ function RunRow({
         <td className="font-medium text-[color:var(--ink-1)]">{run.name}</td>
         <td>
           <div className="flex items-center gap-2">
-            <StatusPill tone={runStatusTone[run.status]} loading={inProgress}>
-              {runStatusLabel[run.status]}
+            <StatusPill tone={runStatusTone(run.status)} loading={inProgress}>
+              {runStatusLabel(run.status)}
             </StatusPill>
             {run.status === "failed" && run.error_message && (
               <span

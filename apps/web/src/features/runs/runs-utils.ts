@@ -4,9 +4,11 @@
  */
 
 import type { PredictDataSource } from "@/lib/api";
-import type { RunStatus } from "@/lib/ml-api";
 
 export type PillTone = "ok" | "warn" | "danger" | "info" | "neutral" | "brand" | "violet";
+
+// Run status tone/label live in the shared module (single source for runs + training).
+export { runStatusTone, runStatusLabel } from "@/lib/run-status";
 
 /** Poll cadence while a prediction run is in_progress. */
 export const RUN_POLL_MS = 3000;
@@ -27,22 +29,6 @@ export function importStatusLabel(status: string): string {
   if (status === "importing") return "Importing";
   return status || "—";
 }
-
-// ── ml_prediction_runs.status ───────────────────────────────────
-
-export const runStatusTone: Record<RunStatus, PillTone> = {
-  pending: "warm",
-  in_progress: "info",
-  completed: "brand",
-  failed: "danger",
-};
-
-export const runStatusLabel: Record<RunStatus, string> = {
-  pending: "Pending",
-  in_progress: "In progress",
-  completed: "Completed",
-  failed: "Failed",
-};
 
 // ── clean_manifest.clean row counts (shape-guarded) ─────────────
 
