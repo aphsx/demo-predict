@@ -1,18 +1,20 @@
 /**
- * Customer AI Explanation — complete rewrite.
+ * Customer AI Explanation.
  *
- * The old approach dumped raw JSON into a minimal prompt → generic, low-quality output.
- * This version uses a proper senior-analyst system prompt with structured sections,
- * explicit reasoning instructions, and calibrated temperature.
+ * Produces a short, grounded, decision-oriented analyst note (Markdown, Thai)
+ * for a single customer, from three sources: the raw dataset, deterministic
+ * pre-computed signals (customer-ai-context.computeSignals), and the ML model
+ * output (churn / lifecycle / CLV / SHAP factors).
  *
- * Output structure (Markdown, in Thai):
- *   ## สรุป (Executive Summary)
- *   ## สัญญาณเสี่ยง (Risk Signals)
- *   ## ปัจจัยขับเคลื่อน (Key Drivers)
- *   ## ข้อสังเกตเพิ่มเติม (Additional Notes — if data conflicts detected)
+ * Output sections:
+ *   ## สรุป            — status, risk level, behaviour in 2–3 sentences
+ *   ## สัญญาณเสี่ยง     — risk signals, each citing a real number
+ *   ## ปัจจัยขับเคลื่อน  — drivers behind the model's churn / lifecycle output
+ *   ## สิ่งที่ควรโฟกัส   — what an analyst should watch (NOT a customer message)
+ *   ## ข้อสังเกตเพิ่มเติม — only when dataset and model output conflict
  */
 
-import type { CustomerAiContext } from "./customer-ai-context";
+import type { CustomerAiContext, CustomerAiSignals } from "./customer-ai-context";
 import { complete, type ChatMessage } from "./llm-client";
 import { getLLMConfig, isLLMConfigured } from "./llm-config";
 import { renderGuardrails } from "./safety";
@@ -22,36 +24,35 @@ export type CustomerAiExplanationResult = {
   model: string;
 };
 
-// ── System prompt ──────────────────────────────────────────────────────────────
-
 const SYSTEM_PROMPT = `คุณคือนักวิเคราะห์ข้อมูลลูกค้าอาวุโสของบริษัท 1Moby (B2B SaaS ด้านการส่ง SMS/Email)
 มีประสบการณ์วิเคราะห์พฤติกรรมลูกค้า, churn prediction, และ CLV มากกว่า 10 ปี
 
-งานของคุณ: วิเคราะห์ข้อมูลลูกค้า 1 รายที่ส่งให้และเขียนรายงานสั้น 4 ส่วน ในภาษาไทย
+งานของคุณ: วิเคราะห์ข้อมูลลูกค้า 1 ราย แล้วเขียนรายงานสั้นเป็นภาษาไทยตามรูปแบบด้านล่าง
 
 กฎสำคัญ:
 ${renderGuardrails()}
-- อ้างอิงเฉพาะข้อมูลในส่วน <data> เท่านั้น
-- ถ้า customer_dataset และ ml_output ขัดแย้งกัน ให้ระบุว่าขัดแย้งตรงไหนในส่วน "ข้อสังเกตเพิ่มเติม"
-- อย่าแนะนำข้อความหรือวิธีติดต่อลูกค้าโดยตรง
+- อ้างอิงเฉพาะข้อมูลในส่วน <data> เท่านั้น และอ้างตัวเลขจริงทุกครั้งที่กล่าวถึงสัญญาณ
+- ถ้า customer_dataset / signals / ml_output ขัดแย้งกัน ให้ระบุไว้ในส่วน "ข้อสังเกตเพิ่มเติม"
+- "สิ่งที่ควรโฟกัส" คือสิ่งที่ทีมภายในควรจับตา ไม่ใช่ข้อความหรือสคริปต์สำหรับส่งหาลูกค้า
+- กระชับ ตรงประเด็น ไม่ต้องเขียน label ภาษาอังกฤษ
 
-รูปแบบ output (Markdown ภาษาไทย — ไม่ต้องเขียน label ภาษาอังกฤษ):
+รูปแบบ output (Markdown ภาษาไทย):
 
 ## สรุป
 [2-3 ประโยค: สถานะปัจจุบัน, ระดับความเสี่ยง, ภาพรวมพฤติกรรม]
 
 ## สัญญาณเสี่ยง
-- [รายการปัจจัยเสี่ยงที่พบจากข้อมูล — อ้างอิงตัวเลขจริงเสมอ]
+- [ปัจจัยเสี่ยงที่พบ — อ้างอิงตัวเลขจริงเสมอ]
 
 ## ปัจจัยขับเคลื่อน
-- [รายการปัจจัยหลักที่อธิบาย churn probability / lifecycle stage ที่โมเดลให้]
+- [ปัจจัยหลักที่อธิบาย churn probability / lifecycle stage ที่โมเดลให้]
+
+## สิ่งที่ควรโฟกัส
+- [1-3 ข้อ ที่ทีมภายในควรจับตาหรือทำต่อ — อิงจากข้อมูล]
 
 ## ข้อสังเกตเพิ่มเติม
-[เฉพาะเมื่อพบความขัดแย้งระหว่าง dataset กับ ml_output หรือข้อมูลน่าสนใจอื่น ถ้าไม่มีให้เขียน "ไม่มี"]`;
+[เฉพาะเมื่อพบความขัดแย้งในข้อมูล ถ้าไม่มีให้เขียน "ไม่มี"]`;
 
-// ── Context formatter ──────────────────────────────────────────────────────────
-
-/** Render SHAP churn drivers as a compact, model-faithful list (top 5). */
 function formatChurnFactors(factors: CustomerAiContext["ml_output"]["churn_factors"]): string {
   if (!factors || factors.length === 0) return "N/A";
   return factors
@@ -60,11 +61,21 @@ function formatChurnFactors(factors: CustomerAiContext["ml_output"]["churn_facto
     .join("; ");
 }
 
+function formatSignals(s: CustomerAiSignals): string {
+  const change =
+    s.usage_change_pct == null ? "N/A" : `${s.usage_change_pct > 0 ? "+" : ""}${s.usage_change_pct}%`;
+  return [
+    `เดือนที่มีการใช้งาน: ${s.months_with_usage}`,
+    `ใช้งาน 3 เดือนล่าสุด: ${s.recent_3m_usage.toLocaleString()} (เทียบ 3 เดือนก่อนหน้า: ${s.prior_3m_usage.toLocaleString()}, เปลี่ยนแปลง ${change})`,
+    `ชำระเงินล่าสุดก่อน cutoff: ${s.last_payment_days_before_cutoff ?? "N/A"} วัน`,
+    `จำนวนครั้งที่ชำระ: ${s.n_payments} | ยอดชำระรวม: ฿${s.total_paid.toLocaleString()}`,
+  ].join("\n");
+}
+
 function formatContext(ctx: CustomerAiContext): string {
-  const { run, acc_id, customer_dataset, ml_output } = ctx;
+  const { run, acc_id, customer_dataset, signals, ml_output } = ctx;
   const { profile, usage_monthly, payments } = customer_dataset;
 
-  // Format usage summary (last 6 months most recent first)
   const usageSummary = usage_monthly
     .slice(-6)
     .reverse()
@@ -87,6 +98,9 @@ SMS expire: ${profile?.expire_sms ?? "N/A"} | Email expire: ${profile?.expire_em
 Join date: ${profile?.join_date ?? "N/A"}
 Last access: ${profile?.last_access ?? "N/A"} | Last send: ${profile?.last_send ?? "N/A"}
 
+=== COMPUTED SIGNALS ===
+${formatSignals(signals)}
+
 === USAGE (last 6 months, newest first) ===
 ${usageSummary || "  No usage data"}
 
@@ -107,8 +121,6 @@ Churn factors: ${formatChurnFactors(ml_output.churn_factors)}
 </data>`;
 }
 
-// ── Main function ──────────────────────────────────────────────────────────────
-
 export async function generateCustomerAiExplanation(
   context: CustomerAiContext
 ): Promise<CustomerAiExplanationResult> {
@@ -117,20 +129,15 @@ export async function generateCustomerAiExplanation(
   }
 
   const llmConfig = getLLMConfig();
-
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: formatContext(context) },
   ];
 
   const text = (
-    await complete(messages, {
-      config: llmConfig,
-      temperature: 0.2, // low temp = consistent, factual analysis
-    })
+    await complete(messages, { config: llmConfig, temperature: 0.2 })
   ).trim();
 
   if (!text) throw new Error("LLM returned an empty explanation");
-
   return { explanation: text, model: llmConfig.model };
 }

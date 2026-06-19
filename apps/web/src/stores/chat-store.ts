@@ -1,11 +1,15 @@
 /**
- * Chat store — complete rewrite for conversation persistence + SSE streaming.
+ * Chat store — conversation persistence + SSE streaming.
  *
- * Key changes from the old store:
- *  - Conversation-based (multiple threads, sidebar list)
- *  - SSE streaming: parses thinking / token / evidence / done / error events
- *  - Messages sourced from backend (DB-persisted), not just local state
- *  - Proper abort via AbortController
+ * Design notes:
+ *  - Conversation-based (multiple threads, sidebar list), each optionally bound
+ *    to a prediction run. The binding is fixed at creation; switching the active
+ *    run never rewrites an existing thread.
+ *  - Streaming is O(1) per token: the in-flight assistant message lives in a
+ *    dedicated `streaming` slot, so committed `messages` are not re-mapped on
+ *    every token. On completion the streamed message is committed once.
+ *  - SSE event names mirror apps/api/src/lib/ai/constants.ts (SSE_EVENT).
+ *  - Abort via AbortController kept outside state to avoid re-renders.
  */
 
 import { create } from "zustand";
@@ -14,13 +18,13 @@ import { redirectingFetch } from "@/lib/http";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export type ChatMsg = {
-  id: string;               // "db:<number>" for persisted, "opt:<timestamp>" for optimistic
+  id: string; // "db:<n>" persisted, "opt:<ts>" optimistic
   dbId?: number;
   role: "user" | "assistant";
   content: string;
   ts: number;
-  pending?: boolean;        // streaming in progress
   evidence?: ChatEvidence;
+  error?: boolean;
 };
 
 export type ChatEvidence = {
@@ -37,58 +41,62 @@ export type Conversation = {
   id: string;
   title: string;
   archived: boolean;
+  runId: string | null;
+  runName: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-export type ThinkingStep = {
-  step: string;
-  message: string;
-};
+export type ThinkingStep = { step: string; message: string };
+export type StreamingMsg = { id: string; content: string; evidence?: ChatEvidence };
+export type LLMPublicConfig = { configured: boolean; provider: string; model: string };
 
-// SSE event payloads from orchestrator
-type SSEThinking  = { step: string; message: string };
-type SSEToken     = { text: string };
-type SSEEvidence  = ChatEvidence;
-type SSEDone      = { message_id: number };
-type SSEError     = { message: string; code: string };
+// SSE payloads
+type SSEThinking = { step: string; message: string };
+type SSEToken = { text: string };
+type SSETitle = { title: string };
+type SSEDone = { message_id: number };
+type SSEError = { message: string; code: string };
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
 type ChatState = {
+  config: LLMPublicConfig | null;
   conversations: Conversation[];
+  showArchived: boolean;
   activeId: string | null;
   messages: ChatMsg[];
+  streaming: StreamingMsg | null;
   sending: boolean;
   thinkingStep: ThinkingStep | null;
+  /** Run id the NEXT new conversation will be bound to (null = global). */
+  pendingRunId: string | null;
 
-  // Conversations CRUD
+  loadConfig: () => Promise<void>;
   loadConversations: () => Promise<void>;
-  createConversation: () => Promise<string>;
+  createConversation: (runId?: string | null) => Promise<string>;
   selectConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<void>;
+  archiveConversation: (id: string, archived: boolean) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  setPendingRun: (runId: string | null) => void;
+  setShowArchived: (v: boolean) => void;
 
-  // Messaging
   send: (text: string) => Promise<void>;
   cancel: () => void;
   clearMessages: () => void;
 
-  // Widget compat (floating AIChatWidget)
+  // Floating widget
   unread: number;
   widgetOpen: boolean;
   setWidgetOpen: (open: boolean) => void;
   reset: () => void;
 };
 
-// ── In-flight abort controller (outside state to avoid re-renders) ─────────────
 let controller: AbortController | null = null;
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 
-// Cookie-credentialed fetch that redirects to /login on 401 (shared with the
-// other web clients via lib/http). This store is client-only, so the redirect
-// always fires before the throw propagates.
 const chatFetch = redirectingFetch;
 
 async function apiGet<T>(path: string): Promise<T> {
@@ -132,22 +140,17 @@ async function* readSSE(response: Response): AsyncGenerator<{ event: string; dat
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
-
-      // SSE messages are separated by double newline
       const parts = buf.split("\n\n");
       buf = parts.pop() ?? "";
-
       for (const part of parts) {
-        const lines = part.split("\n");
         let event = "message";
         let data = "";
-        for (const line of lines) {
+        for (const line of part.split("\n")) {
           if (line.startsWith("event: ")) event = line.slice(7).trim();
           else if (line.startsWith("data: ")) data = line.slice(6).trim();
         }
@@ -155,7 +158,7 @@ async function* readSSE(response: Response): AsyncGenerator<{ event: string; dat
         try {
           yield { event, data: JSON.parse(data) as unknown };
         } catch {
-          // skip malformed
+          /* skip malformed */
         }
       }
     }
@@ -167,50 +170,66 @@ async function* readSSE(response: Response): AsyncGenerator<{ event: string; dat
 // ── Store ──────────────────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()((set, get) => ({
+  config: null,
   conversations: [],
+  showArchived: false,
   activeId: null,
   messages: [],
+  streaming: null,
   sending: false,
   thinkingStep: null,
+  pendingRunId: null,
   unread: 0,
   widgetOpen: false,
 
-  // ── Load conversation list ─────────────────────────────────────────────────
-  loadConversations: async () => {
+  loadConfig: async () => {
     try {
-      const convs = await apiGet<Conversation[]>("/api/ai-chat/conversations");
-      set({ conversations: convs });
+      set({ config: await apiGet<LLMPublicConfig>("/api/ai-chat/config") });
     } catch {
-      // silently fail — user sees empty sidebar
+      set({ config: { configured: false, provider: "", model: "" } });
     }
   },
 
-  // ── Create a new conversation ──────────────────────────────────────────────
-  createConversation: async () => {
-    const conv = await apiPost<Conversation>("/api/ai-chat/conversations", {});
+  loadConversations: async () => {
+    try {
+      set({ conversations: await apiGet<Conversation[]>("/api/ai-chat/conversations") });
+    } catch {
+      /* empty sidebar on failure */
+    }
+  },
+
+  createConversation: async (runId?: string | null) => {
+    const bind = runId !== undefined ? runId : get().pendingRunId;
+    const conv = await apiPost<Conversation>("/api/ai-chat/conversations", {
+      run_id: bind ?? undefined,
+    });
     set((s) => ({
       conversations: [conv, ...s.conversations],
       activeId: conv.id,
       messages: [],
+      streaming: null,
+      thinkingStep: null,
     }));
     return conv.id;
   },
 
-  // ── Select + load a conversation ──────────────────────────────────────────
   selectConversation: async (id: string) => {
     if (get().activeId === id) return;
-    set({ activeId: id, messages: [], sending: false, thinkingStep: null });
     controller?.abort();
     controller = null;
+    set({ activeId: id, messages: [], streaming: null, sending: false, thinkingStep: null });
     try {
-      const conv = await apiGet<Conversation & { messages: Array<{
-        id: number;
-        role: string;
-        content: string;
-        evidenceJson: ChatEvidence | null;
-        createdAt: string;
-      }> }>(`/api/ai-chat/conversations/${id}`);
-
+      const conv = await apiGet<
+        Conversation & {
+          messages: Array<{
+            id: number;
+            role: string;
+            content: string;
+            evidenceJson: ChatEvidence | null;
+            createdAt: string;
+          }>;
+        }
+      >(`/api/ai-chat/conversations/${id}`);
       const msgs: ChatMsg[] = conv.messages.map((m) => ({
         id: `db:${m.id}`,
         dbId: m.id,
@@ -219,60 +238,87 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         ts: new Date(m.createdAt).getTime(),
         evidence: m.evidenceJson ?? undefined,
       }));
-      set({ messages: msgs });
+      // Ignore late responses if the user switched away mid-load.
+      if (get().activeId === id) set({ messages: msgs });
     } catch {
-      set({ messages: [] });
+      if (get().activeId === id) set({ messages: [] });
     }
   },
 
-  // ── Rename ────────────────────────────────────────────────────────────────
   renameConversation: async (id: string, title: string) => {
     await apiPatch(`/api/ai-chat/conversations/${id}`, { title });
     set((s) => ({
-      conversations: s.conversations.map((c) => c.id === id ? { ...c, title } : c),
+      conversations: s.conversations.map((c) => (c.id === id ? { ...c, title } : c)),
     }));
   },
 
-  // ── Delete ────────────────────────────────────────────────────────────────
+  archiveConversation: async (id: string, archived: boolean) => {
+    await apiPatch(`/api/ai-chat/conversations/${id}`, { archived });
+    set((s) => ({
+      conversations: s.conversations.map((c) => (c.id === id ? { ...c, archived } : c)),
+    }));
+  },
+
   deleteConversation: async (id: string) => {
     await apiDelete(`/api/ai-chat/conversations/${id}`);
     set((s) => {
-      const convs = s.conversations.filter((c) => c.id !== id);
-      const nextActive = s.activeId === id ? (convs[0]?.id ?? null) : s.activeId;
+      const conversations = s.conversations.filter((c) => c.id !== id);
+      const switching = s.activeId === id;
+      const nextActive = switching ? null : s.activeId;
       return {
-        conversations: convs,
+        conversations,
         activeId: nextActive,
-        messages: nextActive !== s.activeId ? [] : s.messages,
+        messages: switching ? [] : s.messages,
+        streaming: switching ? null : s.streaming,
       };
     });
   },
 
-  // ── Send message (SSE streaming) ───────────────────────────────────────────
-  send: async (text: string) => {
-    const { sending } = get();
-    const content = text.trim();
-    if (!content || sending) return;
+  setPendingRun: (runId: string | null) => set({ pendingRunId: runId }),
+  setShowArchived: (v: boolean) => set({ showArchived: v }),
 
-    // Auto-create a conversation if none is active (widget use case)
+  send: async (text: string) => {
+    const content = text.trim();
+    if (!content || get().sending) return;
+
     let activeId = get().activeId;
-    if (!activeId) {
-      activeId = await get().createConversation();
-    }
+    if (!activeId) activeId = await get().createConversation();
 
     controller?.abort();
     controller = new AbortController();
 
-    // Optimistic user message
-    const optUserId = `opt:u-${Date.now()}`;
-    const optAiId = `opt:a-${Date.now()}`;
-    const userMsg: ChatMsg = { id: optUserId, role: "user", content, ts: Date.now() };
-    const pendingMsg: ChatMsg = { id: optAiId, role: "assistant", content: "", ts: Date.now(), pending: true };
+    const userMsg: ChatMsg = { id: `opt:u-${Date.now()}`, role: "user", content, ts: Date.now() };
+    const streamId = `opt:a-${Date.now()}`;
 
     set((s) => ({
-      messages: [...s.messages, userMsg, pendingMsg],
+      messages: [...s.messages, userMsg],
+      streaming: { id: streamId, content: "" },
       sending: true,
       thinkingStep: null,
     }));
+
+    // Token buffer kept local so per-token updates stay O(1).
+    let acc = "";
+    let evidence: ChatEvidence | undefined;
+
+    const commitAssistant = (final: string, opts: { error?: boolean } = {}) => {
+      set((s) => ({
+        messages: [
+          ...s.messages,
+          {
+            id: streamId,
+            role: "assistant",
+            content: final,
+            ts: Date.now(),
+            evidence,
+            error: opts.error,
+          },
+        ],
+        streaming: null,
+        thinkingStep: null,
+        unread: s.widgetOpen ? s.unread : s.unread + 1,
+      }));
+    };
 
     try {
       const res = await chatFetch(`/api/ai-chat/conversations/${activeId}/messages`, {
@@ -281,122 +327,84 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         body: JSON.stringify({ message: content }),
         signal: controller.signal,
       });
-
       if (!res.ok) {
         const err = (await res.json().catch(() => null)) as { message?: string } | null;
         throw new Error(err?.message ?? `HTTP ${res.status}`);
       }
 
-      let finalContent = "";
-      let evidencePayload: ChatEvidence | undefined;
-      let savedId: number | undefined;
-
       for await (const { event, data } of readSSE(res)) {
         switch (event) {
-          case "thinking": {
-            const d = data as SSEThinking;
-            set({ thinkingStep: { step: d.step, message: d.message } });
+          case "thinking":
+            set({ thinkingStep: data as SSEThinking });
             break;
-          }
-          case "token": {
-            const d = data as SSEToken;
-            finalContent += d.text;
+          case "token":
+            acc += (data as SSEToken).text;
             set((s) => ({
               thinkingStep: null,
-              messages: s.messages.map((m) =>
-                m.id === optAiId ? { ...m, content: finalContent } : m
+              streaming: s.streaming ? { ...s.streaming, content: acc } : s.streaming,
+            }));
+            break;
+          case "title": {
+            const title = (data as SSETitle).title;
+            set((s) => ({
+              conversations: s.conversations.map((c) =>
+                c.id === activeId ? { ...c, title } : c
               ),
             }));
             break;
           }
-          case "evidence": {
-            evidencePayload = data as SSEEvidence;
+          case "evidence":
+            evidence = data as ChatEvidence;
             break;
-          }
-          case "done": {
-            const d = data as SSEDone;
-            savedId = d.message_id;
-            set((s) => ({
-              messages: s.messages
-                .filter((m) => m.id !== optUserId)
-                .map((m) =>
-                  m.id === optAiId
-                    ? {
-                        ...m,
-                        id: `db:${savedId}`,
-                        dbId: savedId,
-                        content: finalContent,
-                        pending: false,
-                        evidence: evidencePayload,
-                      }
-                    : m
-                ),
-              thinkingStep: null,
-              // bump badge when the floating widget is closed
-              unread: s.widgetOpen ? s.unread : s.unread + 1,
-            }));
-            get().loadConversations().catch(() => null);
+          case "done":
+            commitAssistant(acc);
+            void get().loadConversations();
             break;
-          }
-          case "error": {
-            const d = data as SSEError;
-            set((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === optAiId
-                  ? { ...m, content: `เกิดข้อผิดพลาด: ${d.message}`, pending: false }
-                  : m
-              ),
-              thinkingStep: null,
-            }));
+          case "error":
+            commitAssistant(`เกิดข้อผิดพลาด: ${(data as SSEError).message}`, { error: true });
             break;
-          }
         }
       }
+      // Stream ended without an explicit done/error (e.g. truncated): commit what we have.
+      if (get().streaming?.id === streamId) commitAssistant(acc || "การเชื่อมต่อถูกตัด");
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
+        // Drop the optimistic user message + streaming bubble.
         set((s) => ({
-          messages: s.messages.filter((m) => m.id !== optUserId && m.id !== optAiId),
+          messages: s.messages.filter((m) => m.id !== userMsg.id),
+          streaming: null,
           thinkingStep: null,
         }));
         return;
       }
       const message = err instanceof Error ? err.message : "chat_failed";
-      set((s) => ({
-        messages: s.messages.map((m) =>
-          m.id === optAiId
-            ? { ...m, content: `เชื่อมต่อ AI ไม่สำเร็จ: ${message}`, pending: false }
-            : m
-        ),
-        thinkingStep: null,
-      }));
+      commitAssistant(`เชื่อมต่อ AI ไม่สำเร็จ: ${message}`, { error: true });
     } finally {
       set({ sending: false });
       controller = null;
     }
   },
 
-  cancel: () => {
-    controller?.abort();
-  },
+  cancel: () => controller?.abort(),
 
-  clearMessages: () => {
-    set({ messages: [], thinkingStep: null });
-  },
+  clearMessages: () => set({ messages: [], streaming: null, thinkingStep: null }),
 
-  // ── Widget compat ────────────────────────────────────────────────────────────
-  setWidgetOpen: (open: boolean) => {
-    set((s) => ({ widgetOpen: open, unread: open ? 0 : s.unread }));
-  },
+  setWidgetOpen: (open: boolean) => set((s) => ({ widgetOpen: open, unread: open ? 0 : s.unread })),
 
   reset: () => {
     controller?.abort();
     controller = null;
-    set({ messages: [], sending: false, thinkingStep: null, unread: 0 });
+    set({
+      activeId: null,
+      messages: [],
+      streaming: null,
+      sending: false,
+      thinkingStep: null,
+      unread: 0,
+    });
   },
 }));
 
 // ── Formatting helpers ─────────────────────────────────────────────────────────
 
-export function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
-}
+export { formatTime } from "@/lib/format";
