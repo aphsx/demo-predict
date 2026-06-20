@@ -258,8 +258,11 @@ Training / models
   GET    /model-performance                     champion per model_type + evaluations + baselines
 
 AI chat
-  GET/POST/PATCH/DELETE /ai-chat/conversations[/:id]
-  POST   /ai-chat/conversations/:id/messages    SSE token stream (persists msg + evidence)
+  GET    /ai-chat/config                         { configured, provider, model } for the UI status line
+  GET/POST/PATCH/DELETE /ai-chat/conversations[/:id]   POST accepts { title?, run_id? } (run-bound chat)
+  POST   /ai-chat/conversations/:id/messages    SSE token stream (thinking/token/evidence/title/done/error)
+                                                self-correcting Text-to-SQL agent; row-scope enforced to
+                                                the user's own runs/sources (run-bound chats: that run only)
 
 Health
   GET    /health

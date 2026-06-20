@@ -1,33 +1,45 @@
 "use client";
 
 import {
-  useState, useRef, useEffect, useCallback, type ChangeEvent, type KeyboardEvent,
+  useState, useRef, useEffect, useCallback, useMemo,
+  type ChangeEvent, type KeyboardEvent,
 } from "react";
 import {
   Bot, Send, Plus, Trash2, Edit3, X, ChevronDown, ChevronRight,
-  Database, Loader2, AlertCircle, MessageSquare, User,
+  Database, Loader2, AlertCircle, MessageSquare, User, Search,
+  Archive, ArchiveRestore, Target,
 } from "lucide-react";
 import { MarkdownLite } from "@/components/chat/markdown-lite";
 import { TypingDots } from "@/components/chat/typing-dots";
-import { useChatStore, formatTime, type ChatEvidence, type Conversation } from "@/stores/chat-store";
-
-// ── Layout constants ───────────────────────────────────────────────────────────
+import { fetchPredictionRuns, type PredictionRun } from "@/lib/ml-api";
+import {
+  useChatStore, formatTime, type ChatEvidence, type Conversation,
+} from "@/stores/chat-store";
 
 const VIEWPORT = "h-[calc(100dvh-4rem)]";
 
-// ── Sidebar ────────────────────────────────────────────────────────────────────
+// ── Run badge ────────────────────────────────────────────────────────────────
+function RunBadge({ name }: { name: string }) {
+  return (
+    <span
+      title={`ผูกกับ run: ${name}`}
+      className="inline-flex max-w-[120px] items-center gap-1 truncate rounded-full bg-[color:var(--moby-50)] px-1.5 py-0.5 text-[9.5px] font-medium text-[color:var(--moby-700)]"
+    >
+      <Target size={9} className="shrink-0" />
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
 
+// ── Sidebar conversation item ──────────────────────────────────────────────────
 function ConversationItem({
-  conv,
-  active,
-  onSelect,
-  onRename,
-  onDelete,
+  conv, active, onSelect, onRename, onArchive, onDelete,
 }: {
   conv: Conversation;
   active: boolean;
   onSelect: () => void;
   onRename: (title: string) => void;
+  onArchive: () => void;
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -47,92 +59,135 @@ function ConversationItem({
   return (
     <div
       className={[
-        "group flex min-w-0 cursor-pointer items-center gap-2 rounded-xl px-3 py-2.5 transition-colors",
+        "group flex min-w-0 cursor-pointer flex-col gap-1 rounded-xl px-3 py-2.5 transition-colors",
         active
           ? "bg-[color:var(--moby-50)] text-[color:var(--moby-700)]"
           : "text-[color:var(--ink-3)] hover:bg-gray-100",
       ].join(" ")}
       onClick={editing ? undefined : onSelect}
     >
-      <MessageSquare size={13} className={active ? "shrink-0 text-[color:var(--moby-500)]" : "shrink-0 opacity-50"} />
-
-      {editing ? (
-        <input
-          ref={inputRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitRename();
-            if (e.key === "Escape") setEditing(false);
-          }}
-          onBlur={commitRename}
-          className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none"
-          onClick={(e) => e.stopPropagation()}
-        />
-      ) : (
-        <span className="min-w-0 flex-1 truncate text-[12.5px]">{conv.title}</span>
-      )}
-
-      {!editing && (
-        <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
-          <button
-            onClick={(e) => { e.stopPropagation(); setEditing(true); setDraft(conv.title); }}
-            className="rounded p-0.5 hover:bg-gray-200"
-            title="Rename"
-          >
-            <Edit3 size={11} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="rounded p-0.5 text-red-400 hover:bg-red-50"
-            title="Delete"
-          >
-            <Trash2 size={11} />
-          </button>
+      <div className="flex min-w-0 items-center gap-2">
+        <MessageSquare size={13} className={active ? "shrink-0 text-[color:var(--moby-500)]" : "shrink-0 opacity-50"} />
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            onBlur={commitRename}
+            className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-[12.5px]">{conv.title}</span>
+        )}
+        {!editing && (
+          <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditing(true); setDraft(conv.title); }}
+              className="rounded p-0.5 hover:bg-gray-200" title="เปลี่ยนชื่อ"
+            >
+              <Edit3 size={11} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onArchive(); }}
+              className="rounded p-0.5 hover:bg-gray-200"
+              title={conv.archived ? "เลิก archive" : "Archive"}
+            >
+              {conv.archived ? <ArchiveRestore size={11} /> : <Archive size={11} />}
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="rounded p-0.5 text-red-400 hover:bg-red-50" title="ลบ"
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
+        )}
+      </div>
+      {conv.runId && conv.runName && (
+        <div className="pl-[21px]">
+          <RunBadge name={conv.runName} />
         </div>
       )}
     </div>
   );
 }
 
-function Sidebar() {
+// ── Sidebar ────────────────────────────────────────────────────────────────────
+function Sidebar({ runs }: { runs: PredictionRun[] }) {
   const {
-    conversations, activeId, loadConversations,
-    createConversation, selectConversation, renameConversation, deleteConversation,
+    conversations, activeId, showArchived, pendingRunId,
+    loadConversations, createConversation, selectConversation,
+    renameConversation, archiveConversation, deleteConversation,
+    setPendingRun, setShowArchived,
   } = useChatStore();
+  const [query, setQuery] = useState("");
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
-  const handleNew = async () => {
-    await createConversation();
-  };
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return conversations
+      .filter((c) => c.archived === showArchived)
+      .filter((c) => !q || c.title.toLowerCase().includes(q) || (c.runName ?? "").toLowerCase().includes(q));
+  }, [conversations, showArchived, query]);
 
   return (
-    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-gray-200 bg-[#fafafa]">
-      <div className="p-3">
+    <aside className="flex h-full w-[240px] shrink-0 flex-col border-r border-gray-200 bg-[#fafafa]">
+      <div className="space-y-2 p-3">
+        {/* Scope picker for the next new chat */}
+        <div className="relative">
+          <select
+            value={pendingRunId ?? ""}
+            onChange={(e) => setPendingRun(e.target.value || null)}
+            className="h-8 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-2.5 pr-7 text-[11.5px] text-[color:var(--ink-3)] outline-none hover:border-[color:var(--moby-200)]"
+            title="ขอบเขตข้อมูลของแชทใหม่"
+          >
+            <option value="">ทุก run (global)</option>
+            {runs.map((r) => (
+              <option key={r.id} value={r.id}>{r.name} · {r.cutoff_date}</option>
+            ))}
+          </select>
+          <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[color:var(--ink-5)]" />
+        </div>
+
         <button
-          onClick={handleNew}
+          onClick={() => createConversation()}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--moby-600)] px-3 py-2.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-[color:var(--moby-700)] active:scale-[0.98]"
         >
-          <Plus size={14} />
-          New Chat
+          <Plus size={14} /> New Chat
         </button>
+
+        <div className="relative">
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--ink-5)]" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="ค้นหาแชท…"
+            className="h-8 w-full rounded-lg border border-gray-200 bg-white pl-7 pr-2 text-[11.5px] text-[color:var(--ink-2)] outline-none placeholder:text-[color:var(--ink-5)] focus:border-[color:var(--moby-200)]"
+          />
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        {conversations.length === 0 ? (
+        {visible.length === 0 ? (
           <p className="px-3 py-6 text-center text-[11px] text-[color:var(--ink-5)]">
-            ยังไม่มีการสนทนา
+            {showArchived ? "ไม่มีแชทที่ archive" : "ยังไม่มีการสนทนา"}
           </p>
         ) : (
           <div className="space-y-0.5">
-            {conversations.map((conv) => (
+            {visible.map((conv) => (
               <ConversationItem
                 key={conv.id}
                 conv={conv}
                 active={conv.id === activeId}
                 onSelect={() => selectConversation(conv.id)}
                 onRename={(title) => renameConversation(conv.id, title)}
+                onArchive={() => archiveConversation(conv.id, !conv.archived)}
                 onDelete={() => deleteConversation(conv.id)}
               />
             ))}
@@ -140,17 +195,21 @@ function Sidebar() {
         )}
       </div>
 
-      <div className="border-t border-gray-200 p-3">
-        <p className="text-[10px] text-[color:var(--ink-5)]">
-          Moby AI · Text-to-SQL + Gen AI
-        </p>
+      <div className="flex items-center justify-between border-t border-gray-200 px-3 py-2.5">
+        <button
+          onClick={() => setShowArchived(!showArchived)}
+          className="flex items-center gap-1.5 text-[10.5px] text-[color:var(--ink-4)] hover:text-[color:var(--moby-600)]"
+        >
+          {showArchived ? <ArchiveRestore size={11} /> : <Archive size={11} />}
+          {showArchived ? "แชทใช้งาน" : "Archived"}
+        </button>
+        <span className="text-[10px] text-[color:var(--ink-5)]">Text-to-SQL + Gen AI</span>
       </div>
     </aside>
   );
 }
 
 // ── Evidence panel ─────────────────────────────────────────────────────────────
-
 function EvidencePanel({ evidence }: { evidence: ChatEvidence }) {
   const [open, setOpen] = useState(false);
   const hasData = evidence.sql || evidence.row_count > 0 || evidence.warnings.length > 0;
@@ -160,7 +219,7 @@ function EvidencePanel({ evidence }: { evidence: ChatEvidence }) {
     <div className="mt-2 overflow-hidden rounded-xl border border-gray-200 bg-[#f8fafc]">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-[color:var(--ink-4)] hover:bg-gray-100 transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-2 text-[11px] text-[color:var(--ink-4)] transition-colors hover:bg-gray-100"
       >
         <Database size={11} className="shrink-0 text-[color:var(--moby-500)]" />
         <span className="flex-1 text-left font-medium">
@@ -170,9 +229,8 @@ function EvidencePanel({ evidence }: { evidence: ChatEvidence }) {
         </span>
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
       </button>
-
       {open && (
-        <div className="border-t border-gray-200 p-3 space-y-2">
+        <div className="space-y-2 border-t border-gray-200 p-3">
           {evidence.sql && (
             <div>
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-5)]">SQL</p>
@@ -229,7 +287,14 @@ function EvidencePanel({ evidence }: { evidence: ChatEvidence }) {
   );
 }
 
-// ── Thinking indicator ─────────────────────────────────────────────────────────
+// ── Thinking + bubbles ─────────────────────────────────────────────────────────
+function AssistantAvatar() {
+  return (
+    <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] shadow-sm">
+      <Bot size={13} className="text-white" />
+    </div>
+  );
+}
 
 function ThinkingBubble({ message }: { message: string }) {
   return (
@@ -245,15 +310,20 @@ function ThinkingBubble({ message }: { message: string }) {
   );
 }
 
-// ── Empty state ────────────────────────────────────────────────────────────────
-
-function EmptyState({ onPrompt }: { onPrompt: (p: string) => void }) {
-  const prompts = [
-    "สรุป churn risk ของพอร์ตทั้งหมด",
-    "ลูกค้าที่มี priority_score สูงสุด 10 อันดับ",
-    "lifecycle distribution ในรอบนี้เป็นอย่างไร",
-    "account ไหนที่ revenue_at_risk สูงที่สุด",
-  ];
+function EmptyState({ onPrompt, runName }: { onPrompt: (p: string) => void; runName: string | null }) {
+  const prompts = runName
+    ? [
+        "สรุป churn risk ของ run นี้",
+        "ลูกค้า priority_score สูงสุด 10 อันดับ",
+        "lifecycle distribution เป็นอย่างไร",
+        "account ไหน revenue_at_risk สูงสุด",
+      ]
+    : [
+        "สรุป churn risk รวมทุก run",
+        "เปรียบเทียบจำนวนลูกค้าแต่ละ run",
+        "ลูกค้า priority_score สูงสุด 10 อันดับ",
+        "credit_urgency_level critical มีกี่ราย",
+      ];
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[color:var(--moby-500)] to-[color:var(--moby-700)] shadow-lg">
@@ -262,7 +332,7 @@ function EmptyState({ onPrompt }: { onPrompt: (p: string) => void }) {
       <div className="text-center">
         <h2 className="text-[17px] font-semibold text-[color:var(--ink-1)]">Moby AI</h2>
         <p className="mt-1 text-[13px] text-[color:var(--ink-4)]">
-          ถามข้อมูล analytics จากฐานข้อมูลได้เลย
+          {runName ? `ถามข้อมูลของ run “${runName}” ได้เลย` : "ถามข้อมูล analytics จากฐานข้อมูลได้เลย"}
         </p>
       </div>
       <div className="grid w-full max-w-md grid-cols-2 gap-2">
@@ -279,8 +349,6 @@ function EmptyState({ onPrompt }: { onPrompt: (p: string) => void }) {
     </div>
   );
 }
-
-// ── No conversation selected ───────────────────────────────────────────────────
 
 function NoConversation({ onCreate }: { onCreate: () => void }) {
   return (
@@ -301,45 +369,46 @@ function NoConversation({ onCreate }: { onCreate: () => void }) {
 }
 
 // ── Main view ──────────────────────────────────────────────────────────────────
-
 export function AIChatView() {
   const {
-    conversations, activeId, messages, sending, thinkingStep,
-    send, cancel, createConversation, selectConversation,
+    config, conversations, activeId, messages, streaming, sending, thinkingStep,
+    send, cancel, createConversation, selectConversation, loadConfig,
   } = useChatStore();
 
   const [input, setInput] = useState("");
+  const [runs, setRuns] = useState<PredictionRun[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom when messages or streaming updates
+  useEffect(() => { loadConfig(); }, [loadConfig]);
+
+  useEffect(() => {
+    let alive = true;
+    fetchPredictionRuns()
+      .then((all) => alive && setRuns(all.filter((r) => r.status === "completed")))
+      .catch(() => null);
+    return () => { alive = false; };
+  }, []);
+
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [messages, thinkingStep]);
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, streaming, thinkingStep]);
 
-  // Select first conversation on mount if none active
   useEffect(() => {
     if (!activeId && conversations.length > 0) {
-      selectConversation(conversations[0].id);
+      const firstActive = conversations.find((c) => !c.archived);
+      if (firstActive) selectConversation(firstActive.id);
     }
   }, [conversations, activeId, selectConversation]);
 
   const handleSend = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim();
     if (!msg) return;
-
-    // If no active conversation, create one first
-    if (!activeId) {
-      const newId = await createConversation();
-      useChatStore.setState({ activeId: newId });
-    }
-
     setInput("");
     await send(msg);
     inputRef.current?.focus();
-  }, [input, activeId, createConversation, send]);
+  }, [input, send]);
 
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -350,23 +419,23 @@ export function AIChatView() {
 
   const handleInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-    // Auto-resize textarea
     e.target.style.height = "auto";
     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
   };
 
   const activeConv = conversations.find((c) => c.id === activeId) ?? null;
-  const showMessages = messages.length > 0;
+  const showMessages = messages.length > 0 || streaming !== null;
+  const statusLine = activeConv?.runId && activeConv.runName
+    ? `Run “${activeConv.runName}”`
+    : config?.configured
+      ? `${config.provider} · ${config.model}`
+      : "ตั้งค่า LLM ก่อนใช้งาน";
 
   return (
     <div className={`flex min-h-0 overflow-hidden bg-[color:var(--bg)] ${VIEWPORT}`}>
-      {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
-      <Sidebar />
+      <Sidebar runs={runs} />
 
-      {/* ── Main area ───────────────────────────────────────────────────────── */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
-
-        {/* Header */}
         <header className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-5 py-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[color:var(--moby-500)] to-[color:var(--moby-700)]">
@@ -376,12 +445,9 @@ export function AIChatView() {
               <h2 className="truncate text-[14px] font-semibold text-[color:var(--ink-1)]">
                 {activeConv?.title ?? "Moby AI"}
               </h2>
-              <p className="text-[11px] text-[color:var(--ink-5)]">
-                Text-to-SQL · ข้อมูลเฉพาะของคุณ
-              </p>
+              <p className="truncate text-[11px] text-[color:var(--ink-5)]">{statusLine}</p>
             </div>
           </div>
-
           {sending && (
             <button
               onClick={cancel}
@@ -392,102 +458,74 @@ export function AIChatView() {
           )}
         </header>
 
-        {/* Messages */}
-        <div
-          ref={scrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f8fafc] px-4 py-4"
-        >
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f8fafc] px-4 py-4">
           <div className="mx-auto w-full max-w-3xl">
             {!activeId ? (
               <NoConversation onCreate={() => createConversation()} />
             ) : !showMessages ? (
-              <EmptyState onPrompt={(p) => handleSend(p)} />
+              <EmptyState onPrompt={(p) => handleSend(p)} runName={activeConv?.runName ?? null} />
             ) : (
               <div className="space-y-5">
-                {messages.map((msg) => {
-                  if (msg.role === "assistant" && msg.pending && !msg.content) return null;
-
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex min-w-0 gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
-                    >
-                      {/* Avatar */}
-                      {msg.role === "assistant" ? (
-                        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-800)] shadow-sm">
-                          <Bot size={13} className="text-white" />
-                        </div>
-                      ) : (
-                        <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm">
-                          <User size={13} className="text-[color:var(--ink-4)]" />
-                        </div>
-                      )}
-
-                      {/* Bubble */}
+                {messages.map((msg) => (
+                  <div key={msg.id} className={`flex min-w-0 gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                    {msg.role === "assistant" ? (
+                      <AssistantAvatar />
+                    ) : (
+                      <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white shadow-sm">
+                        <User size={13} className="text-[color:var(--ink-4)]" />
+                      </div>
+                    )}
+                    <div className={["flex min-w-0 flex-col gap-1 max-w-[min(80%,48rem)]", msg.role === "user" ? "items-end" : "items-start"].join(" ")}>
+                      <span className="px-1 text-[10.5px] text-[color:var(--ink-5)]">
+                        {msg.role === "assistant" ? "Moby AI" : "You"} · {formatTime(msg.ts)}
+                      </span>
                       <div
                         className={[
-                          "flex min-w-0 flex-col gap-1",
-                          "max-w-[min(80%,48rem)]",
-                          msg.role === "user" ? "items-end" : "items-start",
+                          "min-w-0 rounded-2xl px-4 py-3 text-[13px] leading-relaxed",
+                          msg.role === "user"
+                            ? "rounded-tr-sm bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-700)] text-white"
+                            : msg.error
+                              ? "rounded-tl-sm border border-red-200 bg-red-50 text-red-700"
+                              : "rounded-tl-sm border border-gray-200 bg-white text-[color:var(--ink-2)] shadow-sm",
                         ].join(" ")}
                       >
-                        {/* Timestamp */}
-                        <span className="px-1 text-[10.5px] text-[color:var(--ink-5)]">
-                          {msg.role === "assistant" ? "Moby AI" : "You"} · {formatTime(msg.ts)}
-                        </span>
-
-                        {/* Content */}
-                        <div
-                          className={[
-                            "min-w-0 rounded-2xl px-4 py-3 text-[13px] leading-relaxed",
-                            msg.role === "user"
-                              ? "rounded-tr-sm bg-gradient-to-br from-[color:var(--moby-600)] to-[color:var(--moby-700)] text-white"
-                              : "rounded-tl-sm border border-gray-200 bg-white text-[color:var(--ink-2)] shadow-sm",
-                          ].join(" ")}
-                        >
-                          {msg.role === "user" ? (
-                            <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                              {msg.content}
-                            </p>
-                          ) : (
-                            <>
-                              <MarkdownLite
-                                text={msg.content || "​"} // zero-width space keeps bubble visible while streaming
-                                strongClassName="font-semibold text-[color:var(--ink-1)]"
-                              />
-                              {msg.pending && msg.content && (
-                                <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-[color:var(--moby-500)]" />
-                              )}
-                            </>
-                          )}
-                        </div>
-
-                        {/* Evidence panel for assistant messages */}
-                        {msg.role === "assistant" && !msg.pending && msg.evidence && (
-                          <div className="w-full max-w-full">
-                            <EvidencePanel evidence={msg.evidence} />
-                          </div>
+                        {msg.role === "user" ? (
+                          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{msg.content}</p>
+                        ) : (
+                          <MarkdownLite text={msg.content || "​"} strongClassName="font-semibold text-[color:var(--ink-1)]" />
                         )}
                       </div>
+                      {msg.role === "assistant" && !msg.error && msg.evidence && (
+                        <div className="w-full max-w-full">
+                          <EvidencePanel evidence={msg.evidence} />
+                        </div>
+                      )}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
 
-                {/* Thinking indicator */}
-                {thinkingStep && (
-                  <ThinkingBubble message={thinkingStep.message} />
+                {/* Streaming assistant bubble (committed once on done) */}
+                {streaming && streaming.content && (
+                  <div className="flex min-w-0 gap-3">
+                    <AssistantAvatar />
+                    <div className="flex min-w-0 max-w-[min(80%,48rem)] flex-col items-start gap-1">
+                      <span className="px-1 text-[10.5px] text-[color:var(--ink-5)]">Moby AI</span>
+                      <div className="min-w-0 rounded-2xl rounded-tl-sm border border-gray-200 bg-white px-4 py-3 text-[13px] leading-relaxed text-[color:var(--ink-2)] shadow-sm">
+                        <MarkdownLite text={streaming.content} strongClassName="font-semibold text-[color:var(--ink-1)]" />
+                        <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse rounded-full bg-[color:var(--moby-500)]" />
+                      </div>
+                    </div>
+                  </div>
                 )}
 
-                {/* Pending (no tokens yet) */}
-                {sending && !thinkingStep && messages[messages.length - 1]?.pending && !messages[messages.length - 1]?.content && (
-                  <ThinkingBubble message="กำลังวิเคราะห์..." />
-                )}
+                {/* Thinking (planner / sql / answer) */}
+                {thinkingStep && <ThinkingBubble message={thinkingStep.message} />}
+                {sending && !thinkingStep && !streaming?.content && <ThinkingBubble message="กำลังวิเคราะห์…" />}
               </div>
             )}
           </div>
         </div>
 
-        {/* Input */}
         <footer className="shrink-0 border-t border-gray-200 bg-white px-4 py-3">
           <div className="mx-auto w-full max-w-3xl">
             <div className="flex items-end gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-[color:var(--moby-300)]">
@@ -499,7 +537,7 @@ export function AIChatView() {
                 rows={1}
                 disabled={sending}
                 placeholder={activeId ? "ถามข้อมูล analytics… (Enter ส่ง, Shift+Enter ขึ้นบรรทัด)" : "สร้าง New Chat ก่อนเริ่มสนทนา"}
-                className="max-h-[160px] min-h-[28px] flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed text-[color:var(--ink-2)] placeholder:text-[color:var(--ink-5)] outline-none"
+                className="max-h-[160px] min-h-[28px] flex-1 resize-none bg-transparent text-[13.5px] leading-relaxed text-[color:var(--ink-2)] outline-none placeholder:text-[color:var(--ink-5)]"
                 style={{ overflowY: "auto" }}
               />
               <button

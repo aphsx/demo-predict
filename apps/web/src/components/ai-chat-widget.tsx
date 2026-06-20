@@ -89,23 +89,32 @@ function MessageRow({ msg }: { msg: ChatMsg }) {
 ═══════════════════════════════════════════════════════════ */
 export default function AIChatWidget() {
   const messages = useChatStore((s) => s.messages);
+  const streaming = useChatStore((s) => s.streaming);
+  const thinkingStep = useChatStore((s) => s.thinkingStep);
   const sending = useChatStore((s) => s.sending);
   const unread = useChatStore((s) => s.unread);
   const open = useChatStore((s) => s.widgetOpen);
   const setOpen = useChatStore((s) => s.setWidgetOpen);
   const sendMessage = useChatStore((s) => s.send);
   const resetChat = useChatStore((s) => s.reset);
+  const config = useChatStore((s) => s.config);
+  const loadConfig = useChatStore((s) => s.loadConfig);
 
   const [input, setInput] = useState("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  /* load LLM config once for the header status line */
+  useEffect(() => {
+    if (!config) loadConfig();
+  }, [config, loadConfig]);
+
   /* auto-scroll to bottom */
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, sending]);
+  }, [messages, streaming, thinkingStep, sending]);
 
   /* focus on open (badge clears in the store) */
   useEffect(() => {
@@ -139,7 +148,12 @@ export default function AIChatWidget() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  const firstLoad = messages.length <= 1 && !sending;
+  const firstLoad = messages.length === 0 && !streaming && !sending;
+  const statusLabel = config?.configured
+    ? `${config.provider} · ${config.model}`
+    : config
+      ? "ยังไม่ได้ตั้งค่า LLM"
+      : "กำลังเชื่อมต่อ…";
 
   return (
     <>
@@ -200,8 +214,8 @@ export default function AIChatWidget() {
           <div className="flex-1 min-w-0">
             <p className="truncate text-[13.5px] font-semibold text-white leading-tight">Moby AI</p>
             <p className="truncate text-[10.5px] text-white/75 flex items-center gap-1.5 mt-0.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#ffa400]" />
-              Ollama Cloud · no mock insights
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${config?.configured ? "bg-[#34d399]" : "bg-[#ffa400]"}`} />
+              {statusLabel}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -240,18 +254,31 @@ export default function AIChatWidget() {
           ref={scrollRef}
           className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-4 space-y-3 bg-white sm:px-4"
         >
-          {messages
-            .filter((msg) => !(msg.role === "assistant" && (msg.pending || msg.content.trim() === "")))
-            .map((msg) => (
-              <MessageRow key={msg.id} msg={msg} />
-            ))}
+          {messages.map((msg) => (
+            <MessageRow key={msg.id} msg={msg} />
+          ))}
 
-          {/* Typing indicator */}
-          {sending && (
+          {/* Streaming assistant bubble */}
+          {streaming && streaming.content && (
+            <div className="flex items-end gap-2 min-w-0">
+              <Avatar />
+              <div className={[
+                "max-w-[82%] px-3.5 py-2.5 text-[13px] leading-relaxed",
+                TEXT_WRAP,
+                "rounded-2xl rounded-bl-none bg-white border border-gray-200 text-[color:var(--ink-2)]",
+              ].join(" ")}>
+                <MarkdownLite text={streaming.content} />
+              </div>
+            </div>
+          )}
+
+          {/* Thinking / typing indicator */}
+          {sending && !streaming?.content && (
             <div className="flex items-end gap-2">
               <Avatar />
               <div className="max-w-[82%] bg-white border border-gray-200 rounded-2xl rounded-bl-none
-                px-4 py-3 flex items-center gap-[5px]">
+                px-4 py-3 flex items-center gap-2">
+                {thinkingStep && <span className="text-[11.5px] text-[color:var(--ink-4)]">{thinkingStep.message}</span>}
                 <TypingDots />
               </div>
             </div>
