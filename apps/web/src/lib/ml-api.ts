@@ -61,6 +61,7 @@ import type {
   MonthlyUsagePoint,
   PaymentEvent,
   ModelPerfEntry,
+  ModelVersionSummary,
   TrainingRun,
   CustomerAiExplanationResult,
 } from "@moby/types";
@@ -206,6 +207,25 @@ export async function fetchTrainSuggestedCutoff(
 export async function fetchModelPerformance(): Promise<ModelPerfEntry[]> {
   if (IS_ML_MOCK) return (await mock()).mockModelPerformance();
   return getJson("/api/model-performance");
+}
+
+/** GET /model-performance/:modelType/versions — all trained versions. */
+export async function fetchModelVersions(modelType: string): Promise<ModelVersionSummary[]> {
+  if (IS_ML_MOCK) return [];
+  return getJson(`/api/model-performance/${modelType}/versions`);
+}
+
+/** POST /model-performance/:modelType/activate — pin a version to production. */
+export async function activateModelVersion(
+  modelType: string,
+  modelVersionId: string,
+  reason?: string
+): Promise<{ ok: boolean }> {
+  if (IS_ML_MOCK) return { ok: true };
+  return sendJson(`/api/model-performance/${modelType}/activate`, "POST", {
+    modelVersionId,
+    reason,
+  });
 }
 
 export async function fetchTrainingRuns(): Promise<TrainingRun[]> {

@@ -107,3 +107,31 @@ async def internal_prediction_run(request: Request):
         raise HTTPException(400, "prediction_run_id is required")
     pid = _spawn_job("src.cli.predict", "--prediction-run-id", prediction_run_id)
     return {"accepted": True, "prediction_run_id": prediction_run_id, "pid": pid}
+
+
+@app.post("/internal/model-activate")
+async def internal_model_activate(request: Request):
+    """Manually pin a model version to production (UI override).
+
+    Synchronous: reuses the gate's promotion transaction so the registry stays
+    consistent (one active version per type, alias + activation history).
+    """
+    _require_internal_token(request)
+    body = await request.json()
+    model_type = body.get("model_type")
+    model_version_id = body.get("model_version_id")
+    if not model_type or not model_version_id:
+        raise HTTPException(400, "model_type and model_version_id are required")
+
+    from src.training.registry import activate_model_version
+
+    try:
+        result = activate_model_version(
+            model_type=model_type,
+            model_version_id=model_version_id,
+            reason=body.get("reason"),
+            created_by=body.get("created_by"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"activated": True, **result}

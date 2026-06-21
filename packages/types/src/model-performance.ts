@@ -18,6 +18,19 @@ export interface CandidateResult {
   reason?: string;
 }
 
+/** A trained model version, for the production-override version picker. */
+export interface ModelVersionSummary {
+  id: string;
+  model_type: string;
+  version: string;
+  algorithm: string;
+  status: string;
+  is_active: boolean;
+  trained_at: string | null;
+  primary_metric_name: string;
+  primary_metric_value: number | null;
+}
+
 export interface ModelPerfEntry {
   model_type: "lifecycle" | "churn" | "clv" | "credit";
   method: string;
