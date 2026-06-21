@@ -8,7 +8,12 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { mlModelAliases, mlModelEvaluations, mlModelVersions } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
-import { DEFAULT_RISK_THRESHOLDS, type ModelPerfEntry, type SplitMetrics } from "../lib/ml-contract";
+import {
+  DEFAULT_RISK_THRESHOLDS,
+  type CandidateResult,
+  type ModelPerfEntry,
+  type SplitMetrics,
+} from "../lib/ml-contract";
 
 const MODEL_TYPES = ["churn", "clv", "credit"] as const;
 
@@ -27,6 +32,14 @@ const LIFECYCLE_ENTRY: ModelPerfEntry = {
   notes: "ไม่ใช่โมเดล ML — กติกาแบ่ง Ghost / Churned / Active Free / Active Paid จากข้อมูลจริง",
 };
 
+interface SelectionEntry {
+  candidate?: string;
+  cv_pr_auc?: number;
+  test_pr_auc?: number;
+  gate_passed?: boolean;
+  reason?: string;
+}
+
 interface ModelCard {
   method?: string;
   algorithm?: string;
@@ -40,6 +53,40 @@ interface ModelCard {
     baseline?: number;
     baseline_name?: string;
   };
+  // Candidate competition snapshots (present per model type that runs one).
+  candidate_competition_cv_pr_auc?: Record<string, number>;
+  candidate_competition_val_spearman?: Record<string, number>;
+  candidate_selection?: SelectionEntry[];
+}
+
+/** Rebuild the candidate competition (ranked, champion-flagged) from a card. */
+function buildCompetition(card: ModelCard): CandidateResult[] | undefined {
+  const churn = card.candidate_competition_cv_pr_auc;
+  const clv = card.candidate_competition_val_spearman;
+  const scores = churn ?? clv;
+  if (!scores || Object.keys(scores).length === 0) return undefined;
+  const cvMetric = churn ? "CV PR-AUC" : "Val Spearman";
+
+  const selection = new Map<string, SelectionEntry>();
+  for (const entry of card.candidate_selection ?? []) {
+    if (entry.candidate) selection.set(entry.candidate, entry);
+  }
+
+  const results: CandidateResult[] = Object.entries(scores).map(([algorithm, cvScore]) => {
+    const sel = selection.get(algorithm);
+    const isChampion = algorithm === card.algorithm;
+    return {
+      algorithm,
+      cv_score: cvScore,
+      cv_metric: cvMetric,
+      test_score: sel?.test_pr_auc ?? null,
+      gate_passed: sel?.gate_passed,
+      is_champion: isChampion,
+      reason: isChampion ? sel?.reason : undefined,
+    };
+  });
+  results.sort((a, b) => (b.cv_score ?? 0) - (a.cv_score ?? 0));
+  return results;
 }
 
 type EvaluationRow = typeof mlModelEvaluations.$inferSelect;
@@ -127,6 +174,9 @@ async function buildEntry(modelType: (typeof MODEL_TYPES)[number]): Promise<Mode
     splits,
     baselines,
   };
+
+  const competition = buildCompetition(card);
+  if (competition) entry.competition = competition;
 
   if (modelType === "churn") {
     entry.thresholds = card.thresholds ?? { ...DEFAULT_RISK_THRESHOLDS };

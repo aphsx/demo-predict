@@ -118,6 +118,10 @@ function MetricSummaryCard({ entry }: { entry: ModelPerfEntry }) {
         })}
       </div>
 
+      {entry.competition && entry.competition.length > 0 && (
+        <CandidateCompetition competition={entry.competition} />
+      )}
+
       <div className="mt-4 space-y-1 text-[11.5px] leading-5 text-[color:var(--ink-5)]">
         {entry.version && <p>version: {entry.version}</p>}
         {entry.trained_at && <p>trained: {new Date(entry.trained_at).toLocaleString()}</p>}
@@ -134,6 +138,52 @@ function MetricSummaryCard({ entry }: { entry: ModelPerfEntry }) {
         </div>
       )}
     </section>
+  );
+}
+
+function CandidateCompetition({
+  competition,
+}: {
+  competition: NonNullable<ModelPerfEntry["competition"]>;
+}) {
+  const metric = competition[0]?.cv_metric ?? "CV score";
+  const champion = competition.find((c) => c.is_champion);
+  return (
+    <div className="mt-5">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[color:var(--ink-5)]">
+        Candidate competition · {metric}
+      </p>
+      <div className="mt-2 space-y-1">
+        {competition.map((c) => (
+          <div
+            key={c.algorithm}
+            className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-xl bg-gray-50 px-3 py-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-medium text-[color:var(--ink-2)]">{c.algorithm}</span>
+              {c.is_champion && (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  🏆 Production
+                </span>
+              )}
+              {!c.is_champion && c.gate_passed === false && (
+                <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-medium text-[color:var(--ink-5)]">
+                  ไม่ผ่าน gate
+                </span>
+              )}
+            </div>
+            <span className="num text-[13px] font-semibold">
+              {c.cv_score != null ? c.cv_score.toFixed(4) : "—"}
+            </span>
+          </div>
+        ))}
+      </div>
+      {champion?.reason && (
+        <p className="mt-2 text-[11px] leading-5 text-[color:var(--ink-5)]">
+          เหตุผลที่เลือก: {champion.reason}
+        </p>
+      )}
+    </div>
   );
 }
 
