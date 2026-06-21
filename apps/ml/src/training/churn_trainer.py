@@ -37,6 +37,7 @@ from src.training.metrics import (
     calibration_curve_points,
     churn_metrics,
     confusion_at_threshold,
+    expected_calibration_error,
     lift_table,
     risk_thresholds_from_high,
     select_threshold_max_fbeta,
@@ -586,26 +587,43 @@ def _tune_xgboost(
 # a hair of Brier gain does not justify collapsing thousands of customers onto
 # ~100 distinct values. Both methods are monotonic, so ranking AUC is unchanged.
 ISOTONIC_BRIER_MARGIN = 0.02  # isotonic must be >=2% better in Brier to be chosen
+ECE_IMPROVEMENT_MARGIN = 0.005  # isotonic must cut ECE by >=this to be preferred
 
 
 def _fit_calibrator(raw_val: np.ndarray, y_val: np.ndarray) -> FittedCalibrator:
-    """Platt vs isotonic on validation; Platt wins ties (§10).
+    """Pick Platt vs isotonic by out-of-fold ECE — the metric the promotion gate
+    actually enforces — with Brier as the tiebreak (§10).
 
-    Default to Platt for continuous, granular probabilities; switch to isotonic
-    only when it is decisively better calibrated (Brier margin), keeping the
-    overall calibration gate (ECE) satisfied either way.
+    Targeting ECE (not Brier alone) means the calibrator directly minimizes the
+    quantity that gates promotion, so a strong ranker is not knocked out by an
+    avoidable calibration miss. Isotonic is only considered with enough positives
+    and must beat Platt by a margin, since its step function overfits on little
+    data and collapses within-tier ranking; Platt stays the default for
+    continuous, granular probabilities. Both are monotonic, so ranking AUC is
+    unchanged either way.
     """
 
     platt = LogisticRegression(max_iter=2000)
     platt.fit(raw_val.reshape(-1, 1), y_val)
-    platt_brier = brier_score_loss(y_val, platt.predict_proba(raw_val.reshape(-1, 1))[:, 1])
+    platt_p = platt.predict_proba(raw_val.reshape(-1, 1))[:, 1]
+    platt_ece = expected_calibration_error(y_val, platt_p)
+    platt_brier = brier_score_loss(y_val, platt_p)
 
     n_positive = int(np.asarray(y_val).sum())
     if n_positive >= 200:
         isotonic = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
         isotonic.fit(raw_val, y_val)
-        isotonic_brier = brier_score_loss(y_val, np.clip(isotonic.predict(raw_val), 0, 1))
-        if isotonic_brier < platt_brier * (1.0 - ISOTONIC_BRIER_MARGIN):
+        iso_p = np.clip(isotonic.predict(raw_val), 0.0, 1.0)
+        iso_ece = expected_calibration_error(y_val, iso_p)
+        iso_brier = brier_score_loss(y_val, iso_p)
+        # Prefer isotonic when it meaningfully improves ECE, or matches ECE while
+        # decisively improving Brier — never for a hair (avoids overfit plateaus).
+        improves_ece = iso_ece < platt_ece - ECE_IMPROVEMENT_MARGIN
+        ties_ece_better_brier = (
+            abs(iso_ece - platt_ece) <= ECE_IMPROVEMENT_MARGIN
+            and iso_brier < platt_brier * (1.0 - ISOTONIC_BRIER_MARGIN)
+        )
+        if improves_ece or ties_ece_better_brier:
             return FittedCalibrator(method="isotonic", model=isotonic)
     return FittedCalibrator(method="platt", model=platt)
 
