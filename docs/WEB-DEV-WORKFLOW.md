@@ -1,4 +1,25 @@
-# Web Dev Workflow
+ถ้าอยากรันทั้ง web + api บนเครื่อง — ใช้ 2 terminal แยกกัน อย่า paste รวมบล็อกเดียว:
+
+Terminal 1 — api:
+
+cd /Users/aphsx/Documents/GitHub/demo-predict
+docker compose stop web api
+docker compose up -d db redis ml
+cd apps/api
+DATABASE_URL=postgresql://moby:moby1234@localhost:5433/moby \
+REDIS_HOST=localhost \
+ML_INTERNAL_URL=http://localhost:8001 \
+MODEL_DIR=../../models \
+BETTER_AUTH_URL=http://localhost:3000 \
+ALLOWED_ORIGINS=http://localhost:3000 \
+bun run dev
+
+
+Terminal 2 — web:
+
+
+cd /Users/aphsx/Documents/GitHub/demo-predict/apps/web
+bun run dev
 
 คู่มือสั้นๆ สำหรับรัน Docker และ dev เว็บใน `apps/web`
 
