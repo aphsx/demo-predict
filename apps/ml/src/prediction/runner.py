@@ -34,9 +34,15 @@ from src.training.features import (
     build_all_features,
     feature_code_hash,
 )
+from src.training.drift import (
+    compute_feature_drift,
+    drift_anomalies,
+    drift_report_status,
+)
 from src.training.preprocessing import transform_features
 from src.training.registry import current_champion
 from src.training.validation import (
+    ValidationReport,
     check_predict_feature_leakage,
     check_predict_schema_quality,
     check_predict_source_readiness,
@@ -86,6 +92,62 @@ def _feature_contract_guard(model_type: str, bundle: dict[str, Any], frame: pd.D
             model_type,
             card.get("version"),
         )
+
+
+# Eligibility column scored by each model — drift is measured on the population
+# that is actually being predicted, not the whole upload.
+_DRIFT_ELIGIBILITY = {"churn": "el_churn", "clv": "el_clv", "credit": "el_credit"}
+
+
+def _run_drift_checks(
+    prediction_run_id: str,
+    source_id: str,
+    champions: dict[str, dict[str, Any]],
+    frame: pd.DataFrame,
+) -> None:
+    """Score PSI drift per model and persist one drift report each.
+
+    Informational only: drift never blocks the run. Champions trained before
+    drift monitoring shipped carry no baseline and are skipped.
+    """
+
+    for model_type, champion in champions.items():
+        bundle = champion["bundle"]
+        baseline = bundle.get("feature_baseline")
+        if not baseline:
+            logger.info("drift: %s champion has no feature baseline — skipping", model_type)
+            continue
+
+        feature_names = list(bundle["preprocessor"].feature_names)
+        mask = frame[_DRIFT_ELIGIBILITY[model_type]].to_numpy()
+        scored = frame.loc[mask, feature_names]
+        if scored.empty:
+            logger.info("drift: %s has no eligible rows to score — skipping", model_type)
+            continue
+
+        drift = compute_feature_drift(scored, baseline, model_type=model_type)
+        status = drift_report_status(drift)
+        if drift["overall_status"] != "stable":
+            logger.warning(
+                "drift: %s %s — %d minor / %d major drifted features (consider retraining)",
+                model_type,
+                drift["overall_status"],
+                drift["minor_drift_count"],
+                drift["major_drift_count"],
+            )
+
+        report = ValidationReport(
+            source_id=source_id,
+            source_kind="predict",
+            validation_type="drift",
+            status=status,
+            row_count=int(len(scored)),
+            stats={"model_type": model_type, "overall_status": drift["overall_status"]},
+            anomalies=drift_anomalies(drift),
+            checks=[],
+            drift=drift,
+        )
+        repository.save_validation_report(report, prediction_run_id=prediction_run_id)
 
 
 def run_prediction(prediction_run_id: str) -> None:
@@ -160,6 +222,10 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
 
     for model_type, champion in champions.items():
         _feature_contract_guard(model_type, champion["bundle"], frame)
+
+    # ── Feature drift monitoring (PSI vs training baseline) ───────
+    progress("drift monitoring", 30)
+    _run_drift_checks(prediction_run_id, source_id, champions, frame)
 
     # ── Churn (calibrated probability + SHAP factors) ─────────────
     progress("churn model", 35)

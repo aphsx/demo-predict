@@ -32,6 +32,7 @@ from src.training.churn_trainer import (
 from src.training.clv_trainer import backtest_clv, train_clv
 from src.training.credit_trainer import backtest_credit, train_credit
 from src.training.data import load_train_clean
+from src.training.drift import build_feature_baseline
 from src.training.datasets import (
     CutoffDatasets,
     adaptive_backtest_cutoffs,
@@ -472,6 +473,9 @@ def _train_and_register_churn(
         model_card=model_card,
         calibrator=result.calibrator,
         thresholds=result.thresholds,
+        feature_baseline=build_feature_baseline(
+            dataset.features("train"), dataset.feature_names, datasets.cutoff_date
+        ),
     )
 
     version_id = insert_model_version(
@@ -723,6 +727,9 @@ def _train_and_register_clv(
             "baselines": result.baseline_metrics,
         },
         model_card=model_card,
+        feature_baseline=build_feature_baseline(
+            dataset.features("train"), dataset.feature_names, datasets.cutoff_date
+        ),
     )
 
     version_id = insert_model_version(
@@ -969,6 +976,9 @@ def _train_and_register_credit(
             "baselines": result.baseline_metrics,
         },
         model_card=model_card,
+        feature_baseline=build_feature_baseline(
+            dataset.features("train"), dataset.feature_names, datasets.cutoff_date
+        ),
     )
 
     version_id = insert_model_version(

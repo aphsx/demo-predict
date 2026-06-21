@@ -80,12 +80,13 @@ class ValidationCheck:
 class ValidationReport:
     source_id: str
     source_kind: SourceKind
-    validation_type: Literal["profile", "schema", "label_viability", "leakage"]
+    validation_type: Literal["profile", "schema", "label_viability", "leakage", "drift"]
     status: ReportStatus
     row_count: int
     stats: dict[str, Any]
     anomalies: list[dict[str, Any]]
     checks: list[ValidationCheck]
+    drift: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -101,7 +102,7 @@ class ValidationReport:
             "row_count": self.row_count,
             "stats_json": self.stats,
             "anomalies_json": self.anomalies,
-            "drift_json": None,
+            "drift_json": self.drift,
         }
 
 

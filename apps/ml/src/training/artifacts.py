@@ -40,6 +40,7 @@ def save_artifacts(
     calibrator: Any | None = None,
     thresholds: dict[str, float] | None = None,
     training_log: str | None = None,
+    feature_baseline: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     """Write all artifacts; returns (artifact_path, model_pkl_sha256).
 
@@ -60,6 +61,9 @@ def save_artifacts(
             dill.dump(calibrator, handle)
     if thresholds is not None:
         _write_json(target / "thresholds.json", thresholds)
+    if feature_baseline is not None:
+        # Training feature distribution snapshot for prediction-time PSI drift.
+        _write_json(target / "feature_baseline.json", feature_baseline)
 
     save_preprocessor(preprocessor, target / "preprocessor.json")
     _write_json(target / "feature_names.json", feature_names)
@@ -94,10 +98,17 @@ def load_artifacts(artifact_path: str) -> dict[str, Any]:
     if thresholds_path.exists():
         thresholds = json.loads(thresholds_path.read_text(encoding="utf-8"))
 
+    # Optional — absent on artifacts trained before drift monitoring shipped.
+    feature_baseline = None
+    baseline_path = target / "feature_baseline.json"
+    if baseline_path.exists():
+        feature_baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+
     return {
         "model": model_object,
         "calibrator": calibrator,
         "thresholds": thresholds,
+        "feature_baseline": feature_baseline,
         "preprocessor": load_preprocessor(target / "preprocessor.json"),
         "feature_names": json.loads((target / "feature_names.json").read_text(encoding="utf-8")),
         "model_card": json.loads((target / "model_card.json").read_text(encoding="utf-8")),

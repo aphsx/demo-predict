@@ -1,14 +1,19 @@
 """Churn model training (TRAINING-PIPELINE §8–§10, §13).
 
 Candidates: Logistic Regression, Random Forest, LightGBM (Optuna), XGBoost
-(Optuna). Selection on validation PR-AUC, calibration fitted on validation
-(Platt vs isotonic by Brier), threshold = max-F2 on validation. Test split is
-touched once, at the end, for reporting.
+(Optuna), and — when the optional `tabicl` package is installed — TabICLv2, a
+pretrained tabular foundation model that needs no tuning. Candidates are ranked
+by 5-fold CV PR-AUC; calibration is fitted on out-of-fold predictions (Platt vs
+isotonic by Brier), threshold = max-F2. Test split is touched once, at the end,
+for reporting. The promotion gate decides whether any candidate (TabICL
+included) actually beats the baselines and the existing champion.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -48,7 +53,44 @@ EARLY_STOPPING_ROUNDS = 50
 # so it never lands in an unusable extreme.
 HIGH_THRESHOLD_BAND = (0.35, 0.85)
 
+# TabICLv2 (tabular foundation model) is an OPTIONAL extra candidate. It is a
+# pretrained in-context learner: no hyperparameter tuning, calibrated out of the
+# box, and shown to beat tuned GBMs on a majority of tabular benchmarks at our
+# data scale. It needs the `tabicl` package (and ideally a GPU) — when either is
+# missing the candidate is silently skipped so existing runs never break. The
+# CV + promotion gate decides whether it actually beats LightGBM/XGBoost on the
+# real 1Moby data, exactly like every other candidate.
+TABICL_SAMPLE_LIMIT = 500_000
+
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+
+def _tabicl_available() -> bool:
+    """True when the optional `tabicl` package can be imported."""
+
+    return importlib.util.find_spec("tabicl") is not None
+
+
+def _tabicl_device() -> str:
+    """Pick a device: TABICL_DEVICE env override, else GPU when torch sees one."""
+
+    override = os.getenv("TABICL_DEVICE")
+    if override:
+        return override
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:  # noqa: BLE001 - torch is a tabicl dependency; absence ⇒ cpu.
+        return "cpu"
+
+
+def _new_tabicl_classifier() -> Any:
+    """Construct a fresh TabICLv2 classifier (raises if `tabicl` is absent)."""
+
+    from tabicl import TabICLClassifier  # optional dependency, imported lazily
+
+    return TabICLClassifier(random_state=RANDOM_SEED, device=_tabicl_device())
 
 
 @dataclass
@@ -150,6 +192,19 @@ def train_churn_candidates(
     candidates.append(_tune_lightgbm(x_train, y_train, x_val, y_val, scale_pos_weight, lgbm_trials))
     notify(f"churn: tuning XGBoost with Optuna ({xgb_trials} trials)")
     candidates.append(_tune_xgboost(x_train, y_train, x_val, y_val, scale_pos_weight, xgb_trials))
+
+    # ── Optional TabICLv2 foundation-model candidate (no tuning) ──
+    if len(y_train) <= TABICL_SAMPLE_LIMIT and _tabicl_available():
+        notify("churn: fitting TabICLv2 candidate (foundation model, no tuning)")
+        try:
+            candidates.append(_fit_tabicl(x_train, y_train, x_val, y_val))
+        except Exception as exc:  # noqa: BLE001 - a missing checkpoint/GPU must not kill the run.
+            notify(f"churn: TabICLv2 candidate skipped ({type(exc).__name__}: {exc})")
+    elif _tabicl_available():
+        notify(
+            f"churn: TabICLv2 skipped — {len(y_train)} train rows exceed the "
+            f"{TABICL_SAMPLE_LIMIT} in-context limit"
+        )
 
     # ── Candidate ranking by 5-fold CV on train∪validation ───────
     # A single 20% validation slice is too noisy to pick the champion at this
@@ -334,6 +389,10 @@ def clone_candidate_model(champion: ChurnCandidate, y_train: np.ndarray) -> Any:
     """Fresh estimator with the champion's hyperparameters (for backtests)."""
 
     scale_pos_weight = float((y_train == 0).sum() / max(1, (y_train == 1).sum()))
+    if champion.name == "tabicl":
+        # Training-free foundation model: handles imbalance internally, so no
+        # scale_pos_weight. A fresh classifier re-runs in-context on the fold.
+        return _new_tabicl_classifier()
     if champion.name == "lightgbm":
         params = dict(champion.params)
         params["scale_pos_weight"] = scale_pos_weight
@@ -345,6 +404,25 @@ def clone_candidate_model(champion: ChurnCandidate, y_train: np.ndarray) -> Any:
     if champion.name == "random_forest":
         return RandomForestClassifier(**champion.params)
     return LogisticRegression(**champion.params)
+
+
+def _fit_tabicl(
+    x_train: pd.DataFrame,
+    y_train: np.ndarray,
+    x_val: pd.DataFrame,
+    y_val: np.ndarray,
+) -> ChurnCandidate:
+    """Fit a TabICLv2 candidate. No search space — it is training-free."""
+
+    model = _new_tabicl_classifier()
+    model.fit(x_train, y_train)
+    params: dict[str, Any] = {"device": _tabicl_device(), "random_state": RANDOM_SEED}
+    return ChurnCandidate(
+        name="tabicl",
+        model=model,
+        params=params,
+        validation_pr_auc=float(average_precision_score(y_val, model.predict_proba(x_val)[:, 1])),
+    )
 
 
 def _fit_logistic(
@@ -568,6 +646,14 @@ def _evaluate_baselines(
 
 def _feature_importance(champion: ChurnCandidate, x_train: pd.DataFrame) -> list[dict[str, Any]]:
     """Global mean |SHAP| for tree champions, |coef| for linear ones."""
+
+    # TabICL is a transformer with no tree structure and no linear coefficients,
+    # so neither TreeExplainer nor |coef| applies — global importance is omitted
+    # (per-customer prediction still works; only this summary is unavailable).
+    if not hasattr(champion.model, "coef_") and not isinstance(
+        champion.model, (lgb.LGBMClassifier, xgb.XGBClassifier, RandomForestClassifier)
+    ):
+        return []
 
     try:
         import shap

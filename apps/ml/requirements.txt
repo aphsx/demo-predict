@@ -21,3 +21,8 @@ arq>=0.25
 msgpack>=1.0
 redis>=5.0
 boto3>=1.34           # R2/S3 model artifact storage (optional — only used when R2_BUCKET is set)
+# TabICLv2 tabular foundation model — OPTIONAL extra churn candidate. Pulls in
+# torch (large; GPU strongly recommended). The trainer auto-skips this candidate
+# when the package is absent, so this line can be removed to keep a lean CPU
+# image. Set TABICL_DEVICE=cuda|cpu to override device autodetection.
+tabicl>=0.1
