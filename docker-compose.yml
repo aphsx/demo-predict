@@ -33,7 +33,11 @@ services:
       retries: 10
 
   ml:
-    build: ./apps/ml
+    build:
+      context: ./apps/ml
+      args:
+        # CPU-only torch by default. For a GPU host: TORCH_VARIANT=cuda docker compose build ml
+        TORCH_VARIANT: ${TORCH_VARIANT:-cpu}
     restart: unless-stopped
     env_file:
       - .env

@@ -36,6 +36,8 @@ export type {
 export type {
   SplitMetrics,
   ModelPerfEntry,
+  CandidateResult,
+  ModelVersionSummary,
 } from "@moby/types";
 
 export type {
