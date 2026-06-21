@@ -10,15 +10,15 @@ import type { ModelPerfEntry } from "@/lib/ml-api";
 import { StatusPill } from "@/components/ui";
 import { metricInfo } from "./metric-info";
 
-const PANEL_TITLE = "text-[12px] font-semibold text-[color:var(--ink-2)]";
-const PANEL_HINT = "text-[11px] text-[color:var(--ink-5)] mt-0.5";
+const PANEL_TITLE = "text-[13px] font-semibold text-[color:var(--ink-2)]";
+const PANEL_HINT = "text-[11.5px] leading-5 text-[color:var(--ink-5)] mt-1";
 
 export function ChurnDiagnostics({ entry }: { entry: ModelPerfEntry }) {
   const testMetrics = entry.splits.find((s) => s.split === "test")?.metrics ?? entry.splits[0]?.metrics;
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div className="space-y-3">
+      <div className="space-y-3">
         {entry.calibration && <CalibrationPanel calibration={entry.calibration} />}
         {entry.confusion && <ConfusionPanel confusion={entry.confusion} />}
         {entry.lift_table && entry.lift_table.length > 0 && (
@@ -28,6 +28,7 @@ export function ChurnDiagnostics({ entry }: { entry: ModelPerfEntry }) {
           />
         )}
       </div>
+
       {entry.thresholds && <ThresholdsLegend thresholds={entry.thresholds} />}
     </div>
   );
@@ -40,8 +41,8 @@ function CalibrationPanel({
 }: {
   calibration: NonNullable<ModelPerfEntry["calibration"]>;
 }) {
-  const size = 150;
-  const pad = 10;
+  const size = 180;
+  const pad = 12;
   const plot = size - pad * 2;
   const x = (v: number): number => pad + v * plot;
   const y = (v: number): number => size - pad - v * plot;
@@ -54,7 +55,7 @@ function CalibrationPanel({
       <p className={PANEL_HINT} title={metricInfo("ece").tooltip}>
         ค่าความน่าจะเป็นที่โมเดลบอก เทียบกับอัตรา churn จริง — เส้นทแยง = perfect
       </p>
-      <div className="mt-3 flex items-start gap-4">
+      <div className="mt-3 flex flex-col items-center gap-3">
         <svg
           width={size}
           height={size}
@@ -63,27 +64,28 @@ function CalibrationPanel({
           role="img"
           aria-label="Calibration curve: predicted vs observed churn probability"
         >
-          <rect x={pad} y={pad} width={plot} height={plot} fill="#ffffff" stroke="#f3f4f6" />
-          {/* diagonal reference = perfectly calibrated */}
+          <rect x={pad} y={pad} width={plot} height={plot} fill="#ffffff" stroke="#e5e7eb" />
           <line
             x1={x(0)} y1={y(0)} x2={x(1)} y2={y(1)}
-            stroke="#999999" strokeWidth="1" strokeDasharray="4 3"
+            stroke="#9ca3af" strokeWidth="1" strokeDasharray="4 3"
           />
-          <path d={path} fill="none" stroke="var(--moby-600)" strokeWidth="1.5" />
+          <path d={path} fill="none" stroke="var(--moby-600)" strokeWidth="1.75" />
           {pts.map(([px, py], i) => (
-            <circle key={i} cx={px} cy={py} r="2.2" fill="var(--moby-600)" />
+            <circle key={i} cx={px} cy={py} r="2.5" fill="var(--moby-600)" />
           ))}
         </svg>
-        <div className="text-[11.5px] text-[color:var(--ink-4)] space-y-2">
-          <div>
-            <div className="text-[10.5px] font-semibold uppercase tracking-[.08em] text-[color:var(--ink-5)]" title={metricInfo("ece").tooltip}>
-              ECE
-            </div>
-            <div className="num text-[18px] font-semibold">
-              {calibration.ece.toFixed(3)}
-            </div>
+        <div className="w-full text-center">
+          <div className="text-[10.5px] font-semibold uppercase tracking-[.08em] text-[color:var(--ink-5)]" title={metricInfo("ece").tooltip}>
+            ECE
           </div>
-          <p>แกน X = prob ที่ทำนาย · แกน Y = churn จริง</p>
+          <div className="num text-[22px] font-semibold leading-none">
+            {calibration.ece.toFixed(3)}
+          </div>
+          <p className="mt-2 text-[11px] leading-5 text-[color:var(--ink-4)]">
+            แกน X = prob ที่ทำนาย
+            <br />
+            แกน Y = churn จริง
+          </p>
         </div>
       </div>
     </div>
@@ -101,7 +103,7 @@ function ConfusionPanel({
     { key: "TP", value: confusion.tp, hint: "ชี้ว่าเสี่ยง และ churn จริง", fg: "var(--ok)", bg: "var(--ok-bg)" },
     { key: "FP", value: confusion.fp, hint: "ชี้ว่าเสี่ยง แต่ไม่ churn (โทรเก้อ)", fg: "var(--warn)", bg: "var(--warn-bg)" },
     { key: "FN", value: confusion.fn, hint: "ไม่ได้ชี้ แต่ churn จริง (หลุดมือ)", fg: "var(--danger)", bg: "var(--danger-bg)" },
-    { key: "TN", value: confusion.tn, hint: "ไม่ได้ชี้ และไม่ churn", fg: "#4b5563", bg: "#f9fafb" },
+    { key: "TN", value: confusion.tn, hint: "ไม่ได้ชี้ และไม่ churn", fg: "#4b5563", bg: "#f3f4f6" },
   ];
 
   return (
@@ -110,16 +112,32 @@ function ConfusionPanel({
       <p className={PANEL_HINT} title={metricInfo("f1").tooltip}>
         ที่ threshold ใช้งาน = <span className="num">{confusion.threshold.toFixed(2)}</span>
       </p>
-      <div className="mt-3 grid grid-cols-[auto_1fr_1fr] gap-1.5 text-[11px]">
-        <div />
-        <div className="text-center text-[color:var(--ink-5)]">Churn จริง</div>
-        <div className="text-center text-[color:var(--ink-5)]">ไม่ churn</div>
-        <div className="flex items-center text-[color:var(--ink-5)] pr-1">ชี้ว่าเสี่ยง</div>
-        <Cell cell={cells[0]} />
-        <Cell cell={cells[1]} />
-        <div className="flex items-center text-[color:var(--ink-5)] pr-1">ไม่ได้ชี้</div>
-        <Cell cell={cells[2]} />
-        <Cell cell={cells[3]} />
+      <div className="mt-3">
+        <table className="w-full border-separate border-spacing-2 text-[11px]">
+          <thead>
+            <tr>
+              <th className="w-[88px]" aria-hidden />
+              <th className="pb-1 text-center font-medium text-[color:var(--ink-5)]">Churn จริง</th>
+              <th className="pb-1 text-center font-medium text-[color:var(--ink-5)]">ไม่ churn</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" className="pr-2 text-left font-medium leading-4 text-[color:var(--ink-5)]">
+                ชี้ว่าเสี่ยง
+              </th>
+              <td><Cell cell={cells[0]} /></td>
+              <td><Cell cell={cells[1]} /></td>
+            </tr>
+            <tr>
+              <th scope="row" className="pr-2 text-left font-medium leading-4 text-[color:var(--ink-5)]">
+                ไม่ได้ชี้
+              </th>
+              <td><Cell cell={cells[2]} /></td>
+              <td><Cell cell={cells[3]} /></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -128,12 +146,14 @@ function ConfusionPanel({
 function Cell({ cell }: { cell: { key: string; value: number; hint: string; fg: string; bg: string } }) {
   return (
     <div
-      className="rounded-lg px-2 py-2.5 text-center"
+      className="rounded-lg px-3 py-3 text-center"
       style={{ background: cell.bg }}
       title={cell.hint}
     >
-      <div className="text-[10px] font-semibold" style={{ color: cell.fg }}>{cell.key}</div>
-      <div className="num text-[16px] font-semibold">
+      <div className="text-[10px] font-semibold uppercase tracking-[.06em]" style={{ color: cell.fg }}>
+        {cell.key}
+      </div>
+      <div className="num mt-0.5 text-[18px] font-semibold leading-none text-[color:var(--ink-1)]">
         {cell.value.toLocaleString()}
       </div>
     </div>
@@ -156,30 +176,36 @@ function LiftPanel({
       <p className={PANEL_HINT} title={metricInfo("lift_at_top10pct").tooltip}>
         เรียงลูกค้าตามคะแนนเสี่ยง แล้วแบ่งเป็น 10 กลุ่ม
       </p>
-      <table className="w-full mt-3 text-[12px]">
-        <thead>
-          <tr className="text-[10.5px] uppercase tracking-[.08em] text-[color:var(--ink-5)]">
-            <th className="text-left font-semibold pb-1.5">Decile</th>
-            <th className="text-right font-semibold pb-1.5" title="กลุ่มนี้กิน churner จริงทั้งหมดกี่ %">% of churners</th>
-            <th className="text-right font-semibold pb-1.5" title={metricInfo("lift_at_top10pct").tooltip}>Lift</th>
-          </tr>
-        </thead>
-        <tbody>
-          {liftTable.map((row) => (
-            <tr key={row.decile} className="border-t border-gray-100">
-              <td className="py-1.5 text-[color:var(--ink-3)]">#{row.decile}</td>
-              <td className="num py-1.5 text-right">
-                {(row.share_of_churners * 100).toFixed(1)}%
-              </td>
-              <td className="num py-1.5 text-right">
-                {row.lift.toFixed(2)}×
-              </td>
+      <div className="mt-3">
+        <table className="w-full text-[12px]">
+          <thead className="sticky top-0 bg-gray-50">
+            <tr className="text-[10.5px] uppercase tracking-[.08em] text-[color:var(--ink-5)]">
+              <th className="pb-2 text-left font-semibold">Decile</th>
+              <th className="pb-2 text-right font-semibold" title="กลุ่มนี้กิน churner จริงทั้งหมดกี่ %">
+                % of churners
+              </th>
+              <th className="pb-2 text-right font-semibold" title={metricInfo("lift_at_top10pct").tooltip}>
+                Lift
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {liftTable.map((row) => (
+              <tr key={row.decile} className="border-t border-gray-200/80">
+                <td className="py-1.5 text-[color:var(--ink-3)]">#{row.decile}</td>
+                <td className="num py-1.5 text-right">
+                  {(row.share_of_churners * 100).toFixed(1)}%
+                </td>
+                <td className="num py-1.5 text-right">
+                  {row.lift.toFixed(2)}×
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {recallAtTop10 !== undefined && topDecile && (
-        <p className="mt-3 text-[11.5px] leading-5 text-[color:var(--ink-3)] rounded-lg bg-white border border-gray-100 px-3 py-2">
+        <p className="mt-4 text-[11.5px] leading-5 text-[color:var(--ink-3)] rounded-lg bg-white border border-gray-200 px-3 py-2.5">
           โทรหา top 10% = เจอ churner จริง{" "}
           <span className="num font-semibold">
             {(recallAtTop10 * 100).toFixed(1)}%
@@ -204,7 +230,7 @@ function ThresholdsLegend({ thresholds }: { thresholds: Record<string, number> }
   if (sorted.length === 0) return null;
   const lowest = sorted[0][1];
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3">
       <span
         className="text-[11px] text-[color:var(--ink-5)]"
         title="เส้นแบ่งระดับเสี่ยงมาจาก model card ของรุ่นนี้ — คำนวณใหม่ทุกครั้งที่ retrain ไม่ hardcode ใน UI"

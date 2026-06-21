@@ -145,7 +145,7 @@ function MetricSummaryCard({
       ) : null}
 
       {entry.model_type === "churn" && (
-        <div className="mt-4">
+        <div className="mt-4 border-t border-gray-100 pt-4">
           <ChurnDiagnostics entry={entry} />
         </div>
       )}
