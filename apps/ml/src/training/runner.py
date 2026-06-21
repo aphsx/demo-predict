@@ -17,6 +17,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
+from src.training import promotion
 from src.training import repository
 from src.training.artifacts import save_artifacts, verify_artifact_load
 from src.training.baselines import (
@@ -67,6 +68,20 @@ from src.training.validation import (
 logger = logging.getLogger(__name__)
 
 ECE_LIMIT = 0.05
+# Two-stage churn promotion (promotion.py). Ranking (PR-AUC) is the primary
+# objective; calibration is a guardrail — a loose SAFETY ceiling (egregious
+# miscalibration is rejected) plus a soft penalty above the desired target, NOT
+# a hairline veto. So the best-ranking, recalibrated candidate wins instead of
+# being knocked out by a noise-sized ECE miss.
+CHURN_PROMOTION_CONFIG = promotion.PromotionConfig(
+    primary_metric="pr_auc",
+    higher_is_better=True,
+    champion_margin=0.0,
+    stability_max_rel_drop=0.30,
+    calibration_ceiling=0.10,
+    calibration_target=ECE_LIMIT,
+    calibration_penalty=1.0,
+)
 COVERAGE_RANGE = (0.75, 0.90)
 BACKTEST_COVERAGE_RANGE = (0.70, 0.92)
 CREDIT_MAE_TOLERANCE = 1.10
@@ -301,20 +316,21 @@ def _train_and_register_churn(
     training = train_churn_candidates(dataset, preprocessor, progress=lambda m: print(m))
     source_id = source_id_of(training_run_id)
 
-    # ── Champion = highest-CV candidate that passes the promotion gate ──
-    # §8: a tree that cannot decisively beat the simpler models across every
-    # split and cutoff is not the champion — fall through in CV order.
-    progress("churn: promotion gate per candidate", 35)
-    selection_log: list[dict[str, Any]] = []
-    selected: dict[str, Any] | None = None
+    # ── Evaluate EVERY candidate, then apply the two-stage promotion policy ──
+    # (promotion.py) §8: Stage 1 safety gates decide eligibility (leakage,
+    # beats trivial baselines, beats incumbent on aggregate, stability,
+    # calibration safety ceiling); Stage 2 picks the best ELIGIBLE candidate by
+    # a ranking-first composite. No early break — the champion is the best model
+    # on quality, not the first that squeaks past a hairline threshold.
+    progress("churn: evaluate candidates + promotion policy", 35)
+    incumbent_backtests = _incumbent_backtests("churn")
+    attempts: list[dict[str, Any]] = []
     for attempt_index, candidate in enumerate(training.candidates):
-        print(f"churn: evaluating candidate {candidate.name} as champion (#{attempt_index + 1})")
+        print(f"churn: evaluating candidate {candidate.name} (#{attempt_index + 1})")
         result = finalize_churn_candidate(training, candidate, progress=lambda m: print(m))
-
         leakage = run_leakage_suite(
             dataset, preprocessor, candidate, result.validation_metrics["roc_auc"]
         )
-
         backtest_rows: list[dict[str, Any]] = []
         for bt in backtest_sets:
             bt_preproc = fit_preprocessor(
@@ -330,76 +346,55 @@ def _train_and_register_churn(
                     "baselines": _churn_backtest_baselines(bt, bt_preproc, high_thr),
                 }
             )
-
-        # Gate №3: must beat every baseline of a *different* algorithm. When
-        # the champion IS the logistic-regression candidate, the LR baseline
-        # is the same model class and a strict win over itself is impossible
-        # by design.
-        required_baselines = [
-            name for name in CHURN_BASELINE_NAMES if name != candidate.name
-        ]
-        beats_baselines = (
-            all(
-                result.validation_metrics["pr_auc"] > result.baseline_metrics[name]["validation"]["pr_auc"]
-                for name in required_baselines
-            )
-            and all(
-                result.test_metrics["pr_auc"] > result.baseline_metrics[name]["test"]["pr_auc"]
-                for name in required_baselines
-            )
-            and all(
-                row["metrics"]["pr_auc"]
-                > max(
-                    metrics["pr_auc"]
-                    for name, metrics in row["baselines"].items()
-                    if name in required_baselines
-                )
-                for row in backtest_rows
-            )
-        )
-        calibration_ok = result.test_metrics["ece"] < ECE_LIMIT
-        champion_check = _beats_existing_champion("churn", "pr_auc", backtest_rows)
-        promote, reason = _promotion_decision(
-            beats_baselines=beats_baselines,
-            leakage_passed=leakage["passed"],
-            calibration_ok=calibration_ok,
-            calibration_label=f"ECE {result.test_metrics['ece']:.3f} (เกณฑ์ < {ECE_LIMIT})",
-            artifact_ok=True,  # checked again after artifacts are written
-            champion_check=champion_check,
-        )
-        selection_log.append(
+        attempts.append(
             {
-                "candidate": candidate.name,
-                "cv_pr_auc": training.competition[candidate.name],
-                "test_pr_auc": result.test_metrics["pr_auc"],
-                "gate_passed": promote,
-                "reason": reason,
+                "candidate": candidate,
+                "result": result,
+                "leakage": leakage,
+                "backtest_rows": backtest_rows,
             }
         )
-        print(f"churn: candidate {candidate.name} gate_passed={promote} — {reason}")
 
-        attempt = {
-            "candidate": candidate,
-            "result": result,
-            "leakage": leakage,
-            "backtest_rows": backtest_rows,
-            "beats_baselines": beats_baselines,
-            "calibration_ok": calibration_ok,
-            "champion_check": champion_check,
+    by_name = {a["candidate"].name: a for a in attempts}
+    decision = promotion.decide(
+        [_churn_candidate_eval(a, incumbent_backtests) for a in attempts],
+        CHURN_PROMOTION_CONFIG,
+    )
+
+    selection_log = [
+        {
+            "candidate": d.name,
+            "cv_pr_auc": training.competition[d.name],
+            "test_pr_auc": by_name[d.name]["result"].test_metrics["pr_auc"],
+            "ece": by_name[d.name]["result"].test_metrics["ece"],
+            "eligible": d.eligible,
+            "composite": round(d.composite, 4),
+            # gate_passed = passed the safety gate (eligible). The champion is the
+            # best eligible candidate (is_champion); both surface on the web.
+            "gate_passed": d.eligible,
+            "is_champion": d.name == decision.winner,
+            "reason": (
+                "🏆 champion — " + decision.summary
+                if d.name == decision.winner
+                else ("ผ่าน safety gate (แต่ไม่ใช่ตัวที่ดีที่สุด)" if d.eligible else "ไม่ผ่าน: " + "; ".join(d.reasons))
+            ),
         }
-        if selected is None:
-            selected = attempt  # top-CV fallback if nobody passes
-        if promote:
-            selected = attempt
-            break
+        for d in decision.candidates
+    ]
+    for entry in selection_log:
+        print(f"churn: {entry['candidate']} eligible={entry['eligible']} champion={entry['is_champion']} — {entry['reason']}")
 
-    assert selected is not None
+    # Winner = best eligible candidate. If none is eligible, keep the incumbent
+    # champion but still record the strongest candidate as a non-promoted version.
+    if decision.winner is not None:
+        selected = by_name[decision.winner]
+    else:
+        best = max(decision.candidates, key=lambda d: d.composite)
+        selected = by_name[best.name]
+
     result = selected["result"]
     leakage = selected["leakage"]
     backtest_rows = selected["backtest_rows"]
-    beats_baselines = selected["beats_baselines"]
-    calibration_ok = selected["calibration_ok"]
-    champion_check = selected["champion_check"]
     _save_leakage_report(
         training_run_id, source_id, datasets.cutoff_date, "churn",
         int(len(dataset.frame)), leakage,
@@ -544,16 +539,15 @@ def _train_and_register_churn(
                 horizon_days=horizon_days, baseline_name=baseline_name,
             )
 
+    # Artifact load is the final safety gate — verified only for the chosen
+    # winner (we don't serialize losing candidates). A winner whose artifact
+    # can't reload is unsafe: do not promote, keep the incumbent.
     artifact_ok = verify_artifact_load(artifact_path, dataset.features("test").head(5))
-
-    promote, reason = _promotion_decision(
-        beats_baselines=beats_baselines,
-        leakage_passed=leakage["passed"],
-        calibration_ok=calibration_ok,
-        calibration_label=f"ECE {result.test_metrics['ece']:.3f} (เกณฑ์ < {ECE_LIMIT})",
-        artifact_ok=artifact_ok,
-        champion_check=champion_check,
-    )
+    promote = decision.winner is not None and artifact_ok
+    if decision.winner is not None and not artifact_ok:
+        reason = "ไม่ promote — artifact load test ไม่ผ่าน (safety gate)"
+    else:
+        reason = decision.summary
     if promote:
         promote_model_version(
             model_type="churn", model_version_id=version_id, reason=reason, created_by=created_by
@@ -572,6 +566,65 @@ def _train_and_register_churn(
         "promote_reason": reason,
         "new_version": version if promote else None,
     }
+
+
+def _incumbent_backtests(model_type: str) -> dict[str, float] | None:
+    """The current champion's per-cutoff backtest PR-AUC, for apples-to-apples
+    comparison. None when there is no incumbent or no stored backtests."""
+
+    champion = current_champion(model_type)
+    if champion is None:
+        return None
+    card = champion.get("model_card_json") or {}
+    if isinstance(card, str):
+        card = json.loads(card)
+    rows = card.get("backtests", []) or []
+    out = {
+        row["cutoff_date"]: row["metrics"]["pr_auc"]
+        for row in rows
+        if isinstance(row.get("metrics"), dict) and "pr_auc" in row["metrics"]
+    }
+    return out or None
+
+
+def _churn_candidate_eval(
+    attempt: dict[str, Any],
+    incumbent_backtests: dict[str, float] | None,
+) -> promotion.CandidateEval:
+    """Build a promotion.CandidateEval from one finalized churn candidate.
+
+    Baselines compared against EXCLUDE the same-named baseline (a candidate
+    cannot be required to strictly beat itself — e.g. the logistic candidate vs
+    the logistic baseline)."""
+
+    candidate = attempt["candidate"]
+    result = attempt["result"]
+    backtest_rows = attempt["backtest_rows"]
+    comparable = [name for name in CHURN_BASELINE_NAMES if name != candidate.name]
+
+    def baseline_best(split: str) -> float:
+        return max(result.baseline_metrics[name][split]["pr_auc"] for name in comparable)
+
+    primary_backtests = {row["cutoff_date"]: row["metrics"]["pr_auc"] for row in backtest_rows}
+    baseline_backtests = {
+        row["cutoff_date"]: max(
+            row["baselines"][name]["pr_auc"] for name in comparable if name in row["baselines"]
+        )
+        for row in backtest_rows
+    }
+    return promotion.CandidateEval(
+        name=candidate.name,
+        leakage_ok=bool(attempt["leakage"]["passed"]),
+        artifact_ok=True,  # the winner's artifact is verified post-write
+        primary_validation=result.validation_metrics["pr_auc"],
+        primary_test=result.test_metrics["pr_auc"],
+        baseline_validation=baseline_best("validation"),
+        baseline_test=baseline_best("test"),
+        primary_backtests=primary_backtests,
+        baseline_backtests=baseline_backtests,
+        champion_backtests=incumbent_backtests,
+        calibration_error=result.test_metrics["ece"],
+    )
 
 
 def _churn_backtest_baselines(
