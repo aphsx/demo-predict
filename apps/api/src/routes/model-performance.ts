@@ -4,13 +4,32 @@
  * and baselines from ml_model_evaluations. Contract: apps/web/src/lib/mlApi.ts.
  */
 import Elysia from "elysia";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { mlModelAliases, mlModelEvaluations, mlModelVersions } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
-import { DEFAULT_RISK_THRESHOLDS, type ModelPerfEntry, type SplitMetrics } from "../lib/ml-contract";
+import {
+  DEFAULT_RISK_THRESHOLDS,
+  type CandidateResult,
+  type ModelPerfEntry,
+  type ModelVersionSummary,
+  type SplitMetrics,
+} from "../lib/ml-contract";
+import { triggerMlJob } from "../lib/ml-internal";
 
 const MODEL_TYPES = ["churn", "clv", "credit"] as const;
+type ModelType = (typeof MODEL_TYPES)[number];
+
+// Primary headline metric per model type, read from a version's test metrics.
+const PRIMARY_METRIC: Record<ModelType, { key: string; name: string }> = {
+  churn: { key: "pr_auc", name: "PR-AUC" },
+  clv: { key: "spearman", name: "Spearman" },
+  credit: { key: "coverage_p10_p90", name: "Coverage p10–p90" },
+};
+
+function isModelType(value: string): value is ModelType {
+  return (MODEL_TYPES as readonly string[]).includes(value);
+}
 
 const LIFECYCLE_ENTRY: ModelPerfEntry = {
   model_type: "lifecycle",
@@ -27,6 +46,14 @@ const LIFECYCLE_ENTRY: ModelPerfEntry = {
   notes: "ไม่ใช่โมเดล ML — กติกาแบ่ง Ghost / Churned / Active Free / Active Paid จากข้อมูลจริง",
 };
 
+interface SelectionEntry {
+  candidate?: string;
+  cv_pr_auc?: number;
+  test_pr_auc?: number;
+  gate_passed?: boolean;
+  reason?: string;
+}
+
 interface ModelCard {
   method?: string;
   algorithm?: string;
@@ -40,6 +67,40 @@ interface ModelCard {
     baseline?: number;
     baseline_name?: string;
   };
+  // Candidate competition snapshots (present per model type that runs one).
+  candidate_competition_cv_pr_auc?: Record<string, number>;
+  candidate_competition_val_spearman?: Record<string, number>;
+  candidate_selection?: SelectionEntry[];
+}
+
+/** Rebuild the candidate competition (ranked, champion-flagged) from a card. */
+function buildCompetition(card: ModelCard): CandidateResult[] | undefined {
+  const churn = card.candidate_competition_cv_pr_auc;
+  const clv = card.candidate_competition_val_spearman;
+  const scores = churn ?? clv;
+  if (!scores || Object.keys(scores).length === 0) return undefined;
+  const cvMetric = churn ? "CV PR-AUC" : "Val Spearman";
+
+  const selection = new Map<string, SelectionEntry>();
+  for (const entry of card.candidate_selection ?? []) {
+    if (entry.candidate) selection.set(entry.candidate, entry);
+  }
+
+  const results: CandidateResult[] = Object.entries(scores).map(([algorithm, cvScore]) => {
+    const sel = selection.get(algorithm);
+    const isChampion = algorithm === card.algorithm;
+    return {
+      algorithm,
+      cv_score: cvScore,
+      cv_metric: cvMetric,
+      test_score: sel?.test_pr_auc ?? null,
+      gate_passed: sel?.gate_passed,
+      is_champion: isChampion,
+      reason: isChampion ? sel?.reason : undefined,
+    };
+  });
+  results.sort((a, b) => (b.cv_score ?? 0) - (a.cv_score ?? 0));
+  return results;
 }
 
 type EvaluationRow = typeof mlModelEvaluations.$inferSelect;
@@ -128,6 +189,9 @@ async function buildEntry(modelType: (typeof MODEL_TYPES)[number]): Promise<Mode
     baselines,
   };
 
+  const competition = buildCompetition(card);
+  if (competition) entry.competition = competition;
+
   if (modelType === "churn") {
     entry.thresholds = card.thresholds ?? { ...DEFAULT_RISK_THRESHOLDS };
     const testRow = holdout.find((r) => r.datasetSplit === "test");
@@ -146,6 +210,10 @@ async function buildEntry(modelType: (typeof MODEL_TYPES)[number]): Promise<Mode
   return entry;
 }
 
+interface VersionCard {
+  algorithm?: string;
+}
+
 export const modelPerformanceRoutes = new Elysia({ prefix: "/model-performance" })
   .use(requireUser)
   .get("/", async (): Promise<ModelPerfEntry[]> => {
@@ -155,4 +223,68 @@ export const modelPerformanceRoutes = new Elysia({ prefix: "/model-performance" 
       if (entry) entries.push(entry);
     }
     return entries;
+  })
+  // All trained versions for a model type — fuels the production-override picker.
+  .get("/:modelType/versions", async ({ params, set }): Promise<ModelVersionSummary[]> => {
+    if (!isModelType(params.modelType)) {
+      set.status = 400;
+      return [];
+    }
+    const primary = PRIMARY_METRIC[params.modelType];
+    const rows = await db
+      .select({
+        id: mlModelVersions.id,
+        version: mlModelVersions.version,
+        status: mlModelVersions.status,
+        isActive: mlModelVersions.isActive,
+        trainedAt: mlModelVersions.trainedAt,
+        modelCardJson: mlModelVersions.modelCardJson,
+        testMetricsJson: mlModelVersions.testMetricsJson,
+      })
+      .from(mlModelVersions)
+      .where(eq(mlModelVersions.modelType, params.modelType))
+      .orderBy(desc(mlModelVersions.trainedAt));
+
+    return rows.map((row) => {
+      const metricValue = asMetrics(row.testMetricsJson)[primary.key];
+      return {
+        id: row.id,
+        model_type: params.modelType,
+        version: row.version,
+        algorithm: (row.modelCardJson as VersionCard | null)?.algorithm ?? "",
+        status: row.status,
+        is_active: row.isActive,
+        trained_at: row.trainedAt?.toISOString() ?? null,
+        primary_metric_name: primary.name,
+        primary_metric_value: typeof metricValue === "number" ? metricValue : null,
+      };
+    });
+  })
+  // Manually pin a version to production. Reuses the ML service's promotion
+  // transaction (action='manual_override') so the registry stays consistent.
+  .post("/:modelType/activate", async ({ params, body, userId, set }) => {
+    if (!isModelType(params.modelType)) {
+      set.status = 400;
+      return { message: "Unknown model type" };
+    }
+    const { modelVersionId, reason } = (body ?? {}) as {
+      modelVersionId?: string;
+      reason?: string;
+    };
+    if (!modelVersionId) {
+      set.status = 400;
+      return { message: "modelVersionId is required" };
+    }
+    try {
+      await triggerMlJob("/internal/model-activate", {
+        model_type: params.modelType,
+        model_version_id: modelVersionId,
+        reason,
+        created_by: userId ?? null,
+      });
+    } catch (error) {
+      set.status = 502;
+      return { message: error instanceof Error ? error.message : "Activation failed" };
+    }
+    return { ok: true };
   });

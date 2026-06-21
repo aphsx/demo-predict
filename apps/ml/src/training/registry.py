@@ -177,8 +177,14 @@ def promote_model_version(
     model_version_id: str,
     reason: str,
     created_by: str | None = None,
+    action: str = "promote",
 ) -> None:
-    """Point the production alias at a version; archive the previous champion."""
+    """Point the production alias at a version; archive the previous champion.
+
+    `action` is recorded in ml_model_activation_history — "promote" for the
+    training gate's automatic choice, "manual_override" for an operator pinning
+    a specific version from the UI.
+    """
 
     with create_engine(database_url()).begin() as conn:
         previous = conn.execute(
@@ -235,7 +241,7 @@ def promote_model_version(
                   action, reason, created_by
                 ) VALUES (
                   :model_type, CAST(:previous AS UUID), CAST(:new AS UUID),
-                  'promote', :reason, :created_by
+                  :action, :reason, :created_by
                 )
                 """
             ),
@@ -243,11 +249,51 @@ def promote_model_version(
                 "model_type": model_type,
                 "previous": previous,
                 "new": model_version_id,
-                "action": "promote",
+                "action": action,
                 "reason": reason,
                 "created_by": created_by,
             },
         )
+
+
+def activate_model_version(
+    *,
+    model_type: str,
+    model_version_id: str,
+    reason: str | None = None,
+    created_by: str | None = None,
+) -> dict[str, Any]:
+    """Manually pin a specific version to the production alias (UI override).
+
+    Validates the version exists, belongs to model_type, and has an artifact,
+    then reuses the same promotion transaction with action='manual_override'.
+    """
+
+    with create_engine(database_url()).connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT version, status, artifact_path
+                FROM ml_model_versions
+                WHERE id = CAST(:version_id AS UUID) AND model_type = :model_type
+                """
+            ),
+            {"version_id": model_version_id, "model_type": model_type},
+        ).mappings().first()
+
+    if row is None:
+        raise ValueError(f"No {model_type} model version {model_version_id}")
+    if not row["artifact_path"]:
+        raise ValueError(f"{model_type} version {row['version']} has no artifact to activate")
+
+    promote_model_version(
+        model_type=model_type,
+        model_version_id=model_version_id,
+        reason=reason or f"Manual override to {row['version']}",
+        created_by=created_by,
+        action="manual_override",
+    )
+    return {"model_type": model_type, "version": row["version"], "model_version_id": model_version_id}
 
 
 # ── Training run lifecycle ───────────────────────────────────────
