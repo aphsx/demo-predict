@@ -248,6 +248,7 @@ def _run_training_inner(training_run_id: str, log_buffer: io.StringIO) -> None:
     else:
         credit_cutoff = cutoff
 
+    from src.training.churn_trainer import _resolve_candidates
     update_training_run(
         training_run_id,
         training_config={
@@ -261,6 +262,7 @@ def _run_training_inner(training_run_id: str, log_buffer: io.StringIO) -> None:
             "backtest_cutoffs": [str(b.cutoff_date.date()) for b in backtest_sets],
             "credit_cutoff_date": str(credit_cutoff.date()),
             "credit_backtest_cutoffs": [str(b.cutoff_date.date()) for b in credit_backtest_sets],
+            "churn_candidates": _resolve_candidates(None),
         },
     )
 
@@ -313,7 +315,7 @@ def _train_and_register_churn(
     preprocessor = fit_preprocessor(
         dataset.features("train"), _feature_schema_for_dataset(datasets, dataset)
     )
-    training = train_churn_candidates(dataset, preprocessor, progress=lambda m: print(m))
+    training = train_churn_candidates(dataset, preprocessor, progress=lambda m: print(m), candidates=None)
     source_id = source_id_of(training_run_id)
 
     # ── Evaluate EVERY candidate, then apply the two-stage promotion policy ──

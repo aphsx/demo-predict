@@ -1,12 +1,22 @@
 """Churn model training (TRAINING-PIPELINE §8–§10, §13).
 
-Candidates: Logistic Regression, Random Forest, LightGBM (Optuna), XGBoost
-(Optuna), and — when the optional `tabicl` package is installed — TabICLv2, a
-pretrained tabular foundation model that needs no tuning. Candidates are ranked
-by 5-fold CV PR-AUC; calibration is fitted on out-of-fold predictions (Platt vs
-isotonic by Brier), threshold = max-F2. Test split is touched once, at the end,
-for reporting. The promotion gate decides whether any candidate (TabICL
-included) actually beats the baselines and the existing champion.
+Candidates are declared explicitly via the `candidates` parameter (or
+CHURN_CANDIDATES env var, comma-separated). Default pool:
+  logistic_regression, lightgbm, xgboost, tabicl
+
+Random Forest is available but excluded from the default — it is slow and
+has not beaten a tuned LightGBM in any backtest on this dataset. Add
+"random_forest" to CHURN_CANDIDATES to re-enable it.
+
+TabICLv2 is a pretrained tabular foundation model (no hyperparameter tuning).
+It is a first-class candidate: always attempted when listed. If the `tabicl`
+package is missing the candidate is skipped with a warning, not a crash.
+
+Candidates are ranked by 5-fold CV PR-AUC; calibration is fitted on
+out-of-fold predictions (Platt vs isotonic by Brier), threshold = max-F2.
+Test split is touched once, at the end, for reporting. The promotion gate
+decides whether any candidate actually beats the baselines and the existing
+champion.
 """
 
 from __future__ import annotations
@@ -63,13 +73,22 @@ HIGH_THRESHOLD_BAND = (0.35, 0.85)
 # real 1Moby data, exactly like every other candidate.
 TABICL_SAMPLE_LIMIT = 500_000
 
+# Default candidate pool — explicit list, not environment-detection.
+# Override via CHURN_CANDIDATES env var (comma-separated) or the
+# `candidates` kwarg on train_churn_candidates / train_churn.
+DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm", "xgboost", "tabicl"]
+
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
-def _tabicl_available() -> bool:
-    """True when the optional `tabicl` package can be imported."""
-
-    return importlib.util.find_spec("tabicl") is not None
+def _resolve_candidates(candidates: list[str] | None) -> list[str]:
+    """Return the active candidate list from arg → env → default (in priority)."""
+    if candidates is not None:
+        return candidates
+    env = os.getenv("CHURN_CANDIDATES")
+    if env:
+        return [c.strip() for c in env.split(",") if c.strip()]
+    return list(DEFAULT_CANDIDATES)
 
 
 def _tabicl_device() -> str:
@@ -171,9 +190,13 @@ def train_churn_candidates(
     *,
     lgbm_trials: int = LGBM_TRIALS,
     xgb_trials: int = XGB_TRIALS,
+    candidates: list[str] | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> ChurnTraining:
     notify = progress or (lambda message: logger.info(message))
+
+    active = _resolve_candidates(candidates)
+    notify(f"churn: candidate pool = {active}")
 
     x_train = transform_features(dataset.features("train"), preprocessor)
     x_val = transform_features(dataset.features("validation"), preprocessor)
@@ -184,28 +207,42 @@ def train_churn_candidates(
 
     scale_pos_weight = float((y_train == 0).sum() / max(1, (y_train == 1).sum()))
 
-    # ── Candidates (§8): tune hyperparameters on the validation split ──
-    notify("churn: training Logistic Regression candidate")
-    candidates = [_fit_logistic(x_train, y_train, x_val, y_val)]
-    notify("churn: training Random Forest candidate")
-    candidates.append(_fit_random_forest(x_train, y_train, x_val, y_val))
-    notify(f"churn: tuning LightGBM with Optuna ({lgbm_trials} trials)")
-    candidates.append(_tune_lightgbm(x_train, y_train, x_val, y_val, scale_pos_weight, lgbm_trials))
-    notify(f"churn: tuning XGBoost with Optuna ({xgb_trials} trials)")
-    candidates.append(_tune_xgboost(x_train, y_train, x_val, y_val, scale_pos_weight, xgb_trials))
+    # ── Build candidate list from config (§8) ─────────────────────
+    fitted: list[ChurnCandidate] = []
 
-    # ── Optional TabICLv2 foundation-model candidate (no tuning) ──
-    if len(y_train) <= TABICL_SAMPLE_LIMIT and _tabicl_available():
-        notify("churn: fitting TabICLv2 candidate (foundation model, no tuning)")
-        try:
-            candidates.append(_fit_tabicl(x_train, y_train, x_val, y_val))
-        except Exception as exc:  # noqa: BLE001 - a missing checkpoint/GPU must not kill the run.
-            notify(f"churn: TabICLv2 candidate skipped ({type(exc).__name__}: {exc})")
-    elif _tabicl_available():
-        notify(
-            f"churn: TabICLv2 skipped — {len(y_train)} train rows exceed the "
-            f"{TABICL_SAMPLE_LIMIT} in-context limit"
-        )
+    if "logistic_regression" in active:
+        notify("churn: training Logistic Regression candidate")
+        fitted.append(_fit_logistic(x_train, y_train, x_val, y_val))
+
+    if "random_forest" in active:
+        notify("churn: training Random Forest candidate")
+        fitted.append(_fit_random_forest(x_train, y_train, x_val, y_val))
+
+    if "lightgbm" in active:
+        notify(f"churn: tuning LightGBM with Optuna ({lgbm_trials} trials)")
+        fitted.append(_tune_lightgbm(x_train, y_train, x_val, y_val, scale_pos_weight, lgbm_trials))
+
+    if "xgboost" in active:
+        notify(f"churn: tuning XGBoost with Optuna ({xgb_trials} trials)")
+        fitted.append(_tune_xgboost(x_train, y_train, x_val, y_val, scale_pos_weight, xgb_trials))
+
+    if "tabicl" in active:
+        if len(y_train) > TABICL_SAMPLE_LIMIT:
+            notify(
+                f"churn: TabICLv2 skipped — {len(y_train)} train rows exceed "
+                f"the {TABICL_SAMPLE_LIMIT} in-context limit"
+            )
+        elif importlib.util.find_spec("tabicl") is None:
+            notify("churn: TabICLv2 skipped — `tabicl` package not installed (pip install tabicl)")
+        else:
+            notify("churn: fitting TabICLv2 candidate (foundation model, no hyperparameter tuning)")
+            try:
+                fitted.append(_fit_tabicl(x_train, y_train, x_val, y_val))
+            except Exception as exc:  # noqa: BLE001
+                notify(f"churn: TabICLv2 candidate failed ({type(exc).__name__}: {exc})")
+
+    if not fitted:
+        raise RuntimeError(f"No churn candidates were fitted. Check CHURN_CANDIDATES or `candidates` kwarg. Active list: {active}")
 
     # ── Candidate ranking by 5-fold CV on train∪validation ───────
     # A single 20% validation slice is too noisy to pick the champion at this
@@ -217,18 +254,18 @@ def train_churn_candidates(
 
     competition: dict[str, float] = {}
     cv_oof: dict[str, np.ndarray] = {}
-    for candidate in candidates:
+    for candidate in fitted:
         candidate.params = _resolved_params(candidate)
         cv_score, oof = _cv_oof(candidate, x_trval, y_trval)
         cv_oof[candidate.name] = oof
         competition[candidate.name] = round(cv_score, 4)
         notify(f"churn: {candidate.name} CV PR-AUC = {cv_score:.4f} (val {candidate.validation_pr_auc:.4f})")
 
-    candidates.sort(key=lambda candidate: -competition[candidate.name])
+    fitted.sort(key=lambda c: -competition[c.name])
     return ChurnTraining(
         dataset=dataset,
         preprocessor=preprocessor,
-        candidates=candidates,
+        candidates=fitted,
         competition=competition,
         cv_oof=cv_oof,
         x_trval=x_trval,
@@ -308,12 +345,15 @@ def train_churn(
     *,
     lgbm_trials: int = LGBM_TRIALS,
     xgb_trials: int = XGB_TRIALS,
+    candidates: list[str] | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> ChurnTrainResult:
     """Convenience wrapper: finalize the top-CV candidate."""
 
     training = train_churn_candidates(
-        dataset, preprocessor, lgbm_trials=lgbm_trials, xgb_trials=xgb_trials, progress=progress
+        dataset, preprocessor,
+        lgbm_trials=lgbm_trials, xgb_trials=xgb_trials,
+        candidates=candidates, progress=progress,
     )
     return finalize_churn_candidate(training, training.candidates[0], progress)
 
