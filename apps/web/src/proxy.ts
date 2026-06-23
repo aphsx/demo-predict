@@ -3,7 +3,7 @@ import { hasValidSession } from "@/lib/auth/session";
 
 const PUBLIC_PATHS = ["/login"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Legacy/alternate home URL — dashboard lives at `/`.
