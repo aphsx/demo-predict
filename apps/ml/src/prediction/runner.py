@@ -50,6 +50,8 @@ from src.training.validation import (
 
 logger = logging.getLogger(__name__)
 
+_UNSET = object()  # sentinel — distinguishes "not supplied" from None in _update_run
+
 # Priority score weights (OUTPUT-CONTRACT §5.2) — single source of truth.
 # Priority ranking key. priority_score ranks by expected money at risk
 # (revenue_at_risk = churn_probability × predicted_clv_6m), log-rescaled to
@@ -283,6 +285,10 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
 
     # ── Batch insert (§6.6) ───────────────────────────────────────
     progress("insert outputs", 85)
+    # Drop duplicates on acc_id — the unique constraint on (prediction_run_id, acc_id)
+    # requires one row per customer. A fan-out from an upstream merge could in theory
+    # produce duplicates; keep the last occurrence so the most-derived values win.
+    frame = frame.drop_duplicates(subset=["acc_id"], keep="last")
     rows = _build_output_rows(prediction_run_id, frame, model_versions)
     _replace_outputs(prediction_run_id, rows)
 
@@ -296,6 +302,7 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     _update_run(
         prediction_run_id,
         status=RunStatus.COMPLETED,
+        error_message=None,
         total_customers=int(len(frame)),
         model_versions=model_versions,
         progress={"step": "completed", "pct": 100},
@@ -862,8 +869,14 @@ def _replace_outputs(prediction_run_id: str, rows: list[dict[str, Any]]) -> None
         }[column]
         for column in OUTPUT_COLUMNS
     )
+    upsert_set = ", ".join(
+        f"{col} = EXCLUDED.{col}"
+        for col in OUTPUT_COLUMNS
+        if col not in ("prediction_run_id", "acc_id")
+    )
     insert_sql = text(
         f"INSERT INTO ml_prediction_outputs ({', '.join(OUTPUT_COLUMNS)}) VALUES ({placeholders})"
+        f" ON CONFLICT (prediction_run_id, acc_id) DO UPDATE SET {upsert_set}"
     )
     with create_engine(database_url()).begin() as conn:
         conn.execute(
@@ -975,7 +988,7 @@ def _update_run(
     *,
     status: str | None = None,
     progress: dict[str, Any] | None = None,
-    error_message: str | None = None,
+    error_message: str | None = _UNSET,  # type: ignore[assignment]
     total_customers: int | None = None,
     model_versions: dict[str, str] | None = None,
     mark_started: bool = False,
@@ -989,7 +1002,7 @@ def _update_run(
     if progress is not None:
         sets.append("progress_json = CAST(:progress AS JSONB)")
         params["progress"] = json.dumps(progress, ensure_ascii=False)
-    if error_message is not None:
+    if error_message is not _UNSET:
         sets.append("error_message = :error_message")
         params["error_message"] = error_message
     if total_customers is not None:
