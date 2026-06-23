@@ -162,7 +162,7 @@ export function StatusPill({
   loading = false,
 }: {
   tone?: keyof typeof PILL_TONES;
-  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  icon?: React.ComponentType<{ size?: number | string; className?: string }>;
   children: ReactNode;
   /** @deprecated dots removed — kept for call-site compat */
   dot?: boolean;
