@@ -1,8 +1,9 @@
 """Credit usage forecast training (TRAINING-PIPELINE §8 — quantile regression).
 
-LightGBM quantile models per horizon (30d, 90d) × quantile (p10–p90), Optuna
-tuned on p50 pinball loss per horizon, with a multiplicative interval widening
-factor calibrated on validation so p10–p90 coverage lands at the 80% target.
+LightGBM quantile models per horizon (30d, 90d) × 5 quantiles
+(p10, p25, p50, p75, p90), Optuna tuned on p50 pinball loss per horizon, with
+an additive CQR margin calibrated on validation so p10–p90 coverage lands at
+the 80% target. (XGBoost quantile is an opt-in alternative — ENABLE_XGB_CREDIT=1.)
 
 The models are trained on the LOG-RATIO against the carryover baseline
 (`log1p(y) − log1p(carryover)`). Trees predict piecewise-constant values and
@@ -23,6 +24,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable
+
+import os
 
 import lightgbm as lgb
 import numpy as np
@@ -62,6 +65,11 @@ TOPUP_RAW_PRED_CAP = 3650.0  # AFT extrapolates exp(η) — censored-heavy rows 
 CORRECTION_CLIP = 1.5
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+# XGBoost quantile is an opt-in alternative to LightGBM per horizon.
+# When disabled, LightGBM is always used (~30 fewer Optuna trials per horizon).
+# Set ENABLE_XGB_CREDIT=1 to let XGBoost compete in _train_horizon().
+_CREDIT_XGB_ENABLED = os.getenv("ENABLE_XGB_CREDIT", "0") == "1"
 
 
 def _enforce_cross_horizon_monotonicity(
@@ -403,44 +411,51 @@ def _train_horizon(
     )
     lgbm_study.optimize(lgbm_objective, n_trials=n_trials, show_progress_bar=False)
 
-    # ── XGBoost Quantile (reg:quantileerror, XGBoost ≥ 2.0) ───────
-    def build_xgb_params(trial: optuna.Trial) -> dict[str, Any]:
-        return {
-            "n_estimators": 1200,
-            "max_depth": trial.suggest_int("max_depth", 3, 8),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-            "min_child_weight": trial.suggest_int("min_child_weight", 10, 200),
-            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
-            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
-            "random_state": RANDOM_SEED,
-            "n_jobs": -1,
-            "verbosity": 0,
-            "tree_method": "hist",
-            "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
-        }
-
-    def xgb_objective(trial: optuna.Trial) -> float:
-        params = build_xgb_params(trial)
-        model = xgb.XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.50, **params)
-        model.fit(x_train, target_train, eval_set=[(x_val, target_val)], verbose=False)
-        predictions = np.clip(np.expm1(model.predict(x_val) + anchor_val), 0, None)
-        return pinball_loss(y_val, predictions, 0.50)
-
-    xgb_study = optuna.create_study(
-        direction="minimize",
-        sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
-    )
-    xgb_study.optimize(xgb_objective, n_trials=n_trials, show_progress_bar=False)
-
+    # ── XGBoost Quantile (opt-in, ENABLE_XGB_CREDIT=1) ────────────
     # ── Pick best family, calibrate CQR ───────────────────────────
-    if xgb_study.best_value < lgbm_study.best_value:
-        best_params = build_xgb_params(optuna.trial.FixedTrial(xgb_study.best_params))
-        models = _fit_xgb_quantile_models(
-            best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+    if _CREDIT_XGB_ENABLED:
+        def build_xgb_params(trial: optuna.Trial) -> dict[str, Any]:
+            return {
+                "n_estimators": 1200,
+                "max_depth": trial.suggest_int("max_depth", 3, 8),
+                "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+                "min_child_weight": trial.suggest_int("min_child_weight", 10, 200),
+                "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+                "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+                "random_state": RANDOM_SEED,
+                "n_jobs": -1,
+                "verbosity": 0,
+                "tree_method": "hist",
+                "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
+            }
+
+        def xgb_objective(trial: optuna.Trial) -> float:
+            params = build_xgb_params(trial)
+            model = xgb.XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.50, **params)
+            model.fit(x_train, target_train, eval_set=[(x_val, target_val)], verbose=False)
+            predictions = np.clip(np.expm1(model.predict(x_val) + anchor_val), 0, None)
+            return pinball_loss(y_val, predictions, 0.50)
+
+        xgb_study = optuna.create_study(
+            direction="minimize",
+            sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
         )
-        family = "xgboost"
+        xgb_study.optimize(xgb_objective, n_trials=n_trials, show_progress_bar=False)
+
+        if xgb_study.best_value < lgbm_study.best_value:
+            best_params = build_xgb_params(optuna.trial.FixedTrial(xgb_study.best_params))
+            models = _fit_xgb_quantile_models(
+                best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+            )
+            family = "xgboost"
+        else:
+            best_params = build_lgbm_params(optuna.trial.FixedTrial(lgbm_study.best_params))
+            models = _fit_quantile_models(
+                best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+            )
+            family = "lgbm"
     else:
         best_params = build_lgbm_params(optuna.trial.FixedTrial(lgbm_study.best_params))
         models = _fit_quantile_models(

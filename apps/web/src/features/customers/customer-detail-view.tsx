@@ -177,7 +177,7 @@ export function CustomerDetailView({
               <MiniStatCard
                 label="Peak usage"
                 value={peakUsage != null ? peakUsage.toLocaleString() : "—"}
-                hint="last 6 months"
+                hint="last 12 months"
               />
               <MiniStatCard
                 label="Inactive"
@@ -189,7 +189,7 @@ export function CustomerDetailView({
 
           <div className="flex min-h-0 flex-col xl:row-span-2">
             <Panel
-              title="เหตุผล"
+              title="พฤติกรรมลูกค้า"
               headerRight={<AiBadge />}
               className="flex min-h-0 flex-1 flex-col"
               bodyClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain"

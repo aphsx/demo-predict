@@ -253,7 +253,7 @@ FEATURE_METADATA: FeatureSchema = {
     "credit_usage_decel": {
         "source": "usage.usage",
         "lookback_window": "180d_before_cutoff",
-        "formula": "signed_log1p((usage_recent_90d/3 - usage_prev_90d/3) / (usage_prev_90d/3 + ε)) — second-order usage trend (acceleration/deceleration)",
+        "formula": "signed_log1p((usage_recent_90d/3 - usage_prev_90d/3) / (usage_prev_90d/3 + ε)) — relative change in monthly usage burn-rate (deceleration/acceleration of usage)",
         "null_handling": "0 when no prior usage exists",
     },
 }

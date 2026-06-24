@@ -2,7 +2,16 @@
 
 Candidates are declared explicitly via the `candidates` parameter (or
 CHURN_CANDIDATES env var, comma-separated). Default pool:
-  logistic_regression, lightgbm, xgboost, tabicl
+  logistic_regression, lightgbm
+
+Both default champions are natively explainable (coef_ / TreeExplainer), so
+every served customer gets faithful per-row churn_factors — the grounding the
+downstream AI explanation layer verbalizes (it must not invent reasons from raw
+features). XGBoost and TabICL are opt-in: add "xgboost" / "tabicl" to
+CHURN_CANDIDATES. XGBoost is redundant with LightGBM on all-numeric features;
+TabICL is a strong but OPAQUE foundation model — it cannot produce per-customer
+SHAP at serve scale, so promoting it would null churn_factors for the whole
+population. Keep it for benchmarking the explainable champions, not for serving.
 
 Random Forest is available but excluded from the default — it is slow and
 has not beaten a tuned LightGBM in any backtest on this dataset. Add
@@ -78,7 +87,7 @@ TABICL_SAMPLE_LIMIT = 500_000
 # Default candidate pool — explicit list, not environment-detection.
 # Override via CHURN_CANDIDATES env var (comma-separated) or the
 # `candidates` kwarg on train_churn_candidates / train_churn.
-DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm", "xgboost", "tabicl"]
+DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm"]
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -137,10 +146,8 @@ class ChurnCandidate:
     validation_pr_auc: float
 
     def predict_raw(self, x: pd.DataFrame) -> np.ndarray:
-        if isinstance(self.model, lgb.LGBMClassifier):
-            return self.model.predict_proba(x)[:, 1]
-        if isinstance(self.model, xgb.XGBClassifier):
-            return self.model.predict_proba(x)[:, 1]
+        # Every candidate (LGB, XGB, LR, RF, TabICL) is an sklearn-style
+        # classifier exposing predict_proba; positive-class column is index 1.
         return self.model.predict_proba(x)[:, 1]
 
 

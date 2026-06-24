@@ -198,7 +198,7 @@ export function ReasoningStack({ customer }: { customer: CustomerDetail }) {
         </ReasonSection>
       )}
 
-      <ReasonSection label="บทวิเคราะห์ AI" order={2}>
+      <ReasonSection label="สรุปพฤติกรรม (AI)" order={2}>
         {narrative.kind === "ready" ? (
           <div className="text-[13px] leading-6 text-[color:var(--ink-3)]">
             <MarkdownLite text={narrative.text} strongClassName="font-semibold text-[color:var(--ink-1)]" />

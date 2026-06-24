@@ -1,13 +1,14 @@
 /**
- * Single ordered reasoning layer for a customer.
+ * Single ordered behaviour layer for a customer.
  *
- * The UI shows two "why" surfaces, in fixed precedence:
+ * The UI shows two surfaces, in fixed precedence:
  *   1. drivers     — model (SHAP) factors behind the churn probability
- *   2. narrative   — GenAI explanation
+ *   2. narrative   — GenAI behaviour overview (how the customer uses the
+ *                    product + forward-looking risk context, not actions)
  *
  * There is intentionally NO rule-based text headline: priority is expressed as a
- * number (priority_score). Any human-readable "why" comes from the AI narrative,
- * grounded in the numeric model outputs and SHAP factors.
+ * number (priority_score). Any human-readable narrative comes from the AI
+ * overview, grounded in the numeric model outputs and SHAP factors.
  */
 import type { ChurnFactor } from "@/lib/ml-api";
 

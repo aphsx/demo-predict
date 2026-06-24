@@ -1,17 +1,23 @@
 /**
  * Customer AI Explanation.
  *
- * Produces a short, grounded, decision-oriented analyst note (Markdown, Thai)
- * for a single customer, from three sources: the raw dataset, deterministic
- * pre-computed signals (customer-ai-context.computeSignals), and the ML model
- * output (churn / lifecycle / CLV / SHAP factors).
+ * Produces a short, grounded BEHAVIOUR overview (Markdown, Thai) for a single
+ * customer, from three sources: the raw dataset, deterministic pre-computed
+ * signals (customer-ai-context.computeSignals), and the ML model output
+ * (churn / lifecycle / CLV / SHAP factors).
+ *
+ * The audience wants to UNDERSTAND the customer's behaviour, not be told whom
+ * to contact — there is intentionally no action/recommendation section
+ * (OUTPUT-CONTRACT §5.2 removed the action workflow). Predictions appear only
+ * as forward-looking context grounded in the observed numbers.
  *
  * Output sections:
- *   ## สรุป            — status, risk level, behaviour in 2–3 sentences
- *   ## สัญญาณเสี่ยง     — risk signals, each citing a real number
- *   ## ปัจจัยขับเคลื่อน  — drivers behind the model's churn / lifecycle output
- *   ## สิ่งที่ควรโฟกัส   — what an analyst should watch (NOT a customer message)
- *   ## ข้อสังเกตเพิ่มเติม — only when dataset and model output conflict
+ *   ## ภาพรวมพฤติกรรม    — how the customer uses the product, in 2–3 sentences
+ *   ## การใช้งาน          — channel mix + monthly volume + trend, citing numbers
+ *   ## การชำระเงิน        — payment cadence / amounts / recency, citing numbers
+ *   ## แนวโน้มและความเสี่ยง — forward look: churn / p_alive / CLV / credit, with
+ *                            the SHAP factors translated to plain language
+ *   ## ข้อสังเกต          — only when dataset and model output conflict
  */
 
 import type { CustomerAiContext, CustomerAiSignals } from "./customer-ai-context";
@@ -27,31 +33,36 @@ export type CustomerAiExplanationResult = {
 const SYSTEM_PROMPT = `คุณคือนักวิเคราะห์ข้อมูลลูกค้าอาวุโสของบริษัท 1Moby (B2B SaaS ด้านการส่ง SMS/Email)
 มีประสบการณ์วิเคราะห์พฤติกรรมลูกค้า, churn prediction, และ CLV มากกว่า 10 ปี
 
-งานของคุณ: วิเคราะห์ข้อมูลลูกค้า 1 ราย แล้วเขียนรายงานสั้นเป็นภาษาไทยตามรูปแบบด้านล่าง
+งานของคุณ: อธิบาย "พฤติกรรมของลูกค้า 1 ราย" เป็นภาษาไทยให้ทีมภายในเข้าใจว่าลูกค้าคนนี้
+ใช้งานอย่างไรและเปลี่ยนแปลงไปอย่างไร ตามรูปแบบด้านล่าง
 
 กฎสำคัญ:
 ${renderGuardrails()}
-- อ้างอิงเฉพาะข้อมูลในส่วน <data> เท่านั้น และอ้างตัวเลขจริงทุกครั้งที่กล่าวถึงสัญญาณ
-- ถ้า customer_dataset / signals / ml_output ขัดแย้งกัน ให้ระบุไว้ในส่วน "ข้อสังเกตเพิ่มเติม"
-- "สิ่งที่ควรโฟกัส" คือสิ่งที่ทีมภายในควรจับตา ไม่ใช่ข้อความหรือสคริปต์สำหรับส่งหาลูกค้า
+- เป้าหมายคือทำให้ "เข้าใจพฤติกรรมลูกค้า" ไม่ใช่บอกให้ไปติดต่อหรือทำอะไร — ห้ามเขียน
+  คำแนะนำเชิงปฏิบัติ, ข้อความหาลูกค้า, หรือ next step ใด ๆ
+- อ้างอิงเฉพาะข้อมูลในส่วน <data> เท่านั้น และอ้างตัวเลขจริงทุกครั้งที่กล่าวถึงพฤติกรรม
+- ค่าทำนายจากโมเดล (churn / CLV / credit) ใช้เป็น "บริบทมองไปข้างหน้า" เท่านั้น และต้อง
+  อ้างอิงตัวเลข/SHAP factors จริงเสมอ — ห้ามเดาเหตุผลที่ไม่มีในข้อมูล
+- ถ้า customer_dataset / signals / ml_output ขัดแย้งกัน ให้ระบุไว้ในส่วน "ข้อสังเกต"
 - กระชับ ตรงประเด็น ไม่ต้องเขียน label ภาษาอังกฤษ
 
 รูปแบบ output (Markdown ภาษาไทย):
 
-## สรุป
-[2-3 ประโยค: สถานะปัจจุบัน, ระดับความเสี่ยง, ภาพรวมพฤติกรรม]
+## ภาพรวมพฤติกรรม
+[2-3 ประโยค: ลูกค้าใช้งานอย่างไร, ใช้ channel ใดเป็นหลัก, ปริมาณมาก/น้อย, แนวโน้มล่าสุด]
 
-## สัญญาณเสี่ยง
-- [ปัจจัยเสี่ยงที่พบ — อ้างอิงตัวเลขจริงเสมอ]
+## การใช้งาน
+- [สัดส่วน SMS/Email, ปริมาณรายเดือน, แนวโน้มเพิ่ม/ลด — อ้างอิงตัวเลขจริงเสมอ]
 
-## ปัจจัยขับเคลื่อน
-- [ปัจจัยหลักที่อธิบาย churn probability / lifecycle stage ที่โมเดลให้]
+## การชำระเงิน
+- [ความถี่การเติมเครดิต, ยอดชำระ, ครั้งล่าสุดก่อน cutoff — อ้างอิงตัวเลขจริงเสมอ]
 
-## สิ่งที่ควรโฟกัส
-- [1-3 ข้อ ที่ทีมภายในควรจับตาหรือทำต่อ — อิงจากข้อมูล]
+## แนวโน้มและความเสี่ยง
+- [churn probability / p_alive / CLV / credit ที่โมเดลให้ พร้อมแปล churn factors เป็นภาษาคน
+  เช่น "ไม่มีการใช้งาน 75 วัน (ดันความเสี่ยงขึ้น)"]
 
-## ข้อสังเกตเพิ่มเติม
-[เฉพาะเมื่อพบความขัดแย้งในข้อมูล ถ้าไม่มีให้เขียน "ไม่มี"]`;
+## ข้อสังเกต
+[เฉพาะเมื่อพบความขัดแย้งหรือความผิดปกติในข้อมูล ถ้าไม่มีให้เขียน "ไม่มี"]`;
 
 function formatChurnFactors(factors: CustomerAiContext["ml_output"]["churn_factors"]): string {
   if (!factors || factors.length === 0) return "N/A";
@@ -77,7 +88,7 @@ function formatContext(ctx: CustomerAiContext): string {
   const { profile, usage_monthly, payments } = customer_dataset;
 
   const usageSummary = usage_monthly
-    .slice(-6)
+    .slice(-12)
     .reverse()
     .map((u) => `  ${u.month}: รวม ${u.total} (SMS ${u.sms} / Email ${u.email})`)
     .join("\n");
@@ -101,7 +112,7 @@ Last access: ${profile?.last_access ?? "N/A"} | Last send: ${profile?.last_send 
 === COMPUTED SIGNALS ===
 ${formatSignals(signals)}
 
-=== USAGE (last 6 months, newest first) ===
+=== USAGE (last 12 months, newest first) ===
 ${usageSummary || "  No usage data"}
 
 === PAYMENT HISTORY (last 5) ===
