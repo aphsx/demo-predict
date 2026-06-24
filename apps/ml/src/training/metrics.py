@@ -3,6 +3,17 @@
 Metric key names are part of the API contract — the Model Performance page
 renders `metrics_json` records directly (see apps/web/src/mocks/ml.ts and
 apps/web/src/features/model-performance/metricInfo.ts). Do not rename keys.
+
+Gold-standard extensions (additive — no existing key is removed):
+  log_loss            Binary cross-entropy (threshold-free calibration)
+  bss                 Brier Skill Score: 1 - Brier/Brier_ref (base-rate climatology).
+                      > 0 = beats naive; 1 = perfect; < 0 = worse than trivial.
+  mce                 Maximum Calibration Error: worst-case bin (complements ECE).
+  recall_at_top{5,20}pct / lift_at_top{5,20}pct   Additional decile coverage.
+
+Separate statistical functions (not stored in metrics_json):
+  hosmer_lemeshow_test  Chi-squared goodness-of-fit for calibration.
+  bootstrap_ci          Percentile bootstrap 95% CI for all churn_metrics keys.
 """
 
 from __future__ import annotations
@@ -11,11 +22,13 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from scipy.stats import chi2 as chi2_dist
 from scipy.stats import spearmanr
 from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,
     f1_score,
+    log_loss,
     mean_absolute_error,
     precision_score,
     recall_score,
@@ -47,7 +60,12 @@ def churn_metrics(
     ranking = y_prob if ranking_scores is None else np.asarray(ranking_scores, dtype=float)
     y_pred = (y_prob >= threshold).astype(int)
 
+    brier = float(brier_score_loss(y_true, np.clip(y_prob, 0.0, 1.0)))
+    base_rate = float(y_true.mean())
+    brier_ref = base_rate * (1.0 - base_rate)  # climatological Brier score
+
     return {
+        # ── Existing keys (API contract — never rename or remove) ──
         "pr_auc": float(average_precision_score(y_true, ranking)),
         "roc_auc": float(roc_auc_score(y_true, ranking)) if len(np.unique(y_true)) > 1 else float("nan"),
         "f1": float(f1_score(y_true, y_pred, zero_division=0)),
@@ -55,11 +73,19 @@ def churn_metrics(
         "recall": float(recall_score(y_true, y_pred, zero_division=0)),
         "recall_at_top10pct": recall_at_top_k(y_true, ranking, 0.10),
         "lift_at_top10pct": lift_at_top_k(y_true, ranking, 0.10),
-        "brier": float(brier_score_loss(y_true, np.clip(y_prob, 0.0, 1.0))),
+        "brier": brier,
         "ece": expected_calibration_error(y_true, y_prob),
         "threshold": float(threshold),
-        "positive_rate": float(y_true.mean()),
+        "positive_rate": base_rate,
         "n": int(len(y_true)),
+        # ── Gold-standard additions ────────────────────────────────
+        "log_loss": float(log_loss(y_true, np.clip(y_prob, 1e-15, 1 - 1e-15))),
+        "bss": float(1.0 - brier / brier_ref) if brier_ref > 0 else 0.0,
+        "mce": maximum_calibration_error(y_true, y_prob),
+        "recall_at_top5pct": recall_at_top_k(y_true, ranking, 0.05),
+        "recall_at_top20pct": recall_at_top_k(y_true, ranking, 0.20),
+        "lift_at_top5pct": lift_at_top_k(y_true, ranking, 0.05),
+        "lift_at_top20pct": lift_at_top_k(y_true, ranking, 0.20),
     }
 
 
@@ -105,6 +131,134 @@ def expected_calibration_error(
             continue
         ece += (mask.mean()) * abs(y_true[mask].mean() - y_prob[mask].mean())
     return float(ece)
+
+
+def maximum_calibration_error(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    n_bins: int = 10,
+) -> float:
+    """Worst-case bin-level calibration error (equal-width bins).
+
+    Complements ECE: ECE averages calibration error weighted by bin population;
+    MCE surfaces the single most dangerous miscalibrated region, which a small
+    ECE can hide when that region is sparsely populated.
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    y_prob = np.clip(np.asarray(y_prob, dtype=float), 0.0, 1.0)
+    bins = np.linspace(0.0, 1.0, n_bins + 1)
+    bin_ids = np.clip(np.digitize(y_prob, bins[1:-1]), 0, n_bins - 1)
+    mce = 0.0
+    for b in range(n_bins):
+        mask = bin_ids == b
+        if not mask.any():
+            continue
+        mce = max(mce, abs(y_true[mask].mean() - y_prob[mask].mean()))
+    return float(mce)
+
+
+def hosmer_lemeshow_test(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    n_groups: int = 10,
+) -> dict[str, float]:
+    """Hosmer-Lemeshow chi-squared goodness-of-fit test for calibration.
+
+    Null hypothesis: predicted probabilities match observed event rates.
+
+    Returns:
+        statistic  Chi-squared HL statistic (lower = better fit)
+        p_value    Probability under chi-sq(df=n_groups-2).
+                   p > 0.05 → fail to reject H0 (calibration adequate)
+                   p ≤ 0.05 → reject H0 (significant miscalibration)
+        df         Degrees of freedom (n_groups - 2)
+
+    Caution: with n > 10,000 the test has very high power and rejects even
+    trivially small miscalibrations. Interpret p_value as a continuous
+    diagnostic rather than a binary gate at large sample sizes.
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    y_prob = np.clip(np.asarray(y_prob, dtype=float), 1e-10, 1 - 1e-10)
+
+    order = np.argsort(y_prob)
+    y_true_s = y_true[order]
+    y_prob_s = y_prob[order]
+    groups = np.array_split(np.arange(len(y_true)), n_groups)
+
+    hl_stat = 0.0
+    for idx in groups:
+        if len(idx) == 0:
+            continue
+        n_g = len(idx)
+        o_g = float(y_true_s[idx].sum())
+        e_g = float(y_prob_s[idx].sum())
+        pi_g = e_g / n_g
+        denom = n_g * pi_g * (1.0 - pi_g)
+        if denom < 1e-10:
+            continue
+        hl_stat += (o_g - e_g) ** 2 / denom
+
+    df = n_groups - 2
+    p_value = float(1.0 - chi2_dist.cdf(hl_stat, df))
+    return {"statistic": round(float(hl_stat), 4), "p_value": round(p_value, 4), "df": df}
+
+
+def bootstrap_ci(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    *,
+    threshold: float,
+    ranking_scores: np.ndarray | None = None,
+    n_boot: int = 1000,
+    alpha: float = 0.05,
+    seed: int = 42,
+) -> dict[str, dict[str, float]]:
+    """Percentile bootstrap confidence intervals for all churn_metrics keys.
+
+    Samples with replacement n_boot times and collects each metric's sampling
+    distribution. Returns the alpha/2 and 1-alpha/2 percentiles as CI bounds.
+    Valid for n ≥ 500; for smaller holdouts consider BCa correction.
+
+    Degenerate bootstrap samples (only one class present) are discarded.
+    Keys excluded from CI: n, threshold, positive_rate (not random quantities).
+
+    Returns:
+        {metric: {"ci_lower": float, "ci_upper": float, "n_boot_valid": int}}
+    """
+    y_true = np.asarray(y_true, dtype=int)
+    y_prob = np.asarray(y_prob, dtype=float)
+    ranking = y_prob if ranking_scores is None else np.asarray(ranking_scores, dtype=float)
+
+    rng = np.random.default_rng(seed)
+    n = len(y_true)
+    SKIP = {"n", "threshold", "positive_rate"}
+
+    boot_dist: dict[str, list[float]] = {}
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        bt = y_true[idx]
+        bp = y_prob[idx]
+        br = ranking[idx]
+        if bt.sum() == 0 or (bt == 0).sum() == 0:
+            continue
+        m = churn_metrics(bt, bp, threshold=threshold, ranking_scores=br)
+        for k, v in m.items():
+            if k in SKIP:
+                continue
+            if isinstance(v, (int, float)) and not (isinstance(v, float) and np.isnan(v)):
+                boot_dist.setdefault(k, []).append(float(v))
+
+    lo_pct = alpha / 2 * 100
+    hi_pct = (1.0 - alpha / 2) * 100
+    return {
+        k: {
+            "ci_lower": round(float(np.percentile(vals, lo_pct)), 4),
+            "ci_upper": round(float(np.percentile(vals, hi_pct)), 4),
+            "n_boot_valid": len(vals),
+        }
+        for k, vals in boot_dist.items()
+        if len(vals) >= 10
+    }
 
 
 def calibration_curve_points(

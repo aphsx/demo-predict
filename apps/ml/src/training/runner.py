@@ -507,14 +507,30 @@ def _train_and_register_churn(
         cutoff_date=str(datasets.cutoff_date.date()), horizon_days=horizon_days,
         feature_set_id=feature_set_id,
     )
+    # Flatten bootstrap CIs for key metrics into the test metrics dict so they
+    # are persisted without a schema change. Full CI dict lives in test_ci_json.
+    test_metrics_persisted = dict(round_metrics(result.test_metrics))
+    if result.test_ci_json:
+        for _k in ("pr_auc", "roc_auc", "brier", "bss", "log_loss"):
+            if _k in result.test_ci_json:
+                _ci = result.test_ci_json[_k]
+                test_metrics_persisted[f"{_k}_ci_lower"] = _ci["ci_lower"]
+                test_metrics_persisted[f"{_k}_ci_upper"] = _ci["ci_upper"]
+
+    # Extend calibration JSON with Hosmer-Lemeshow result (no schema change needed).
+    calibration_persisted = {
+        **result.calibration_json,
+        **({"hosmer_lemeshow": result.hosmer_lemeshow_json} if result.hosmer_lemeshow_json else {}),
+    }
+
     insert_evaluation(
         model_version_id=version_id, training_run_id=training_run_id, model_type="churn",
         evaluation_type="holdout", dataset_split="test",
-        metrics=round_metrics(result.test_metrics),
+        metrics=test_metrics_persisted,
         cutoff_date=str(datasets.cutoff_date.date()), horizon_days=horizon_days,
         feature_set_id=feature_set_id,
         confusion_matrix=result.confusion_json,
-        calibration=result.calibration_json,
+        calibration=calibration_persisted,
         lift_table=result.lift_table_json,
         feature_importance=result.feature_importance,
     )
@@ -614,6 +630,12 @@ def _churn_candidate_eval(
         )
         for row in backtest_rows
     }
+    # Extract bootstrap CI on the primary (PR-AUC) test metric if available.
+    test_ci: tuple[float, float] | None = None
+    if result.test_ci_json and "pr_auc" in result.test_ci_json:
+        ci = result.test_ci_json["pr_auc"]
+        test_ci = (float(ci["ci_lower"]), float(ci["ci_upper"]))
+
     return promotion.CandidateEval(
         name=candidate.name,
         leakage_ok=bool(attempt["leakage"]["passed"]),
@@ -626,6 +648,7 @@ def _churn_candidate_eval(
         baseline_backtests=baseline_backtests,
         champion_backtests=incumbent_backtests,
         calibration_error=result.test_metrics["ece"],
+        primary_test_ci=test_ci,
     )
 
 

@@ -44,10 +44,12 @@ from src.training.baselines import (
 )
 from src.training.datasets import SplitFrame
 from src.training.metrics import (
+    bootstrap_ci,
     calibration_curve_points,
     churn_metrics,
     confusion_at_threshold,
     expected_calibration_error,
+    hosmer_lemeshow_test,
     lift_table,
     risk_thresholds_from_high,
     select_threshold_max_fbeta,
@@ -156,6 +158,9 @@ class ChurnTrainResult:
     feature_importance: list[dict[str, Any]]
     baseline_metrics: dict[str, dict[str, dict[str, float]]]
     preprocessor: PreprocessorConfig
+    # Gold-standard additions: stored separately so metrics_json API is unchanged
+    test_ci_json: dict[str, dict[str, float]] | None = None  # bootstrap 95% CIs
+    hosmer_lemeshow_json: dict[str, float] | None = None     # calibration GoF test
 
     def predict_proba(self, features_raw: pd.DataFrame) -> np.ndarray:
         x = transform_features(features_raw, self.preprocessor)
@@ -176,6 +181,7 @@ class ChurnTraining:
     candidates: list[ChurnCandidate]  # sorted by CV PR-AUC, best first
     competition: dict[str, float]
     cv_oof: dict[str, np.ndarray]
+    cv_fold_scores: dict[str, list[float]]  # per-fold PR-AUC for CI computation
     x_trval: pd.DataFrame
     y_trval: np.ndarray
     x_test: pd.DataFrame
@@ -254,12 +260,19 @@ def train_churn_candidates(
 
     competition: dict[str, float] = {}
     cv_oof: dict[str, np.ndarray] = {}
+    cv_fold_scores: dict[str, list[float]] = {}
     for candidate in fitted:
         candidate.params = _resolved_params(candidate)
-        cv_score, oof = _cv_oof(candidate, x_trval, y_trval)
+        cv_score, oof, fold_scores = _cv_oof(candidate, x_trval, y_trval)
         cv_oof[candidate.name] = oof
+        cv_fold_scores[candidate.name] = fold_scores
         competition[candidate.name] = round(cv_score, 4)
-        notify(f"churn: {candidate.name} CV PR-AUC = {cv_score:.4f} (val {candidate.validation_pr_auc:.4f})")
+        # Report mean ± std so CI is visible at training time
+        cv_std = float(np.std(fold_scores))
+        notify(
+            f"churn: {candidate.name} CV PR-AUC = {cv_score:.4f} ± {cv_std:.4f} "
+            f"(val {candidate.validation_pr_auc:.4f})"
+        )
 
     fitted.sort(key=lambda c: -competition[c.name])
     return ChurnTraining(
@@ -268,6 +281,7 @@ def train_churn_candidates(
         candidates=fitted,
         competition=competition,
         cv_oof=cv_oof,
+        cv_fold_scores=cv_fold_scores,
         x_trval=x_trval,
         y_trval=y_trval,
         x_test=x_test,
@@ -313,6 +327,43 @@ def finalize_churn_candidate(
         training.y_test, calibrated_test, threshold=thresholds["high"], ranking_scores=raw_test
     )
 
+    # ── CV confidence interval (fold-score std → 95% t-interval) ─
+    fold_scores = training.cv_fold_scores[candidate.name]
+    n_folds = len(fold_scores)
+    cv_mean = float(np.mean(fold_scores))
+    cv_std = float(np.std(fold_scores, ddof=1))
+    # t_{n-1, 0.975} ≈ 2.776 for 5 folds; use exact value from scipy
+    from scipy.stats import t as t_dist
+    t_crit = float(t_dist.ppf(0.975, df=n_folds - 1))
+    half_width = t_crit * cv_std / np.sqrt(n_folds)
+    validation_metrics["cv_pr_auc_std"] = round(cv_std, 4)
+    validation_metrics["cv_pr_auc_ci_lower"] = round(max(0.0, cv_mean - half_width), 4)
+    validation_metrics["cv_pr_auc_ci_upper"] = round(min(1.0, cv_mean + half_width), 4)
+
+    # ── Bootstrap 95% CI on test metrics (1000 resamples) ────────
+    notify(f"churn: {candidate.name} computing bootstrap CIs on test set …")
+    test_ci = bootstrap_ci(
+        training.y_test,
+        calibrated_test,
+        threshold=thresholds["high"],
+        ranking_scores=raw_test,
+        n_boot=1000,
+        seed=42,
+    )
+    notify(
+        f"churn: {candidate.name} test PR-AUC 95% CI "
+        f"[{test_ci.get('pr_auc', {}).get('ci_lower', '?'):.4f}, "
+        f"{test_ci.get('pr_auc', {}).get('ci_upper', '?'):.4f}]"
+    )
+
+    # ── Hosmer-Lemeshow calibration goodness-of-fit ───────────────
+    hl = hosmer_lemeshow_test(training.y_test, calibrated_test)
+    notify(
+        f"churn: {candidate.name} Hosmer-Lemeshow "
+        f"χ²({hl['df']})={hl['statistic']:.2f} p={hl['p_value']:.4f}"
+        + (" (calibration adequate)" if hl["p_value"] > 0.05 else " ⚠ miscalibration detected")
+    )
+
     # ── Baselines evaluated with the same harness (§12) ──────────
     baseline_metrics = _evaluate_baselines(
         training.dataset,
@@ -336,6 +387,8 @@ def finalize_churn_candidate(
         feature_importance=_feature_importance(candidate, training.x_trval),
         baseline_metrics=baseline_metrics,
         preprocessor=training.preprocessor,
+        test_ci_json=test_ci,
+        hosmer_lemeshow_json=hl,
     )
 
 
@@ -395,9 +448,13 @@ def _cv_oof(
     x: pd.DataFrame,
     y: np.ndarray,
     n_folds: int = 5,
-) -> tuple[float, np.ndarray]:
-    """Stratified K-fold CV: mean PR-AUC + out-of-fold probabilities."""
+) -> tuple[float, np.ndarray, list[float]]:
+    """Stratified K-fold CV: mean PR-AUC + out-of-fold probabilities + per-fold scores.
 
+    Returns (mean_cv_score, oof_probs, fold_scores). The caller uses fold_scores
+    to compute a confidence interval on the CV estimate (the per-fold variance
+    quantifies how stable the ranking metric is across data partitions).
+    """
     from sklearn.model_selection import StratifiedKFold
 
     oof = np.zeros(len(y), dtype=float)
@@ -409,7 +466,7 @@ def _cv_oof(
         fold_probs = model.predict_proba(x.iloc[fold_test])[:, 1]
         oof[fold_test] = fold_probs
         scores.append(float(average_precision_score(y[fold_test], fold_probs)))
-    return float(np.mean(scores)), oof
+    return float(np.mean(scores)), oof, scores
 
 
 def _resolved_params(candidate: ChurnCandidate) -> dict[str, Any]:
