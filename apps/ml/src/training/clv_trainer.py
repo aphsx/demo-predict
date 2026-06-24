@@ -107,6 +107,8 @@ class ClvTrainResult:
     baseline_metrics: dict[str, dict[str, dict[str, float]]]
     preprocessor: PreprocessorConfig
     test_ci_json: dict[str, dict[str, float]] = field(default_factory=dict)
+    magnitude_slope: float = 1.0
+    magnitude_intercept: float = 0.0
 
 
 def build_rfm_summary(payments: pd.DataFrame, acc_ids: pd.Series, cutoff: pd.Timestamp) -> pd.DataFrame:
@@ -319,8 +321,26 @@ def train_clv(
         rfm = build_rfm_summary(payments, dataset.split(split_name)["acc_id"], cutoff)
         return best_bundle.predict_frame(rfm)["predicted_clv"].to_numpy()
 
-    validation_metrics = clv_metrics(y_val.to_numpy(), champion_predict("validation", x_val))
-    test_preds = champion_predict("test", x_test)
+    val_preds = champion_predict("validation", x_val)
+    validation_metrics = clv_metrics(y_val.to_numpy(), val_preds)
+
+    # OLS magnitude calibration: correct systematic scale bias while preserving ranking.
+    # Fitted on validation so the slope/intercept are unknown to the test set.
+    # Spearman (promotion metric) is unaffected; RMSLE/MAE improve when predictions
+    # are systematically too high or too low relative to actuals.
+    from sklearn.linear_model import LinearRegression as _LR
+    _lr = _LR().fit(val_preds.reshape(-1, 1), y_val.to_numpy())
+    _raw_slope = float(_lr.coef_[0])
+    if _raw_slope < 0.01:
+        # Degenerate: negative or near-zero slope means predictions are anti-correlated
+        # with actuals — calibration would flip or collapse magnitudes. Fall back to identity.
+        magnitude_slope, magnitude_intercept = 1.0, 0.0
+    else:
+        magnitude_slope = float(np.clip(_raw_slope, 0.01, 20.0))
+        magnitude_intercept = float(_lr.intercept_)
+
+    test_preds_raw = champion_predict("test", x_test)
+    test_preds = np.clip(magnitude_slope * test_preds_raw + magnitude_intercept, 0.0, None)
     test_metrics = clv_metrics(y_test.to_numpy(), test_preds)
     test_ci_json = bootstrap_ci_regression(y_test.to_numpy(), test_preds)
 
@@ -351,6 +371,8 @@ def train_clv(
         baseline_metrics=baseline_metrics,
         preprocessor=preprocessor,
         test_ci_json=test_ci_json,
+        magnitude_slope=magnitude_slope,
+        magnitude_intercept=magnitude_intercept,
     )
 
 
@@ -409,6 +431,10 @@ def backtest_clv(
             else:
                 reg.fit(x_train[pos_tr], y_tr_pos)
             predictions = np.clip(HurdleBundle(clf, reg, bp).predict(x_test_bt), 0, None)
+        # Apply training-time magnitude calibration for consistent backtest comparison.
+        predictions = np.clip(
+            result.magnitude_slope * predictions + result.magnitude_intercept, 0.0, None
+        )
     else:
         bundle = fit_bgnbd(
             payments, dataset.split("train")["acc_id"], cutoff, horizon_days, result.bgnbd.penalizer
