@@ -351,7 +351,9 @@ def _churn_shap_factors(
             # Linear champion: SHAP of a linear model on standardized features
             # is exactly coef_j × x_ij (relative to the feature mean).
             values = np.asarray(x) * np.asarray(model.coef_[0])
-        else:
+        elif hasattr(model, "feature_importances_"):
+            # Tree champion (LightGBM / XGBoost / RandomForest): TreeExplainer is
+            # exact and fast enough to run on the full eligible population.
             import shap
 
             explainer = shap.TreeExplainer(model)
@@ -360,6 +362,18 @@ def _churn_shap_factors(
                 values = values[1]
             if getattr(values, "ndim", 2) == 3:
                 values = values[:, :, 1]
+        else:
+            # Opaque champion (e.g. TabICL foundation model): no tree structure
+            # for TreeExplainer, and KernelExplainer is far too slow to run per
+            # customer at serve scale. Emit no per-row factors rather than
+            # fabricate directions — global permutation importance is still
+            # available in the model card for population-level explanation.
+            logger.warning(
+                "churn champion %s is not SHAP-explainable at serve time; "
+                "per-customer churn_factors will be null (see model_card feature_importance)",
+                type(model).__name__,
+            )
+            return factors
     except Exception as exc:  # noqa: BLE001 - explainability failure must not block the run.
         logger.warning("SHAP factors unavailable: %s", exc)
         return factors
