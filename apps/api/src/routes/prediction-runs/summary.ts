@@ -86,7 +86,7 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
       name: run.name,
       cutoff_date: run.cutoffDate,
       status: run.status as RunStatus,
-      total_customers: run.totalCustomers ?? 0,
+      total_customers: agg.total_customers,
       finished_at: run.finishedAt?.toISOString() ?? null,
     },
     lifecycle: agg.lifecycle,

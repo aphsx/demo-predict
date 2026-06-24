@@ -44,6 +44,7 @@ export const outputsRoutes = new Elysia()
   .get(
     "/:id/outputs",
     async ({ params, query, userId, set }) => {
+      if (!UUID_RE.test(params.id)) return denyNotFound(set, "Prediction run not found");
       const run = await fetchRun(params.id);
       const denied = requireOwnedRun(run, userId, set);
       if (denied) return denied;

@@ -127,7 +127,7 @@ export const predictDataRoutes = new Elysia({ prefix: "/predict-data-sources" })
           await abortPredictDataSource(sourceId);
         }
         set.status = 400;
-        return { message: err.message ?? "Import failed" };
+        return { message };
       }
     },
     {

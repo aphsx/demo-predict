@@ -30,12 +30,9 @@ export type RunInsight = {
   ai_generated_at: string | null;
 };
 
-type InsightCache = {
-  status: "completed";
-  summary: string;
-  model: string;
-  generated_at: string;
-};
+type InsightCache =
+  | { status: "completed"; summary: string; model: string; generated_at: string }
+  | { status: "failed"; summary: null; model: null; generated_at: string };
 
 type ServiceError = { status: number; body: { message: string; code?: string } };
 
@@ -125,6 +122,9 @@ function toResponse(runId: string, cache: InsightCache | null): RunInsight {
   if (!cache) {
     return { run_id: runId, ai_status: "not_requested", ai_summary: null, ai_model: null, ai_generated_at: null };
   }
+  if (cache.status === "failed") {
+    return { run_id: runId, ai_status: "failed", ai_summary: null, ai_model: null, ai_generated_at: cache.generated_at };
+  }
   return {
     run_id: runId,
     ai_status: "completed",
@@ -189,6 +189,10 @@ export async function createRunInsight(
 
     return toResponse(runId, cache);
   } catch (e) {
+    await db
+      .update(mlPredictionRuns)
+      .set({ cohortInsightJson: { status: "failed", summary: null, model: null, generated_at: new Date().toISOString() } })
+      .where(eq(mlPredictionRuns.id, runId));
     return { status: 500, body: { message: (e as Error).message || "Failed to generate run insight" } };
   }
 }

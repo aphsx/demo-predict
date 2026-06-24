@@ -7,6 +7,7 @@ import { aiChatRoutes } from "./routes/ai-chat";
 import { predictionRunRoutes } from "./routes/prediction-runs";
 import { trainingRunRoutes } from "./routes/training-runs";
 import { modelPerformanceRoutes } from "./routes/model-performance";
+import { releaseStaleTrainImports, releaseStalePredict } from "./lib/abort-data-source";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -14,6 +15,14 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+Promise.all([releaseStaleTrainImports(), releaseStalePredict()])
+  .then(([train, predict]) => {
+    if (train > 0 || predict > 0) {
+      console.log(`[api] Released stale imports on startup: train=${train} predict=${predict}`);
+    }
+  })
+  .catch((e) => console.error("[api] Failed to release stale imports:", e));
 
 const app = new Elysia()
   .use(
