@@ -372,10 +372,18 @@ def clv_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
         "spearman": round(float(0.0 if np.isnan(corr) else corr), 4),
         "mae": round(float(mean_absolute_error(y_true, y_pred)), 2),
         "rmse": round(float(np.sqrt(np.mean((y_true - y_pred) ** 2))), 2),
+        "rmsle": round(rmsle(y_true, y_pred), 4),
         "smape": round(smape(y_true, y_pred), 4),
         "top_decile_capture": round(top_decile_capture(y_true, y_pred), 4),
         "n": int(len(y_true)),
     }
+
+
+def rmsle(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Root Mean Squared Log Error — scale-invariant, penalises under-prediction less for zeros."""
+    y_true = np.clip(np.asarray(y_true, dtype=float), 0.0, None)
+    y_pred = np.clip(np.asarray(y_pred, dtype=float), 0.0, None)
+    return float(np.sqrt(np.mean((np.log1p(y_pred) - np.log1p(y_true)) ** 2)))
 
 
 def smape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -398,6 +406,27 @@ def top_decile_capture(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 # ── Credit forecast (quantile regression) ────────────────────────
+
+
+def winkler_score(
+    y_true: np.ndarray,
+    lower: np.ndarray,
+    upper: np.ndarray,
+    alpha: float = 0.20,
+) -> float:
+    """Mean Winkler score for a (1-alpha) prediction interval (proper scoring rule).
+
+    = interval width  when y ∈ [lo, hi]
+    = interval width + (2/alpha) × |violation|  when y is outside
+    Lower is better: rewards narrow intervals that contain the truth.
+    Reference: Winkler (1972) "A Decision-Theoretic Approach to Interval Estimation".
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    lower = np.asarray(lower, dtype=float)
+    upper = np.asarray(upper, dtype=float)
+    width = upper - lower
+    penalty = (2.0 / alpha) * (np.maximum(0.0, lower - y_true) + np.maximum(0.0, y_true - upper))
+    return float(np.mean(width + penalty))
 
 
 def pinball_loss(y_true: np.ndarray, y_pred: np.ndarray, alpha: float) -> float:
@@ -432,6 +461,14 @@ def credit_metrics(
         "coverage_p10_p90_90d": round(coverage_90, 4),
         "pinball_p50_30d": round(pinball_loss(y_true_30d, pred_30d[0.50], 0.50), 2),
         "pinball_p50_90d": round(pinball_loss(y_true_90d, pred_90d[0.50], 0.50), 2),
+        "winkler_p10_p90_30d": round(winkler_score(y_true_30d, pred_30d[0.10], pred_30d[0.90]), 2),
+        "winkler_p10_p90_90d": round(winkler_score(y_true_90d, pred_90d[0.10], pred_90d[0.90]), 2),
+        "pinball_composite_30d": round(
+            float(np.mean([pinball_loss(y_true_30d, pred_30d[q], q) for q in (0.10, 0.25, 0.50, 0.75, 0.90)])), 2
+        ),
+        "pinball_composite_90d": round(
+            float(np.mean([pinball_loss(y_true_90d, pred_90d[q], q) for q in (0.10, 0.25, 0.50, 0.75, 0.90)])), 2
+        ),
         "n": int(len(y_true_30d)),
     }
 

@@ -74,8 +74,9 @@ def credit_anchor_log(features_raw: pd.DataFrame, horizon_days: int) -> np.ndarr
 class CreditHorizonModels:
     horizon_days: int
     params: dict[str, Any]
-    models: dict[float, lgb.LGBMRegressor]
+    models: dict[float, Any]  # LGBMRegressor or XGBRegressor per quantile
     cqr_q_hat: float  # additive CQR margin for q10/q90; replaces multiplicative interval_widening
+    model_family: str = "lgbm"  # "lgbm" | "xgboost" — controls backtest refitting
     correction_shrinkage: float = 1.0
 
     def predict_quantiles(
@@ -274,17 +275,24 @@ def backtest_credit(
         anchor_val = credit_anchor_log(dataset.features("validation"), horizon_days)
         anchor_test = credit_anchor_log(dataset.features("test"), horizon_days)
 
-        models = _fit_quantile_models(
-            result.params_by_horizon[horizon_days],
-            x_train, y_train, anchor_train, x_val, y_val, anchor_val,
-        )
+        family = result.horizons[horizon_days].model_family
+        bt_params = result.params_by_horizon[horizon_days]
+        if family == "xgboost":
+            models = _fit_xgb_quantile_models(
+                bt_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val,
+            )
+        else:
+            models = _fit_quantile_models(
+                bt_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val,
+            )
         shrinkage = _calibrate_shrinkage(models, x_val, y_val, anchor_val)
         ordered_val = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
         q_hat = _calibrate_cqr(ordered_val, y_val)
         bundle = CreditHorizonModels(
             horizon_days=horizon_days,
-            params=result.params_by_horizon[horizon_days],
+            params=bt_params,
             models=models,
+            model_family=family,
             cqr_q_hat=q_hat,
             correction_shrinkage=shrinkage,
         )
@@ -330,7 +338,11 @@ def _train_horizon(
     horizon_days: int,
     n_trials: int,
 ) -> CreditHorizonModels:
-    def build_params(trial: optuna.Trial) -> dict[str, Any]:
+    target_train = np.log1p(np.clip(y_train, 0, None)) - anchor_train
+    target_val = np.log1p(np.clip(y_val, 0, None)) - anchor_val
+
+    # ── LightGBM Quantile ──────────────────────────────────────────
+    def build_lgbm_params(trial: optuna.Trial) -> dict[str, Any]:
         return {
             "n_estimators": 1200,
             "num_leaves": trial.suggest_int("num_leaves", 16, 128),
@@ -346,31 +358,68 @@ def _train_horizon(
             "verbosity": -1,
         }
 
-    target_train = np.log1p(np.clip(y_train, 0, None)) - anchor_train
-    target_val = np.log1p(np.clip(y_val, 0, None)) - anchor_val
-
-    def objective(trial: optuna.Trial) -> float:
-        params = build_params(trial)
+    def lgbm_objective(trial: optuna.Trial) -> float:
+        params = build_lgbm_params(trial)
         model = lgb.LGBMRegressor(objective="quantile", alpha=0.50, **params)
         model.fit(
-            x_train,
-            target_train,
+            x_train, target_train,
             eval_set=[(x_val, target_val)],
             callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
         )
         predictions = np.clip(np.expm1(model.predict(x_val) + anchor_val), 0, None)
         return pinball_loss(y_val, predictions, 0.50)
 
-    study = optuna.create_study(
+    lgbm_study = optuna.create_study(
         direction="minimize",
         sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
     )
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    best_params = build_params(optuna.trial.FixedTrial(study.best_params))
+    lgbm_study.optimize(lgbm_objective, n_trials=n_trials, show_progress_bar=False)
 
-    models = _fit_quantile_models(
-        best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+    # ── XGBoost Quantile (reg:quantileerror, XGBoost ≥ 2.0) ───────
+    def build_xgb_params(trial: optuna.Trial) -> dict[str, Any]:
+        return {
+            "n_estimators": 1200,
+            "max_depth": trial.suggest_int("max_depth", 3, 8),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "min_child_weight": trial.suggest_int("min_child_weight", 10, 200),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+            "random_state": RANDOM_SEED,
+            "n_jobs": -1,
+            "verbosity": 0,
+            "tree_method": "hist",
+            "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
+        }
+
+    def xgb_objective(trial: optuna.Trial) -> float:
+        params = build_xgb_params(trial)
+        model = xgb.XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.50, **params)
+        model.fit(x_train, target_train, eval_set=[(x_val, target_val)], verbose=False)
+        predictions = np.clip(np.expm1(model.predict(x_val) + anchor_val), 0, None)
+        return pinball_loss(y_val, predictions, 0.50)
+
+    xgb_study = optuna.create_study(
+        direction="minimize",
+        sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
     )
+    xgb_study.optimize(xgb_objective, n_trials=n_trials, show_progress_bar=False)
+
+    # ── Pick best family, calibrate CQR ───────────────────────────
+    if xgb_study.best_value < lgbm_study.best_value:
+        best_params = build_xgb_params(optuna.trial.FixedTrial(xgb_study.best_params))
+        models = _fit_xgb_quantile_models(
+            best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+        )
+        family = "xgboost"
+    else:
+        best_params = build_lgbm_params(optuna.trial.FixedTrial(lgbm_study.best_params))
+        models = _fit_quantile_models(
+            best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+        )
+        family = "lgbm"
+
     shrinkage = _calibrate_shrinkage(models, x_val, y_val, anchor_val)
     ordered_val = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
     q_hat = _calibrate_cqr(ordered_val, y_val)
@@ -378,6 +427,7 @@ def _train_horizon(
         horizon_days=horizon_days,
         params=best_params,
         models=models,
+        model_family=family,
         cqr_q_hat=q_hat,
         correction_shrinkage=shrinkage,
     )
@@ -403,6 +453,30 @@ def _fit_quantile_models(
             eval_set=[(x_val, target_val)],
             callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
         )
+        models[alpha] = model
+    return models
+
+
+def _fit_xgb_quantile_models(
+    params: dict[str, Any],
+    x_train: pd.DataFrame,
+    y_train: np.ndarray,
+    anchor_train: np.ndarray,
+    x_val: pd.DataFrame,
+    y_val: np.ndarray,
+    anchor_val: np.ndarray,
+) -> dict[float, xgb.XGBRegressor]:
+    """Fit one XGBoost quantile regressor per quantile level on the log-ratio target."""
+    target_train = np.log1p(np.clip(y_train, 0, None)) - anchor_train
+    target_val = np.log1p(np.clip(y_val, 0, None)) - anchor_val
+    models: dict[float, xgb.XGBRegressor] = {}
+    for alpha in QUANTILES:
+        model = xgb.XGBRegressor(
+            objective="reg:quantileerror",
+            quantile_alpha=alpha,
+            **params,
+        )
+        model.fit(x_train, target_train, eval_set=[(x_val, target_val)], verbose=False)
         models[alpha] = model
     return models
 

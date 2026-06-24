@@ -763,7 +763,7 @@ def _train_and_register_clv(
     model_card = {
         "model_type": "clv",
         "version": version,
-        "method": "BG-NBD + Gamma-Gamma vs LightGBM Tweedie vs XGBoost Tweedie",
+        "method": "BG-NBD + Gamma-Gamma vs LightGBM Tweedie vs XGBoost Tweedie vs LightGBM Hurdle",
         "algorithm": result.champion_name,
         "cutoff_date": str(datasets.cutoff_date.date()),
         "horizon_days": horizon_days,
@@ -773,6 +773,7 @@ def _train_and_register_clv(
         "params": (
             _plain(result.tweedie_params) if result.champion_name == "lgbm_tweedie"
             else _plain(result.xgb_params) if result.champion_name == "xgb_tweedie"
+            else {"stage1": "lgbm_binary", "stage2": "lgbm_gamma", **_plain(result.hurdle_bundle.params)} if result.champion_name == "hurdle"
             else {"penalizer": result.bgnbd.penalizer}
         ),
         "candidate_competition_val_spearman": result.competition,
@@ -796,6 +797,7 @@ def _train_and_register_clv(
         "tweedie_params": result.tweedie_params,
         "xgb": result.xgb_model,
         "xgb_params": result.xgb_params,
+        "hurdle": result.hurdle_bundle,
         "horizon_days": horizon_days,
     }
     artifact_path, checksum = save_artifacts(
@@ -1010,6 +1012,9 @@ def _train_and_register_credit(
         "params": {str(h): _plain(p) for h, p in result.params_by_horizon.items()},
         "cqr_q_hat": {
             str(h): result.horizons[h].cqr_q_hat for h in result.horizons
+        },
+        "model_family": {
+            str(h): result.horizons[h].model_family for h in result.horizons
         },
         "correction_shrinkage": {
             str(h): result.horizons[h].correction_shrinkage for h in result.horizons
