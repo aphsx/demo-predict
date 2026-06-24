@@ -23,7 +23,7 @@ export const PREDICT_SHEET_CONFIG: Record<
   },
   "Backend_payment": {
     table: "predict_raw_sheet_backend_payment",
-    requiredHeaders: ["uid", "payment_date", "acc_id"],
+    requiredHeaders: ["uid", "payment_date", "acc_id", "amount", "credit_add"],
   },
   "SMS_usage (BC)": {
     table: "predict_raw_sheet_sms_usage_bc",

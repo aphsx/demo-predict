@@ -12,12 +12,11 @@ import {
   num,
   TOP_PRIORITY_LIMIT,
   type LifecycleStage,
-  type RiskLevel,
   type RunStatus,
   type RunSummary,
-  type UrgencyLevel,
   type ValueTier,
 } from "../../lib/ml-contract";
+import { fetchRunAggregates } from "../../lib/run-aggregates";
 import { runSelect, type RunRow } from "./_helpers";
 
 async function churnThresholds(): Promise<{ medium: number; high: number; critical: number }> {
@@ -63,53 +62,8 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
   const o = mlPredictionOutputs;
   const inRun = eq(o.predictionRunId, run.id);
 
-  const [
-    lifecycleRows,
-    [scalarAgg],
-    riskRows,
-    urgencyRows,
-    matrixRows,
-    topRows,
-    monthly,
-    thresholds,
-  ] = await Promise.all([
-    db
-      .select({ stage: o.lifecycleStage, n: sql<number>`COUNT(*)::int` })
-      .from(o)
-      .where(inRun)
-      .groupBy(o.lifecycleStage),
-    db
-      .select({
-        eligibleCount: sql<number>`COUNT(*) FILTER (WHERE ${o.churnProbability} IS NOT NULL)::int`,
-        expectedAtRisk: sql<number>`COALESCE(SUM(${o.revenueAtRisk}) FILTER (WHERE ${o.lifecycleStage} = 'Active Paid'), 0)::float8`,
-        highRiskExposure: sql<number>`COALESCE(SUM(${o.predictedClv6m}) FILTER (WHERE ${o.churnRiskLevel} IN ('high', 'critical')), 0)::float8`,
-        demand30d: sql<number>`COALESCE(SUM(${o.predictedCreditUsage30d}) FILTER (WHERE ${o.lifecycleStage} LIKE 'Active%'), 0)::float8`,
-        topupDue7d: sql<number>`COUNT(*) FILTER (WHERE ${o.estimatedDaysUntilTopup} <= 7)::int`,
-      })
-      .from(o)
-      .where(inRun),
-    db
-      .select({ level: o.churnRiskLevel, n: sql<number>`COUNT(*)::int` })
-      .from(o)
-      .where(and(inRun, sql`${o.churnRiskLevel} IS NOT NULL`))
-      .groupBy(o.churnRiskLevel),
-    db
-      .select({ level: o.creditUrgencyLevel, n: sql<number>`COUNT(*)::int` })
-      .from(o)
-      .where(and(inRun, sql`${o.creditUrgencyLevel} IS NOT NULL`))
-      .groupBy(o.creditUrgencyLevel),
-    db
-      .select({
-        tier: o.customerValueTier,
-        level: o.churnRiskLevel,
-        n: sql<number>`COUNT(*)::int`,
-        clvSum: sql<number>`COALESCE(SUM(${o.predictedClv6m}), 0)::float8`,
-      })
-      .from(o)
-      .where(
-        and(inRun, sql`${o.customerValueTier} IS NOT NULL`, sql`${o.churnRiskLevel} IS NOT NULL`)
-      )
-      .groupBy(o.customerValueTier, o.churnRiskLevel),
+  const [agg, topRows, monthly, thresholds] = await Promise.all([
+    fetchRunAggregates(run.id),
     db
       .select({
         accId: o.accId,
@@ -126,29 +80,6 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
     churnThresholds(),
   ]);
 
-  const lifecycle = { active_paid: 0, active_free: 0, churned: 0, ghost: 0 };
-  for (const row of lifecycleRows) {
-    if (row.stage === "Active Paid") lifecycle.active_paid = row.n;
-    else if (row.stage === "Active Free") lifecycle.active_free = row.n;
-    else if (row.stage === "Churned") lifecycle.churned = row.n;
-    else if (row.stage === "Ghost") lifecycle.ghost = row.n;
-  }
-
-  const byRisk: Record<RiskLevel, number> = { low: 0, medium: 0, high: 0, critical: 0 };
-  for (const row of riskRows) {
-    if (row.level && row.level in byRisk) byRisk[row.level as RiskLevel] = row.n;
-  }
-
-  const byUrgency: Record<UrgencyLevel, number> = {
-    critical: 0,
-    warning: 0,
-    monitor: 0,
-    stable: 0,
-  };
-  for (const row of urgencyRows) {
-    if (row.level && row.level in byUrgency) byUrgency[row.level as UrgencyLevel] = row.n;
-  }
-
   return {
     run: {
       id: run.id,
@@ -158,23 +89,23 @@ async function buildSummary(run: RunRow & { modelVersionsJson: unknown }): Promi
       total_customers: run.totalCustomers ?? 0,
       finished_at: run.finishedAt?.toISOString() ?? null,
     },
-    lifecycle,
-    churn: { eligible_count: scalarAgg.eligibleCount, by_risk: byRisk, thresholds },
+    lifecycle: agg.lifecycle,
+    churn: { eligible_count: agg.churn_eligible, by_risk: agg.churn_by_risk, thresholds },
     revenue: {
-      expected_at_risk: scalarAgg.expectedAtRisk,
-      high_risk_exposure: scalarAgg.highRiskExposure,
+      expected_at_risk: agg.revenue_expected_at_risk,
+      high_risk_exposure: agg.revenue_high_risk_exposure,
       monthly_actual: monthly,
     },
-    value_risk_matrix: matrixRows.map((row) => ({
-      value_tier: row.tier as ValueTier,
-      risk_level: row.level as RiskLevel,
-      count: row.n,
-      clv_sum: row.clvSum,
+    value_risk_matrix: agg.value_risk_matrix.map((row) => ({
+      value_tier: row.value_tier as ValueTier,
+      risk_level: row.risk_level,
+      count: row.count,
+      clv_sum: row.clv_sum,
     })),
     credit: {
-      demand_30d: scalarAgg.demand30d,
-      by_urgency: byUrgency,
-      topup_due_7d: scalarAgg.topupDue7d,
+      demand_30d: agg.credit_demand_30d,
+      by_urgency: agg.credit_by_urgency,
+      topup_due_7d: agg.credit_topup_due_7d,
     },
     top_priority: topRows.map((row) => ({
       acc_id: row.accId,
