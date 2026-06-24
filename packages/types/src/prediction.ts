@@ -167,3 +167,12 @@ export interface CustomerAiExplanationResult {
   ai_model: string;
   ai_generated_at: string;
 }
+
+/** Run-level AI base summary of the whole customer base (cached per run). */
+export interface RunInsight {
+  run_id: string;
+  ai_status: "not_requested" | "completed" | "failed";
+  ai_summary: string | null;
+  ai_model: string | null;
+  ai_generated_at: string | null;
+}

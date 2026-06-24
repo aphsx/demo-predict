@@ -18,6 +18,7 @@ import { RiskCard } from "./risk-card";
 import { TopPriorityCard } from "./top-priority-card";
 import { ValueCard } from "./value-card";
 import { ValueRiskMatrixCard } from "./value-risk-matrix-card";
+import { RunInsightCard } from "./run-insight-card";
 import { TEXT_SAFE } from "./palette";
 import { fromRunSummary } from "./types";
 
@@ -30,6 +31,10 @@ export function DashboardView({ summary, runId }: { summary: RunSummary; runId: 
 
   return (
     <main className="min-w-0 px-4 py-6 pb-12 sm:px-6 lg:px-8">
+      <div className="mb-6">
+        <RunInsightCard runId={runId} />
+      </div>
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           icon={Users}

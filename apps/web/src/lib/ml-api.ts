@@ -31,6 +31,7 @@ export type {
   MonthlyUsagePoint,
   PaymentEvent,
   CustomerAiExplanationResult,
+  RunInsight,
 } from "@moby/types";
 
 export type {
@@ -66,6 +67,7 @@ import type {
   ModelVersionSummary,
   TrainingRun,
   CustomerAiExplanationResult,
+  RunInsight,
 } from "@moby/types";
 
 // ── Plumbing ────────────────────────────────────────────────────────────────
@@ -165,6 +167,21 @@ export async function generateCustomerAiExplanation(
     "POST",
     options
   );
+}
+
+/** GET /prediction-runs/:id/insight — cached AI base summary of the whole base. */
+export async function fetchRunInsight(runId: string): Promise<RunInsight> {
+  if (IS_ML_MOCK) return (await mock()).mockRunInsight(runId);
+  return getJson(`/api/prediction-runs/${runId}/insight`);
+}
+
+/** POST /prediction-runs/:id/insight — generate or regenerate the base summary. */
+export async function generateRunInsight(
+  runId: string,
+  options: { force?: boolean } = {}
+): Promise<RunInsight> {
+  if (IS_ML_MOCK) return (await mock()).mockGenerateRunInsight(runId, options);
+  return sendJson(`/api/prediction-runs/${runId}/insight`, "POST", options);
 }
 
 export async function fetchCustomerUsageMonthly(
