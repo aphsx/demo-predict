@@ -106,13 +106,16 @@ def _run_drift_checks(
     source_id: str,
     champions: dict[str, dict[str, Any]],
     frame: pd.DataFrame,
-) -> None:
+) -> set[str]:
     """Score PSI drift per model and persist one drift report each.
 
-    Informational only: drift never blocks the run. Champions trained before
-    drift monitoring shipped carry no baseline and are skipped.
+    Returns the set of model_types with major drift (PSI > 0.25 on ≥1 feature).
+    Major drift surfaces as output_status=PARTIAL for affected customers.
+    Champions trained before drift monitoring shipped carry no baseline and
+    are skipped (not counted as drifted).
     """
 
+    major_drift_models: set[str] = set()
     for model_type, champion in champions.items():
         bundle = champion["bundle"]
         baseline = bundle.get("feature_baseline")
@@ -137,6 +140,8 @@ def _run_drift_checks(
                 drift["minor_drift_count"],
                 drift["major_drift_count"],
             )
+        if drift.get("major_drift_count", 0) > 0:
+            major_drift_models.add(model_type)
 
         report = ValidationReport(
             source_id=source_id,
@@ -150,6 +155,8 @@ def _run_drift_checks(
             drift=drift,
         )
         repository.save_validation_report(report, prediction_run_id=prediction_run_id)
+
+    return major_drift_models
 
 
 def run_prediction(prediction_run_id: str) -> None:
@@ -227,7 +234,7 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
 
     # ── Feature drift monitoring (PSI vs training baseline) ───────
     progress("drift monitoring", 30)
-    _run_drift_checks(prediction_run_id, source_id, champions, frame)
+    major_drift_models = _run_drift_checks(prediction_run_id, source_id, champions, frame)
 
     # ── Churn (calibrated probability + SHAP factors) ─────────────
     progress("churn model", 35)
@@ -289,7 +296,7 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     # requires one row per customer. A fan-out from an upstream merge could in theory
     # produce duplicates; keep the last occurrence so the most-derived values win.
     frame = frame.drop_duplicates(subset=["acc_id"], keep="last")
-    rows = _build_output_rows(prediction_run_id, frame, model_versions)
+    rows = _build_output_rows(prediction_run_id, frame, model_versions, major_drift_models)
     _replace_outputs(prediction_run_id, rows)
 
     # ── Gate 15 post-check (§6.7) ─────────────────────────────────
@@ -381,6 +388,7 @@ def _blend_clv_tail(
     bg_clv: np.ndarray,
     freq: np.ndarray,
     revenue: np.ndarray,
+    tail_quantile: float = CLV_TAIL_QUANTILE,
 ) -> np.ndarray:
     """Lift the whale tail of a Tweedie CLV with BG/NBD (REMEDIATION-PLAN P1).
 
@@ -390,6 +398,7 @@ def _blend_clv_tail(
     take the higher of the two. Kept tight (top decile) because BG/NBD
     over-predicts the body. Tail is defined relatively (quantiles), so it adapts
     to any dataset scale; skipped on tiny runs where percentiles are unreliable.
+    `tail_quantile` can be overridden via the model card's `clv_tail_quantile` field.
     """
 
     if len(tweedie_pred) < CLV_TAIL_MIN_POPULATION:
@@ -398,11 +407,11 @@ def _blend_clv_tail(
     tail = np.zeros(len(tweedie_pred), dtype=bool)
     fok = freq[np.isfinite(freq)]
     if fok.size:
-        cut = max(float(np.quantile(fok, CLV_TAIL_QUANTILE)), CLV_TAIL_MIN_FREQUENCY)
+        cut = max(float(np.quantile(fok, tail_quantile)), CLV_TAIL_MIN_FREQUENCY)
         tail |= np.nan_to_num(freq, nan=0.0) >= cut
     rok = revenue[np.isfinite(revenue)]
     if rok.size:
-        tail |= np.nan_to_num(revenue, nan=0.0) >= float(np.quantile(rok, CLV_TAIL_QUANTILE))
+        tail |= np.nan_to_num(revenue, nan=0.0) >= float(np.quantile(rok, tail_quantile))
 
     blended = tweedie_pred.copy()
     blended[tail] = np.maximum(tweedie_pred[tail], bg_clv[tail])
@@ -452,12 +461,15 @@ def _apply_clv(
             else:
                 ml_pred = np.clip(ml_obj.predict(x), 0, None)
                 if bgnbd is not None and champion != "hurdle":
-                    # BG-NBD tail blend only for point estimators — hurdle already models zeros
+                    # BG-NBD tail blend only for point estimators — hurdle already models zeros.
+                    # tail_quantile is configurable via model_card so future runs can tighten/widen.
+                    tail_q = float(clv_bundle.get("model_card", {}).get("clv_tail_quantile", CLV_TAIL_QUANTILE))
                     ml_pred = _blend_clv_tail(
                         ml_pred,
                         bg_clv=eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy(),
                         freq=pd.to_numeric(features_raw["payment_count_all"], errors="coerce").to_numpy()[clv_mask],
                         revenue=pd.to_numeric(features_raw["total_revenue_all"], errors="coerce").to_numpy()[clv_mask],
+                        tail_quantile=tail_q,
                     )
                 elif bgnbd is None and champion != "hurdle":
                     logger.warning(
@@ -465,6 +477,11 @@ def _apply_clv(
                         "high-value tail will be under-predicted (no hybrid correction).",
                         champion,
                     )
+                # Apply OLS magnitude calibration: corrects systematic scale bias fitted on
+                # validation at training time. Preserves ranking; improves RMSLE/MAE.
+                mag_slope = float(model_object.get("magnitude_slope", 1.0))
+                mag_intercept = float(model_object.get("magnitude_intercept", 0.0))
+                ml_pred = np.clip(mag_slope * ml_pred + mag_intercept, 0.0, None)
                 predicted[clv_mask] = ml_pred
 
     frame["predicted_clv_6m"] = predicted
@@ -742,12 +759,37 @@ def _build_output_rows(
     prediction_run_id: str,
     frame: pd.DataFrame,
     model_versions: dict[str, str],
+    major_drift_models: set[str] | None = None,
 ) -> list[dict[str, Any]]:
+    major_drift_models = major_drift_models or set()
+    _eligibility_col_map = {"churn": "el_churn", "clv": "el_clv", "credit": "el_credit"}
     model_versions_json = json.dumps(model_versions, ensure_ascii=False)
     rows: list[dict[str, Any]] = []
     # records iteration instead of iterrows() — same values, no per-row Series.
     for row in frame.to_dict("records"):
         eligibility = _eligibility_json(row)
+        eligibility_dict = json.loads(eligibility)
+
+        all_eligible = all(model["eligible"] for model in eligibility_dict.values())
+        # Major PSI drift on a model that processed this customer → downgrade to PARTIAL
+        # so downstream consumers know predictions may be unreliable.
+        customer_drift_models = [
+            mt for mt in major_drift_models
+            if bool(row.get(_eligibility_col_map.get(mt, ""), False))
+        ]
+        has_major_drift = bool(customer_drift_models)
+
+        output_status = (
+            OutputStatus.PREDICTED if all_eligible and not has_major_drift else OutputStatus.PARTIAL
+        )
+        base_notes = _output_notes(eligibility_dict)
+        drift_notes = [
+            f"{mt}: major feature drift detected (PSI > 0.25) — predictions may be unreliable"
+            for mt in sorted(customer_drift_models)
+        ]
+        all_note_parts = [n for n in ([base_notes] if base_notes else []) + drift_notes if n]
+        output_notes = "; ".join(all_note_parts) if all_note_parts else None
+
         interval = None
         if not pd.isna(row["credit_p10_30d"]):
             interval = json.dumps(
@@ -788,10 +830,8 @@ def _build_output_rows(
                 "segment": _str_or_none(row.get("segment")),
                 "action_rank": _int_or_none(row.get("action_rank")),
                 "needs_review": bool(row.get("needs_review", False)),
-                "output_status": OutputStatus.PREDICTED if all(
-                    model["eligible"] for model in json.loads(eligibility).values()
-                ) else OutputStatus.PARTIAL,
-                "output_notes": _output_notes(json.loads(eligibility)),
+                "output_status": output_status,
+                "output_notes": output_notes,
                 "model_eligibility_json": eligibility,
                 "model_versions_json": model_versions_json,
                 "profile_snapshot_json": json.dumps(row["profile_snapshot"], ensure_ascii=False),

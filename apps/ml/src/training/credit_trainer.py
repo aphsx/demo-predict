@@ -64,6 +64,19 @@ CORRECTION_CLIP = 1.5
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
+def _enforce_cross_horizon_monotonicity(
+    pred_30: dict[float, np.ndarray],
+    pred_90: dict[float, np.ndarray],
+) -> dict[float, np.ndarray]:
+    """Enforce pred_90[q] >= pred_30[q] per quantile.
+
+    Cumulative credit usage over 90 days cannot be less than over 30 days.
+    The two horizon heads are independent so ~3% of rows can invert; this
+    correction matches what the prediction runner already does at serve time.
+    """
+    return {q: np.maximum(pred_90[q], pred_30[q]) for q in pred_90}
+
+
 def credit_anchor_log(features_raw: pd.DataFrame, horizon_days: int) -> np.ndarray:
     """log1p of the carryover baseline forecast (the model's anchor)."""
 
@@ -221,6 +234,14 @@ def train_credit(
     notify("credit: training top-up timing model (XGBoost AFT)")
     topup_model = train_topup_model(dataset, preprocessor, censor_days=topup_censor_days)
 
+    # Enforce 90d >= 30d per quantile (cumulative usage is non-decreasing).
+    # Mirrors the enforcement already in the prediction runner so training
+    # metrics match what is actually served.
+    for split in ("validation", "test"):
+        predictions[split][90] = _enforce_cross_horizon_monotonicity(
+            predictions[split][30], predictions[split][90]
+        )
+
     validation_metrics = credit_metrics(
         y[30]["validation"], predictions["validation"][30],
         y[90]["validation"], predictions["validation"][90],
@@ -304,6 +325,7 @@ def backtest_credit(
         )
         predictions[horizon_days] = bundle.predict_quantiles(x_test, anchor_test)
 
+    predictions[90] = _enforce_cross_horizon_monotonicity(predictions[30], predictions[90])
     champion_metrics = credit_metrics(
         y_test[30], predictions[30], y_test[90], predictions[90]
     )

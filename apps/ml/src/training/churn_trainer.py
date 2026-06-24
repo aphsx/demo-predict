@@ -384,7 +384,7 @@ def finalize_churn_candidate(
         calibration_json=calibration_curve_points(training.y_test, calibrated_test),
         confusion_json=confusion_at_threshold(training.y_test, calibrated_test, thresholds["high"]),
         lift_table_json=lift_table(training.y_test, raw_test),
-        feature_importance=_feature_importance(candidate, training.x_trval),
+        feature_importance=_feature_importance(candidate, training.x_trval, training.y_trval),
         baseline_metrics=baseline_metrics,
         preprocessor=training.preprocessor,
         test_ci_json=test_ci,
@@ -759,21 +759,42 @@ def _evaluate_baselines(
     return results
 
 
-def _feature_importance(champion: ChurnCandidate, x_train: pd.DataFrame) -> list[dict[str, Any]]:
-    """Global mean |SHAP| for tree champions, |coef| for linear ones."""
+def _feature_importance(
+    champion: ChurnCandidate,
+    x_train: pd.DataFrame,
+    y_train: np.ndarray | None = None,
+) -> list[dict[str, Any]]:
+    """Global mean |SHAP| for tree champions, |coef| for linear ones, permutation importance for others."""
 
-    # TabICL is a transformer with no tree structure and no linear coefficients,
-    # so neither TreeExplainer nor |coef| applies — global importance is omitted
-    # (per-customer prediction still works; only this summary is unavailable).
-    if not hasattr(champion.model, "coef_") and not isinstance(
-        champion.model, (lgb.LGBMClassifier, xgb.XGBClassifier, RandomForestClassifier)
-    ):
-        return []
+    is_tree = isinstance(champion.model, (lgb.LGBMClassifier, xgb.XGBClassifier, RandomForestClassifier))
+    is_linear = hasattr(champion.model, "coef_")
+
+    if not is_tree and not is_linear:
+        # TabICL and other opaque models: fall back to model-agnostic permutation importance.
+        # Slower than SHAP but works for any predict_proba interface.
+        if y_train is None or len(y_train) == 0:
+            return []
+        try:
+            from sklearn.inspection import permutation_importance as _perm_imp
+            sample_size = min(2000, len(x_train))
+            idx = np.random.RandomState(RANDOM_SEED).choice(len(x_train), size=sample_size, replace=False)
+            x_sample = x_train.iloc[idx]
+            y_sample = y_train[idx]
+            result = _perm_imp(
+                champion.model, x_sample, y_sample,
+                n_repeats=10, random_state=RANDOM_SEED,
+                scoring="average_precision", n_jobs=-1,
+            )
+            pairs = sorted(zip(x_train.columns, result.importances_mean), key=lambda p: -p[1])[:10]
+            return [{"feature": name, "importance": round(float(v), 4)} for name, v in pairs]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("permutation importance failed: %s", exc)
+            return []
 
     try:
         import shap
 
-        if isinstance(champion.model, (lgb.LGBMClassifier, xgb.XGBClassifier, RandomForestClassifier)):
+        if is_tree:
             sample = x_train.sample(min(1500, len(x_train)), random_state=RANDOM_SEED)
             explainer = shap.TreeExplainer(champion.model)
             values = explainer.shap_values(sample)

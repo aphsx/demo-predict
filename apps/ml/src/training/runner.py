@@ -873,6 +873,8 @@ def _train_and_register_clv(
         "xgb_params": result.xgb_params,
         "hurdle": result.hurdle_bundle,
         "horizon_days": horizon_days,
+        "magnitude_slope": result.magnitude_slope,
+        "magnitude_intercept": result.magnitude_intercept,
     }
     artifact_path, checksum = save_artifacts(
         model_type="clv",

@@ -46,6 +46,7 @@ CREDIT_TIER_A_FEATURES = [
     "credit_added_180d",
     "credit_balance_proxy",
     "credit_runway_months",
+    "credit_usage_decel",
 ]
 # Churn/CLV intentionally keep the original compact Tier A contract. Credit
 # uses the extended contract because balance/runway features are directly tied
@@ -73,6 +74,7 @@ ZERO_DEFAULT_FEATURES = {
     "credit_added_180d",
     "credit_balance_proxy",
     "credit_runway_months",
+    "credit_usage_decel",
 }
 
 NULLABLE_CONTRACT_FEATURES = {
@@ -247,6 +249,12 @@ FEATURE_METADATA: FeatureSchema = {
         "lookback_window": "all_history_before_cutoff",
         "formula": "credit_balance_proxy / (usage_recent_90d / 3), clipped to [0, 24]; 24 when balance > 0 with no recent usage",
         "null_handling": "0 when no prior activity or non-positive balance",
+    },
+    "credit_usage_decel": {
+        "source": "usage.usage",
+        "lookback_window": "180d_before_cutoff",
+        "formula": "signed_log1p((usage_recent_90d/3 - usage_prev_90d/3) / (usage_prev_90d/3 + ε)) — second-order usage trend (acceleration/deceleration)",
+        "null_handling": "0 when no prior usage exists",
     },
 }
 
@@ -603,7 +611,7 @@ def build_credit_features(
     )
     if not acc_ids:
         return _empty_feature_frame(
-            ["credit_added_180d", "credit_balance_proxy", "credit_runway_months"]
+            ["credit_added_180d", "credit_balance_proxy", "credit_runway_months", "credit_usage_decel"]
         )
 
     credit_add = pd.to_numeric(payment_history["credit_add"], errors="coerce").fillna(0.0)
@@ -612,6 +620,10 @@ def build_credit_features(
         payment_history["payment_date"] >= cutoff - pd.Timedelta(days=180)
     ]
     recent_usage_90 = usage_history[usage_history["period"] >= cutoff - pd.Timedelta(days=90)]
+    prev_usage_90 = usage_history[
+        (usage_history["period"] >= cutoff - pd.Timedelta(days=180))
+        & (usage_history["period"] < cutoff - pd.Timedelta(days=90))
+    ]
 
     rows = pd.DataFrame({"acc_id": acc_ids})
     rows["credit_added_180d"] = (
@@ -633,7 +645,18 @@ def build_credit_features(
     )
     rows["credit_runway_months"] = np.clip(runway, 0.0, 24.0)
 
-    return rows[["acc_id", "credit_added_180d", "credit_balance_proxy", "credit_runway_months"]]
+    # Second-order usage trend: signed log1p of the monthly-rate change between the
+    # two 90d windows. Captures acceleration/deceleration not visible in the first-
+    # order usage_change_90d_pct feature (which lives in the base feature set).
+    recent_mo = rows["acc_id"].map(
+        recent_usage_90.groupby("acc_id")["usage"].sum()
+    ).fillna(0.0) / 3.0
+    prev_mo = rows["acc_id"].map(
+        prev_usage_90.groupby("acc_id")["usage"].sum()
+    ).fillna(0.0) / 3.0
+    rows["credit_usage_decel"] = _signed_log1p((recent_mo - prev_mo) / (prev_mo + EPSILON))
+
+    return rows[["acc_id", "credit_added_180d", "credit_balance_proxy", "credit_runway_months", "credit_usage_decel"]]
 
 
 def build_activity_features(
