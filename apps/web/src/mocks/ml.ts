@@ -505,6 +505,12 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
   };
 }
 
+const SEGMENT_ORDER = [
+  "Protect", "Stabilize", "Grow", "Develop", "Maintain",
+  "Watch-low", "Salvage-low", "Reactivate", "Dormant", "Ghost",
+] as const;
+const RETENTION_SEGMENTS = new Set(["Protect", "Stabilize", "Salvage-low", "Watch-low"]);
+
 function assignDerived(rows: PredictionOutput[]): void {
   // value tier: percentile of CLV among active (contract §3.5)
   const active = rows.filter((c) => c.predicted_clv_6m !== null && c.predicted_clv_6m > 0);
@@ -526,6 +532,47 @@ function assignDerived(rows: PredictionOutput[]): void {
     c.priority_score =
       hi - lo < 1e-9 ? 0 : Math.round((100 * (logged[i] - lo)) / (hi - lo) * 100) / 100;
   });
+
+  // segment: mirrors runner.py _apply_segments() — first-match rules
+  rows.forEach((c) => {
+    const stage = c.lifecycle_stage;
+    const tier = c.customer_value_tier;
+    const risk = c.churn_risk_level;
+    const pAlive = c.p_alive;
+    const valuable = tier === "high" || tier === "mid";
+    const atRisk =
+      risk === "high" || risk === "critical" || (pAlive !== null && pAlive < 0.2);
+    const watch =
+      !atRisk && (risk === "medium" || (pAlive !== null && pAlive < 0.5));
+    const growing = c.usage_trend === "increasing";
+
+    if (stage === "Ghost") c.segment = "Ghost";
+    else if (stage === "Churned" && c.sub_stage === "Churned Paid") c.segment = "Reactivate";
+    else if (stage === "Churned") c.segment = "Dormant";
+    else if (valuable && atRisk) c.segment = "Protect";
+    else if (valuable && watch) c.segment = "Stabilize";
+    else if (valuable) c.segment = "Grow";
+    else if (atRisk) c.segment = "Salvage-low";
+    else if (watch) c.segment = "Watch-low";
+    else if (growing) c.segment = "Develop";
+    else c.segment = "Maintain";
+  });
+
+  // action_rank: global rank by (segment order, -money) where money =
+  // revenue_at_risk for RETENTION segments, else predicted_clv_6m
+  const ranked = [...rows].sort((a, b) => {
+    const segA = SEGMENT_ORDER.indexOf((a.segment ?? "Maintain") as typeof SEGMENT_ORDER[number]);
+    const segB = SEGMENT_ORDER.indexOf((b.segment ?? "Maintain") as typeof SEGMENT_ORDER[number]);
+    if (segA !== segB) return segA - segB;
+    const moneyA = RETENTION_SEGMENTS.has(a.segment ?? "")
+      ? (a.revenue_at_risk ?? 0)
+      : (a.predicted_clv_6m ?? 0);
+    const moneyB = RETENTION_SEGMENTS.has(b.segment ?? "")
+      ? (b.revenue_at_risk ?? 0)
+      : (b.predicted_clv_6m ?? 0);
+    return moneyB - moneyA;
+  });
+  ranked.forEach((c, i) => { c.action_rank = i + 1; });
 }
 
 const populationCache = new Map<string, PredictionOutput[]>();
@@ -652,6 +699,10 @@ export function mockRunOutputs(runId: string, q: OutputsQuery): OutputsPage {
   if (q.customer_value_tier) rows = rows.filter((c) => c.customer_value_tier === q.customer_value_tier);
   if (q.credit_urgency_level) rows = rows.filter((c) => c.credit_urgency_level === q.credit_urgency_level);
   if (q.ever_paid) rows = rows.filter((c) => c.ever_paid === (q.ever_paid === "true"));
+  if (q.segment) rows = rows.filter((c) => c.segment === q.segment);
+  if (q.needs_review === "true" || q.needs_review === "false") {
+    rows = rows.filter((c) => c.needs_review === (q.needs_review === "true"));
+  }
 
   const [sortKey, sortDir] = (q.sort ?? "priority_score:desc").split(":");
   const dir = sortDir === "asc" ? 1 : -1;

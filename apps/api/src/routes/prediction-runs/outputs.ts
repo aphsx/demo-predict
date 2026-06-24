@@ -32,6 +32,10 @@ function outputFilters(runId: string, q: OutputsQueryParams): SQL | undefined {
   if (q.ever_paid === "true" || q.ever_paid === "false") {
     conds.push(eq(o.everPaid, q.ever_paid === "true"));
   }
+  if (q.segment) conds.push(eq(o.segment, q.segment));
+  if (q.needs_review === "true" || q.needs_review === "false") {
+    conds.push(eq(o.needsReview, q.needs_review === "true"));
+  }
   return and(...conds);
 }
 
@@ -76,6 +80,8 @@ export const outputsRoutes = new Elysia()
         customer_value_tier: t.Optional(t.String()),
         credit_urgency_level: t.Optional(t.String()),
         ever_paid: t.Optional(t.String()),
+        segment: t.Optional(t.String()),
+        needs_review: t.Optional(t.String()),
       }),
     }
   )

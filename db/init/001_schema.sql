@@ -1860,6 +1860,34 @@ CREATE INDEX idx_ml_prediction_outputs_run ON public.ml_prediction_outputs USING
 
 
 --
+-- Name: idx_ml_prediction_outputs_segment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_ml_prediction_outputs_segment ON public.ml_prediction_outputs USING btree (segment);
+
+
+--
+-- Name: idx_ml_prediction_outputs_value_tier; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_ml_prediction_outputs_value_tier ON public.ml_prediction_outputs USING btree (customer_value_tier);
+
+
+--
+-- Name: idx_ml_prediction_outputs_urgency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_ml_prediction_outputs_urgency ON public.ml_prediction_outputs USING btree (credit_urgency_level);
+
+
+--
+-- Name: idx_ml_prediction_outputs_needs_review; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_ml_prediction_outputs_needs_review ON public.ml_prediction_outputs USING btree (needs_review);
+
+
+--
 -- Name: idx_ml_prediction_runs_created_by; Type: INDEX; Schema: public; Owner: -
 --
 
