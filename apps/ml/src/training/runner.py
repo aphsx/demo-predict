@@ -763,14 +763,18 @@ def _train_and_register_clv(
     model_card = {
         "model_type": "clv",
         "version": version,
-        "method": "BG-NBD + Gamma-Gamma vs LightGBM Tweedie",
+        "method": "BG-NBD + Gamma-Gamma vs LightGBM Tweedie vs XGBoost Tweedie",
         "algorithm": result.champion_name,
         "cutoff_date": str(datasets.cutoff_date.date()),
         "horizon_days": horizon_days,
         "dataset_rows": int(len(dataset.frame)),
         "feature_set": f"{feature_contract.name}/{feature_contract.version}",
         "feature_code_hash": feature_contract.feature_code_hash,
-        "params": _plain(result.tweedie_params) if result.champion_name == "lgbm_tweedie" else {"penalizer": result.bgnbd.penalizer},
+        "params": (
+            _plain(result.tweedie_params) if result.champion_name == "lgbm_tweedie"
+            else _plain(result.xgb_params) if result.champion_name == "xgb_tweedie"
+            else {"penalizer": result.bgnbd.penalizer}
+        ),
         "candidate_competition_val_spearman": result.competition,
         "primary_metric": {
             "name": "Spearman",
@@ -790,6 +794,8 @@ def _train_and_register_clv(
         "bgnbd": result.bgnbd,
         "tweedie": result.tweedie_model,
         "tweedie_params": result.tweedie_params,
+        "xgb": result.xgb_model,
+        "xgb_params": result.xgb_params,
         "horizon_days": horizon_days,
     }
     artifact_path, checksum = save_artifacts(
@@ -1002,8 +1008,8 @@ def _train_and_register_credit(
         "feature_set": f"{feature_contract.name}/{feature_contract.version}",
         "feature_code_hash": feature_contract.feature_code_hash,
         "params": {str(h): _plain(p) for h, p in result.params_by_horizon.items()},
-        "interval_widening": {
-            str(h): result.horizons[h].interval_widening for h in result.horizons
+        "cqr_q_hat": {
+            str(h): result.horizons[h].cqr_q_hat for h in result.horizons
         },
         "correction_shrinkage": {
             str(h): result.horizons[h].correction_shrinkage for h in result.horizons

@@ -75,7 +75,7 @@ class CreditHorizonModels:
     horizon_days: int
     params: dict[str, Any]
     models: dict[float, lgb.LGBMRegressor]
-    interval_widening: float
+    cqr_q_hat: float  # additive CQR margin for q10/q90; replaces multiplicative interval_widening
     correction_shrinkage: float = 1.0
 
     def predict_quantiles(
@@ -86,7 +86,7 @@ class CreditHorizonModels:
         ordered = _ordered_quantile_predictions(
             self.models, x, anchor_log, getattr(self, "correction_shrinkage", 1.0)
         )
-        return _widen_interval(ordered, self.interval_widening)
+        return _apply_cqr_correction(ordered, self.cqr_q_hat)
 
 
 def _ordered_quantile_predictions(
@@ -279,12 +279,13 @@ def backtest_credit(
             x_train, y_train, anchor_train, x_val, y_val, anchor_val,
         )
         shrinkage = _calibrate_shrinkage(models, x_val, y_val, anchor_val)
-        widening = _calibrate_widening(models, x_val, y_val, anchor_val, shrinkage)
+        ordered_val = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
+        q_hat = _calibrate_cqr(ordered_val, y_val)
         bundle = CreditHorizonModels(
             horizon_days=horizon_days,
             params=result.params_by_horizon[horizon_days],
             models=models,
-            interval_widening=widening,
+            cqr_q_hat=q_hat,
             correction_shrinkage=shrinkage,
         )
         predictions[horizon_days] = bundle.predict_quantiles(x_test, anchor_test)
@@ -371,12 +372,13 @@ def _train_horizon(
         best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
     )
     shrinkage = _calibrate_shrinkage(models, x_val, y_val, anchor_val)
-    widening = _calibrate_widening(models, x_val, y_val, anchor_val, shrinkage)
+    ordered_val = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
+    q_hat = _calibrate_cqr(ordered_val, y_val)
     return CreditHorizonModels(
         horizon_days=horizon_days,
         params=best_params,
         models=models,
-        interval_widening=widening,
+        cqr_q_hat=q_hat,
         correction_shrinkage=shrinkage,
     )
 
@@ -405,41 +407,42 @@ def _fit_quantile_models(
     return models
 
 
-def _calibrate_widening(
-    models: dict[float, lgb.LGBMRegressor],
-    x_val: pd.DataFrame,
+def _calibrate_cqr(
+    ordered: dict[float, np.ndarray],
     y_val: np.ndarray,
-    anchor_val: np.ndarray,
-    shrinkage: float = 1.0,
+    alpha: float = 1.0 - TARGET_COVERAGE,
 ) -> float:
-    """Pick a widening multiplier so validation p10–p90 coverage ≈ 80% (§11)."""
+    """Conformalized Quantile Regression calibration (distribution-free coverage guarantee).
 
-    ordered = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
+    Computes q_hat such that P(q10_adj ≤ y ≤ q90_adj) ≥ 1 - alpha on
+    exchangeable data. The guarantee holds exactly at the 1-alpha level
+    regardless of distribution shift, unlike the multiplicative widening heuristic.
 
-    best_factor, best_gap = 1.0, float("inf")
-    for factor in np.linspace(0.3, 3.0, 28):
-        widened = _widen_interval(ordered, float(factor))
-        coverage = interval_coverage(y_val, widened[0.10], widened[0.90])
-        gap = abs(coverage - TARGET_COVERAGE)
-        if gap < best_gap:
-            best_gap, best_factor = gap, float(factor)
-    return best_factor
+    conformity score: s_i = max(q10_pred(x_i) - y_i, y_i - q90_pred(x_i))
+    q_hat = (1-alpha)(1+1/n)-th quantile of {s_i}
+    adjusted interval: [q10_pred(x) - q_hat, q90_pred(x) + q_hat]
+    """
+    scores = np.maximum(ordered[0.10] - y_val, y_val - ordered[0.90])
+    n = len(scores)
+    quantile_level = min(1.0, (1.0 - alpha) * (1.0 + 1.0 / n))
+    return float(np.quantile(scores, quantile_level))
 
 
-def _widen_interval(
+def _apply_cqr_correction(
     quantile_predictions: dict[float, np.ndarray],
-    factor: float,
+    q_hat: float,
 ) -> dict[float, np.ndarray]:
-    """Scale outer quantiles away from p50 by `factor` (p50 untouched)."""
+    """Expand q10 and q90 by the CQR margin q_hat (additive); middle quantiles unchanged."""
 
-    p50 = quantile_predictions[0.50]
-    widened: dict[float, np.ndarray] = {}
+    corrected: dict[float, np.ndarray] = {}
     for alpha, values in quantile_predictions.items():
-        if alpha == 0.50:
-            widened[alpha] = values
+        if alpha == 0.10:
+            corrected[alpha] = np.clip(values - q_hat, 0, None)
+        elif alpha == 0.90:
+            corrected[alpha] = np.clip(values + q_hat, 0, None)
         else:
-            widened[alpha] = np.clip(p50 + (values - p50) * factor, 0, None)
-    return widened
+            corrected[alpha] = values
+    return corrected
 
 
 def urgent_topup_metrics(

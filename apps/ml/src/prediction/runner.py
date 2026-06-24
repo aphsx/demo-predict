@@ -436,24 +436,33 @@ def _apply_clv(
                 predicted[clv_mask] = (
                     eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy()
                 )
-        if model_object["champion"] == "lgbm_tweedie":
+        if model_object["champion"] in ("lgbm_tweedie", "xgb_tweedie"):
             x = transform_features(features_raw[clv_mask], clv_bundle["preprocessor"])
-            tweedie_pred = np.clip(model_object["tweedie"].predict(x), 0, None)
-            if bgnbd is not None:
-                tweedie_pred = _blend_clv_tail(
-                    tweedie_pred,
-                    bg_clv=eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy(),
-                    freq=pd.to_numeric(features_raw["payment_count_all"], errors="coerce").to_numpy()[clv_mask],
-                    revenue=pd.to_numeric(features_raw["total_revenue_all"], errors="coerce").to_numpy()[clv_mask],
+            ml_model = (
+                model_object["tweedie"] if model_object["champion"] == "lgbm_tweedie"
+                else model_object["xgb"]
+            )
+            if ml_model is None:
+                logger.warning(
+                    "CLV champion is %s but model object is None; falling back to BG-NBD.",
+                    model_object["champion"],
                 )
             else:
-                # No BG/NBD in the bundle → the whale tail stays capped. Surface
-                # it rather than degrade silently (REMEDIATION-PLAN P1).
-                logger.warning(
-                    "CLV champion is lgbm_tweedie without a BG/NBD bundle; "
-                    "high-value tail will be under-predicted (no hybrid correction)."
-                )
-            predicted[clv_mask] = tweedie_pred
+                tweedie_pred = np.clip(ml_model.predict(x), 0, None)
+                if bgnbd is not None:
+                    tweedie_pred = _blend_clv_tail(
+                        tweedie_pred,
+                        bg_clv=eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy(),
+                        freq=pd.to_numeric(features_raw["payment_count_all"], errors="coerce").to_numpy()[clv_mask],
+                        revenue=pd.to_numeric(features_raw["total_revenue_all"], errors="coerce").to_numpy()[clv_mask],
+                    )
+                else:
+                    logger.warning(
+                        "CLV champion is %s without a BG/NBD bundle; "
+                        "high-value tail will be under-predicted (no hybrid correction).",
+                        model_object["champion"],
+                    )
+                predicted[clv_mask] = tweedie_pred
 
     frame["predicted_clv_6m"] = predicted
     frame["p_alive"] = np.clip(p_alive, 0.0, 1.0)
