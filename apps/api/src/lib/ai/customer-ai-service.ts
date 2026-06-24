@@ -48,11 +48,20 @@ export async function createCustomerAiExplanation(
     const { explanation, model } = await generateCustomerAiExplanation(context);
     const generatedAt = new Date();
 
+    // Persist the deterministic signals + SHAP factors the explanation was
+    // grounded in. Keeps a structured, queryable record next to the free text
+    // and lets the UI fall back to facts if the narrative is ever unavailable.
+    const reasoningJson = {
+      signals: context.signals,
+      churn_factors: output.churn_factors ?? null,
+    };
+
     const [updated] = await db
       .update(mlPredictionOutputs)
       .set({
         aiStatus: "completed",
         aiExplanation: explanation,
+        aiReasoningJson: reasoningJson,
         aiModel: model,
         aiGeneratedAt: generatedAt,
       })

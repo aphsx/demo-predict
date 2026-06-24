@@ -20,6 +20,7 @@ import type {
   PredictionRun,
   ProfileSnapshot,
   RiskLevel,
+  RunInsight,
   RunSummary,
   TrainingRun,
   UrgencyLevel,
@@ -717,6 +718,58 @@ export function mockGenerateCustomerAiExplanation(
     ai_model: "mock_ai_v1",
     ai_generated_at: new Date().toISOString(),
   };
+}
+
+// ── Run-level AI base summary ───────────────────────────────────
+
+const mockInsightCache = new Map<string, RunInsight>();
+
+export function mockRunInsight(runId: string): RunInsight {
+  return (
+    mockInsightCache.get(runId) ?? {
+      run_id: runId,
+      ai_status: "not_requested",
+      ai_summary: null,
+      ai_model: null,
+      ai_generated_at: null,
+    }
+  );
+}
+
+export function mockGenerateRunInsight(
+  runId: string,
+  options: { force?: boolean } = {}
+): RunInsight {
+  const existing = mockInsightCache.get(runId);
+  if (existing?.ai_summary && !options.force) {
+    throw new Error("Run insight already exists");
+  }
+  const s = mockRunSummary(runId);
+  const total = s.run.total_customers;
+  const highCrit = s.churn.by_risk.high + s.churn.by_risk.critical;
+  const summary = [
+    "## ภาพรวมฐานลูกค้า",
+    `ฐานลูกค้าทั้งหมด ${total.toLocaleString()} ราย — Active Paid ${s.lifecycle.active_paid.toLocaleString()}, Active Free ${s.lifecycle.active_free.toLocaleString()}, Churned ${s.lifecycle.churned.toLocaleString()}, Ghost ${s.lifecycle.ghost.toLocaleString()}`,
+    "",
+    "## ความเสี่ยง churn",
+    `- กลุ่มที่ประเมินได้ ${s.churn.eligible_count.toLocaleString()} ราย, high+critical รวม ${highCrit.toLocaleString()} ราย`,
+    "",
+    "## มูลค่าและรายได้ที่เกี่ยวข้อง",
+    `- revenue at risk รวม ฿${Math.round(s.revenue.expected_at_risk).toLocaleString()}, exposure กลุ่มเสี่ยงสูง ฿${Math.round(s.revenue.high_risk_exposure).toLocaleString()}`,
+    "",
+    "## ข้อสังเกต",
+    "ไม่มี",
+  ].join("\n");
+
+  const result: RunInsight = {
+    run_id: runId,
+    ai_status: "completed",
+    ai_summary: summary,
+    ai_model: "mock_ai_v1",
+    ai_generated_at: new Date().toISOString(),
+  };
+  mockInsightCache.set(runId, result);
+  return result;
 }
 
 // ── Per-customer time series ────────────────────────────────────

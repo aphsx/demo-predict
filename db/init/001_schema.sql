@@ -306,6 +306,7 @@ CREATE TABLE public.ml_prediction_runs (
     total_customers integer,
     progress_json jsonb,
     model_versions_json jsonb,
+    cohort_insight_json jsonb,
     error_message text,
     created_by text,
     created_at timestamp with time zone DEFAULT now() NOT NULL

@@ -52,7 +52,9 @@ ${renderGuardrails()}
 [2-3 ประโยค: ลูกค้าใช้งานอย่างไร, ใช้ channel ใดเป็นหลัก, ปริมาณมาก/น้อย, แนวโน้มล่าสุด]
 
 ## การใช้งาน
-- [สัดส่วน SMS/Email, ปริมาณรายเดือน, แนวโน้มเพิ่ม/ลด — อ้างอิงตัวเลขจริงเสมอ]
+- [สัดส่วน SMS/Email, ปริมาณรายเดือน, แนวโน้มเพิ่ม/ลด — อ้างอิงตัวเลขจริงเสมอ
+  ใช้หน้าต่าง 6 เดือนเป็นหลักในการตัดสินแนวโน้มภาพรวม เพื่อไม่ให้สับสนกับการตกชั่วคราว
+  ตามฤดูกาล แล้วค่อยใช้ 3 เดือนล่าสุดบอกความเคลื่อนไหวระยะสั้น]
 
 ## การชำระเงิน
 - [ความถี่การเติมเครดิต, ยอดชำระ, ครั้งล่าสุดก่อน cutoff — อ้างอิงตัวเลขจริงเสมอ]
@@ -72,12 +74,15 @@ function formatChurnFactors(factors: CustomerAiContext["ml_output"]["churn_facto
     .join("; ");
 }
 
+function formatPct(value: number | null): string {
+  return value == null ? "N/A" : `${value > 0 ? "+" : ""}${value}%`;
+}
+
 function formatSignals(s: CustomerAiSignals): string {
-  const change =
-    s.usage_change_pct == null ? "N/A" : `${s.usage_change_pct > 0 ? "+" : ""}${s.usage_change_pct}%`;
   return [
     `เดือนที่มีการใช้งาน: ${s.months_with_usage}`,
-    `ใช้งาน 3 เดือนล่าสุด: ${s.recent_3m_usage.toLocaleString()} (เทียบ 3 เดือนก่อนหน้า: ${s.prior_3m_usage.toLocaleString()}, เปลี่ยนแปลง ${change})`,
+    `ใช้งาน 3 เดือนล่าสุด: ${s.recent_3m_usage.toLocaleString()} (เทียบ 3 เดือนก่อนหน้า: ${s.prior_3m_usage.toLocaleString()}, เปลี่ยนแปลง ${formatPct(s.usage_change_pct)})`,
+    `ใช้งาน 6 เดือนล่าสุด: ${s.recent_6m_usage.toLocaleString()} (เทียบ 6 เดือนก่อนหน้า: ${s.prior_6m_usage.toLocaleString()}, เปลี่ยนแปลง ${formatPct(s.usage_change_6m_pct)})`,
     `ชำระเงินล่าสุดก่อน cutoff: ${s.last_payment_days_before_cutoff ?? "N/A"} วัน`,
     `จำนวนครั้งที่ชำระ: ${s.n_payments} | ยอดชำระรวม: ฿${s.total_paid.toLocaleString()}`,
   ].join("\n");
@@ -93,9 +98,9 @@ function formatContext(ctx: CustomerAiContext): string {
     .map((u) => `  ${u.month}: รวม ${u.total} (SMS ${u.sms} / Email ${u.email})`)
     .join("\n");
 
+  // payments arrive newest-first from the loader — take the most recent 12.
   const paymentSummary = payments
-    .slice(-5)
-    .reverse()
+    .slice(0, 12)
     .map((p) => `  ${p.payment_date}: +${p.credit_add} credits (฿${p.amount})`)
     .join("\n");
 
@@ -115,7 +120,7 @@ ${formatSignals(signals)}
 === USAGE (last 12 months, newest first) ===
 ${usageSummary || "  No usage data"}
 
-=== PAYMENT HISTORY (last 5) ===
+=== PAYMENT HISTORY (last 12, newest first) ===
 ${paymentSummary || "  No payment data"}
 
 === ML MODEL OUTPUT ===

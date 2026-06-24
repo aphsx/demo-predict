@@ -21,6 +21,9 @@ export type CustomerAiSignals = {
   recent_3m_usage: number;
   prior_3m_usage: number;
   usage_change_pct: number | null;
+  recent_6m_usage: number;
+  prior_6m_usage: number;
+  usage_change_6m_pct: number | null;
   last_payment_days_before_cutoff: number | null;
   total_paid: number;
   n_payments: number;
@@ -55,9 +58,15 @@ function computeSignals(
   cutoffDate: string
 ): CustomerAiSignals {
   const totals = usageMonthly.map((u) => u.total);
+  // Short window (3m vs prior 3m): catches recent momentum shifts.
   const recent3 = totals.slice(-3).reduce((a, b) => a + b, 0);
   const prior3 = totals.slice(-6, -3).reduce((a, b) => a + b, 0);
   const usageChangePct = prior3 > 0 ? ((recent3 - prior3) / prior3) * 100 : null;
+  // Long window (6m vs prior 6m): smooths out seasonal dips so the AI does not
+  // call a customer "declining" off a single soft quarter when the year trends up.
+  const recent6 = totals.slice(-6).reduce((a, b) => a + b, 0);
+  const prior6 = totals.slice(-12, -6).reduce((a, b) => a + b, 0);
+  const usageChange6mPct = prior6 > 0 ? ((recent6 - prior6) / prior6) * 100 : null;
 
   // payments arrive newest-first from the loader.
   const lastPayment = payments[0]?.payment_date ?? null;
@@ -67,6 +76,9 @@ function computeSignals(
     recent_3m_usage: Math.round(recent3),
     prior_3m_usage: Math.round(prior3),
     usage_change_pct: usageChangePct == null ? null : Math.round(usageChangePct),
+    recent_6m_usage: Math.round(recent6),
+    prior_6m_usage: Math.round(prior6),
+    usage_change_6m_pct: usageChange6mPct == null ? null : Math.round(usageChange6mPct),
     last_payment_days_before_cutoff: lastPayment ? daysBetween(lastPayment, cutoffDate) : null,
     total_paid: Math.round(payments.reduce((a, p) => a + (p.amount ?? 0), 0)),
     n_payments: payments.length,

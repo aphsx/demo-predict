@@ -24,6 +24,7 @@ export type ReasonInput = ReasonAiFields & {
 export type ReasonDriver = {
   label: string;
   direction: "up" | "down";
+  directionLabel: string;
   valueText: string;
 };
 
@@ -94,6 +95,7 @@ export function composeReasoning(input: ReasonInput): ReasoningLayer {
     .map((factor: ChurnFactor) => ({
       label: humanizeFeature(factor.feature),
       direction: factor.direction,
+      directionLabel: factor.direction === "up" ? "เพิ่มความเสี่ยง" : "ลดความเสี่ยง",
       valueText: formatFactorValue(factor.value),
     }));
 

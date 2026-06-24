@@ -19,6 +19,11 @@ export {
   type CustomerAiExplanationResponse,
 } from "./customer-ai-service";
 export {
+  createRunInsight,
+  getRunInsight,
+  type RunInsight,
+} from "./run-insight";
+export {
   loadCustomerPayments,
   loadCustomerUsageMonthly,
 } from "./customer-dataset";
