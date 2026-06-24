@@ -64,8 +64,8 @@ function validateWorkbookSheets(sheetNames: string[]): void {
   validateWorkbookSheetsCore(sheetNames, TRAIN_SHEET_CONFIG, TRAIN_REQUIRED_SHEETS);
 }
 
-function parseSheetRows(buffer: Buffer, sheetName: TrainSheetName, skipEmpty: boolean) {
-  return parseSheetRowsCore(buffer, sheetName, TRAIN_SHEET_CONFIG[sheetName].requiredHeaders, skipEmpty);
+function parseSheetRows(wb: XLSX.WorkBook, sheetName: TrainSheetName, skipEmpty: boolean) {
+  return parseSheetRowsCore(wb, sheetName, TRAIN_SHEET_CONFIG[sheetName].requiredHeaders, skipEmpty);
 }
 
 async function insertSheetRows(
@@ -213,7 +213,7 @@ export async function importTrainExcel(params: {
         sheet: sheetName,
       });
 
-      const rows = parseSheetRows(params.buffer, sheetName, true);
+      const rows = parseSheetRows(wb, sheetName, true);
       const rowCount = await insertSheetRows(table, sourceId, rows);
       manifest[sheetName] = rowCount;
 

@@ -73,20 +73,16 @@ export function validateWorkbookSheets(
       throw new Error(`Missing required sheet: ${req}`);
     }
   }
-  const unexpected = sheetNames.filter((name) => !expected.has(name));
-  if (unexpected.length > 0) {
-    throw new Error(`Unexpected sheet(s): ${unexpected.join(", ")}. Expected exactly 8 fixed-schema sheets.`);
-  }
+  // Extra/metadata sheets are silently ignored — only required sheets are processed.
 }
 
 export function parseSheetRows(
-  buffer: Buffer,
+  workbook: XLSX.WorkBook,
   sheetName: string,
   requiredHeaders: string[],
   skipEmpty: boolean
 ): { excel_row: number; row_payload: Record<string, CellJson> }[] {
-  const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const ws = wb.Sheets[sheetName];
+  const ws = workbook.Sheets[sheetName];
   if (!ws) throw new Error(`Sheet not found: ${sheetName}`);
 
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, {

@@ -618,6 +618,10 @@ export const mlPredictionOutputs = pgTable(
     index("idx_ml_prediction_outputs_lifecycle").on(t.lifecycleStage),
     index("idx_ml_prediction_outputs_churn").on(t.churnRiskLevel),
     index("idx_ml_prediction_outputs_priority").on(t.priorityScore),
+    index("idx_ml_prediction_outputs_segment").on(t.segment),
+    index("idx_ml_prediction_outputs_value_tier").on(t.customerValueTier),
+    index("idx_ml_prediction_outputs_urgency").on(t.creditUrgencyLevel),
+    index("idx_ml_prediction_outputs_needs_review").on(t.needsReview),
   ]
 );
 

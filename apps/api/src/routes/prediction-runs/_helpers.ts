@@ -204,6 +204,8 @@ export interface OutputsQueryParams {
   customer_value_tier?: string;
   credit_urgency_level?: string;
   ever_paid?: string;
+  segment?: string;
+  needs_review?: string;
 }
 
 export { mlPredictionOutputs, mlPredictionRuns, predictDataSources, user, db, eq, and };

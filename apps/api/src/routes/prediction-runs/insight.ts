@@ -26,6 +26,10 @@ export const insightRoutes = new Elysia()
       const run = await fetchRun(params.id);
       const denied = requireOwnedRun(run, userId, set);
       if (denied) return denied;
+      if (run!.status !== "completed") {
+        set.status = 400;
+        return { message: "Run must be completed before generating insight" };
+      }
 
       const result = await createRunInsight(run!.id, body.force ?? false);
       if ("status" in result) {

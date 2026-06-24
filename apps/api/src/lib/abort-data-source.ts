@@ -34,3 +34,23 @@ export async function releaseStaleTrainImports(): Promise<number> {
   }
   return stale.length;
 }
+
+/** Remove predict catalogs left in importing/cleaning after a crash. */
+export async function releaseStalePredict(): Promise<number> {
+  const cutoff = new Date(Date.now() - STALE_IMPORT_MINUTES * 60 * 1000);
+  const stale = await db
+    .select({ id: predictDataSources.id })
+    .from(predictDataSources)
+    .where(
+      and(
+        inArray(predictDataSources.importStatus, ["importing", "cleaning"]),
+        isNull(predictDataSources.cleanedAt),
+        lt(predictDataSources.createdAt, cutoff)
+      )
+    );
+
+  for (const row of stale) {
+    await abortPredictDataSource(row.id);
+  }
+  return stale.length;
+}

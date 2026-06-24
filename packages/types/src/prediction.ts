@@ -134,6 +134,8 @@ export interface OutputsQuery {
   customer_value_tier?: ValueTier | "";
   credit_urgency_level?: UrgencyLevel | "";
   ever_paid?: "true" | "false" | "";
+  segment?: string | "";
+  needs_review?: "true" | "false" | "";
 }
 
 export interface OutputsPage {

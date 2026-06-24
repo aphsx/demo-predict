@@ -30,48 +30,42 @@ export type RunInsight = {
   ai_generated_at: string | null;
 };
 
-type InsightCache = {
-  status: "completed";
-  summary: string;
-  model: string;
-  generated_at: string;
-};
+type InsightCache =
+  | { status: "completed"; summary: string; model: string; generated_at: string }
+  | { status: "failed"; summary: null; model: null; generated_at: string };
 
 type ServiceError = { status: number; body: { message: string; code?: string } };
 
 const SYSTEM_PROMPT = `คุณคือนักวิเคราะห์ข้อมูลลูกค้าอาวุโสของบริษัท 1Moby (B2B SaaS ด้านการส่ง SMS/Email)
 
-งานของคุณ: สรุป "ภาพรวมพฤติกรรมของฐานลูกค้าทั้งหมด" ของ prediction run นี้ เป็นภาษาไทย
-ให้ทีมภายในอ่านเพื่อเข้าใจว่าฐานลูกค้าตอนนี้เป็นอย่างไร ก่อนจะเจาะดูลูกค้ารายคน
+งานของคุณ: เขียน "สรุปภาพรวมพฤติกรรมฐานลูกค้า" ของ prediction run นี้ เป็นภาษาไทย
+ให้ทีมอ่านก่อนดูรายคน — เป้าหมายคือ "เข้าใจว่าฐานลูกค้านี้มีลักษณะอย่างไร"
+ไม่ใช่แค่อ่านตัวเลขออกมาเป็นร้อยแก้วหรือบอกให้ไปทำอะไร
 
-กฎสำคัญ:
+กฎเหล็ก:
 ${renderGuardrails()}
-- เป้าหมายคือทำให้ "เข้าใจภาพรวมฐานลูกค้า" ไม่ใช่บอกให้ไปทำอะไร — ห้ามเขียนคำแนะนำ,
-  next step, แผนปฏิบัติ หรือบอกว่าควรติดต่อ/รักษากลุ่มไหน ผู้อ่านจะตัดสินใจเอง
-- อ้างอิงเฉพาะตัวเลขในส่วน <data> เท่านั้น และอ้างตัวเลข/สัดส่วนจริงทุกครั้งที่กล่าวถึง
-- ระบุสัดส่วนเป็น % เมื่อช่วยให้เห็นภาพ (คำนวณจากตัวเลขที่ให้มาเท่านั้น)
-- กระชับ ตรงประเด็น ไม่ต้องเขียน label ภาษาอังกฤษ
+- ห้ามแนะนำ ห้าม next step ห้ามบอกให้ติดต่อหรือดูแลกลุ่มไหน — ผู้อ่านตัดสินใจเอง
+- อ้างอิงเฉพาะตัวเลขใน <data> เท่านั้น อ้างตัวเลขจริง/สัดส่วนทุกครั้งที่กล่าวถึง
+- อย่าบรรยายทีละมิติเหมือนอ่านตาราง — ให้วิเคราะห์ว่า "ภาพรวมเป็นอย่างไร" และ "มีอะไรน่าสังเกต"
 
-รูปแบบ output (Markdown ภาษาไทย):
+รูปแบบ output (Markdown ภาษาไทย, กระชับ):
 
-## ภาพรวมฐานลูกค้า
-[2-3 ประโยค: จำนวนลูกค้าทั้งหมด, สัดส่วน lifecycle (active paid/free/churned/ghost), ภาพรวมกว้าง ๆ]
+## ภาพรวม
+[1 ย่อหน้า: สิ่งที่สำคัญที่สุดที่บอกลักษณะของฐานลูกค้านี้ ไม่ใช่แค่จำนวนและสัดส่วน
+แต่คือ "ฐานนี้เป็น base ประเภทไหน" — เช่น base ที่กำลังหดตัว, base ที่ยังแข็งแกร่ง,
+base ที่มีความเสี่ยงกระจุกตัวสูง เป็นต้น อ้างตัวเลขสนับสนุนคำอธิบาย]
 
-## พฤติกรรมการใช้งาน
-- [การกระจายของแนวโน้มการใช้งาน: เพิ่มขึ้น/คงที่/ลดลง/ไม่ใช้ — กี่รายและสัดส่วน]
+## ความเชื่อมโยงที่น่าสังเกต
+[2-4 bullets: ค้นหาความสัมพันธ์ข้ามมิติที่มีนัยสำคัญ เช่น
+- กลุ่มเสี่ยงสูงมี revenue at risk สูงไม่สมดุลกับจำนวน (กลุ่มเล็กแต่ exposure ใหญ่ หรือกลับกัน)
+- การใช้งานที่ลดลงกับ value tier และ churn risk สอดคล้องหรือขัดแย้งกันอย่างไร
+- credit urgency สัมพันธ์กับ lifecycle stage อย่างไร
+- cohort ไหนที่มี clv สูงแต่ใกล้หมดเครดิต
+ระบุเฉพาะที่พบจากตัวเลขจริง อย่าสร้างขึ้นมาเอง]
 
-## ความเสี่ยง churn
-- [การกระจายระดับความเสี่ยงในกลุ่มที่ประเมินได้ (eligible), จำนวน high+critical และสัดส่วน]
-
-## มูลค่าและรายได้ที่เกี่ยวข้อง
-- [รายได้ที่ผูกกับความเสี่ยง (revenue at risk), มูลค่า exposure ของกลุ่มเสี่ยงสูง,
-  กลุ่ม value×risk ที่มี exposure สูงสุด — อ้างตัวเลขจริง]
-
-## เครดิตและการเติม
-- [ความต้องการเครดิต 30 วันที่คาดการณ์, การกระจายระดับ urgency, จำนวนที่ใกล้ต้องเติมใน 7 วัน]
-
-## ข้อสังเกต
-[เฉพาะเมื่อพบความผิดปกติหรือความขัดแย้งในตัวเลข ถ้าไม่มีให้เขียน "ไม่มี"]`;
+## ข้อสังเกตเพิ่มเติม
+[เฉพาะเมื่อพบตัวเลขที่ผิดปกติหรือขัดแย้งกัน เช่น churn risk ต่ำแต่ usage declining สูง,
+หรือ base ใหญ่แต่ active paid มีน้อยผิดปกติ — ถ้าไม่มีให้เขียน "ไม่มีข้อมูลผิดปกติ"]`;
 
 function pct(part: number, whole: number): string {
   if (whole <= 0) return "0%";
@@ -127,6 +121,9 @@ urgency — critical: ${u.critical} | warning: ${u.warning} | monitor: ${u.monit
 function toResponse(runId: string, cache: InsightCache | null): RunInsight {
   if (!cache) {
     return { run_id: runId, ai_status: "not_requested", ai_summary: null, ai_model: null, ai_generated_at: null };
+  }
+  if (cache.status === "failed") {
+    return { run_id: runId, ai_status: "failed", ai_summary: null, ai_model: null, ai_generated_at: cache.generated_at };
   }
   return {
     run_id: runId,
@@ -192,6 +189,10 @@ export async function createRunInsight(
 
     return toResponse(runId, cache);
   } catch (e) {
+    await db
+      .update(mlPredictionRuns)
+      .set({ cohortInsightJson: { status: "failed", summary: null, model: null, generated_at: new Date().toISOString() } })
+      .where(eq(mlPredictionRuns.id, runId));
     return { status: 500, body: { message: (e as Error).message || "Failed to generate run insight" } };
   }
 }

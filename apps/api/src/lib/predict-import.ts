@@ -57,8 +57,8 @@ function validateWorkbookSheets(sheetNames: string[]): void {
   validateWorkbookSheetsCore(sheetNames, PREDICT_SHEET_CONFIG, PREDICT_REQUIRED_SHEETS);
 }
 
-function parseSheetRows(buffer: Buffer, sheetName: PredictSheetName, skipEmpty: boolean) {
-  return parseSheetRowsCore(buffer, sheetName, PREDICT_SHEET_CONFIG[sheetName].requiredHeaders, skipEmpty);
+function parseSheetRows(wb: XLSX.WorkBook, sheetName: PredictSheetName, skipEmpty: boolean) {
+  return parseSheetRowsCore(wb, sheetName, PREDICT_SHEET_CONFIG[sheetName].requiredHeaders, skipEmpty);
 }
 
 async function insertSheetRows(
@@ -111,7 +111,7 @@ export async function importPredictExcel(params: {
       const table = PREDICT_RAW_TABLE_BY_NAME[cfg.table];
       if (!table) throw new Error(`No table mapping for ${cfg.table}`);
 
-      const rows = parseSheetRows(params.buffer, sheetName, true);
+      const rows = parseSheetRows(wb, sheetName, true);
       manifest[sheetName] = await insertSheetRows(table, sourceId, rows);
     }
 

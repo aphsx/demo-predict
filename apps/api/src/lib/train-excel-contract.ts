@@ -32,7 +32,7 @@ export const TRAIN_SHEET_CONFIG: Record<TrainSheetName, TrainSheetConfig> = {
   },
   "Backend_payment": {
     table: "train_raw_sheet_backend_payment",
-    requiredHeaders: ["uid", "payment_date", "acc_id"],
+    requiredHeaders: ["uid", "payment_date", "acc_id", "amount", "credit_add"],
   },
   "SMS_usage (BC)": {
     table: "train_raw_sheet_sms_usage_bc",
