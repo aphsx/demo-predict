@@ -436,24 +436,36 @@ def _apply_clv(
                 predicted[clv_mask] = (
                     eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy()
                 )
-        if model_object["champion"] == "lgbm_tweedie":
+        champion = model_object["champion"]
+        if champion in ("lgbm_tweedie", "xgb_tweedie", "hurdle"):
             x = transform_features(features_raw[clv_mask], clv_bundle["preprocessor"])
-            tweedie_pred = np.clip(model_object["tweedie"].predict(x), 0, None)
-            if bgnbd is not None:
-                tweedie_pred = _blend_clv_tail(
-                    tweedie_pred,
-                    bg_clv=eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy(),
-                    freq=pd.to_numeric(features_raw["payment_count_all"], errors="coerce").to_numpy()[clv_mask],
-                    revenue=pd.to_numeric(features_raw["total_revenue_all"], errors="coerce").to_numpy()[clv_mask],
+            ml_obj = (
+                model_object["tweedie"] if champion == "lgbm_tweedie"
+                else model_object["xgb"] if champion == "xgb_tweedie"
+                else model_object.get("hurdle")
+            )
+            if ml_obj is None:
+                logger.warning(
+                    "CLV champion is %s but model object is None; falling back to BG-NBD.",
+                    champion,
                 )
             else:
-                # No BG/NBD in the bundle → the whale tail stays capped. Surface
-                # it rather than degrade silently (REMEDIATION-PLAN P1).
-                logger.warning(
-                    "CLV champion is lgbm_tweedie without a BG/NBD bundle; "
-                    "high-value tail will be under-predicted (no hybrid correction)."
-                )
-            predicted[clv_mask] = tweedie_pred
+                ml_pred = np.clip(ml_obj.predict(x), 0, None)
+                if bgnbd is not None and champion != "hurdle":
+                    # BG-NBD tail blend only for point estimators — hurdle already models zeros
+                    ml_pred = _blend_clv_tail(
+                        ml_pred,
+                        bg_clv=eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy(),
+                        freq=pd.to_numeric(features_raw["payment_count_all"], errors="coerce").to_numpy()[clv_mask],
+                        revenue=pd.to_numeric(features_raw["total_revenue_all"], errors="coerce").to_numpy()[clv_mask],
+                    )
+                elif bgnbd is None and champion != "hurdle":
+                    logger.warning(
+                        "CLV champion is %s without a BG/NBD bundle; "
+                        "high-value tail will be under-predicted (no hybrid correction).",
+                        champion,
+                    )
+                predicted[clv_mask] = ml_pred
 
     frame["predicted_clv_6m"] = predicted
     frame["p_alive"] = np.clip(p_alive, 0.0, 1.0)
@@ -750,23 +762,23 @@ def _build_output_rows(
             {
                 "prediction_run_id": prediction_run_id,
                 "acc_id": int(row["acc_id"]),
-                "lifecycle_stage": row["lifecycle_stage"],
-                "sub_stage": row["sub_stage"],
+                "lifecycle_stage": _str_or_none(row["lifecycle_stage"]),
+                "sub_stage": _str_or_none(row["sub_stage"]),
                 "churn_probability": _round_or_none(row["churn_probability"], 4),
-                "churn_risk_level": row["churn_risk_level"],
+                "churn_risk_level": _str_or_none(row["churn_risk_level"]),
                 "churn_factors_json": json.dumps(row["churn_factors"], ensure_ascii=False)
                 if row["churn_factors"] is not None
                 else None,
                 "predicted_clv_6m": _round_or_none(row["predicted_clv_6m"], 2),
                 "p_alive": _round_or_none(row["p_alive"], 4),
-                "customer_value_tier": row["customer_value_tier"],
+                "customer_value_tier": _str_or_none(row["customer_value_tier"]),
                 "revenue_at_risk": _round_or_none(row["revenue_at_risk"], 2),
                 "predicted_credit_usage_30d": _round_or_none(row["predicted_credit_usage_30d"], 2),
                 "predicted_credit_usage_90d": _round_or_none(row["predicted_credit_usage_90d"], 2),
                 "credit_forecast_interval_json": interval,
                 "estimated_days_until_topup": _int_or_none(row["estimated_days_until_topup"]),
                 "credit_urgency_level": _str_or_none(row["credit_urgency_level"]),
-                "usage_trend": row["usage_trend"],
+                "usage_trend": _str_or_none(row["usage_trend"]),
                 "days_since_last_activity": _int_or_none(row["days_since_last_activity"]),
                 "n_purchases": int(row["n_purchases"]),
                 "total_revenue": _round_or_none(row["total_revenue"], 2) or 0.0,

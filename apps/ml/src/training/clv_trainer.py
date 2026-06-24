@@ -9,26 +9,30 @@ of which candidate wins the revenue forecast (OUTPUT-CONTRACT §3.5).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import lightgbm as lgb
 import numpy as np
 import optuna
 import pandas as pd
+import xgboost as xgb
 from lifetimes import BetaGeoFitter, GammaGammaFitter
 from scipy.stats import spearmanr
 
 from src.training.baselines import ClvSegmentMeanBaseline, clv_carryover_scores
 from src.training.datasets import SplitFrame
-from src.training.metrics import clv_metrics
+from src.training.metrics import bootstrap_ci_regression, clv_metrics
 from src.training.preprocessing import PreprocessorConfig, transform_features
 
 logger = logging.getLogger(__name__)
 
 RANDOM_SEED = 42
 TWEEDIE_TRIALS = 50
-BGNBD_PENALIZERS = [0.001, 0.01, 0.1]
+XGB_TWEEDIE_TRIALS = 30
+HURDLE_TRIALS = 30
+# 9 log-spaced values [1e-4, 3.2e-4, ..., 1.0] — finer coverage than the old 3-point grid
+BGNBD_PENALIZERS = [float(v) for v in np.logspace(-4, 0, 9)]
 EARLY_STOPPING_ROUNDS = 50
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -69,16 +73,40 @@ class BgNbdBundle:
 
 
 @dataclass
+class HurdleBundle:
+    """2-stage zero-inflated model: LightGBM binary × LightGBM Gamma.
+
+    Stage 1 (classifier): P(revenue > 0) — trained on all rows.
+    Stage 2 (regressor):  E[revenue | revenue > 0] — trained on positive-only rows,
+                          Gamma objective appropriate for strictly positive right-skewed targets.
+    Final prediction: prob_positive × conditional_revenue (expectation by law of total expectation).
+    """
+
+    classifier: lgb.LGBMClassifier
+    regressor: lgb.LGBMRegressor
+    params: dict[str, Any]  # shared structural params (objective field excluded)
+
+    def predict(self, x: "pd.DataFrame") -> np.ndarray:
+        prob_positive = np.clip(self.classifier.predict_proba(x)[:, 1], 0.0, 1.0)
+        conditional = np.clip(self.regressor.predict(x), 0.0, None)
+        return prob_positive * conditional
+
+
+@dataclass
 class ClvTrainResult:
-    champion_name: str  # "bgnbd_gamma_gamma" | "lgbm_tweedie"
+    champion_name: str  # "bgnbd_gamma_gamma" | "lgbm_tweedie" | "xgb_tweedie" | "hurdle"
     bgnbd: BgNbdBundle
     tweedie_model: lgb.LGBMRegressor | None
     tweedie_params: dict[str, Any]
+    xgb_model: xgb.XGBRegressor | None
+    xgb_params: dict[str, Any]
+    hurdle_bundle: HurdleBundle | None
     competition: dict[str, float]
     validation_metrics: dict[str, float]
     test_metrics: dict[str, float]
     baseline_metrics: dict[str, dict[str, dict[str, float]]]
     preprocessor: PreprocessorConfig
+    test_ci_json: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 def build_rfm_summary(payments: pd.DataFrame, acc_ids: pd.Series, cutoff: pd.Timestamp) -> pd.DataFrame:
@@ -140,6 +168,8 @@ def train_clv(
     preprocessor: PreprocessorConfig,
     *,
     tweedie_trials: int = TWEEDIE_TRIALS,
+    xgb_trials: int = XGB_TWEEDIE_TRIALS,
+    hurdle_trials: int = HURDLE_TRIALS,
     progress: Callable[[str], None] | None = None,
 ) -> ClvTrainResult:
     notify = progress or (lambda message: logger.info(message))
@@ -172,7 +202,7 @@ def train_clv(
     x_val = transform_features(dataset.features("validation"), preprocessor)
     x_test = transform_features(dataset.features("test"), preprocessor)
 
-    def build_params(trial: optuna.Trial) -> dict[str, Any]:
+    def build_lgbm_params(trial: optuna.Trial) -> dict[str, Any]:
         return {
             "objective": "tweedie",
             "tweedie_variance_power": trial.suggest_float("tweedie_variance_power", 1.1, 1.9),
@@ -190,8 +220,8 @@ def train_clv(
             "verbosity": -1,
         }
 
-    def objective(trial: optuna.Trial) -> float:
-        model = lgb.LGBMRegressor(**build_params(trial))
+    def lgbm_objective(trial: optuna.Trial) -> float:
+        model = lgb.LGBMRegressor(**build_lgbm_params(trial))
         model.fit(
             x_train,
             y_train,
@@ -202,12 +232,12 @@ def train_clv(
         corr = spearmanr(y_val.to_numpy(), predictions).statistic
         return 0.0 if np.isnan(corr) else float(corr)
 
-    study = optuna.create_study(
+    lgbm_study = optuna.create_study(
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
     )
-    study.optimize(objective, n_trials=tweedie_trials, show_progress_bar=False)
-    tweedie_params = build_params(optuna.trial.FixedTrial(study.best_params))
+    lgbm_study.optimize(lgbm_objective, n_trials=tweedie_trials, show_progress_bar=False)
+    tweedie_params = build_lgbm_params(optuna.trial.FixedTrial(lgbm_study.best_params))
     tweedie = lgb.LGBMRegressor(**tweedie_params)
     tweedie.fit(
         x_train,
@@ -215,25 +245,84 @@ def train_clv(
         eval_set=[(x_val, y_val)],
         callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(0)],
     )
-    tweedie_val_spearman = float(study.best_value)
+    tweedie_val_spearman = float(lgbm_study.best_value)
+
+    # ── Candidate 3: XGBoost Tweedie — alternative zero-heavy regressor ──
+    notify(f"clv: tuning XGBoost Tweedie with Optuna ({xgb_trials} trials)")
+
+    def build_xgb_params(trial: optuna.Trial) -> dict[str, Any]:
+        return {
+            "objective": "reg:tweedie",
+            "tweedie_variance_power": trial.suggest_float("tweedie_variance_power", 1.1, 1.9),
+            "n_estimators": 1500,
+            "max_depth": trial.suggest_int("max_depth", 3, 8),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "min_child_weight": trial.suggest_int("min_child_weight", 5, 100),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+            "random_state": RANDOM_SEED,
+            "n_jobs": -1,
+            "verbosity": 0,
+            "tree_method": "hist",
+            "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
+        }
+
+    def xgb_objective(trial: optuna.Trial) -> float:
+        model = xgb.XGBRegressor(**build_xgb_params(trial))
+        model.fit(x_train, y_train, eval_set=[(x_val, y_val)], verbose=False)
+        predictions = np.clip(model.predict(x_val), 0, None)
+        corr = spearmanr(y_val.to_numpy(), predictions).statistic
+        return 0.0 if np.isnan(corr) else float(corr)
+
+    xgb_study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
+    )
+    xgb_study.optimize(xgb_objective, n_trials=xgb_trials, show_progress_bar=False)
+    xgb_params = build_xgb_params(optuna.trial.FixedTrial(xgb_study.best_params))
+    xgb_model = xgb.XGBRegressor(**xgb_params)
+    xgb_model.fit(x_train, y_train, eval_set=[(x_val, y_val)], verbose=False)
+    xgb_val_spearman = float(xgb_study.best_value)
+
+    # ── Candidate 4: Hurdle model (binary × Gamma) — tackles zero-inflation directly ──
+    notify(f"clv: fitting hurdle model (LightGBM binary + Gamma, {hurdle_trials} trials)")
+    hurdle_bundle, hurdle_val_spearman = _fit_hurdle(
+        x_train, y_train, x_val, y_val, hurdle_trials=hurdle_trials
+    )
 
     competition = {
         "bgnbd_gamma_gamma": round(best_bgnbd_spearman, 4),
         "lgbm_tweedie": round(tweedie_val_spearman, 4),
+        "xgb_tweedie": round(xgb_val_spearman, 4),
+        "hurdle": round(hurdle_val_spearman, 4),
     }
-    champion_name = (
-        "lgbm_tweedie" if tweedie_val_spearman > best_bgnbd_spearman else "bgnbd_gamma_gamma"
-    )
+    best_val = max(competition.values())
+    if competition["hurdle"] == best_val:
+        champion_name = "hurdle"
+    elif competition["xgb_tweedie"] == best_val:
+        champion_name = "xgb_tweedie"
+    elif competition["lgbm_tweedie"] == best_val:
+        champion_name = "lgbm_tweedie"
+    else:
+        champion_name = "bgnbd_gamma_gamma"
     notify(f"clv: champion = {champion_name} ({competition})")
 
     def champion_predict(split_name: str, x: pd.DataFrame) -> np.ndarray:
         if champion_name == "lgbm_tweedie":
             return np.clip(tweedie.predict(x), 0, None)
+        if champion_name == "xgb_tweedie":
+            return np.clip(xgb_model.predict(x), 0, None)
+        if champion_name == "hurdle":
+            return np.clip(hurdle_bundle.predict(x), 0, None)
         rfm = build_rfm_summary(payments, dataset.split(split_name)["acc_id"], cutoff)
         return best_bundle.predict_frame(rfm)["predicted_clv"].to_numpy()
 
     validation_metrics = clv_metrics(y_val.to_numpy(), champion_predict("validation", x_val))
-    test_metrics = clv_metrics(y_test.to_numpy(), champion_predict("test", x_test))
+    test_preds = champion_predict("test", x_test)
+    test_metrics = clv_metrics(y_test.to_numpy(), test_preds)
+    test_ci_json = bootstrap_ci_regression(y_test.to_numpy(), test_preds)
 
     # ── Baselines (§12) ───────────────────────────────────────────
     segment = ClvSegmentMeanBaseline().fit(dataset.features("train"), y_train)
@@ -253,11 +342,15 @@ def train_clv(
         bgnbd=best_bundle,
         tweedie_model=tweedie if champion_name == "lgbm_tweedie" else None,
         tweedie_params=tweedie_params,
+        xgb_model=xgb_model if champion_name == "xgb_tweedie" else None,
+        xgb_params=xgb_params,
+        hurdle_bundle=hurdle_bundle if champion_name == "hurdle" else None,
         competition=competition,
         validation_metrics=validation_metrics,
         test_metrics=test_metrics,
         baseline_metrics=baseline_metrics,
         preprocessor=preprocessor,
+        test_ci_json=test_ci_json,
     )
 
 
@@ -274,18 +367,48 @@ def backtest_clv(
     y_train = pd.to_numeric(dataset.labels("train", "future_revenue_6m"), errors="coerce").fillna(0.0)
     y_test = pd.to_numeric(dataset.labels("test", "future_revenue_6m"), errors="coerce").fillna(0.0)
 
-    if result.champion_name == "lgbm_tweedie":
+    if result.champion_name in ("lgbm_tweedie", "xgb_tweedie", "hurdle"):
         x_train = transform_features(dataset.features("train"), preprocessor)
         x_val = transform_features(dataset.features("validation"), preprocessor)
-        y_val = pd.to_numeric(dataset.labels("validation", "future_revenue_6m"), errors="coerce").fillna(0.0)
-        model = lgb.LGBMRegressor(**result.tweedie_params)
-        model.fit(
-            x_train,
-            y_train,
-            eval_set=[(x_val, y_val)],
-            callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
-        )
-        predictions = np.clip(model.predict(transform_features(dataset.features("test"), preprocessor)), 0, None)
+        y_val_bt = pd.to_numeric(dataset.labels("validation", "future_revenue_6m"), errors="coerce").fillna(0.0)
+        x_test_bt = transform_features(dataset.features("test"), preprocessor)
+        if result.champion_name == "lgbm_tweedie":
+            model: Any = lgb.LGBMRegressor(**result.tweedie_params)
+            model.fit(
+                x_train, y_train,
+                eval_set=[(x_val, y_val_bt)],
+                callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
+            )
+            predictions = np.clip(model.predict(x_test_bt), 0, None)
+        elif result.champion_name == "xgb_tweedie":
+            model = xgb.XGBRegressor(**result.xgb_params)
+            model.fit(x_train, y_train, eval_set=[(x_val, y_val_bt)], verbose=False)
+            predictions = np.clip(model.predict(x_test_bt), 0, None)
+        else:
+            # Hurdle: refit both stages from params stored in bundle
+            bp = result.hurdle_bundle.params
+            y_train_np = y_train.to_numpy()
+            y_val_np = y_val_bt.to_numpy()
+            pos_tr = y_train_np > 0
+            pos_va = y_val_np > 0
+            y_tr_pos = np.maximum(y_train_np[pos_tr], 1e-6)
+            y_va_pos = np.maximum(y_val_np[pos_va], 1e-6)
+            clf = lgb.LGBMClassifier(objective="binary", **bp)
+            clf.fit(
+                x_train, (y_train_np > 0).astype(float),
+                eval_set=[(x_val, (y_val_np > 0).astype(float))],
+                callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
+            )
+            reg = lgb.LGBMRegressor(objective="gamma", **bp)
+            if pos_va.sum() >= 20:
+                reg.fit(
+                    x_train[pos_tr], y_tr_pos,
+                    eval_set=[(x_val[pos_va], y_va_pos)],
+                    callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
+                )
+            else:
+                reg.fit(x_train[pos_tr], y_tr_pos)
+            predictions = np.clip(HurdleBundle(clf, reg, bp).predict(x_test_bt), 0, None)
     else:
         bundle = fit_bgnbd(
             payments, dataset.split("train")["acc_id"], cutoff, horizon_days, result.bgnbd.penalizer
@@ -303,3 +426,103 @@ def backtest_clv(
         ),
     }
     return champion_metrics, baseline_metrics
+
+
+def _fit_hurdle(
+    x_train: pd.DataFrame,
+    y_train: pd.Series,
+    x_val: pd.DataFrame,
+    y_val: pd.Series,
+    *,
+    hurdle_trials: int,
+) -> tuple[HurdleBundle, float]:
+    """Tune and fit a 2-stage hurdle model; return (bundle, val_spearman).
+
+    Stage 1: LightGBM binary classifier — learns which customers will have any revenue.
+    Stage 2: LightGBM Gamma regressor on positive-only rows — learns how much revenue.
+    Joint optimisation target: Spearman on the full validation set (not just positives).
+    """
+    y_train_np = np.asarray(y_train, dtype=float)
+    y_val_np = np.asarray(y_val, dtype=float)
+    y_train_bin = (y_train_np > 0).astype(float)
+    y_val_bin = (y_val_np > 0).astype(float)
+
+    pos_tr = y_train_np > 0
+    pos_va = y_val_np > 0
+    # Gamma requires strictly positive; clip away any float-precision zeros.
+    y_tr_pos = np.maximum(y_train_np[pos_tr], 1e-6)
+    y_va_pos = np.maximum(y_val_np[pos_va], 1e-6)
+    x_tr_pos = x_train[pos_tr]
+    x_va_pos = x_val[pos_va]
+    use_val_es = int(pos_va.sum()) >= 20  # need enough positive val rows for early stopping
+
+    if int(pos_tr.sum()) < 10:
+        # Degenerate dataset — return dummy with score -1 so it never wins
+        dummy_clf = lgb.LGBMClassifier(objective="binary", n_estimators=10, random_state=RANDOM_SEED, verbosity=-1)
+        dummy_clf.fit(x_train, y_train_bin)
+        dummy_reg = lgb.LGBMRegressor(objective="gamma", n_estimators=10, random_state=RANDOM_SEED, verbosity=-1)
+        if int(pos_tr.sum()) > 0:
+            dummy_reg.fit(x_tr_pos, y_tr_pos)
+        return HurdleBundle(classifier=dummy_clf, regressor=dummy_reg, params={}), -1.0
+
+    def build_params(trial: optuna.Trial) -> dict[str, Any]:
+        return {
+            "n_estimators": 1000,
+            "num_leaves": trial.suggest_int("num_leaves", 16, 128),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "min_child_samples": trial.suggest_int("min_child_samples", 10, 200),
+            "feature_fraction": trial.suggest_float("feature_fraction", 0.5, 1.0),
+            "bagging_fraction": trial.suggest_float("bagging_fraction", 0.5, 1.0),
+            "bagging_freq": 1,
+            "lambda_l1": trial.suggest_float("lambda_l1", 1e-8, 10.0, log=True),
+            "lambda_l2": trial.suggest_float("lambda_l2", 1e-8, 10.0, log=True),
+            "random_state": RANDOM_SEED,
+            "n_jobs": -1,
+            "verbosity": -1,
+        }
+
+    def hurdle_objective(trial: optuna.Trial) -> float:
+        params = build_params(trial)
+        clf = lgb.LGBMClassifier(objective="binary", **params)
+        clf.fit(
+            x_train, y_train_bin,
+            eval_set=[(x_val, y_val_bin)],
+            callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
+        )
+        reg = lgb.LGBMRegressor(objective="gamma", **params)
+        if use_val_es:
+            reg.fit(
+                x_tr_pos, y_tr_pos,
+                eval_set=[(x_va_pos, y_va_pos)],
+                callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
+            )
+        else:
+            reg.fit(x_tr_pos, y_tr_pos)
+        prob = np.clip(clf.predict_proba(x_val)[:, 1], 0.0, 1.0)
+        cond = np.clip(reg.predict(x_val), 0.0, None)
+        corr = spearmanr(y_val_np, prob * cond).statistic
+        return 0.0 if np.isnan(corr) else float(corr)
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
+    )
+    study.optimize(hurdle_objective, n_trials=hurdle_trials, show_progress_bar=False)
+    best_params = build_params(optuna.trial.FixedTrial(study.best_params))
+
+    clf_final = lgb.LGBMClassifier(objective="binary", **best_params)
+    clf_final.fit(
+        x_train, y_train_bin,
+        eval_set=[(x_val, y_val_bin)],
+        callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
+    )
+    reg_final = lgb.LGBMRegressor(objective="gamma", **best_params)
+    if use_val_es:
+        reg_final.fit(
+            x_tr_pos, y_tr_pos,
+            eval_set=[(x_va_pos, y_va_pos)],
+            callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
+        )
+    else:
+        reg_final.fit(x_tr_pos, y_tr_pos)
+    return HurdleBundle(classifier=clf_final, regressor=reg_final, params=best_params), float(study.best_value)

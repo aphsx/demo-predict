@@ -74,6 +74,9 @@ class CandidateEval:
     baseline_backtests: dict[str, float] = field(default_factory=dict)
     champion_backtests: dict[str, float] | None = None
     calibration_error: float | None = None
+    # Bootstrap 95% CI on the primary test metric: (ci_lower, ci_upper).
+    # When supplied, decide() uses it to flag statistically uncertain wins.
+    primary_test_ci: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -116,11 +119,27 @@ def decide(candidates: list[CandidateEval], config: PromotionConfig) -> Promotio
         if runner_up
         else f" (composite {winner.composite:.4f})"
     )
+
+    # CI overlap check: if the winner's test-metric CI overlaps the runner-up's,
+    # the observed difference may be within sampling noise. Flag as advisory —
+    # it does NOT change the selection, but surfaces the uncertainty for review.
+    ci_note = ""
+    if runner_up:
+        cand_map = {c.name: c for c in candidates}
+        w_ci = cand_map[winner.name].primary_test_ci
+        r_ci = cand_map[runner_up[0].name].primary_test_ci
+        if w_ci is not None and r_ci is not None and w_ci[0] <= r_ci[1]:
+            ci_note = (
+                f" ⚠ CIs ทับซ้อน ({winner.name} [{w_ci[0]:.4f},{w_ci[1]:.4f}] "
+                f"vs {runner_up[0].name} [{r_ci[0]:.4f},{r_ci[1]:.4f}])"
+                " — ความแตกต่างอาจเป็น sampling noise; ควรเก็บข้อมูลเพิ่ม"
+            )
+
     return PromotionDecision(
         winner=winner.name,
         keep_incumbent=False,
         candidates=decisions,
-        summary=f"เลือก {winner.name} — ดีที่สุดในกลุ่มที่ผ่าน safety gate{margin_note}",
+        summary=f"เลือก {winner.name} — ดีที่สุดในกลุ่มที่ผ่าน safety gate{margin_note}{ci_note}",
     )
 
 

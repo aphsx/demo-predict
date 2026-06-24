@@ -1,12 +1,22 @@
 """Churn model training (TRAINING-PIPELINE §8–§10, §13).
 
-Candidates: Logistic Regression, Random Forest, LightGBM (Optuna), XGBoost
-(Optuna), and — when the optional `tabicl` package is installed — TabICLv2, a
-pretrained tabular foundation model that needs no tuning. Candidates are ranked
-by 5-fold CV PR-AUC; calibration is fitted on out-of-fold predictions (Platt vs
-isotonic by Brier), threshold = max-F2. Test split is touched once, at the end,
-for reporting. The promotion gate decides whether any candidate (TabICL
-included) actually beats the baselines and the existing champion.
+Candidates are declared explicitly via the `candidates` parameter (or
+CHURN_CANDIDATES env var, comma-separated). Default pool:
+  logistic_regression, lightgbm, xgboost, tabicl
+
+Random Forest is available but excluded from the default — it is slow and
+has not beaten a tuned LightGBM in any backtest on this dataset. Add
+"random_forest" to CHURN_CANDIDATES to re-enable it.
+
+TabICLv2 is a pretrained tabular foundation model (no hyperparameter tuning).
+It is a first-class candidate: always attempted when listed. If the `tabicl`
+package is missing the candidate is skipped with a warning, not a crash.
+
+Candidates are ranked by 5-fold CV PR-AUC; calibration is fitted on
+out-of-fold predictions (Platt vs isotonic by Brier), threshold = max-F2.
+Test split is touched once, at the end, for reporting. The promotion gate
+decides whether any candidate actually beats the baselines and the existing
+champion.
 """
 
 from __future__ import annotations
@@ -34,10 +44,12 @@ from src.training.baselines import (
 )
 from src.training.datasets import SplitFrame
 from src.training.metrics import (
+    bootstrap_ci,
     calibration_curve_points,
     churn_metrics,
     confusion_at_threshold,
     expected_calibration_error,
+    hosmer_lemeshow_test,
     lift_table,
     risk_thresholds_from_high,
     select_threshold_max_fbeta,
@@ -63,13 +75,22 @@ HIGH_THRESHOLD_BAND = (0.35, 0.85)
 # real 1Moby data, exactly like every other candidate.
 TABICL_SAMPLE_LIMIT = 500_000
 
+# Default candidate pool — explicit list, not environment-detection.
+# Override via CHURN_CANDIDATES env var (comma-separated) or the
+# `candidates` kwarg on train_churn_candidates / train_churn.
+DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm", "xgboost", "tabicl"]
+
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
-def _tabicl_available() -> bool:
-    """True when the optional `tabicl` package can be imported."""
-
-    return importlib.util.find_spec("tabicl") is not None
+def _resolve_candidates(candidates: list[str] | None) -> list[str]:
+    """Return the active candidate list from arg → env → default (in priority)."""
+    if candidates is not None:
+        return candidates
+    env = os.getenv("CHURN_CANDIDATES")
+    if env:
+        return [c.strip() for c in env.split(",") if c.strip()]
+    return list(DEFAULT_CANDIDATES)
 
 
 def _tabicl_device() -> str:
@@ -137,6 +158,9 @@ class ChurnTrainResult:
     feature_importance: list[dict[str, Any]]
     baseline_metrics: dict[str, dict[str, dict[str, float]]]
     preprocessor: PreprocessorConfig
+    # Gold-standard additions: stored separately so metrics_json API is unchanged
+    test_ci_json: dict[str, dict[str, float]] | None = None  # bootstrap 95% CIs
+    hosmer_lemeshow_json: dict[str, float] | None = None     # calibration GoF test
 
     def predict_proba(self, features_raw: pd.DataFrame) -> np.ndarray:
         x = transform_features(features_raw, self.preprocessor)
@@ -157,6 +181,7 @@ class ChurnTraining:
     candidates: list[ChurnCandidate]  # sorted by CV PR-AUC, best first
     competition: dict[str, float]
     cv_oof: dict[str, np.ndarray]
+    cv_fold_scores: dict[str, list[float]]  # per-fold PR-AUC for CI computation
     x_trval: pd.DataFrame
     y_trval: np.ndarray
     x_test: pd.DataFrame
@@ -171,9 +196,13 @@ def train_churn_candidates(
     *,
     lgbm_trials: int = LGBM_TRIALS,
     xgb_trials: int = XGB_TRIALS,
+    candidates: list[str] | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> ChurnTraining:
     notify = progress or (lambda message: logger.info(message))
+
+    active = _resolve_candidates(candidates)
+    notify(f"churn: candidate pool = {active}")
 
     x_train = transform_features(dataset.features("train"), preprocessor)
     x_val = transform_features(dataset.features("validation"), preprocessor)
@@ -184,28 +213,42 @@ def train_churn_candidates(
 
     scale_pos_weight = float((y_train == 0).sum() / max(1, (y_train == 1).sum()))
 
-    # ── Candidates (§8): tune hyperparameters on the validation split ──
-    notify("churn: training Logistic Regression candidate")
-    candidates = [_fit_logistic(x_train, y_train, x_val, y_val)]
-    notify("churn: training Random Forest candidate")
-    candidates.append(_fit_random_forest(x_train, y_train, x_val, y_val))
-    notify(f"churn: tuning LightGBM with Optuna ({lgbm_trials} trials)")
-    candidates.append(_tune_lightgbm(x_train, y_train, x_val, y_val, scale_pos_weight, lgbm_trials))
-    notify(f"churn: tuning XGBoost with Optuna ({xgb_trials} trials)")
-    candidates.append(_tune_xgboost(x_train, y_train, x_val, y_val, scale_pos_weight, xgb_trials))
+    # ── Build candidate list from config (§8) ─────────────────────
+    fitted: list[ChurnCandidate] = []
 
-    # ── Optional TabICLv2 foundation-model candidate (no tuning) ──
-    if len(y_train) <= TABICL_SAMPLE_LIMIT and _tabicl_available():
-        notify("churn: fitting TabICLv2 candidate (foundation model, no tuning)")
-        try:
-            candidates.append(_fit_tabicl(x_train, y_train, x_val, y_val))
-        except Exception as exc:  # noqa: BLE001 - a missing checkpoint/GPU must not kill the run.
-            notify(f"churn: TabICLv2 candidate skipped ({type(exc).__name__}: {exc})")
-    elif _tabicl_available():
-        notify(
-            f"churn: TabICLv2 skipped — {len(y_train)} train rows exceed the "
-            f"{TABICL_SAMPLE_LIMIT} in-context limit"
-        )
+    if "logistic_regression" in active:
+        notify("churn: training Logistic Regression candidate")
+        fitted.append(_fit_logistic(x_train, y_train, x_val, y_val))
+
+    if "random_forest" in active:
+        notify("churn: training Random Forest candidate")
+        fitted.append(_fit_random_forest(x_train, y_train, x_val, y_val))
+
+    if "lightgbm" in active:
+        notify(f"churn: tuning LightGBM with Optuna ({lgbm_trials} trials)")
+        fitted.append(_tune_lightgbm(x_train, y_train, x_val, y_val, scale_pos_weight, lgbm_trials))
+
+    if "xgboost" in active:
+        notify(f"churn: tuning XGBoost with Optuna ({xgb_trials} trials)")
+        fitted.append(_tune_xgboost(x_train, y_train, x_val, y_val, scale_pos_weight, xgb_trials))
+
+    if "tabicl" in active:
+        if len(y_train) > TABICL_SAMPLE_LIMIT:
+            notify(
+                f"churn: TabICLv2 skipped — {len(y_train)} train rows exceed "
+                f"the {TABICL_SAMPLE_LIMIT} in-context limit"
+            )
+        elif importlib.util.find_spec("tabicl") is None:
+            notify("churn: TabICLv2 skipped — `tabicl` package not installed (pip install tabicl)")
+        else:
+            notify("churn: fitting TabICLv2 candidate (foundation model, no hyperparameter tuning)")
+            try:
+                fitted.append(_fit_tabicl(x_train, y_train, x_val, y_val))
+            except Exception as exc:  # noqa: BLE001
+                notify(f"churn: TabICLv2 candidate failed ({type(exc).__name__}: {exc})")
+
+    if not fitted:
+        raise RuntimeError(f"No churn candidates were fitted. Check CHURN_CANDIDATES or `candidates` kwarg. Active list: {active}")
 
     # ── Candidate ranking by 5-fold CV on train∪validation ───────
     # A single 20% validation slice is too noisy to pick the champion at this
@@ -217,20 +260,28 @@ def train_churn_candidates(
 
     competition: dict[str, float] = {}
     cv_oof: dict[str, np.ndarray] = {}
-    for candidate in candidates:
+    cv_fold_scores: dict[str, list[float]] = {}
+    for candidate in fitted:
         candidate.params = _resolved_params(candidate)
-        cv_score, oof = _cv_oof(candidate, x_trval, y_trval)
+        cv_score, oof, fold_scores = _cv_oof(candidate, x_trval, y_trval)
         cv_oof[candidate.name] = oof
+        cv_fold_scores[candidate.name] = fold_scores
         competition[candidate.name] = round(cv_score, 4)
-        notify(f"churn: {candidate.name} CV PR-AUC = {cv_score:.4f} (val {candidate.validation_pr_auc:.4f})")
+        # Report mean ± std so CI is visible at training time
+        cv_std = float(np.std(fold_scores))
+        notify(
+            f"churn: {candidate.name} CV PR-AUC = {cv_score:.4f} ± {cv_std:.4f} "
+            f"(val {candidate.validation_pr_auc:.4f})"
+        )
 
-    candidates.sort(key=lambda candidate: -competition[candidate.name])
+    fitted.sort(key=lambda c: -competition[c.name])
     return ChurnTraining(
         dataset=dataset,
         preprocessor=preprocessor,
-        candidates=candidates,
+        candidates=fitted,
         competition=competition,
         cv_oof=cv_oof,
+        cv_fold_scores=cv_fold_scores,
         x_trval=x_trval,
         y_trval=y_trval,
         x_test=x_test,
@@ -276,6 +327,43 @@ def finalize_churn_candidate(
         training.y_test, calibrated_test, threshold=thresholds["high"], ranking_scores=raw_test
     )
 
+    # ── CV confidence interval (fold-score std → 95% t-interval) ─
+    fold_scores = training.cv_fold_scores[candidate.name]
+    n_folds = len(fold_scores)
+    cv_mean = float(np.mean(fold_scores))
+    cv_std = float(np.std(fold_scores, ddof=1))
+    # t_{n-1, 0.975} ≈ 2.776 for 5 folds; use exact value from scipy
+    from scipy.stats import t as t_dist
+    t_crit = float(t_dist.ppf(0.975, df=n_folds - 1))
+    half_width = t_crit * cv_std / np.sqrt(n_folds)
+    validation_metrics["cv_pr_auc_std"] = round(cv_std, 4)
+    validation_metrics["cv_pr_auc_ci_lower"] = round(max(0.0, cv_mean - half_width), 4)
+    validation_metrics["cv_pr_auc_ci_upper"] = round(min(1.0, cv_mean + half_width), 4)
+
+    # ── Bootstrap 95% CI on test metrics (1000 resamples) ────────
+    notify(f"churn: {candidate.name} computing bootstrap CIs on test set …")
+    test_ci = bootstrap_ci(
+        training.y_test,
+        calibrated_test,
+        threshold=thresholds["high"],
+        ranking_scores=raw_test,
+        n_boot=1000,
+        seed=42,
+    )
+    notify(
+        f"churn: {candidate.name} test PR-AUC 95% CI "
+        f"[{test_ci.get('pr_auc', {}).get('ci_lower', '?'):.4f}, "
+        f"{test_ci.get('pr_auc', {}).get('ci_upper', '?'):.4f}]"
+    )
+
+    # ── Hosmer-Lemeshow calibration goodness-of-fit ───────────────
+    hl = hosmer_lemeshow_test(training.y_test, calibrated_test)
+    notify(
+        f"churn: {candidate.name} Hosmer-Lemeshow "
+        f"χ²({hl['df']})={hl['statistic']:.2f} p={hl['p_value']:.4f}"
+        + (" (calibration adequate)" if hl["p_value"] > 0.05 else " ⚠ miscalibration detected")
+    )
+
     # ── Baselines evaluated with the same harness (§12) ──────────
     baseline_metrics = _evaluate_baselines(
         training.dataset,
@@ -299,6 +387,8 @@ def finalize_churn_candidate(
         feature_importance=_feature_importance(candidate, training.x_trval),
         baseline_metrics=baseline_metrics,
         preprocessor=training.preprocessor,
+        test_ci_json=test_ci,
+        hosmer_lemeshow_json=hl,
     )
 
 
@@ -308,12 +398,15 @@ def train_churn(
     *,
     lgbm_trials: int = LGBM_TRIALS,
     xgb_trials: int = XGB_TRIALS,
+    candidates: list[str] | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> ChurnTrainResult:
     """Convenience wrapper: finalize the top-CV candidate."""
 
     training = train_churn_candidates(
-        dataset, preprocessor, lgbm_trials=lgbm_trials, xgb_trials=xgb_trials, progress=progress
+        dataset, preprocessor,
+        lgbm_trials=lgbm_trials, xgb_trials=xgb_trials,
+        candidates=candidates, progress=progress,
     )
     return finalize_churn_candidate(training, training.candidates[0], progress)
 
@@ -355,9 +448,13 @@ def _cv_oof(
     x: pd.DataFrame,
     y: np.ndarray,
     n_folds: int = 5,
-) -> tuple[float, np.ndarray]:
-    """Stratified K-fold CV: mean PR-AUC + out-of-fold probabilities."""
+) -> tuple[float, np.ndarray, list[float]]:
+    """Stratified K-fold CV: mean PR-AUC + out-of-fold probabilities + per-fold scores.
 
+    Returns (mean_cv_score, oof_probs, fold_scores). The caller uses fold_scores
+    to compute a confidence interval on the CV estimate (the per-fold variance
+    quantifies how stable the ranking metric is across data partitions).
+    """
     from sklearn.model_selection import StratifiedKFold
 
     oof = np.zeros(len(y), dtype=float)
@@ -369,7 +466,7 @@ def _cv_oof(
         fold_probs = model.predict_proba(x.iloc[fold_test])[:, 1]
         oof[fold_test] = fold_probs
         scores.append(float(average_precision_score(y[fold_test], fold_probs)))
-    return float(np.mean(scores)), oof
+    return float(np.mean(scores)), oof, scores
 
 
 def _resolved_params(candidate: ChurnCandidate) -> dict[str, Any]:

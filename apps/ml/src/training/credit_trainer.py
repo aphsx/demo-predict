@@ -33,7 +33,7 @@ import xgboost as xgb
 from src.training.baselines import credit_last_30d_carryover, credit_moving_avg_90d
 from src.training.datasets import SplitFrame
 from src.training.labels import CREDIT_HORIZONS
-from src.training.metrics import credit_metrics, interval_coverage, pinball_loss, smape
+from src.training.metrics import bootstrap_ci_credit, credit_metrics, interval_coverage, pinball_loss, smape
 from src.training.preprocessing import PreprocessorConfig, transform_features
 from sklearn.metrics import mean_absolute_error
 
@@ -74,8 +74,9 @@ def credit_anchor_log(features_raw: pd.DataFrame, horizon_days: int) -> np.ndarr
 class CreditHorizonModels:
     horizon_days: int
     params: dict[str, Any]
-    models: dict[float, lgb.LGBMRegressor]
-    interval_widening: float
+    models: dict[float, Any]  # LGBMRegressor or XGBRegressor per quantile
+    cqr_q_hat: float  # additive CQR margin for q10/q90; replaces multiplicative interval_widening
+    model_family: str = "lgbm"  # "lgbm" | "xgboost" — controls backtest refitting
     correction_shrinkage: float = 1.0
 
     def predict_quantiles(
@@ -86,7 +87,7 @@ class CreditHorizonModels:
         ordered = _ordered_quantile_predictions(
             self.models, x, anchor_log, getattr(self, "correction_shrinkage", 1.0)
         )
-        return _widen_interval(ordered, self.interval_widening)
+        return _apply_cqr_correction(ordered, self.cqr_q_hat)
 
 
 def _ordered_quantile_predictions(
@@ -169,6 +170,7 @@ class CreditTrainResult:
     preprocessor: PreprocessorConfig
     params_by_horizon: dict[int, dict[str, Any]] = field(default_factory=dict)
     topup_model: "TopupTimingModel | None" = None
+    test_ci_json: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 def train_credit(
@@ -241,6 +243,10 @@ def train_credit(
         )
 
     baseline_metrics = _evaluate_baselines(dataset, y)
+    test_ci_json = bootstrap_ci_credit(
+        y[30]["test"], predictions["test"][30],
+        y[90]["test"], predictions["test"][90],
+    )
 
     return CreditTrainResult(
         horizons=horizons,
@@ -250,6 +256,7 @@ def train_credit(
         preprocessor=preprocessor,
         params_by_horizon={h: m.params for h, m in horizons.items()},
         topup_model=topup_model,
+        test_ci_json=test_ci_json,
     )
 
 
@@ -274,17 +281,25 @@ def backtest_credit(
         anchor_val = credit_anchor_log(dataset.features("validation"), horizon_days)
         anchor_test = credit_anchor_log(dataset.features("test"), horizon_days)
 
-        models = _fit_quantile_models(
-            result.params_by_horizon[horizon_days],
-            x_train, y_train, anchor_train, x_val, y_val, anchor_val,
-        )
+        family = result.horizons[horizon_days].model_family
+        bt_params = result.params_by_horizon[horizon_days]
+        if family == "xgboost":
+            models = _fit_xgb_quantile_models(
+                bt_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val,
+            )
+        else:
+            models = _fit_quantile_models(
+                bt_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val,
+            )
         shrinkage = _calibrate_shrinkage(models, x_val, y_val, anchor_val)
-        widening = _calibrate_widening(models, x_val, y_val, anchor_val, shrinkage)
+        ordered_val = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
+        q_hat = _calibrate_cqr(ordered_val, y_val)
         bundle = CreditHorizonModels(
             horizon_days=horizon_days,
-            params=result.params_by_horizon[horizon_days],
+            params=bt_params,
             models=models,
-            interval_widening=widening,
+            model_family=family,
+            cqr_q_hat=q_hat,
             correction_shrinkage=shrinkage,
         )
         predictions[horizon_days] = bundle.predict_quantiles(x_test, anchor_test)
@@ -329,7 +344,11 @@ def _train_horizon(
     horizon_days: int,
     n_trials: int,
 ) -> CreditHorizonModels:
-    def build_params(trial: optuna.Trial) -> dict[str, Any]:
+    target_train = np.log1p(np.clip(y_train, 0, None)) - anchor_train
+    target_val = np.log1p(np.clip(y_val, 0, None)) - anchor_val
+
+    # ── LightGBM Quantile ──────────────────────────────────────────
+    def build_lgbm_params(trial: optuna.Trial) -> dict[str, Any]:
         return {
             "n_estimators": 1200,
             "num_leaves": trial.suggest_int("num_leaves", 16, 128),
@@ -345,38 +364,77 @@ def _train_horizon(
             "verbosity": -1,
         }
 
-    target_train = np.log1p(np.clip(y_train, 0, None)) - anchor_train
-    target_val = np.log1p(np.clip(y_val, 0, None)) - anchor_val
-
-    def objective(trial: optuna.Trial) -> float:
-        params = build_params(trial)
+    def lgbm_objective(trial: optuna.Trial) -> float:
+        params = build_lgbm_params(trial)
         model = lgb.LGBMRegressor(objective="quantile", alpha=0.50, **params)
         model.fit(
-            x_train,
-            target_train,
+            x_train, target_train,
             eval_set=[(x_val, target_val)],
             callbacks=[lgb.early_stopping(EARLY_STOPPING_ROUNDS, verbose=False), lgb.log_evaluation(0)],
         )
         predictions = np.clip(np.expm1(model.predict(x_val) + anchor_val), 0, None)
         return pinball_loss(y_val, predictions, 0.50)
 
-    study = optuna.create_study(
+    lgbm_study = optuna.create_study(
         direction="minimize",
         sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
     )
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    best_params = build_params(optuna.trial.FixedTrial(study.best_params))
+    lgbm_study.optimize(lgbm_objective, n_trials=n_trials, show_progress_bar=False)
 
-    models = _fit_quantile_models(
-        best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+    # ── XGBoost Quantile (reg:quantileerror, XGBoost ≥ 2.0) ───────
+    def build_xgb_params(trial: optuna.Trial) -> dict[str, Any]:
+        return {
+            "n_estimators": 1200,
+            "max_depth": trial.suggest_int("max_depth", 3, 8),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+            "min_child_weight": trial.suggest_int("min_child_weight", 10, 200),
+            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+            "random_state": RANDOM_SEED,
+            "n_jobs": -1,
+            "verbosity": 0,
+            "tree_method": "hist",
+            "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
+        }
+
+    def xgb_objective(trial: optuna.Trial) -> float:
+        params = build_xgb_params(trial)
+        model = xgb.XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.50, **params)
+        model.fit(x_train, target_train, eval_set=[(x_val, target_val)], verbose=False)
+        predictions = np.clip(np.expm1(model.predict(x_val) + anchor_val), 0, None)
+        return pinball_loss(y_val, predictions, 0.50)
+
+    xgb_study = optuna.create_study(
+        direction="minimize",
+        sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
     )
+    xgb_study.optimize(xgb_objective, n_trials=n_trials, show_progress_bar=False)
+
+    # ── Pick best family, calibrate CQR ───────────────────────────
+    if xgb_study.best_value < lgbm_study.best_value:
+        best_params = build_xgb_params(optuna.trial.FixedTrial(xgb_study.best_params))
+        models = _fit_xgb_quantile_models(
+            best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+        )
+        family = "xgboost"
+    else:
+        best_params = build_lgbm_params(optuna.trial.FixedTrial(lgbm_study.best_params))
+        models = _fit_quantile_models(
+            best_params, x_train, y_train, anchor_train, x_val, y_val, anchor_val
+        )
+        family = "lgbm"
+
     shrinkage = _calibrate_shrinkage(models, x_val, y_val, anchor_val)
-    widening = _calibrate_widening(models, x_val, y_val, anchor_val, shrinkage)
+    ordered_val = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
+    q_hat = _calibrate_cqr(ordered_val, y_val)
     return CreditHorizonModels(
         horizon_days=horizon_days,
         params=best_params,
         models=models,
-        interval_widening=widening,
+        model_family=family,
+        cqr_q_hat=q_hat,
         correction_shrinkage=shrinkage,
     )
 
@@ -405,41 +463,66 @@ def _fit_quantile_models(
     return models
 
 
-def _calibrate_widening(
-    models: dict[float, lgb.LGBMRegressor],
+def _fit_xgb_quantile_models(
+    params: dict[str, Any],
+    x_train: pd.DataFrame,
+    y_train: np.ndarray,
+    anchor_train: np.ndarray,
     x_val: pd.DataFrame,
     y_val: np.ndarray,
     anchor_val: np.ndarray,
-    shrinkage: float = 1.0,
+) -> dict[float, xgb.XGBRegressor]:
+    """Fit one XGBoost quantile regressor per quantile level on the log-ratio target."""
+    target_train = np.log1p(np.clip(y_train, 0, None)) - anchor_train
+    target_val = np.log1p(np.clip(y_val, 0, None)) - anchor_val
+    models: dict[float, xgb.XGBRegressor] = {}
+    for alpha in QUANTILES:
+        model = xgb.XGBRegressor(
+            objective="reg:quantileerror",
+            quantile_alpha=alpha,
+            **params,
+        )
+        model.fit(x_train, target_train, eval_set=[(x_val, target_val)], verbose=False)
+        models[alpha] = model
+    return models
+
+
+def _calibrate_cqr(
+    ordered: dict[float, np.ndarray],
+    y_val: np.ndarray,
+    alpha: float = 1.0 - TARGET_COVERAGE,
 ) -> float:
-    """Pick a widening multiplier so validation p10–p90 coverage ≈ 80% (§11)."""
+    """Conformalized Quantile Regression calibration (distribution-free coverage guarantee).
 
-    ordered = _ordered_quantile_predictions(models, x_val, anchor_val, shrinkage)
+    Computes q_hat such that P(q10_adj ≤ y ≤ q90_adj) ≥ 1 - alpha on
+    exchangeable data. The guarantee holds exactly at the 1-alpha level
+    regardless of distribution shift, unlike the multiplicative widening heuristic.
 
-    best_factor, best_gap = 1.0, float("inf")
-    for factor in np.linspace(0.3, 3.0, 28):
-        widened = _widen_interval(ordered, float(factor))
-        coverage = interval_coverage(y_val, widened[0.10], widened[0.90])
-        gap = abs(coverage - TARGET_COVERAGE)
-        if gap < best_gap:
-            best_gap, best_factor = gap, float(factor)
-    return best_factor
+    conformity score: s_i = max(q10_pred(x_i) - y_i, y_i - q90_pred(x_i))
+    q_hat = (1-alpha)(1+1/n)-th quantile of {s_i}
+    adjusted interval: [q10_pred(x) - q_hat, q90_pred(x) + q_hat]
+    """
+    scores = np.maximum(ordered[0.10] - y_val, y_val - ordered[0.90])
+    n = len(scores)
+    quantile_level = min(1.0, (1.0 - alpha) * (1.0 + 1.0 / n))
+    return float(np.quantile(scores, quantile_level))
 
 
-def _widen_interval(
+def _apply_cqr_correction(
     quantile_predictions: dict[float, np.ndarray],
-    factor: float,
+    q_hat: float,
 ) -> dict[float, np.ndarray]:
-    """Scale outer quantiles away from p50 by `factor` (p50 untouched)."""
+    """Expand q10 and q90 by the CQR margin q_hat (additive); middle quantiles unchanged."""
 
-    p50 = quantile_predictions[0.50]
-    widened: dict[float, np.ndarray] = {}
+    corrected: dict[float, np.ndarray] = {}
     for alpha, values in quantile_predictions.items():
-        if alpha == 0.50:
-            widened[alpha] = values
+        if alpha == 0.10:
+            corrected[alpha] = np.clip(values - q_hat, 0, None)
+        elif alpha == 0.90:
+            corrected[alpha] = np.clip(values + q_hat, 0, None)
         else:
-            widened[alpha] = np.clip(p50 + (values - p50) * factor, 0, None)
-    return widened
+            corrected[alpha] = values
+    return corrected
 
 
 def urgent_topup_metrics(
