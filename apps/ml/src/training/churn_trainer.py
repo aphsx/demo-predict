@@ -142,10 +142,8 @@ class ChurnCandidate:
     validation_pr_auc: float
 
     def predict_raw(self, x: pd.DataFrame) -> np.ndarray:
-        if isinstance(self.model, lgb.LGBMClassifier):
-            return self.model.predict_proba(x)[:, 1]
-        if isinstance(self.model, xgb.XGBClassifier):
-            return self.model.predict_proba(x)[:, 1]
+        # Every candidate (LGB, XGB, LR, RF, TabICL) is an sklearn-style
+        # classifier exposing predict_proba; positive-class column is index 1.
         return self.model.predict_proba(x)[:, 1]
 
 

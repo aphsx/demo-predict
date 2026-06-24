@@ -1,8 +1,9 @@
 """Credit usage forecast training (TRAINING-PIPELINE §8 — quantile regression).
 
-LightGBM quantile models per horizon (30d, 90d) × quantile (p10–p90), Optuna
-tuned on p50 pinball loss per horizon, with a multiplicative interval widening
-factor calibrated on validation so p10–p90 coverage lands at the 80% target.
+LightGBM quantile models per horizon (30d, 90d) × 5 quantiles
+(p10, p25, p50, p75, p90), Optuna tuned on p50 pinball loss per horizon, with
+an additive CQR margin calibrated on validation so p10–p90 coverage lands at
+the 80% target. (XGBoost quantile is an opt-in alternative — ENABLE_XGB_CREDIT=1.)
 
 The models are trained on the LOG-RATIO against the carryover baseline
 (`log1p(y) − log1p(carryover)`). Trees predict piecewise-constant values and

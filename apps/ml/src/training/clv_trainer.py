@@ -343,15 +343,29 @@ def train_clv(
     # Spearman (promotion metric) is unaffected; RMSLE/MAE improve when predictions
     # are systematically too high or too low relative to actuals.
     from sklearn.linear_model import LinearRegression as _LR
-    _lr = _LR().fit(val_preds.reshape(-1, 1), y_val.to_numpy())
-    _raw_slope = float(_lr.coef_[0])
-    if _raw_slope < 0.01:
-        # Degenerate: negative or near-zero slope means predictions are anti-correlated
-        # with actuals — calibration would flip or collapse magnitudes. Fall back to identity.
+    _val_actual = y_val.to_numpy()
+    _finite = np.isfinite(val_preds) & np.isfinite(_val_actual)
+    if _finite.sum() < 2:
+        # Not enough finite (pred, actual) pairs to fit a line — e.g. a BG-NBD
+        # champion whose RFM summary produced NaN for a degenerate cohort.
+        notify("clv: magnitude calibration skipped — insufficient finite validation pairs; using identity")
         magnitude_slope, magnitude_intercept = 1.0, 0.0
     else:
-        magnitude_slope = float(np.clip(_raw_slope, 0.01, 20.0))
-        magnitude_intercept = float(_lr.intercept_)
+        _lr = _LR().fit(val_preds[_finite].reshape(-1, 1), _val_actual[_finite])
+        _raw_slope = float(_lr.coef_[0])
+        if _raw_slope < 0.01:
+            # Degenerate: negative or near-zero slope means predictions are anti-correlated
+            # with actuals — calibration would flip or collapse magnitudes. Fall back to
+            # identity and surface it: a negative slope signals val/test drift or an
+            # unstable champion, not a benign no-op.
+            notify(
+                f"clv: ⚠ magnitude calibration slope={_raw_slope:.4f} ≤ 0.01 "
+                "(predictions anti-correlated with actuals) — falling back to identity"
+            )
+            magnitude_slope, magnitude_intercept = 1.0, 0.0
+        else:
+            magnitude_slope = float(np.clip(_raw_slope, 0.01, 20.0))
+            magnitude_intercept = float(_lr.intercept_)
 
     test_preds_raw = champion_predict("test", x_test)
     test_preds = np.clip(magnitude_slope * test_preds_raw + magnitude_intercept, 0.0, None)
