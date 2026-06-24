@@ -169,14 +169,14 @@ export function ReasoningStack({ customer }: { customer: CustomerDetail }) {
   return (
     <div className="space-y-5">
       {drivers.length > 0 && (
-        <ReasonSection label="ปัจจัยจากโมเดล" order={1}>
+        <ReasonSection label="ปัจจัยความเสี่ยง (SHAP)" order={1}>
           <ul className="space-y-2">
             {drivers.map((driver) => (
               <li
                 key={driver.label}
                 className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2"
               >
-                <span className="flex items-center gap-2 text-[12.5px] text-[color:var(--ink-2)]">
+                <span className="flex min-w-0 items-center gap-2 text-[12.5px] text-[color:var(--ink-2)]">
                   <span
                     className="grid h-6 w-6 shrink-0 place-items-center rounded-lg"
                     style={{
@@ -187,9 +187,17 @@ export function ReasoningStack({ customer }: { customer: CustomerDetail }) {
                   >
                     {driver.direction === "up" ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
                   </span>
-                  {driver.label}
+                  <span className="min-w-0">
+                    <span className="block truncate">{driver.label}</span>
+                    <span
+                      className="block text-[10.5px] font-medium"
+                      style={{ color: driver.direction === "up" ? CHURN_COLOR : MOBY_BRAND.blue }}
+                    >
+                      {driver.directionLabel}
+                    </span>
+                  </span>
                 </span>
-                <span className="num text-[12.5px] font-semibold text-[color:var(--ink-1)]">
+                <span className="num shrink-0 text-[12.5px] font-semibold text-[color:var(--ink-1)]">
                   {driver.valueText}
                 </span>
               </li>

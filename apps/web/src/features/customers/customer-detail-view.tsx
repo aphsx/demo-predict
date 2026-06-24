@@ -156,7 +156,7 @@ export function CustomerDetailView({
                 <HeroMetric
                   label="Revenue risk"
                   value={customer.revenue_at_risk != null ? formatCurrency(customer.revenue_at_risk) : "—"}
-                  hint="at risk"
+                  hint="มูลค่าที่เสี่ยงสูญเสีย"
                 />
                 <HeroMetric
                   label="Top-up risk"
@@ -170,19 +170,19 @@ export function CustomerDetailView({
           <UsageCreditPanel data={usageTrend}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <MiniStatCard
-                label="Latest usage"
+                label="ใช้งานล่าสุด"
                 value={latestUsage?.total.toLocaleString() ?? "—"}
-                hint={latestUsage ? `${latestUsage.month} credits` : "ไม่มีข้อมูล usage"}
+                hint={latestUsage ? `${latestUsage.month} เครดิต` : "ไม่มีข้อมูลการใช้งาน"}
               />
               <MiniStatCard
-                label="Peak usage"
+                label="ใช้งานสูงสุด"
                 value={peakUsage != null ? peakUsage.toLocaleString() : "—"}
-                hint="last 12 months"
+                hint="ย้อนหลัง 12 เดือน"
               />
               <MiniStatCard
-                label="Inactive"
-                value={customer.days_since_last_activity != null ? `${customer.days_since_last_activity}d` : "—"}
-                hint="since last activity"
+                label="ไม่มีการใช้งาน"
+                value={customer.days_since_last_activity != null ? `${customer.days_since_last_activity} วัน` : "—"}
+                hint="นับจากใช้งานล่าสุด"
               />
             </div>
           </UsageCreditPanel>
@@ -204,21 +204,21 @@ export function CustomerDetailView({
         </div>
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[390px_minmax(0,1fr)] xl:items-start">
-          <Panel title="Compact profile">
+          <Panel title="ข้อมูลสรุป">
             <div className="grid grid-cols-2 gap-3">
-              <FactCard label="Lifecycle" value={customer.lifecycle_stage} />
-              <FactCard label="Purchases" value={customer.n_purchases.toLocaleString()} />
-              <FactCard label="Total revenue" value={formatCurrency(customer.total_revenue)} />
+              <FactCard label="สถานะ" value={customer.lifecycle_stage} />
+              <FactCard label="จำนวนการชำระ" value={customer.n_purchases.toLocaleString()} />
+              <FactCard label="รายได้รวม" value={formatCurrency(customer.total_revenue)} />
               <FactCard
-                label="Avg txn"
+                label="เฉลี่ยต่อครั้ง"
                 value={customer.avg_transaction_value != null ? formatCurrency(customer.avg_transaction_value) : "—"}
               />
               <FactCard
-                label="Credit 30d (p10–90)"
+                label="เครดิต 30 วัน (p10–90)"
                 value={creditRange(customer.predicted_credit_usage_30d, interval?.p10_30d ?? null, interval?.p90_30d ?? null)}
               />
               <FactCard
-                label="Credit 90d (p10–90)"
+                label="เครดิต 90 วัน (p10–90)"
                 value={creditRange(customer.predicted_credit_usage_90d, interval?.p10_90d ?? null, interval?.p90_90d ?? null)}
               />
             </div>
