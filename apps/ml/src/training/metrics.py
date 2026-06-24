@@ -261,6 +261,100 @@ def bootstrap_ci(
     }
 
 
+def bootstrap_ci_regression(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    *,
+    n_boot: int = 1000,
+    alpha: float = 0.05,
+    seed: int = 42,
+) -> dict[str, dict[str, float]]:
+    """Percentile bootstrap 95% CI for all clv_metrics keys (Spearman, RMSLE, etc.).
+
+    Resamples with replacement n_boot times and collects each metric's sampling
+    distribution. Returns the alpha/2 and 1-alpha/2 percentiles as CI bounds.
+    Valid for n >= 200; for smaller holdouts consider BCa correction.
+    Key excluded from CI: n (not a random quantity).
+
+    Returns:
+        {metric: {"ci_lower": float, "ci_upper": float, "n_boot_valid": int}}
+    """
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    rng = np.random.default_rng(seed)
+    n = len(y_true)
+    SKIP = {"n"}
+    boot_dist: dict[str, list[float]] = {}
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        m = clv_metrics(y_true[idx], y_pred[idx])
+        for k, v in m.items():
+            if k in SKIP:
+                continue
+            if isinstance(v, float) and not np.isnan(v):
+                boot_dist.setdefault(k, []).append(v)
+    lo_pct = alpha / 2 * 100
+    hi_pct = (1.0 - alpha / 2) * 100
+    return {
+        k: {
+            "ci_lower": round(float(np.percentile(vals, lo_pct)), 4),
+            "ci_upper": round(float(np.percentile(vals, hi_pct)), 4),
+            "n_boot_valid": len(vals),
+        }
+        for k, vals in boot_dist.items()
+        if len(vals) >= 10
+    }
+
+
+def bootstrap_ci_credit(
+    y_true_30d: np.ndarray,
+    pred_30d: dict[float, np.ndarray],
+    y_true_90d: np.ndarray,
+    pred_90d: dict[float, np.ndarray],
+    *,
+    n_boot: int = 500,
+    alpha: float = 0.05,
+    seed: int = 42,
+) -> dict[str, dict[str, float]]:
+    """Percentile bootstrap 95% CI for all credit_metrics keys (coverage, pinball, etc.).
+
+    30d and 90d horizons are resampled with the SAME indices per iteration (joint
+    resampling) to preserve the natural per-customer correlation between horizons and
+    obtain accurate — rather than overconfident — CIs.
+    Key excluded: n.
+
+    Returns:
+        {metric: {"ci_lower": float, "ci_upper": float, "n_boot_valid": int}}
+    """
+    y30 = np.asarray(y_true_30d, dtype=float)
+    y90 = np.asarray(y_true_90d, dtype=float)
+    n = len(y30)
+    rng = np.random.default_rng(seed)
+    SKIP = {"n"}
+    boot_dist: dict[str, list[float]] = {}
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        bt_pred30 = {q: arr[idx] for q, arr in pred_30d.items()}
+        bt_pred90 = {q: arr[idx] for q, arr in pred_90d.items()}
+        m = credit_metrics(y30[idx], bt_pred30, y90[idx], bt_pred90)
+        for k, v in m.items():
+            if k in SKIP:
+                continue
+            if isinstance(v, (int, float)) and not (isinstance(v, float) and np.isnan(v)):
+                boot_dist.setdefault(k, []).append(float(v))
+    lo_pct = alpha / 2 * 100
+    hi_pct = (1.0 - alpha / 2) * 100
+    return {
+        k: {
+            "ci_lower": round(float(np.percentile(vals, lo_pct)), 4),
+            "ci_upper": round(float(np.percentile(vals, hi_pct)), 4),
+            "n_boot_valid": len(vals),
+        }
+        for k, vals in boot_dist.items()
+        if len(vals) >= 10
+    }
+
+
 def calibration_curve_points(
     y_true: np.ndarray,
     y_prob: np.ndarray,

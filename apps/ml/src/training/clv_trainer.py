@@ -9,7 +9,7 @@ of which candidate wins the revenue forecast (OUTPUT-CONTRACT §3.5).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import lightgbm as lgb
@@ -22,7 +22,7 @@ from scipy.stats import spearmanr
 
 from src.training.baselines import ClvSegmentMeanBaseline, clv_carryover_scores
 from src.training.datasets import SplitFrame
-from src.training.metrics import clv_metrics
+from src.training.metrics import bootstrap_ci_regression, clv_metrics
 from src.training.preprocessing import PreprocessorConfig, transform_features
 
 logger = logging.getLogger(__name__)
@@ -106,6 +106,7 @@ class ClvTrainResult:
     test_metrics: dict[str, float]
     baseline_metrics: dict[str, dict[str, dict[str, float]]]
     preprocessor: PreprocessorConfig
+    test_ci_json: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 def build_rfm_summary(payments: pd.DataFrame, acc_ids: pd.Series, cutoff: pd.Timestamp) -> pd.DataFrame:
@@ -319,7 +320,9 @@ def train_clv(
         return best_bundle.predict_frame(rfm)["predicted_clv"].to_numpy()
 
     validation_metrics = clv_metrics(y_val.to_numpy(), champion_predict("validation", x_val))
-    test_metrics = clv_metrics(y_test.to_numpy(), champion_predict("test", x_test))
+    test_preds = champion_predict("test", x_test)
+    test_metrics = clv_metrics(y_test.to_numpy(), test_preds)
+    test_ci_json = bootstrap_ci_regression(y_test.to_numpy(), test_preds)
 
     # ── Baselines (§12) ───────────────────────────────────────────
     segment = ClvSegmentMeanBaseline().fit(dataset.features("train"), y_train)
@@ -347,6 +350,7 @@ def train_clv(
         test_metrics=test_metrics,
         baseline_metrics=baseline_metrics,
         preprocessor=preprocessor,
+        test_ci_json=test_ci_json,
     )
 
 

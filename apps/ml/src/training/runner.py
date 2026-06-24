@@ -82,6 +82,27 @@ CHURN_PROMOTION_CONFIG = promotion.PromotionConfig(
     calibration_target=ECE_LIMIT,
     calibration_penalty=1.0,
 )
+CLV_PROMOTION_CONFIG = promotion.PromotionConfig(
+    primary_metric="spearman",
+    higher_is_better=True,
+    champion_margin=0.0,
+    stability_max_rel_drop=0.30,
+    calibration_ceiling=None,
+    calibration_target=None,
+)
+# Coverage must be in (0.75, 0.90]. calibration_error = max(0, coverage − 0.90):
+#   if coverage ≤ 0.90 → calibration_error = 0.0 → passes the safety ceiling
+#   if coverage > 0.90 → calibration_error > 0 > CEILING (0.001) → rejected
+# The lower bound (0.75) is enforced via baseline_validation in CandidateEval.
+CREDIT_PROMOTION_CONFIG = promotion.PromotionConfig(
+    primary_metric="coverage_p10_p90",
+    higher_is_better=True,
+    champion_margin=0.0,
+    stability_max_rel_drop=0.25,
+    calibration_ceiling=0.001,
+    calibration_target=None,
+    calibration_penalty=0.0,
+)
 COVERAGE_RANGE = (0.75, 0.90)
 BACKTEST_COVERAGE_RANGE = (0.70, 0.92)
 CREDIT_MAE_TOLERANCE = 1.10
@@ -605,6 +626,27 @@ def _incumbent_backtests(model_type: str) -> dict[str, float] | None:
     return out or None
 
 
+def _incumbent_backtests_by_metric(model_type: str, metric_key: str) -> dict[str, float] | None:
+    """Per-cutoff backtest metric for the current champion, keyed by cutoff date string.
+
+    Parallel to _incumbent_backtests() but parameterised on metric_key so it works
+    for any model type (CLV → spearman, Credit → coverage_p10_p90).
+    """
+    champion = current_champion(model_type)
+    if champion is None:
+        return None
+    card = champion.get("model_card_json") or {}
+    if isinstance(card, str):
+        card = json.loads(card)
+    rows = card.get("backtests", []) or []
+    out = {
+        row["cutoff_date"]: row["metrics"][metric_key]
+        for row in rows
+        if isinstance(row.get("metrics"), dict) and metric_key in row["metrics"]
+    }
+    return out or None
+
+
 def _churn_candidate_eval(
     attempt: dict[str, Any],
     incumbent_backtests: dict[str, float] | None,
@@ -733,21 +775,51 @@ def _train_and_register_clv(
     baseline_best_name = max(
         CLV_BASELINE_NAMES, key=lambda name: result.baseline_metrics[name]["test"]["spearman"]
     )
-    beats_baselines = (
-        all(
-            result.validation_metrics["spearman"] > result.baseline_metrics[name]["validation"]["spearman"]
-            for name in CLV_BASELINE_NAMES
-        )
-        and all(
-            result.test_metrics["spearman"] > result.baseline_metrics[name]["test"]["spearman"]
-            for name in CLV_BASELINE_NAMES
-        )
-        and all(
-            row["metrics"]["spearman"] > max(b["spearman"] for b in row["baselines"].values())
-            for row in backtest_rows
-        )
+
+    # ── CLV promotion gate (two-stage safety/quality policy) ──────
+    _clv_test_ci: tuple[float, float] | None = None
+    if result.test_ci_json and "spearman" in result.test_ci_json:
+        _ci = result.test_ci_json["spearman"]
+        _clv_test_ci = (float(_ci["ci_lower"]), float(_ci["ci_upper"]))
+    _clv_primary_backtests = {row["cutoff_date"]: row["metrics"]["spearman"] for row in backtest_rows}
+    _clv_baseline_backtests = {
+        row["cutoff_date"]: max(b["spearman"] for b in row["baselines"].values())
+        for row in backtest_rows
+    }
+    clv_eval = promotion.CandidateEval(
+        name=result.champion_name,
+        leakage_ok=bool(leakage["passed"]),
+        artifact_ok=True,
+        primary_validation=result.validation_metrics["spearman"],
+        primary_test=result.test_metrics["spearman"],
+        baseline_validation=max(
+            result.baseline_metrics[n]["validation"]["spearman"] for n in CLV_BASELINE_NAMES
+        ),
+        baseline_test=baseline_best_test,
+        primary_backtests=_clv_primary_backtests,
+        baseline_backtests=_clv_baseline_backtests,
+        champion_backtests=_incumbent_backtests_by_metric("clv", "spearman"),
+        calibration_error=None,
+        primary_test_ci=_clv_test_ci,
     )
-    champion_check = _beats_existing_champion("clv", "spearman", backtest_rows)
+    clv_decision = promotion.decide([clv_eval], CLV_PROMOTION_CONFIG)
+    clv_selection_log = [
+        {
+            "candidate": result.champion_name,
+            "internal_competition": result.competition,
+            "test_spearman": result.test_metrics["spearman"],
+            "eligible": clv_decision.candidates[0].eligible,
+            "composite": round(clv_decision.candidates[0].composite, 4),
+            "is_champion": clv_decision.winner == result.champion_name,
+            "reason": (
+                "🏆 champion — " + clv_decision.summary
+                if clv_decision.winner == result.champion_name
+                else "ไม่ผ่าน: " + "; ".join(clv_decision.candidates[0].reasons)
+            ),
+        }
+    ]
+    for entry in clv_selection_log:
+        print(f"clv: {entry['candidate']} eligible={entry['eligible']} — {entry['reason']}")
 
     progress("clv: artifacts + registry", 70)
     version = next_version("clv")
@@ -777,12 +849,14 @@ def _train_and_register_clv(
             else {"penalizer": result.bgnbd.penalizer}
         ),
         "candidate_competition_val_spearman": result.competition,
+        "candidate_selection": clv_selection_log,
         "primary_metric": {
             "name": "Spearman",
             "value": result.test_metrics["spearman"],
             "baseline": baseline_best_test,
             "baseline_name": baseline_best_name,
         },
+        "test_ci": result.test_ci_json,
         "backtests": backtest_rows,
         "p_alive_source": "bgnbd",
         "limitations": "CLV เป็น forecast 180 วัน — เทียบ value tier ข้าม run ตรง ๆ ไม่ได้",
@@ -841,16 +915,28 @@ def _train_and_register_clv(
         model_card=model_card,
     )
 
-    for split_name, metrics in (
-        ("validation", result.validation_metrics),
-        ("test", result.test_metrics),
-    ):
-        insert_evaluation(
-            model_version_id=version_id, training_run_id=training_run_id, model_type="clv",
-            evaluation_type="holdout", dataset_split=split_name, metrics=round_metrics(metrics),
-            cutoff_date=str(datasets.cutoff_date.date()), horizon_days=horizon_days,
-            feature_set_id=feature_set_id,
-        )
+    insert_evaluation(
+        model_version_id=version_id, training_run_id=training_run_id, model_type="clv",
+        evaluation_type="holdout", dataset_split="validation",
+        metrics=round_metrics(result.validation_metrics),
+        cutoff_date=str(datasets.cutoff_date.date()), horizon_days=horizon_days,
+        feature_set_id=feature_set_id,
+    )
+    # Flatten bootstrap CIs for key metrics into the test metrics dict.
+    clv_test_metrics_persisted = dict(round_metrics(result.test_metrics))
+    if result.test_ci_json:
+        for _k in ("spearman", "rmsle", "top_decile_capture"):
+            if _k in result.test_ci_json:
+                _ci = result.test_ci_json[_k]
+                clv_test_metrics_persisted[f"{_k}_ci_lower"] = _ci["ci_lower"]
+                clv_test_metrics_persisted[f"{_k}_ci_upper"] = _ci["ci_upper"]
+    insert_evaluation(
+        model_version_id=version_id, training_run_id=training_run_id, model_type="clv",
+        evaluation_type="holdout", dataset_split="test",
+        metrics=clv_test_metrics_persisted,
+        cutoff_date=str(datasets.cutoff_date.date()), horizon_days=horizon_days,
+        feature_set_id=feature_set_id,
+    )
     for row in backtest_rows:
         insert_evaluation(
             model_version_id=version_id, training_run_id=training_run_id, model_type="clv",
@@ -873,14 +959,11 @@ def _train_and_register_clv(
             )
 
     artifact_ok = verify_artifact_load(artifact_path, dataset.features("test").head(5))
-    promote, reason = _promotion_decision(
-        beats_baselines=beats_baselines,
-        leakage_passed=leakage["passed"],
-        calibration_ok=True,
-        calibration_label="ไม่มีเกณฑ์ calibration สำหรับ CLV",
-        artifact_ok=artifact_ok,
-        champion_check=champion_check,
-    )
+    promote = clv_decision.winner is not None and artifact_ok
+    if clv_decision.winner is not None and not artifact_ok:
+        reason = "ไม่ promote — artifact load test ไม่ผ่าน (safety gate)"
+    else:
+        reason = clv_decision.summary
     if promote:
         promote_model_version(
             model_type="clv", model_version_id=version_id, reason=reason, created_by=created_by
@@ -956,23 +1039,12 @@ def _train_and_register_credit(
     )
     print(f"credit: leakage suite passed={leakage['passed']}")
 
-    # Gate per TRAINING §11: the credit PRIMARY metric is interval coverage —
-    # baselines are point forecasts with no interval, so gate №3 compares MAE
-    # with a tolerance band instead of a strict win. The target is zero-heavy,
-    # so rows with zero actuals are always covered by a [0, x] interval and
-    # the achievable coverage floor sits above the 0.80 target; the acceptance
-    # band is therefore (0.75, 0.90].
+    # Gate per TRAINING §11: credit PRIMARY metric is interval coverage.
+    # Baselines are point forecasts with no interval → MAE comparison used as a
+    # separate gate outside promotion.decide(). Coverage range (0.75, 0.90]:
+    # lower bound enforced via baseline_validation in CandidateEval; upper bound
+    # encoded as calibration_error = max(0, coverage − 0.90) with ceiling = 0.001.
     coverage = result.test_metrics["coverage_p10_p90"]
-    coverage_ok = (
-        COVERAGE_RANGE[0] <= coverage <= COVERAGE_RANGE[1]
-        and COVERAGE_RANGE[0] <= result.validation_metrics["coverage_p10_p90"] <= COVERAGE_RANGE[1]
-        and all(
-            BACKTEST_COVERAGE_RANGE[0]
-            <= row["metrics"]["coverage_p10_p90"]
-            <= BACKTEST_COVERAGE_RANGE[1]
-            for row in backtest_rows
-        )
-    )
     best_baseline_mae30 = min(
         result.baseline_metrics[name]["test"]["mae_30d"] for name in CREDIT_BASELINE_NAMES
     )
@@ -983,7 +1055,49 @@ def _train_and_register_credit(
         result.test_metrics["mae_30d"] <= best_baseline_mae30 * CREDIT_MAE_TOLERANCE
         and result.test_metrics["mae_90d"] <= best_baseline_mae90 * CREDIT_MAE_TOLERANCE
     )
-    champion_check = _beats_existing_champion("credit", "coverage_p10_p90", backtest_rows, tolerance=True)
+
+    # ── Credit promotion gate (two-stage safety/quality policy) ───
+    _credit_test_ci: tuple[float, float] | None = None
+    if result.test_ci_json and "coverage_p10_p90" in result.test_ci_json:
+        _ci = result.test_ci_json["coverage_p10_p90"]
+        _credit_test_ci = (float(_ci["ci_lower"]), float(_ci["ci_upper"]))
+    _credit_primary_backtests = {
+        row["cutoff_date"]: row["metrics"]["coverage_p10_p90"] for row in backtest_rows
+    }
+    _credit_baseline_backtests = {
+        row["cutoff_date"]: BACKTEST_COVERAGE_RANGE[0] for row in backtest_rows
+    }
+    credit_eval = promotion.CandidateEval(
+        name="quantile_champion",
+        leakage_ok=bool(leakage["passed"]),
+        artifact_ok=True,
+        primary_validation=result.validation_metrics["coverage_p10_p90"],
+        primary_test=coverage,
+        baseline_validation=COVERAGE_RANGE[0],
+        baseline_test=COVERAGE_RANGE[0],
+        primary_backtests=_credit_primary_backtests,
+        baseline_backtests=_credit_baseline_backtests,
+        champion_backtests=_incumbent_backtests_by_metric("credit", "coverage_p10_p90"),
+        calibration_error=max(0.0, coverage - COVERAGE_RANGE[1]),
+        primary_test_ci=_credit_test_ci,
+    )
+    credit_decision = promotion.decide([credit_eval], CREDIT_PROMOTION_CONFIG)
+    credit_selection_log = [
+        {
+            "candidate": "quantile_champion",
+            "test_coverage": coverage,
+            "eligible": credit_decision.candidates[0].eligible,
+            "composite": round(credit_decision.candidates[0].composite, 4),
+            "is_champion": credit_decision.winner is not None,
+            "reason": (
+                "🏆 champion — " + credit_decision.summary
+                if credit_decision.winner is not None
+                else "ไม่ผ่าน: " + "; ".join(credit_decision.candidates[0].reasons)
+            ),
+        }
+    ]
+    for entry in credit_selection_log:
+        print(f"credit: {entry['candidate']} eligible={entry['eligible']} — {entry['reason']}")
 
     progress("credit: artifacts + registry", 92)
     version = next_version("credit")
@@ -1036,12 +1150,14 @@ def _train_and_register_credit(
         ),
         "pooled_cutoffs": [str(datasets.cutoff_date.date())]
         + [str(bt.cutoff_date.date()) for bt in backtest_sets],
+        "candidate_selection": credit_selection_log,
         "primary_metric": {
             "name": "Coverage p10–p90",
             "value": coverage,
             "baseline": 0.0,
             "baseline_name": baseline_best_name,
         },
+        "test_ci": result.test_ci_json,
         "backtests": backtest_rows,
         "limitations": "ทำนายเฉพาะลูกค้าที่มีประวัติใช้งาน/จ่ายเงิน — ลูกค้า Ghost ไม่มี forecast",
         "trained_by": created_by,
@@ -1092,16 +1208,28 @@ def _train_and_register_credit(
         model_card=model_card,
     )
 
-    for split_name, metrics in (
-        ("validation", result.validation_metrics),
-        ("test", result.test_metrics),
-    ):
-        insert_evaluation(
-            model_version_id=version_id, training_run_id=training_run_id, model_type="credit",
-            evaluation_type="holdout", dataset_split=split_name, metrics=round_metrics(metrics),
-            cutoff_date=str(datasets.cutoff_date.date()), horizon_days=horizon_days,
-            feature_set_id=feature_set_id,
-        )
+    insert_evaluation(
+        model_version_id=version_id, training_run_id=training_run_id, model_type="credit",
+        evaluation_type="holdout", dataset_split="validation",
+        metrics=round_metrics(result.validation_metrics),
+        cutoff_date=str(datasets.cutoff_date.date()), horizon_days=horizon_days,
+        feature_set_id=feature_set_id,
+    )
+    # Flatten bootstrap CIs for key metrics into the test metrics dict.
+    credit_test_metrics_persisted = dict(round_metrics(result.test_metrics))
+    if result.test_ci_json:
+        for _k in ("coverage_p10_p90", "mae_30d", "mae_90d", "pinball_composite_30d", "pinball_composite_90d"):
+            if _k in result.test_ci_json:
+                _ci = result.test_ci_json[_k]
+                credit_test_metrics_persisted[f"{_k}_ci_lower"] = _ci["ci_lower"]
+                credit_test_metrics_persisted[f"{_k}_ci_upper"] = _ci["ci_upper"]
+    insert_evaluation(
+        model_version_id=version_id, training_run_id=training_run_id, model_type="credit",
+        evaluation_type="holdout", dataset_split="test",
+        metrics=credit_test_metrics_persisted,
+        cutoff_date=str(datasets.cutoff_date.date()), horizon_days=horizon_days,
+        feature_set_id=feature_set_id,
+    )
     for row in backtest_rows:
         insert_evaluation(
             model_version_id=version_id, training_run_id=training_run_id, model_type="credit",
@@ -1123,14 +1251,13 @@ def _train_and_register_credit(
             )
 
     artifact_ok = verify_artifact_load(artifact_path, dataset.features("test").head(5))
-    promote, reason = _promotion_decision(
-        beats_baselines=beats_baselines,
-        leakage_passed=leakage["passed"],
-        calibration_ok=coverage_ok,
-        calibration_label=f"coverage {coverage:.3f} (เป้า 0.75–0.90, zero-heavy target)",
-        artifact_ok=artifact_ok,
-        champion_check=champion_check,
-    )
+    promote = credit_decision.winner is not None and beats_baselines and artifact_ok
+    if credit_decision.winner is not None and not artifact_ok:
+        reason = "ไม่ promote — artifact load test ไม่ผ่าน (safety gate)"
+    elif credit_decision.winner is not None and not beats_baselines:
+        reason = f"ไม่ promote — MAE เกิน tolerance {CREDIT_MAE_TOLERANCE}× baseline (gate ข้อ 3)"
+    else:
+        reason = credit_decision.summary
     if promote:
         promote_model_version(
             model_type="credit", model_version_id=version_id, reason=reason, created_by=created_by

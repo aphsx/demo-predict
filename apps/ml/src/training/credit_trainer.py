@@ -33,7 +33,7 @@ import xgboost as xgb
 from src.training.baselines import credit_last_30d_carryover, credit_moving_avg_90d
 from src.training.datasets import SplitFrame
 from src.training.labels import CREDIT_HORIZONS
-from src.training.metrics import credit_metrics, interval_coverage, pinball_loss, smape
+from src.training.metrics import bootstrap_ci_credit, credit_metrics, interval_coverage, pinball_loss, smape
 from src.training.preprocessing import PreprocessorConfig, transform_features
 from sklearn.metrics import mean_absolute_error
 
@@ -170,6 +170,7 @@ class CreditTrainResult:
     preprocessor: PreprocessorConfig
     params_by_horizon: dict[int, dict[str, Any]] = field(default_factory=dict)
     topup_model: "TopupTimingModel | None" = None
+    test_ci_json: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 def train_credit(
@@ -242,6 +243,10 @@ def train_credit(
         )
 
     baseline_metrics = _evaluate_baselines(dataset, y)
+    test_ci_json = bootstrap_ci_credit(
+        y[30]["test"], predictions["test"][30],
+        y[90]["test"], predictions["test"][90],
+    )
 
     return CreditTrainResult(
         horizons=horizons,
@@ -251,6 +256,7 @@ def train_credit(
         preprocessor=preprocessor,
         params_by_horizon={h: m.params for h, m in horizons.items()},
         topup_model=topup_model,
+        test_ci_json=test_ci_json,
     )
 
 
