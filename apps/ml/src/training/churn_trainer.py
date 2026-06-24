@@ -2,7 +2,12 @@
 
 Candidates are declared explicitly via the `candidates` parameter (or
 CHURN_CANDIDATES env var, comma-separated). Default pool:
-  logistic_regression, lightgbm, xgboost, tabicl
+  logistic_regression, lightgbm, tabicl
+
+XGBoost is opt-in: add "xgboost" to CHURN_CANDIDATES to include it.
+On all-numeric Tier A features LightGBM matches XGBoost accuracy while
+running faster, so it is excluded from the default to save ~50 Optuna
+trials per training run.
 
 Random Forest is available but excluded from the default — it is slow and
 has not beaten a tuned LightGBM in any backtest on this dataset. Add
@@ -78,7 +83,7 @@ TABICL_SAMPLE_LIMIT = 500_000
 # Default candidate pool — explicit list, not environment-detection.
 # Override via CHURN_CANDIDATES env var (comma-separated) or the
 # `candidates` kwarg on train_churn_candidates / train_churn.
-DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm", "xgboost", "tabicl"]
+DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm", "tabicl"]
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 

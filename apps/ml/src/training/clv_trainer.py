@@ -9,6 +9,7 @@ of which candidate wins the revenue forecast (OUTPUT-CONTRACT §3.5).
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -36,6 +37,11 @@ BGNBD_PENALIZERS = [float(v) for v in np.logspace(-4, 0, 9)]
 EARLY_STOPPING_ROUNDS = 50
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+# XGBoost Tweedie is an opt-in candidate. On all-numeric Tier A features
+# LightGBM Tweedie matches XGBoost accuracy; enabling adds ~30 Optuna trials.
+# Set ENABLE_XGB_CLV=1 to include it in the competition.
+_CLV_XGB_ENABLED = os.getenv("ENABLE_XGB_CLV", "0") == "1"
 
 
 @dataclass
@@ -249,44 +255,51 @@ def train_clv(
     )
     tweedie_val_spearman = float(lgbm_study.best_value)
 
-    # ── Candidate 3: XGBoost Tweedie — alternative zero-heavy regressor ──
-    notify(f"clv: tuning XGBoost Tweedie with Optuna ({xgb_trials} trials)")
+    # ── Candidate 3: XGBoost Tweedie (opt-in, ENABLE_XGB_CLV=1) ──────
+    xgb_model: xgb.XGBRegressor | None = None
+    xgb_params: dict[str, Any] = {}
+    xgb_val_spearman = -2.0
 
-    def build_xgb_params(trial: optuna.Trial) -> dict[str, Any]:
-        return {
-            "objective": "reg:tweedie",
-            "tweedie_variance_power": trial.suggest_float("tweedie_variance_power", 1.1, 1.9),
-            "n_estimators": 1500,
-            "max_depth": trial.suggest_int("max_depth", 3, 8),
-            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
-            "min_child_weight": trial.suggest_int("min_child_weight", 5, 100),
-            "subsample": trial.suggest_float("subsample", 0.5, 1.0),
-            "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
-            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
-            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
-            "random_state": RANDOM_SEED,
-            "n_jobs": -1,
-            "verbosity": 0,
-            "tree_method": "hist",
-            "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
-        }
+    if _CLV_XGB_ENABLED:
+        notify(f"clv: tuning XGBoost Tweedie with Optuna ({xgb_trials} trials)")
 
-    def xgb_objective(trial: optuna.Trial) -> float:
-        model = xgb.XGBRegressor(**build_xgb_params(trial))
-        model.fit(x_train, y_train, eval_set=[(x_val, y_val)], verbose=False)
-        predictions = np.clip(model.predict(x_val), 0, None)
-        corr = spearmanr(y_val.to_numpy(), predictions).statistic
-        return 0.0 if np.isnan(corr) else float(corr)
+        def build_xgb_params(trial: optuna.Trial) -> dict[str, Any]:
+            return {
+                "objective": "reg:tweedie",
+                "tweedie_variance_power": trial.suggest_float("tweedie_variance_power", 1.1, 1.9),
+                "n_estimators": 1500,
+                "max_depth": trial.suggest_int("max_depth", 3, 8),
+                "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.2, log=True),
+                "min_child_weight": trial.suggest_int("min_child_weight", 5, 100),
+                "subsample": trial.suggest_float("subsample", 0.5, 1.0),
+                "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
+                "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+                "random_state": RANDOM_SEED,
+                "n_jobs": -1,
+                "verbosity": 0,
+                "tree_method": "hist",
+                "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
+            }
 
-    xgb_study = optuna.create_study(
-        direction="maximize",
-        sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
-    )
-    xgb_study.optimize(xgb_objective, n_trials=xgb_trials, show_progress_bar=False)
-    xgb_params = build_xgb_params(optuna.trial.FixedTrial(xgb_study.best_params))
-    xgb_model = xgb.XGBRegressor(**xgb_params)
-    xgb_model.fit(x_train, y_train, eval_set=[(x_val, y_val)], verbose=False)
-    xgb_val_spearman = float(xgb_study.best_value)
+        def xgb_objective(trial: optuna.Trial) -> float:
+            model = xgb.XGBRegressor(**build_xgb_params(trial))
+            model.fit(x_train, y_train, eval_set=[(x_val, y_val)], verbose=False)
+            predictions = np.clip(model.predict(x_val), 0, None)
+            corr = spearmanr(y_val.to_numpy(), predictions).statistic
+            return 0.0 if np.isnan(corr) else float(corr)
+
+        xgb_study = optuna.create_study(
+            direction="maximize",
+            sampler=optuna.samplers.TPESampler(seed=RANDOM_SEED),
+        )
+        xgb_study.optimize(xgb_objective, n_trials=xgb_trials, show_progress_bar=False)
+        xgb_params = build_xgb_params(optuna.trial.FixedTrial(xgb_study.best_params))
+        xgb_model = xgb.XGBRegressor(**xgb_params)
+        xgb_model.fit(x_train, y_train, eval_set=[(x_val, y_val)], verbose=False)
+        xgb_val_spearman = float(xgb_study.best_value)
+    else:
+        notify("clv: XGBoost Tweedie skipped (set ENABLE_XGB_CLV=1 to enable)")
 
     # ── Candidate 4: Hurdle model (binary × Gamma) — tackles zero-inflation directly ──
     notify(f"clv: fitting hurdle model (LightGBM binary + Gamma, {hurdle_trials} trials)")
@@ -297,13 +310,14 @@ def train_clv(
     competition = {
         "bgnbd_gamma_gamma": round(best_bgnbd_spearman, 4),
         "lgbm_tweedie": round(tweedie_val_spearman, 4),
-        "xgb_tweedie": round(xgb_val_spearman, 4),
         "hurdle": round(hurdle_val_spearman, 4),
     }
+    if _CLV_XGB_ENABLED:
+        competition["xgb_tweedie"] = round(xgb_val_spearman, 4)
     best_val = max(competition.values())
     if competition["hurdle"] == best_val:
         champion_name = "hurdle"
-    elif competition["xgb_tweedie"] == best_val:
+    elif competition.get("xgb_tweedie") == best_val:
         champion_name = "xgb_tweedie"
     elif competition["lgbm_tweedie"] == best_val:
         champion_name = "lgbm_tweedie"
