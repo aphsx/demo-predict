@@ -45,7 +45,7 @@ export type CustomerDetail = {
   avg_transaction_value: number | null;
   ever_paid: boolean;
   segment: string | null;
-  action_rank: number | null;
+  priority_rank: number | null;
   needs_review: boolean;
   profile_snapshot: ProfileSnapshot;
   churn_factors: ChurnFactor[] | null;
@@ -119,7 +119,7 @@ export function CustomerDetailView({
                 {customer.segment && (
                   <SolidDetailPill color={MOBY_BRAND.dark}>
                     {customer.segment}
-                    {customer.action_rank != null ? ` · #${customer.action_rank}` : ""}
+                    {customer.priority_rank != null ? ` · #${customer.priority_rank}` : ""}
                   </SolidDetailPill>
                 )}
                 {showSubStage && (

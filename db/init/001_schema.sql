@@ -256,7 +256,7 @@ CREATE TABLE public.ml_prediction_outputs (
     ever_paid boolean DEFAULT false NOT NULL,
     priority_score numeric(5,2),
     segment text,
-    action_rank integer,
+    priority_rank integer,
     needs_review boolean DEFAULT false NOT NULL,
     ai_explanation text,
     ai_reasoning_json jsonb,
