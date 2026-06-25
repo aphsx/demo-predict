@@ -68,7 +68,12 @@ from src.training.preprocessing import PreprocessorConfig, transform_features
 logger = logging.getLogger(__name__)
 
 RANDOM_SEED = 42
-LGBM_TRIALS = 100
+# Reduced from 100 → 40: at this dataset's labelled size (~1.5–2k active-paid
+# rows per cutoff) a 100-trial Optuna search overfits the validation slice with
+# negligible CV PR-AUC gain. 40 TPE trials retain the useful search budget while
+# cutting the overfit-the-tuning-split risk; the promotion gate (vs baselines +
+# incumbent) is the real arbiter, not search depth.
+LGBM_TRIALS = 40
 XGB_TRIALS = 50
 EARLY_STOPPING_ROUNDS = 50
 # Usable band for the high-risk decision threshold (§13): clip the max-F2 point
@@ -438,7 +443,7 @@ def refit_for_backtest(
     x_trval = pd.concat([x_train, x_val], ignore_index=True)
     y_trval = np.concatenate([y_train, y_val])
 
-    _, oof = _cv_oof(champion, x_trval, y_trval)
+    _, oof, _ = _cv_oof(champion, x_trval, y_trval)
     calibrator = _fit_calibrator(oof, y_trval)
     f2_threshold = select_threshold_max_fbeta(y_trval, calibrator.transform(oof), beta=2.0)
     high_threshold = float(np.clip(f2_threshold, *HIGH_THRESHOLD_BAND))

@@ -27,6 +27,7 @@ BASE_TIER_A_FEATURES = [
     "avg_transaction_value",
     "payment_interval_mean_days",
     "payment_overdue_ratio",
+    "payment_amount_cv",
     "usage_total_180d",
     "usage_recent_90d",
     "usage_prev_90d",
@@ -40,6 +41,8 @@ BASE_TIER_A_FEATURES = [
     "bc_usage_share",
     "api_usage_share",
     "otp_usage_share",
+    "channel_hhi",
+    "multichannel_flag",
 ]
 CREDIT_TIER_A_FEATURES = [
     *BASE_TIER_A_FEATURES,
@@ -71,6 +74,8 @@ ZERO_DEFAULT_FEATURES = {
     "bc_usage_share",
     "api_usage_share",
     "otp_usage_share",
+    "channel_hhi",
+    "multichannel_flag",
     "credit_added_180d",
     "credit_balance_proxy",
     "credit_runway_months",
@@ -85,6 +90,7 @@ NULLABLE_CONTRACT_FEATURES = {
     "avg_transaction_value",
     "payment_interval_mean_days",
     "payment_overdue_ratio",
+    "payment_amount_cv",
 }
 
 FEATURE_METADATA: FeatureSchema = {
@@ -153,6 +159,12 @@ FEATURE_METADATA: FeatureSchema = {
         "lookback_window": "all_history_before_cutoff",
         "formula": "days_since_last_payment / payment_interval_mean_days",
         "null_handling": "nullable when payment cadence is unknown",
+    },
+    "payment_amount_cv": {
+        "source": "payments.amount",
+        "lookback_window": "all_history_before_cutoff",
+        "formula": "std(amount) / mean(amount) over pre-cutoff payments (coefficient of variation; separates steady payers from spiky/whale top-ups)",
+        "null_handling": "nullable when fewer than 2 payments exist (std undefined)",
     },
     "usage_total_180d": {
         "source": "usage.usage",
@@ -231,6 +243,18 @@ FEATURE_METADATA: FeatureSchema = {
         "lookback_window": "all_history_before_cutoff",
         "formula": "otp usage / total usage",
         "null_handling": "0 when total usage is zero",
+    },
+    "channel_hhi": {
+        "source": "derived: sms_usage_share + email_usage_share",
+        "lookback_window": "all_history_before_cutoff",
+        "formula": "sms_usage_share^2 + email_usage_share^2 (Herfindahl concentration across the SMS/Email channels; 1.0 = single-channel, ~0.5 = balanced)",
+        "null_handling": "0 when no usage exists",
+    },
+    "multichannel_flag": {
+        "source": "derived: sms_usage_share + email_usage_share",
+        "lookback_window": "all_history_before_cutoff",
+        "formula": "1.0 when both SMS and Email usage > 0, else 0.0 (SMS and Email are distinct product lines — multi-channel customers behave differently)",
+        "null_handling": "0 when no usage exists",
     },
     "credit_added_180d": {
         "source": "payments.credit_add",
@@ -452,6 +476,7 @@ def build_payment_features(payments: pd.DataFrame, cutoff_date: pd.Timestamp) ->
                 "avg_transaction_value",
                 "payment_interval_mean_days",
                 "payment_overdue_ratio",
+                "payment_amount_cv",
             ]
         )
 
@@ -461,8 +486,14 @@ def build_payment_features(payments: pd.DataFrame, cutoff_date: pd.Timestamp) ->
         payment_count_all=("payment_date", "size"),
         total_revenue_all=("amount", "sum"),
         avg_transaction_value=("amount", "mean"),
+        amount_std=("amount", "std"),  # NaN for single-payment accounts → cv stays nullable
     ).reset_index()
     features["days_since_last_payment"] = (cutoff - features["last_payment_date"]).dt.days
+    # Coefficient of variation: spread of transaction sizes relative to their mean.
+    # nullable (NaN) when <2 payments (std undefined) — handled as a nullable feature.
+    features["payment_amount_cv"] = _nullable_ratio(
+        features["amount_std"], features["avg_transaction_value"]
+    )
 
     recent = history[history["payment_date"] >= cutoff - pd.Timedelta(days=180)]
     recent_grouped = recent.groupby("acc_id", dropna=True)
@@ -493,6 +524,7 @@ def build_payment_features(payments: pd.DataFrame, cutoff_date: pd.Timestamp) ->
             "avg_transaction_value",
             "payment_interval_mean_days",
             "payment_overdue_ratio",
+            "payment_amount_cv",
         ]
     ]
 
@@ -687,13 +719,28 @@ def build_activity_features(
 
 
 def build_interaction_features(feature_df: pd.DataFrame) -> pd.DataFrame:
-    """Reserved hook for deterministic interaction features.
+    """Deterministic interaction/derived features built from already-merged columns.
 
-    Task 4.1 keeps the minimum Tier A baseline compact, so no extra interaction
-    columns are added yet.
+    These are pure functions of the SMS/Email usage shares (themselves PIT-safe,
+    < cutoff), so they introduce no new data dependency or leakage surface:
+      - channel_hhi: Herfindahl concentration across the two product channels.
+      - multichannel_flag: uses both SMS and Email (distinct product lines).
     """
 
-    return feature_df.copy()
+    feature_df = feature_df.copy()
+    sms = (
+        pd.to_numeric(feature_df["sms_usage_share"], errors="coerce").fillna(0.0)
+        if "sms_usage_share" in feature_df.columns
+        else pd.Series(0.0, index=feature_df.index)
+    )
+    email = (
+        pd.to_numeric(feature_df["email_usage_share"], errors="coerce").fillna(0.0)
+        if "email_usage_share" in feature_df.columns
+        else pd.Series(0.0, index=feature_df.index)
+    )
+    feature_df["channel_hhi"] = (sms**2 + email**2).astype("float64")
+    feature_df["multichannel_flag"] = ((sms > 0) & (email > 0)).astype("float64")
+    return feature_df
 
 
 def build_all_features(
