@@ -108,7 +108,9 @@ class CreditHorizonModels:
         ordered = _ordered_quantile_predictions(
             self.models, x, anchor_log, getattr(self, "correction_shrinkage", 1.0)
         )
-        return _apply_cqr_correction(ordered, self.cqr_q_hat)
+        # cqr_q_hat was added after the initial release; older artifacts lack it.
+        cqr = getattr(self, "cqr_q_hat", None)
+        return _apply_cqr_correction(ordered, cqr) if cqr is not None else ordered
 
 
 def _ordered_quantile_predictions(

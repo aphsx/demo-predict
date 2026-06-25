@@ -914,12 +914,28 @@ OUTPUT_COLUMNS = [
     "credit_urgency_level", "usage_trend",
     "days_since_last_activity", "n_purchases", "total_revenue",
     "avg_transaction_value", "ever_paid", "priority_score",
+    "segment", "action_rank", "needs_review",
     "output_status", "output_notes",
     "model_eligibility_json", "model_versions_json", "profile_snapshot_json",
 ]
 
 
 def _replace_outputs(prediction_run_id: str, rows: list[dict[str, Any]]) -> None:
+    # Contract guard: every key built per row must be persisted, and every
+    # persisted column must be built. This catches the silent class of bug where
+    # a derived field (e.g. segment/action_rank/needs_review) is computed but
+    # missing from OUTPUT_COLUMNS, so it never reaches the table.
+    if rows:
+        produced = set(rows[0].keys())
+        declared = set(OUTPUT_COLUMNS)
+        missing = sorted(declared - produced)
+        dropped = sorted(produced - declared)
+        if missing or dropped:
+            raise RuntimeError(
+                "Output column contract drift — "
+                f"declared but not produced: {missing}; "
+                f"produced but not persisted: {dropped}"
+            )
     placeholders = ", ".join(
         f":{column}" if column not in (
             "prediction_run_id", "churn_factors_json", "credit_forecast_interval_json",
