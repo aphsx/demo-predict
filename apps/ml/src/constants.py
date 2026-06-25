@@ -71,20 +71,20 @@ class AiStatus:
 
 
 class Segment:
-    PROTECT: Final = "Protect"
-    STABILIZE: Final = "Stabilize"
-    GROW: Final = "Grow"
-    DEVELOP: Final = "Develop"
-    MAINTAIN: Final = "Maintain"
-    WATCH_LOW: Final = "Watch-low"
-    SALVAGE_LOW: Final = "Salvage-low"
-    REACTIVATE: Final = "Reactivate"
+    PROTECT: Final = "High-Value At-Risk"
+    STABILIZE: Final = "Mid-Value At-Risk"
+    GROW: Final = "High-Value Stable"
+    DEVELOP: Final = "Emerging"
+    MAINTAIN: Final = "Stable"
+    WATCH_LOW: Final = "Low-Value Watch"
+    SALVAGE_LOW: Final = "Low-Value At-Risk"
+    REACTIVATE: Final = "Lapsed"
     DORMANT: Final = "Dormant"
     GHOST: Final = "Ghost"
 
     # Work-list priority order (top first) + retention subset (ranked by money).
     ORDER: Final = (
-        "Protect", "Stabilize", "Grow", "Develop", "Maintain",
-        "Watch-low", "Salvage-low", "Reactivate", "Dormant", "Ghost",
+        "High-Value At-Risk", "Mid-Value At-Risk", "High-Value Stable", "Emerging", "Stable",
+        "Low-Value Watch", "Low-Value At-Risk", "Lapsed", "Dormant", "Ghost",
     )
-    RETENTION: Final = ("Protect", "Stabilize", "Salvage-low", "Watch-low")
+    RETENTION: Final = ("High-Value At-Risk", "Mid-Value At-Risk", "Low-Value At-Risk", "Low-Value Watch")

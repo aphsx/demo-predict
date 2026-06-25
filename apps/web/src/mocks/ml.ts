@@ -498,7 +498,7 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
     revenue_at_risk: revenueAtRisk,
     priority_score: 0, // assigned below
     segment: null,
-    action_rank: null,
+    priority_rank: null,
     needs_review: false,
     ai_status: "not_requested",
     ai_explanation: null,
@@ -509,10 +509,10 @@ function buildCustomer(runId: string, cutoff: string, accId: number): Prediction
 }
 
 const SEGMENT_ORDER = [
-  "Protect", "Stabilize", "Grow", "Develop", "Maintain",
-  "Watch-low", "Salvage-low", "Reactivate", "Dormant", "Ghost",
+  "High-Value At-Risk", "Mid-Value At-Risk", "High-Value Stable", "Emerging", "Stable",
+  "Low-Value Watch", "Low-Value At-Risk", "Lapsed", "Dormant", "Ghost",
 ] as const;
-const RETENTION_SEGMENTS = new Set(["Protect", "Stabilize", "Salvage-low", "Watch-low"]);
+const RETENTION_SEGMENTS = new Set(["High-Value At-Risk", "Mid-Value At-Risk", "Low-Value At-Risk", "Low-Value Watch"]);
 
 function assignDerived(rows: PredictionOutput[]): void {
   // value tier: percentile of CLV among active (contract §3.5)
@@ -550,18 +550,18 @@ function assignDerived(rows: PredictionOutput[]): void {
     const growing = c.usage_trend === "increasing";
 
     if (stage === "Ghost") c.segment = "Ghost";
-    else if (stage === "Churned" && c.sub_stage === "Churned Paid") c.segment = "Reactivate";
+    else if (stage === "Churned" && c.sub_stage === "Churned Paid") c.segment = "Lapsed";
     else if (stage === "Churned") c.segment = "Dormant";
-    else if (valuable && atRisk) c.segment = "Protect";
-    else if (valuable && watch) c.segment = "Stabilize";
-    else if (valuable) c.segment = "Grow";
-    else if (atRisk) c.segment = "Salvage-low";
-    else if (watch) c.segment = "Watch-low";
-    else if (growing) c.segment = "Develop";
-    else c.segment = "Maintain";
+    else if (valuable && atRisk) c.segment = "High-Value At-Risk";
+    else if (valuable && watch) c.segment = "Mid-Value At-Risk";
+    else if (valuable) c.segment = "High-Value Stable";
+    else if (atRisk) c.segment = "Low-Value At-Risk";
+    else if (watch) c.segment = "Low-Value Watch";
+    else if (growing) c.segment = "Emerging";
+    else c.segment = "Stable";
   });
 
-  // action_rank: global rank by (segment order, -money) where money =
+  // priority_rank: global rank by (segment order, -money) where money =
   // revenue_at_risk for RETENTION segments, else predicted_clv_6m
   const ranked = [...rows].sort((a, b) => {
     const segA = SEGMENT_ORDER.indexOf((a.segment ?? "Maintain") as typeof SEGMENT_ORDER[number]);
@@ -575,7 +575,7 @@ function assignDerived(rows: PredictionOutput[]): void {
       : (b.predicted_clv_6m ?? 0);
     return moneyB - moneyA;
   });
-  ranked.forEach((c, i) => { c.action_rank = i + 1; });
+  ranked.forEach((c, i) => { c.priority_rank = i + 1; });
 }
 
 const populationCache = new Map<string, PredictionOutput[]>();

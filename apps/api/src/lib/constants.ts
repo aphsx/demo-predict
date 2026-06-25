@@ -72,14 +72,14 @@ export const AI_STATUS = {
 export type AiStatus = (typeof AI_STATUS)[keyof typeof AI_STATUS];
 
 export const SEGMENT = {
-  PROTECT: "Protect",
-  STABILIZE: "Stabilize",
-  GROW: "Grow",
-  DEVELOP: "Develop",
-  MAINTAIN: "Maintain",
-  WATCH_LOW: "Watch-low",
-  SALVAGE_LOW: "Salvage-low",
-  REACTIVATE: "Reactivate",
+  PROTECT: "High-Value At-Risk",
+  STABILIZE: "Mid-Value At-Risk",
+  GROW: "High-Value Stable",
+  DEVELOP: "Emerging",
+  MAINTAIN: "Stable",
+  WATCH_LOW: "Low-Value Watch",
+  SALVAGE_LOW: "Low-Value At-Risk",
+  REACTIVATE: "Lapsed",
   DORMANT: "Dormant",
   GHOST: "Ghost",
 } as const;

@@ -79,7 +79,7 @@ export interface PredictionOutput {
   revenue_at_risk: number | null;
   priority_score: number;
   segment: string | null;
-  action_rank: number | null;
+  priority_rank: number | null;
   needs_review: boolean;
   ai_status: "not_requested" | "pending" | "completed" | "failed";
   ai_explanation: string | null;
