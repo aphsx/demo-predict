@@ -15,11 +15,11 @@ Audit evidence lives in the analysis scripts under the outputs folder
 | P2 churn calibration | ✅ in code | takes effect on next churn retrain |
 | P3 credit monotonicity | ✅ shipped | 0 cross-horizon violations, no retrain needed |
 | P4 needs_review | ✅ shipped | flags 287348-type cases |
-| P5 segments + action_rank | ✅ code shipped | run `db:introspect` + typecheck + web UI remain |
+| P5 segments + priority_rank | ✅ code shipped | run `db:introspect` + typecheck + web UI remain |
 | P6 stale metrics/docs | 🔧 partial | honest numbers documented; legacy `models/metrics.json` cleanup remains |
 
 Validation: `validate_fixes.py` (CLV whales uncapped, credit monotonic, needs_review,
-segments + action_rank) and `clv_experiment.py` (hybrid tail capture 0.38→0.69).
+segments + priority_rank) and `clv_experiment.py` (hybrid tail capture 0.38→0.69).
 
 ---
 
@@ -127,7 +127,7 @@ column in `ml_prediction_outputs`.
 
 **Problem.** Segmentation (`docs/CUSTOMER-SEGMENTS.md`) is designed but not in the pipeline.
 
-**Fix.** Add `segment text` + `action_rank int` to `db/init/001_schema.sql`, compute in
+**Fix.** Add `segment text` + `priority_rank int` to `db/init/001_schema.sql`, compute in
 `_apply_derived` (all inputs already on `frame`), expose `segment` as a filter on
 `/runs/:id/outputs`.
 

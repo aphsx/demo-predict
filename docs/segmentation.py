@@ -32,34 +32,34 @@ df["momentum"]=np.where(active, mom, "-")
 def seg(r):
     st=r["lifecycle_stage"]
     if st=="Ghost": return "Ghost"
-    if st=="Churned": return "Reactivate" if r["sub_stage"]=="Churned Paid" else "Dormant"
+    if st=="Churned": return "Lapsed" if r["sub_stage"]=="Churned Paid" else "Dormant"
     v,h,m=r["value_tier"],r["health"],r["momentum"]
     hi = v in ("A","B")
-    if hi and h=="At-risk": return "Protect"
-    if hi and h=="Watch":   return "Stabilize"
-    if hi and h=="Healthy": return "Grow"
+    if hi and h=="At-risk": return "High-Value At-Risk"
+    if hi and h=="Watch":   return "Mid-Value At-Risk"
+    if hi and h=="Healthy": return "High-Value Stable"
     # value C
-    if h=="At-risk": return "Salvage-low"
-    if h=="Watch":   return "Watch-low"
-    if m=="growing": return "Develop"
-    return "Maintain"
+    if h=="At-risk": return "Low-Value At-Risk"
+    if h=="Watch":   return "Low-Value Watch"
+    if m=="growing": return "Emerging"
+    return "Stable"
 df["segment"]=df.apply(seg,axis=1)
 
-# ---- ACTION TAGS ----
+# ---- ANALYSIS TAGS ----
 df["tag_credit_urgent"]= df["credit_urgency_level"].isin(["critical","warning"])
 df["tag_momentum"]=df["momentum"]
 
 # ---- PRIORITY RANK ----
-SEG_ORDER=["Protect","Stabilize","Grow","Develop","Maintain","Watch-low","Salvage-low","Reactivate","Dormant","Ghost"]
+SEG_ORDER=["High-Value At-Risk","Mid-Value At-Risk","High-Value Stable","Emerging","Stable","Low-Value Watch","Low-Value At-Risk","Lapsed","Dormant","Ghost"]
 seg_rank={s:i for i,s in enumerate(SEG_ORDER)}
 rar=pd.to_numeric(df["revenue_at_risk"],errors="coerce").fillna(0)
 clv0=clv.fillna(0)
 # money key: retention segs use revenue_at_risk; growth segs use forward CLV
-money=np.where(df["segment"].isin(["Protect","Stabilize","Salvage-low","Watch-low"]), rar, clv0)
+money=np.where(df["segment"].isin(["High-Value At-Risk","Mid-Value At-Risk","Low-Value At-Risk","Low-Value Watch"]), rar, clv0)
 df["_segrank"]=df["segment"].map(seg_rank)
 df["_money"]=money
 df=df.sort_values(["_segrank","_money"],ascending=[True,False]).reset_index(drop=True)
-df["action_rank"]=np.arange(1,len(df)+1)
+df["priority_rank"]=np.arange(1,len(df)+1)
 
 # ---- SUMMARY ----
 print("=== SEGMENT SUMMARY (n, %, total forward CLV, total revenue_at_risk) ===")
@@ -74,7 +74,7 @@ summ["%"]=(summ["n"]/len(df)*100).round(1)
 print(summ.to_string())
 print("\nactive customers:",int(active.sum()),"| total:",len(df))
 
-cols=["action_rank","acc_id","segment","value_tier","health","momentum","tag_credit_urgent",
+cols=["priority_rank","acc_id","segment","value_tier","health","momentum","tag_credit_urgent",
       "churn_probability","predicted_clv_6m","revenue_at_risk","p_alive",
       "estimated_days_until_topup","total_revenue","payment_count_all"]
 print("\n=== TOP 15 ACTION LIST ===")

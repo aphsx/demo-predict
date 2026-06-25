@@ -700,7 +700,7 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
 
 
 def _apply_segments(frame: pd.DataFrame) -> pd.DataFrame:
-    """Assign an actionable segment + a global action_rank per customer (§5.4)."""
+    """Assign a descriptive segment + a global priority_rank per customer (§5.4)."""
 
     tier = frame["customer_value_tier"]
     risk = frame["churn_risk_level"].astype("object")
@@ -742,15 +742,15 @@ def _apply_segments(frame: pd.DataFrame) -> pd.DataFrame:
     ]
     frame["segment"] = np.select(conditions, choices, default=Segment.MAINTAIN)
 
-    # Global action_rank: by segment priority, then by money inside each segment
-    # (revenue-at-risk for retention plays, forward CLV for growth/value plays).
+    # Global priority_rank: by segment priority, then by money inside each segment
+    # (revenue-at-risk for at-risk segments, forward CLV for stable/growth segments).
     seg_rank = frame["segment"].map({s: i for i, s in enumerate(Segment.ORDER)})
     rar = pd.to_numeric(frame["revenue_at_risk"], errors="coerce").fillna(0.0)
     clv = pd.to_numeric(frame["predicted_clv_6m"], errors="coerce").fillna(0.0)
     money = np.where(frame["segment"].isin(Segment.RETENTION), rar, clv)
     order = pd.DataFrame({"seg": seg_rank.to_numpy(), "money": -money}, index=frame.index)
     ranked = order.sort_values(["seg", "money"]).index
-    frame["action_rank"] = pd.Series(range(1, len(frame) + 1), index=ranked).reindex(frame.index)
+    frame["priority_rank"] = pd.Series(range(1, len(frame) + 1), index=ranked).reindex(frame.index)
     return frame
 
 
@@ -842,7 +842,7 @@ def _build_output_rows(
                 "ever_paid": bool(row["ever_paid"]),
                 "priority_score": _round_or_none(row["priority_score"], 2) or 0.0,
                 "segment": _str_or_none(row.get("segment")),
-                "action_rank": _int_or_none(row.get("action_rank")),
+                "priority_rank": _int_or_none(row.get("priority_rank")),
                 "needs_review": bool(row.get("needs_review", False)),
                 "output_status": output_status,
                 "output_notes": output_notes,
@@ -914,7 +914,7 @@ OUTPUT_COLUMNS = [
     "credit_urgency_level", "usage_trend",
     "days_since_last_activity", "n_purchases", "total_revenue",
     "avg_transaction_value", "ever_paid", "priority_score",
-    "segment", "action_rank", "needs_review",
+    "segment", "priority_rank", "needs_review",
     "output_status", "output_notes",
     "model_eligibility_json", "model_versions_json", "profile_snapshot_json",
 ]
@@ -923,7 +923,7 @@ OUTPUT_COLUMNS = [
 def _replace_outputs(prediction_run_id: str, rows: list[dict[str, Any]]) -> None:
     # Contract guard: every key built per row must be persisted, and every
     # persisted column must be built. This catches the silent class of bug where
-    # a derived field (e.g. segment/action_rank/needs_review) is computed but
+    # a derived field (e.g. segment/priority_rank/needs_review) is computed but
     # missing from OUTPUT_COLUMNS, so it never reaches the table.
     if rows:
         produced = set(rows[0].keys())

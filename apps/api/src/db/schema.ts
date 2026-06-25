@@ -594,7 +594,7 @@ export const mlPredictionOutputs = pgTable(
     everPaid: boolean("ever_paid").notNull().default(false),
     priorityScore: numeric("priority_score", { precision: 5, scale: 2 }),
     segment: text("segment"),
-    actionRank: integer("action_rank"),
+    priorityRank: integer("priority_rank"),
     needsReview: boolean("needs_review").notNull().default(false),
     aiExplanation: text("ai_explanation"),
     aiReasoningJson: jsonb("ai_reasoning_json"),

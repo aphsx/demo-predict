@@ -163,7 +163,7 @@ export function mapOutput(row: OutputRow): PredictionOutput {
     revenue_at_risk: num(row.revenueAtRisk),
     priority_score: num(row.priorityScore) ?? 0,
     segment: row.segment ?? null,
-    action_rank: row.actionRank ?? null,
+    priority_rank: row.priorityRank ?? null,
     needs_review: row.needsReview ?? false,
     ai_status: row.aiStatus as PredictionOutput["ai_status"],
     ai_explanation: row.aiExplanation,
@@ -189,7 +189,7 @@ export const SORT_COLUMNS = {
   total_revenue: mlPredictionOutputs.totalRevenue,
   days_since_last_activity: mlPredictionOutputs.daysSinceLastActivity,
   estimated_days_until_topup: mlPredictionOutputs.estimatedDaysUntilTopup,
-  action_rank: mlPredictionOutputs.actionRank,
+  priority_rank: mlPredictionOutputs.priorityRank,
   ai_status: mlPredictionOutputs.aiStatus,
   acc_id: mlPredictionOutputs.accId,
 } as const;
