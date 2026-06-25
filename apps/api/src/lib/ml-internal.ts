@@ -17,8 +17,13 @@ export async function triggerMlJob(path: string, payload: object): Promise<void>
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(
-      `ML job trigger ${path} failed (${res.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`
+    // Attach the upstream status so callers can distinguish a client/state error
+    // raised by the ML service (e.g. 400 from a guard) from a 5xx outage.
+    throw Object.assign(
+      new Error(
+        `ML job trigger ${path} failed (${res.status})${detail ? `: ${detail.slice(0, 300)}` : ""}`
+      ),
+      { upstreamStatus: res.status }
     );
   }
 }

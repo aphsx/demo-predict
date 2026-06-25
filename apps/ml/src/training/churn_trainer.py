@@ -275,13 +275,19 @@ def train_churn_candidates(
     # threshold selection (§13). The test split stays untouched until the end.
     x_trval = pd.concat([x_train, x_val], ignore_index=True)
     y_trval = np.concatenate([y_train, y_val])
+    # Group CV by acc_id so panel-pooled duplicate customers never span folds
+    # (row order matches x_trval = train rows then validation rows).
+    acc_trval = pd.concat(
+        [dataset.split("train")["acc_id"], dataset.split("validation")["acc_id"]],
+        ignore_index=True,
+    ).to_numpy()
 
     competition: dict[str, float] = {}
     cv_oof: dict[str, np.ndarray] = {}
     cv_fold_scores: dict[str, list[float]] = {}
     for candidate in fitted:
         candidate.params = _resolved_params(candidate)
-        cv_score, oof, fold_scores = _cv_oof(candidate, x_trval, y_trval)
+        cv_score, oof, fold_scores = _cv_oof(candidate, x_trval, y_trval, groups=acc_trval)
         cv_oof[candidate.name] = oof
         cv_fold_scores[candidate.name] = fold_scores
         competition[candidate.name] = round(cv_score, 4)
@@ -448,8 +454,12 @@ def refit_for_backtest(
 
     x_trval = pd.concat([x_train, x_val], ignore_index=True)
     y_trval = np.concatenate([y_train, y_val])
+    acc_trval = pd.concat(
+        [dataset.split("train")["acc_id"], dataset.split("validation")["acc_id"]],
+        ignore_index=True,
+    ).to_numpy()
 
-    _, oof, _ = _cv_oof(champion, x_trval, y_trval)
+    _, oof, _ = _cv_oof(champion, x_trval, y_trval, groups=acc_trval)
     calibrator = _fit_calibrator(oof, y_trval)
     f2_threshold = select_threshold_max_fbeta(y_trval, calibrator.transform(oof), beta=2.0)
     high_threshold = float(np.clip(f2_threshold, *HIGH_THRESHOLD_BAND))
@@ -466,19 +476,31 @@ def _cv_oof(
     x: pd.DataFrame,
     y: np.ndarray,
     n_folds: int = 5,
+    groups: np.ndarray | None = None,
 ) -> tuple[float, np.ndarray, list[float]]:
     """Stratified K-fold CV: mean PR-AUC + out-of-fold probabilities + per-fold scores.
 
     Returns (mean_cv_score, oof_probs, fold_scores). The caller uses fold_scores
     to compute a confidence interval on the CV estimate (the per-fold variance
     quantifies how stable the ranking metric is across data partitions).
+
+    When `groups` (acc_id) is supplied, uses StratifiedGroupKFold so the same
+    customer never appears in both a train and a held-out fold. This is required
+    once multi-cutoff panel pooling puts the same acc_id in several train rows —
+    otherwise both the CV PR-AUC ranking metric and the OOF-fitted calibrator are
+    optimistically biased by within-customer leakage across folds.
     """
-    from sklearn.model_selection import StratifiedKFold
+    from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
     oof = np.zeros(len(y), dtype=float)
     scores: list[float] = []
-    folds = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=RANDOM_SEED)
-    for fold_train, fold_test in folds.split(x, y):
+    if groups is not None:
+        folds: Any = StratifiedGroupKFold(n_splits=n_folds, shuffle=True, random_state=RANDOM_SEED)
+        split_iter = folds.split(x, y, groups)
+    else:
+        folds = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=RANDOM_SEED)
+        split_iter = folds.split(x, y)
+    for fold_train, fold_test in split_iter:
         model = clone_candidate_model(candidate, y[fold_train])
         model.fit(x.iloc[fold_train], y[fold_train])
         fold_probs = model.predict_proba(x.iloc[fold_test])[:, 1]

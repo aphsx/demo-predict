@@ -261,6 +261,7 @@ def delete_model_version(
     *,
     model_type: str,
     model_version_id: str,
+    created_by: str | None = None,
 ) -> dict[str, Any]:
     """Permanently delete a non-production model version (artifacts + DB row).
 
@@ -310,6 +311,27 @@ def delete_model_version(
             artifact_removed = True
 
     with create_engine(database_url()).begin() as conn:
+        # Audit the deletion BEFORE removing the row. The version id is kept in
+        # `reason` text (not the FK columns, which ON DELETE SET NULL would clear)
+        # so the trail survives the row deletion.
+        conn.execute(
+            text(
+                """
+                INSERT INTO ml_model_activation_history (
+                  model_type, previous_model_version_id, new_model_version_id,
+                  action, reason, created_by
+                ) VALUES (:model_type, NULL, NULL, 'delete', :reason, :created_by)
+                """
+            ),
+            {
+                "model_type": model_type,
+                "reason": (
+                    f"Deleted {model_type} version {row['version']} "
+                    f"(id={model_version_id}, artifact_removed={artifact_removed})"
+                ),
+                "created_by": created_by,
+            },
+        )
         conn.execute(
             text("DELETE FROM ml_model_versions WHERE id = CAST(:version_id AS UUID)"),
             {"version_id": model_version_id},

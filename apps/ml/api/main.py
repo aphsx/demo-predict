@@ -158,6 +158,7 @@ async def internal_model_delete(request: Request):
         result = delete_model_version(
             model_type=model_type,
             model_version_id=model_version_id,
+            created_by=body.get("created_by"),
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc))
