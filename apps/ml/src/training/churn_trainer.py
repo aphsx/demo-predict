@@ -2,16 +2,17 @@
 
 Candidates are declared explicitly via the `candidates` parameter (or
 CHURN_CANDIDATES env var, comma-separated). Default pool:
-  logistic_regression, lightgbm
+  logistic_regression, lightgbm, tabicl
 
-Both default champions are natively explainable (coef_ / TreeExplainer), so
-every served customer gets faithful per-row churn_factors — the grounding the
+logistic_regression and lightgbm are natively explainable (coef_ / TreeExplainer),
+so every served customer gets faithful per-row churn_factors — the grounding the
 downstream AI explanation layer verbalizes (it must not invent reasons from raw
-features). XGBoost and TabICL are opt-in: add "xgboost" / "tabicl" to
-CHURN_CANDIDATES. XGBoost is redundant with LightGBM on all-numeric features;
-TabICL is a strong but OPAQUE foundation model — it cannot produce per-customer
-SHAP at serve scale, so promoting it would null churn_factors for the whole
-population. Keep it for benchmarking the explainable champions, not for serving.
+features). TabICL is in the default pool so it ALWAYS competes and is visible in
+the candidate competition, but it is a strong yet OPAQUE foundation model: it
+cannot produce per-customer SHAP at serve scale, so the runner treats it as
+BENCHMARK-ONLY and never auto-promotes it (serving it would null churn_factors
+for the whole population). XGBoost is opt-in (add "xgboost" to CHURN_CANDIDATES);
+it is redundant with LightGBM on all-numeric features.
 
 Random Forest is available but excluded from the default — it is slow and
 has not beaten a tuned LightGBM in any backtest on this dataset. Add
@@ -92,7 +93,12 @@ TABICL_SAMPLE_LIMIT = 500_000
 # Default candidate pool — explicit list, not environment-detection.
 # Override via CHURN_CANDIDATES env var (comma-separated) or the
 # `candidates` kwarg on train_churn_candidates / train_churn.
-DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm"]
+# TabICL is included so it ALWAYS competes (visible in the candidate
+# competition). It is auto-skipped when the `tabicl` package is absent or the
+# train set exceeds the in-context limit, and the runner treats it as a
+# BENCHMARK-ONLY candidate — it is never auto-promoted to the served champion
+# because it cannot produce per-customer SHAP (churn_factors) at serve time.
+DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm", "tabicl"]
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 

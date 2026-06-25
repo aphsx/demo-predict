@@ -394,6 +394,20 @@ def _train_and_register_churn(
         CHURN_PROMOTION_CONFIG,
     )
 
+    # TabICL competes as a BENCHMARK only: it cannot produce per-customer SHAP, so
+    # serving it would null churn_factors for the whole population (see the
+    # prediction runner). If it tops the gate, keep it visible in the competition
+    # but serve the best eligible EXPLAINABLE candidate instead.
+    BENCHMARK_ONLY = {"tabicl"}
+    promotable_winner = decision.winner
+    if decision.winner in BENCHMARK_ONLY:
+        explainable = [
+            d for d in decision.candidates if d.eligible and d.name not in BENCHMARK_ONLY
+        ]
+        promotable_winner = (
+            max(explainable, key=lambda d: d.composite).name if explainable else None
+        )
+
     selection_log = [
         {
             "candidate": d.name,
@@ -405,11 +419,15 @@ def _train_and_register_churn(
             # gate_passed = passed the safety gate (eligible). The champion is the
             # best eligible candidate (is_champion); both surface on the web.
             "gate_passed": d.eligible,
-            "is_champion": d.name == decision.winner,
+            "is_champion": d.name == promotable_winner,
             "reason": (
                 "🏆 champion — " + decision.summary
-                if d.name == decision.winner
-                else ("ผ่าน safety gate (แต่ไม่ใช่ตัวที่ดีที่สุด)" if d.eligible else "ไม่ผ่าน: " + "; ".join(d.reasons))
+                if d.name == promotable_winner
+                else (
+                    "🥇 ชนะ CV แต่เป็น benchmark-only — ไม่ serve เพราะให้ SHAP รายลูกค้าไม่ได้"
+                    if d.name == decision.winner and d.name in BENCHMARK_ONLY
+                    else ("ผ่าน safety gate (แต่ไม่ใช่ตัวที่ดีที่สุด)" if d.eligible else "ไม่ผ่าน: " + "; ".join(d.reasons))
+                )
             ),
         }
         for d in decision.candidates
@@ -417,10 +435,11 @@ def _train_and_register_churn(
     for entry in selection_log:
         print(f"churn: {entry['candidate']} eligible={entry['eligible']} champion={entry['is_champion']} — {entry['reason']}")
 
-    # Winner = best eligible candidate. If none is eligible, keep the incumbent
-    # champion but still record the strongest candidate as a non-promoted version.
-    if decision.winner is not None:
-        selected = by_name[decision.winner]
+    # Serve the promotable (explainable) winner. If none is eligible, keep the
+    # incumbent champion but still record the strongest candidate as a
+    # non-promoted version.
+    if promotable_winner is not None:
+        selected = by_name[promotable_winner]
     else:
         best = max(decision.candidates, key=lambda d: d.composite)
         selected = by_name[best.name]
@@ -592,9 +611,14 @@ def _train_and_register_churn(
     # winner (we don't serialize losing candidates). A winner whose artifact
     # can't reload is unsafe: do not promote, keep the incumbent.
     artifact_ok = verify_artifact_load(artifact_path, dataset.features("test").head(5))
-    promote = decision.winner is not None and artifact_ok
-    if decision.winner is not None and not artifact_ok:
+    promote = promotable_winner is not None and artifact_ok
+    if promotable_winner is not None and not artifact_ok:
         reason = "ไม่ promote — artifact load test ไม่ผ่าน (safety gate)"
+    elif decision.winner in BENCHMARK_ONLY and promotable_winner is not None:
+        reason = (
+            f"{decision.winner} ชนะ CV (benchmark-only) — serve {promotable_winner} "
+            f"ที่อธิบายได้แทน; {decision.summary}"
+        )
     else:
         reason = decision.summary
     if promote:
