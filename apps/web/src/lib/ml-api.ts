@@ -240,6 +240,15 @@ export async function activateModelVersion(
   });
 }
 
+/** DELETE /model-performance/:modelType/versions/:id — remove a non-production version. */
+export async function deleteModelVersion(
+  modelType: string,
+  modelVersionId: string
+): Promise<{ deleted: boolean }> {
+  if (IS_ML_MOCK) return { deleted: true };
+  return sendJson(`/api/model-performance/${modelType}/versions/${modelVersionId}`, "DELETE");
+}
+
 export async function fetchTrainingRuns(): Promise<TrainingRun[]> {
   if (IS_ML_MOCK) return (await mock()).mockTrainingRuns();
   return getJson("/api/training-runs");

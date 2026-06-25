@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -254,6 +255,72 @@ def promote_model_version(
                 "created_by": created_by,
             },
         )
+
+
+def delete_model_version(
+    *,
+    model_type: str,
+    model_version_id: str,
+) -> dict[str, Any]:
+    """Permanently delete a non-production model version (artifacts + DB row).
+
+    Guardrails:
+      - the version must exist and belong to `model_type`;
+      - the current production champion (is_active / status='production') can
+        NEVER be deleted — switch champion first.
+
+    Removes the on-disk artifact directory, then deletes the
+    `ml_model_versions` row. FK cascades clean up `ml_model_evaluations` and
+    `ml_model_aliases`; `ml_model_activation_history` rows are kept with their
+    version references set to NULL (audit trail survives).
+    """
+
+    import shutil
+
+    from src.training.artifacts import models_dir
+
+    with create_engine(database_url()).connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT version, status, is_active, artifact_path
+                FROM ml_model_versions
+                WHERE id = CAST(:version_id AS UUID) AND model_type = :model_type
+                """
+            ),
+            {"version_id": model_version_id, "model_type": model_type},
+        ).mappings().first()
+
+    if row is None:
+        raise ValueError(f"No {model_type} model version {model_version_id}")
+    if row["is_active"] or row["status"] == "production":
+        raise ValueError(
+            f"{model_type} version {row['version']} is the production champion — "
+            "switch the production model to another version before deleting it"
+        )
+
+    artifact_path = row["artifact_path"]
+    artifact_removed = False
+    if artifact_path:
+        target = Path(artifact_path)
+        if not target.is_absolute():
+            target = models_dir() / target
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+            artifact_removed = True
+
+    with create_engine(database_url()).begin() as conn:
+        conn.execute(
+            text("DELETE FROM ml_model_versions WHERE id = CAST(:version_id AS UUID)"),
+            {"version_id": model_version_id},
+        )
+
+    return {
+        "model_type": model_type,
+        "version": row["version"],
+        "model_version_id": model_version_id,
+        "artifact_removed": artifact_removed,
+    }
 
 
 def activate_model_version(

@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Activity } from "lucide-react";
+import { Activity, Trash2 } from "lucide-react";
 import { EmptyState, PageHeader, Skeleton } from "@/components/ui";
+import { StatusDialog } from "@/components/status-dialog";
 import {
   activateModelVersion,
+  deleteModelVersion,
   fetchModelPerformance,
   fetchModelVersions,
   type ModelPerfEntry,
@@ -168,6 +170,8 @@ function ModelVersionSwitcher({
   const [versions, setVersions] = useState<ModelVersionSummary[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ModelVersionSummary | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function toggle() {
     const next = !open;
@@ -190,6 +194,21 @@ function ModelVersionSwitcher({
       setError(e instanceof Error ? e.message : "เปลี่ยนโมเดลไม่สำเร็จ");
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function remove(version: ModelVersionSummary) {
+    setDeletingId(version.id);
+    setError(null);
+    try {
+      await deleteModelVersion(modelType, version.id);
+      setPendingDelete(null);
+      await onChanged();
+      setVersions(await fetchModelVersions(modelType));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "ลบเวอร์ชันไม่สำเร็จ");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -231,18 +250,43 @@ function ModelVersionSwitcher({
                   production
                 </span>
               ) : (
-                <button
-                  type="button"
-                  disabled={busyId !== null}
-                  onClick={() => activate(v.id)}
-                  className="rounded-full bg-gray-900 px-2.5 py-1 text-[10.5px] font-semibold text-white disabled:opacity-50"
-                >
-                  {busyId === v.id ? "กำลังเปลี่ยน…" : "ใช้ตัวนี้"}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={busyId !== null || deletingId !== null}
+                    onClick={() => activate(v.id)}
+                    className="rounded-full bg-gray-900 px-2.5 py-1 text-[10.5px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {busyId === v.id ? "กำลังเปลี่ยน…" : "ใช้ตัวนี้"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId !== null || deletingId !== null}
+                    onClick={() => setPendingDelete(v)}
+                    title="ลบเวอร์ชันนี้"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--ink-5)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-40"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               )}
             </div>
           ))}
         </div>
+      )}
+
+      {pendingDelete && (
+        <StatusDialog
+          open
+          tone="warning"
+          title={`ยืนยันการลบเวอร์ชัน ${pendingDelete.version}`}
+          message="ไฟล์โมเดล (.pkl) และผลประเมินของเวอร์ชันนี้จะถูกลบถาวร กู้คืนไม่ได้ — เวอร์ชัน production ปัจจุบันจะไม่ถูกแตะต้อง"
+          confirmLabel="ลบเวอร์ชัน"
+          cancelLabel="ยกเลิก"
+          loading={deletingId === pendingDelete.id}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => void remove(pendingDelete)}
+        />
       )}
     </div>
   );
