@@ -21,8 +21,6 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import { db } from "../../db/client";
-import { mlPredictionRuns, predictDataSources } from "../../db/schema";
 
 const UUID_LITERAL_RE =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -50,6 +48,11 @@ export type ScopeCheck =
 
 /** Load the ids the current user is allowed to query, in one round-trip each. */
 export async function loadUserScope(userId: string): Promise<UserScope> {
+  const [{ db }, { mlPredictionRuns, predictDataSources }] = await Promise.all([
+    import("../../db/client"),
+    import("../../db/schema"),
+  ]);
+
   const [runs, sources] = await Promise.all([
     db
       .select({ id: mlPredictionRuns.id })
@@ -68,6 +71,11 @@ export async function loadRunSourceId(
   runId: string,
   userId: string
 ): Promise<string | null> {
+  const [{ db }, { mlPredictionRuns }] = await Promise.all([
+    import("../../db/client"),
+    import("../../db/schema"),
+  ]);
+
   const [row] = await db
     .select({ sourceId: mlPredictionRuns.predictSourceId })
     .from(mlPredictionRuns)

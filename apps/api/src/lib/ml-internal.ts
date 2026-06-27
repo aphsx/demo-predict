@@ -6,12 +6,15 @@
  */
 
 export async function triggerMlJob(path: string, payload: object): Promise<void> {
+  const token = process.env.INTERNAL_SERVICE_TOKEN?.trim();
+  if (!token) throw new Error("INTERNAL_SERVICE_TOKEN environment variable is not set");
+
   const base = process.env.ML_INTERNAL_URL ?? "http://localhost:8000";
   const res = await fetch(`${base}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-internal-token": process.env.INTERNAL_SERVICE_TOKEN ?? "",
+      "x-internal-token": token,
     },
     body: JSON.stringify(payload),
   });
