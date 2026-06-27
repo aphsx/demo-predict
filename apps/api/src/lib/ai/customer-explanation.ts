@@ -45,6 +45,9 @@ ${renderGuardrails()}
   อ้างอิงตัวเลข/SHAP factors จริงเสมอ — ห้ามเดาเหตุผลที่ไม่มีในข้อมูล
 - ถ้า customer_dataset / signals / ml_output ขัดแย้งกัน ให้ระบุไว้ในส่วน "ข้อสังเกต"
 - กระชับ ตรงประเด็น ไม่ต้องเขียน label ภาษาอังกฤษ
+- เขียนแต่ละหัวข้อด้านล่างเพียงครั้งเดียว ห้ามสร้างหัวข้อซ้ำ
+- แยกความหมายของ Last access, Last send, last payment และ days since last activity ให้ชัดเจน ห้ามบอกว่า last access คือ days since last activity เว้นแต่วันที่ตรงกันจริง
+- วันที่/เดือนต้องคัดลอกจาก <data> ตาม ISO/Gregorian format เดิมเท่านั้น เช่น 2025-08 หรือ 2025-08-19 ห้ามแปลงเป็นปี พ.ศ. และห้ามเปลี่ยนปี
 
 รูปแบบ output (Markdown ภาษาไทย):
 
@@ -88,6 +91,15 @@ function formatSignals(s: CustomerAiSignals): string {
   ].join("\n");
 }
 
+function assertNoBuddhistYears(text: string): void {
+  const buddhistYears = text.match(/\b25\d{2}\b/g) ?? [];
+  if (buddhistYears.length > 0) {
+    throw new Error(
+      `LLM output used non-ISO/Buddhist year(s): ${[...new Set(buddhistYears)].join(", ")}`
+    );
+  }
+}
+
 function formatContext(ctx: CustomerAiContext): string {
   const { run, acc_id, customer_dataset, signals, ml_output } = ctx;
   const { profile, usage_monthly, payments } = customer_dataset;
@@ -127,7 +139,7 @@ ${paymentSummary || "  No payment data"}
 Lifecycle: ${ml_output.lifecycle_stage ?? "N/A"} / ${ml_output.sub_stage ?? "N/A"}
 Churn probability: ${ml_output.churn_probability != null ? (ml_output.churn_probability * 100).toFixed(1) + "%" : "N/A"}
 Churn risk level: ${ml_output.churn_risk_level ?? "N/A"}
-Days since last activity: ${ml_output.days_since_last_activity ?? "N/A"}
+Days since last activity: ${ml_output.days_since_last_activity ?? "N/A"} (derived from customer activity signals; do not equate this with Last access unless the dates match)
 Usage trend: ${ml_output.usage_trend ?? "N/A"}
 Priority score: ${ml_output.priority_score ?? "N/A"}
 Revenue at risk: ${ml_output.revenue_at_risk != null ? "฿" + ml_output.revenue_at_risk.toLocaleString() : "N/A"}
@@ -155,5 +167,6 @@ export async function generateCustomerAiExplanation(
   ).trim();
 
   if (!text) throw new Error("LLM returned an empty explanation");
+  assertNoBuddhistYears(text);
   return { explanation: text, model: llmConfig.model };
 }
