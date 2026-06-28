@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Play, RefreshCw, SlidersHorizontal } from "lucide-react";
-import { MockBadge } from "@/components/run-selector";
 import { StatusPill } from "@/components/ui";
 import type { TrainDataSource } from "@/lib/api";
 import { PRIMARY_BUTTON_CLS } from "./training-utils";
@@ -51,16 +50,10 @@ export function TrainRunPanel({
       <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="type-label">ML v2 training</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h2 className="type-section-title text-[20px]">
-                Train models
-              </h2>
-              <MockBadge />
-            </div>
+            <p className="type-label">Step 2</p>
+            <h2 className="type-section-title mt-1 text-[20px]">Train</h2>
             <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
-              ใช้ dataset ที่เลือกจากตารางด้านบน (เฉพาะสถานะ Ready) — กด Train เพื่อสร้าง training run
-              ใหม่ผ่าน pipeline: gates → labels → features → baselines → tuning → promotion gate
+              กด Train — ระบบจัดการ cutoff/leakage และเลือกโมเดลที่ดีที่สุดให้อัตโนมัติ
             </p>
           </div>
           <button

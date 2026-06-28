@@ -33,7 +33,6 @@ export function TrainingView() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [importName, setImportName] = useState("");
-  const [importClient, setImportClient] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDeleteSource, setPendingDeleteSource] = useState<TrainDataSource | null>(null);
@@ -105,7 +104,7 @@ export function TrainingView() {
           setImportStep(event.step);
           if (event.phase) setImportPhase(event.phase);
         },
-        importClient.trim() || undefined
+        undefined
       );
 
       setImportName("");
@@ -216,16 +215,6 @@ export function TrainingView() {
                     />
                   </label>
 
-                  <label className="block">
-                    <span className="type-label">Client label</span>
-                    <input
-                      type="text"
-                      value={importClient}
-                      onChange={(e) => setImportClient(e.target.value)}
-                      placeholder="optional"
-                      className="mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)]"
-                    />
-                  </label>
                 </div>
 
                 <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-3.5">

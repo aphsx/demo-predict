@@ -28,14 +28,10 @@ export function ModelTrainingPanel({
       <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <p className="type-label">
-              Model training
-            </p>
-            <h2 className="type-section-title mt-1 text-[20px]">
-              Select dataset and train
-            </h2>
+            <p className="type-label">Step 1</p>
+            <h2 className="type-section-title mt-1 text-[20px]">เลือก dataset</h2>
             <p className="mt-1 max-w-2xl text-[13px] leading-6 text-[color:var(--ink-4)]">
-              เลือก clean dataset ที่ import สำเร็จแล้ว เพื่อใช้เป็น source สำหรับ training panel ด้านล่าง.
+              เลือก dataset ที่สถานะ Ready เพื่อใช้เทรน
             </p>
           </div>
         </div>
@@ -68,8 +64,6 @@ export function ModelTrainingPanel({
                   <th>Dataset</th>
                   <th>Status</th>
                   <th className="text-right">Customers</th>
-                  <th className="text-right">Payments</th>
-                  <th className="text-right">Usage</th>
                   <th>Imported</th>
                   <th></th>
                 </tr>
@@ -108,7 +102,6 @@ function DatasetTableRow({
   onDelete: () => void;
 }) {
   const counts = getCleanCounts(source);
-  const importer = source.importer_name ?? source.importer_email ?? source.imported_by ?? "-";
   const selectable = source.import_status === "ready";
 
   return (
@@ -150,13 +143,10 @@ function DatasetTableRow({
         </StatusPill>
       </td>
       <td className="num text-right">{counts?.customers.toLocaleString() ?? "-"}</td>
-      <td className="num text-right">{counts?.payments.toLocaleString() ?? "-"}</td>
-      <td className="num text-right">{counts?.usage.toLocaleString() ?? "-"}</td>
       <td>
         <div className="text-[12px] text-[color:var(--ink-4)]">
           {formatDate(source.imported_at || source.created_at)}
         </div>
-        <div className="mt-0.5 text-[11px] text-[color:var(--ink-5)]">{importer}</div>
       </td>
       <td>
         <div className="flex justify-end gap-2">
