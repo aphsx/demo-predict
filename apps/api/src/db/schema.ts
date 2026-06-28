@@ -488,6 +488,7 @@ export const mlPredictionRuns = pgTable(
     progressJson: jsonb("progress_json"),
     modelVersionsJson: jsonb("model_versions_json"),
     cohortInsightJson: jsonb("cohort_insight_json"),
+    modelOverridesJson: jsonb("model_overrides_json"),
     cutoffDate: date("cutoff_date").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),

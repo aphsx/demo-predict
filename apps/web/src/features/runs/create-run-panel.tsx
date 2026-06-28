@@ -10,9 +10,17 @@ import { useEffect, useState } from "react";
 import { Play, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { SectionCard } from "@/components/ui";
 import type { PredictDataSource } from "@/lib/api";
-import { createPredictionRun, fetchPredictSuggestedCutoff } from "@/lib/ml-api";
+import {
+  createPredictionRun,
+  fetchModelVersions,
+  fetchPredictSuggestedCutoff,
+  type ModelVersionSummary,
+} from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
 import { defaultRunName, todayISO } from "./runs-utils";
+
+const MODEL_TYPES = ["churn", "clv", "credit"] as const;
+type ModelType = (typeof MODEL_TYPES)[number];
 
 const fieldCls =
   "mt-1.5 h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 text-[13px] text-[color:var(--ink-2)] shadow-[var(--shadow-1)] outline-none transition-colors focus:border-[color:var(--moby-500)] disabled:opacity-50";
@@ -35,6 +43,29 @@ export function CreateRunPanel({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Per-run model selection. "" = use the production champion for that type.
+  const [versionsByType, setVersionsByType] = useState<Record<ModelType, ModelVersionSummary[]>>({
+    churn: [],
+    clv: [],
+    credit: [],
+  });
+  const [overrides, setOverrides] = useState<Record<ModelType, string>>({
+    churn: "",
+    clv: "",
+    credit: "",
+  });
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all(MODEL_TYPES.map((t) => fetchModelVersions(t).catch(() => [])))
+      .then(([churn, clv, credit]) => {
+        if (alive) setVersionsByType({ churn, clv, credit });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (sourceId && readySources.some((s) => s.id === sourceId)) return;
@@ -80,10 +111,15 @@ export function CreateRunPanel({
     setCreating(true);
     setError(null);
     try {
+      const modelOverrides: { churn?: string; clv?: string; credit?: string } = {};
+      for (const modelType of MODEL_TYPES) {
+        if (overrides[modelType]) modelOverrides[modelType] = overrides[modelType];
+      }
       await createPredictionRun({
         predict_source_id: sourceId,
         name: name.trim(),
         cutoff_date: cutoff,
+        ...(Object.keys(modelOverrides).length > 0 ? { model_overrides: modelOverrides } : {}),
       });
       setNameTouched(false);
       setName(selected ? defaultRunName(selected.name) : "");
@@ -173,22 +209,56 @@ export function CreateRunPanel({
           Advanced
         </button>
         {showAdvanced && (
-          <label className="mt-3 block max-w-[260px]">
-            <span className="type-label">Manual cutoff override</span>
-            <input
-              type="date"
-              value={cutoff}
-              onChange={(e) => {
-                setCutoff(e.target.value);
-                setCutoffTouched(true);
-              }}
-              disabled={creating || readySources.length === 0}
-              className={fieldCls}
-            />
-            <p className="mt-1.5 text-[12px] leading-5 text-[color:var(--ink-4)]">
-              ใช้เฉพาะกรณีต้อง replay prediction ณ วันอื่นของ dataset เดิม
-            </p>
-          </label>
+          <div className="mt-3 space-y-4">
+            <label className="block max-w-[260px]">
+              <span className="type-label">Manual cutoff override</span>
+              <input
+                type="date"
+                value={cutoff}
+                onChange={(e) => {
+                  setCutoff(e.target.value);
+                  setCutoffTouched(true);
+                }}
+                disabled={creating || readySources.length === 0}
+                className={fieldCls}
+              />
+              <p className="mt-1.5 text-[12px] leading-5 text-[color:var(--ink-4)]">
+                ใช้เฉพาะกรณีต้อง replay prediction ณ วันอื่นของ dataset เดิม
+              </p>
+            </label>
+
+            <div>
+              <span className="type-label">เลือกโมเดลต่อ run</span>
+              <p className="mt-1 mb-2 text-[12px] leading-5 text-[color:var(--ink-4)]">
+                ปล่อยเป็น &quot;Production (ปัจจุบัน)&quot; เพื่อใช้ champion — หรือเลือกเวอร์ชันเจาะจงสำหรับ run นี้
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {MODEL_TYPES.map((modelType) => (
+                  <label key={modelType} className="block">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[color:var(--ink-5)]">
+                      {modelType}
+                    </span>
+                    <select
+                      value={overrides[modelType]}
+                      onChange={(e) =>
+                        setOverrides((prev) => ({ ...prev, [modelType]: e.target.value }))
+                      }
+                      disabled={creating}
+                      className={fieldCls}
+                    >
+                      <option value="">Production (ปัจจุบัน)</option>
+                      {versionsByType[modelType].map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.version}
+                          {v.is_active ? " · production" : ""} · {v.algorithm || "—"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

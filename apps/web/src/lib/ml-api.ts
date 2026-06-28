@@ -117,6 +117,8 @@ export async function createPredictionRun(input: {
   predict_source_id: string;
   name: string;
   cutoff_date?: string;
+  /** Optional per-run model overrides — version id per model type; omit a type to use its champion. */
+  model_overrides?: { churn?: string; clv?: string; credit?: string };
 }): Promise<PredictionRun> {
   if (IS_ML_MOCK) return (await mock()).mockCreatePredictionRun(input);
   return sendJson("/api/prediction-runs", "POST", input);
@@ -252,6 +254,12 @@ export async function deleteModelVersion(
 export async function fetchTrainingRuns(): Promise<TrainingRun[]> {
   if (IS_ML_MOCK) return (await mock()).mockTrainingRuns();
   return getJson("/api/training-runs");
+}
+
+/** DELETE /training-runs/:id — remove a failed training run from history. */
+export async function deleteTrainingRun(id: string): Promise<{ deleted: boolean }> {
+  if (IS_ML_MOCK) return { deleted: true };
+  return sendJson(`/api/training-runs/${id}`, "DELETE");
 }
 
 export async function createTrainingRun(input: {

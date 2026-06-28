@@ -220,4 +220,25 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
       return mapTrainingRun(run!);
     },
     { params: t.Object({ id: t.String() }) }
+  )
+  // Delete a training run from history. Only FAILED runs may be removed — a
+  // completed run is an audit record of a model that was (or could be) served,
+  // and deleting it would cascade to its ml_model_versions. Owner-scoped.
+  .delete(
+    "/:id",
+    async ({ params, userId, set }) => {
+      const run = await fetchTrainingRun(params.id);
+      if (!run) return denyNotFound(set, "Training run not found");
+      if (run.createdBy && run.createdBy !== userId) {
+        set.status = 403;
+        return { message: "You do not own this training run" };
+      }
+      if (run.status !== "failed") {
+        set.status = 409;
+        return { message: "Only failed training runs can be deleted" };
+      }
+      await db.delete(mlTrainingRuns).where(eq(mlTrainingRuns.id, run.id));
+      return { deleted: true };
+    },
+    { params: t.Object({ id: t.String() }) }
   );

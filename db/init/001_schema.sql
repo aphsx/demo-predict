@@ -307,6 +307,9 @@ CREATE TABLE public.ml_prediction_runs (
     progress_json jsonb,
     model_versions_json jsonb,
     cohort_insight_json jsonb,
+    -- Optional per-run model overrides: {"churn": "<version_id>", ...}. NULL or a
+    -- missing key means "use the current production champion" for that model type.
+    model_overrides_json jsonb,
     error_message text,
     created_by text,
     created_at timestamp with time zone DEFAULT now() NOT NULL

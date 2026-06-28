@@ -49,6 +49,20 @@ export const runsRoutes = new Elysia()
         return { message: "No clean activity data for this source yet" };
       }
 
+      // Optional per-run model overrides. Only provided, valid-UUID entries are
+      // stored; missing model types fall back to the production champion.
+      const overrides: Record<string, string> = {};
+      for (const modelType of ["churn", "clv", "credit"] as const) {
+        const versionId = body.model_overrides?.[modelType];
+        if (versionId) {
+          if (!UUID_RE.test(versionId)) {
+            set.status = 400;
+            return { message: `model_overrides.${modelType} must be a UUID` };
+          }
+          overrides[modelType] = versionId;
+        }
+      }
+
       const [inserted] = await db
         .insert(mlPredictionRuns)
         .values({
@@ -57,6 +71,7 @@ export const runsRoutes = new Elysia()
           cutoffDate,
           status: "pending",
           createdBy: userId!,
+          modelOverridesJson: Object.keys(overrides).length > 0 ? overrides : null,
         })
         .returning({ id: mlPredictionRuns.id });
 
@@ -77,6 +92,14 @@ export const runsRoutes = new Elysia()
         predict_source_id: t.String(),
         name: t.String({ minLength: 1 }),
         cutoff_date: t.Optional(t.String()),
+        // Per-run model overrides — version id per model type; omit to use champion.
+        model_overrides: t.Optional(
+          t.Object({
+            churn: t.Optional(t.String()),
+            clv: t.Optional(t.String()),
+            credit: t.Optional(t.String()),
+          })
+        ),
       }),
     }
   )

@@ -172,6 +172,31 @@ def current_champion(model_type: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def version_for_serving(model_type: str, model_version_id: str) -> dict[str, Any] | None:
+    """Fetch a specific version row (same shape as `current_champion`) so a
+    prediction run can override the production champion for one model type.
+
+    Returns None when the version does not exist, belongs to another model_type,
+    or has no artifact — the caller falls back to the production champion.
+    """
+
+    with create_engine(database_url()).connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT v.id::text AS id, v.version, v.artifact_path, v.artifact_checksum,
+                       v.model_card_json, v.metrics_json
+                FROM ml_model_versions v
+                WHERE v.id = CAST(:version_id AS UUID) AND v.model_type = :model_type
+                """
+            ),
+            {"version_id": model_version_id, "model_type": model_type},
+        ).mappings().first()
+    if row is None or not row["artifact_path"]:
+        return None
+    return dict(row)
+
+
 def promote_model_version(
     *,
     model_type: str,

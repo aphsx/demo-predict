@@ -40,7 +40,7 @@ from src.training.features import (
     feature_code_hash,
 )
 from src.training.preprocessing import transform_features
-from src.training.registry import current_champion
+from src.training.registry import current_champion, version_for_serving
 from src.training.validation import (
     ValidationReport,
     check_predict_feature_leakage,
@@ -198,17 +198,33 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     _update_run(prediction_run_id, status=RunStatus.IN_PROGRESS, mark_started=True)
     progress("load data", 5)
 
-    # ── Champions (alias `production` only) ───────────────────────
+    # ── Models: production champion by default, or a per-run override ─────
+    # `model_overrides_json` maps model_type → version_id. A missing/None entry
+    # (or an invalid one) falls back to the production champion for that type.
+    overrides = run.get("model_overrides_json") or {}
+    if not isinstance(overrides, dict):
+        overrides = {}
     champions: dict[str, dict[str, Any]] = {}
     for model_type in ("churn", "clv", "credit"):
-        champion = current_champion(model_type)
-        if champion is None:
-            raise RuntimeError(
-                f"No production model for '{model_type}' — train and promote first."
-            )
+        selected = None
+        override_id = overrides.get(model_type)
+        if override_id:
+            selected = version_for_serving(model_type, str(override_id))
+            if selected is None:
+                raise RuntimeError(
+                    f"Selected {model_type} model version {override_id} not found "
+                    "or has no artifact — pick another version or use the champion."
+                )
+            logger.info("[%s] %s using override version %s", prediction_run_id[:8], model_type, selected["version"])
+        else:
+            selected = current_champion(model_type)
+            if selected is None:
+                raise RuntimeError(
+                    f"No production model for '{model_type}' — train and promote first."
+                )
         champions[model_type] = {
-            **champion,
-            "bundle": load_artifacts(champion["artifact_path"]),
+            **selected,
+            "bundle": load_artifacts(selected["artifact_path"]),
         }
 
     # ── Gates on the predict source ───────────────────────────────
@@ -1207,7 +1223,8 @@ def _load_run(prediction_run_id: str) -> dict[str, Any]:
             conn.execute(
                 text(
                     """
-                SELECT id::text, predict_source_id::text, status, cutoff_date, created_by
+                SELECT id::text, predict_source_id::text, status, cutoff_date, created_by,
+                       model_overrides_json
                 FROM ml_prediction_runs WHERE id = CAST(:id AS UUID)
                 """
                 ),

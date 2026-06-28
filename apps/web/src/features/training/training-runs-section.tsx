@@ -5,6 +5,7 @@ import { notifyStatusDialog } from "@/components/global-status-dialog-host";
 import type { TrainDataSource } from "@/lib/api";
 import {
   createTrainingRun,
+  deleteTrainingRun,
   fetchTrainingRuns,
   fetchTrainSuggestedCutoff,
   type RunStatus,
@@ -78,6 +79,7 @@ export function TrainingRunsSection({
   const [error, setError] = useState<string | null>(null);
   const [suggestedCutoff, setSuggestedCutoff] = useState<string | null>(null);
   const [latestDataDate, setLatestDataDate] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const knownStatusesRef = useRef<Map<string, RunStatus>>(new Map());
 
   const selectedSourceId = selectedSource?.id ?? null;
@@ -146,6 +148,20 @@ export function TrainingRunsSection({
     }
   };
 
+  const handleDelete = async (run: TrainingRun) => {
+    setDeletingId(run.id);
+    setError(null);
+    try {
+      await deleteTrainingRun(run.id);
+      knownStatusesRef.current.delete(run.id);
+      setRuns((prev) => prev.filter((item) => item.id !== run.id));
+    } catch (e) {
+      setError(getDisplayError(e, "ลบ training run ไม่สำเร็จ"));
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const latestCompleted =
     runs.find((run) => run.status === "completed" && (run.results?.length ?? 0) > 0) ?? null;
 
@@ -167,7 +183,11 @@ export function TrainingRunsSection({
 
       {latestCompleted && <TrainingResultCards run={latestCompleted} />}
 
-      <TrainingHistoryTable runs={runs} />
+      <TrainingHistoryTable
+        runs={runs}
+        deletingId={deletingId}
+        onDelete={(run) => void handleDelete(run)}
+      />
     </>
   );
 }

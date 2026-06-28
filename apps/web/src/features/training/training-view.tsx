@@ -14,6 +14,7 @@ import {
 import { getDisplayError } from "@/lib/ui-error";
 import { FilePickerPanel } from "./file-picker-panel";
 import { ModelTrainingPanel } from "./model-training-panel";
+import { ModelVersionsSection } from "./model-versions-section";
 import { ProgressCard } from "./progress-card";
 import { TrainingRunsSection } from "./training-runs-section";
 import {
@@ -273,6 +274,8 @@ export function TrainingView() {
         />
 
         <TrainingRunsSection selectedSource={selectedReadySource} />
+
+        <ModelVersionsSection />
       </div>
 
       {pendingDeleteSource && (
