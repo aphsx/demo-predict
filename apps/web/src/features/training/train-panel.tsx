@@ -56,22 +56,23 @@ export function TrainPanel({
   creating: boolean;
   onTrain: (input: { cutoff_date: string; horizon_days: number }) => void;
 }) {
+  // Training cutoff is fully auto-managed: the API picks the latest cutoff that
+  // still has a complete label horizon (leakage-safe). It is sent to the run but
+  // not user-editable — manual cutoff is only meaningful for replay/backtest.
   const [cutoffDate, setCutoffDate] = useState("");
-  const [cutoffTouched, setCutoffTouched] = useState(false);
   const [horizonDays, setHorizonDays] = useState<number>(DEFAULT_HORIZON_DAYS);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setCutoffTouched(false);
     setCutoffDate("");
     setHorizonDays(DEFAULT_HORIZON_DAYS);
   }, [selectedSource?.id]);
 
   useEffect(() => {
-    if (suggestedCutoff && !cutoffTouched) setCutoffDate(suggestedCutoff);
-  }, [suggestedCutoff, cutoffTouched]);
+    if (suggestedCutoff) setCutoffDate(suggestedCutoff);
+  }, [suggestedCutoff]);
 
   const horizonValid = Number.isInteger(horizonDays) && horizonDays > 0;
   const canTrain = Boolean(selectedSource) && Boolean(cutoffDate) && horizonValid && !creating;
@@ -133,9 +134,9 @@ export function TrainPanel({
 
         <p className="mt-2 text-[12px] text-[color:var(--ink-5)]">
           {selectedSource
-            ? `${counts ? `${counts.customers.toLocaleString()} แถว · ` : ""}cutoff อัตโนมัติ: ${
+            ? `${counts ? `${counts.customers.toLocaleString()} แถว · ` : ""}cutoff ${
                 cutoffDate || "—"
-              } · horizon ${horizonDays} วัน`
+              } (อัตโนมัติ${latestDataDate ? `, ข้อมูลล่าสุด ${latestDataDate}` : ""}) · horizon ${horizonDays} วัน`
             : "เลือก dataset ที่ Ready หรือ upload ไฟล์ Excel ใหม่"}
         </p>
 
@@ -169,29 +170,10 @@ export function TrainPanel({
             className={`transition-transform ${showAdvanced ? "rotate-0" : "-rotate-90"}`}
           />
           <SlidersHorizontal size={13} />
-          ตั้งค่าขั้นสูง — cutoff override, horizon
+          ตั้งค่าขั้นสูง — horizon
         </button>
         {showAdvanced && (
-          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="type-label">Manual cutoff override</span>
-              <input
-                type="date"
-                value={cutoffDate}
-                onChange={(e) => {
-                  setCutoffDate(e.target.value);
-                  setCutoffTouched(true);
-                }}
-                className={`${fieldCls} max-w-[240px]`}
-              />
-              <span className="mt-1.5 block text-[12px] leading-5 text-[color:var(--ink-4)]">
-                {cutoffTouched
-                  ? "Manual override — API จะ block ถ้า history หรือ label horizon ไม่ครบ"
-                  : latestDataDate
-                    ? `Auto · ข้อมูลล่าสุด ${latestDataDate}; เลือก cutoff นี้เพื่อกัน leakage`
-                    : "Auto — ระบบเลือก cutoff ล่าสุดที่ยังมี label horizon ครบ"}
-              </span>
-            </label>
+          <div className="mt-3">
             <label className="block">
               <span className="type-label">Horizon (days)</span>
               <input
