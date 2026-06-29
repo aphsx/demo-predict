@@ -30,6 +30,7 @@ import {
 import { getDisplayError } from "@/lib/ui-error";
 import {
   defaultRunName,
+  formatDate,
   formatRelative,
   getCleanCounts,
   todayISO,
@@ -53,9 +54,10 @@ export function CreateRunPanel({
   const [sourceId, setSourceId] = useState("");
   const [name, setName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
+  // Prediction cutoff is fully auto-managed (the as-of date = latest data in the
+  // source). It is computed from the API suggestion and sent to the run, but is
+  // not user-editable — there is no legitimate non-replay reason to override it.
   const [cutoff, setCutoff] = useState(todayISO());
-  const [cutoffTouched, setCutoffTouched] = useState(false);
-  const [latestDataDate, setLatestDataDate] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,19 +99,12 @@ export function CreateRunPanel({
   }, [selected?.id, nameTouched]);
 
   useEffect(() => {
-    if (!selected) return;
-    setCutoffTouched(false);
-    setLatestDataDate(null);
     setCutoff("");
+    if (!selected) return;
     let alive = true;
     fetchPredictSuggestedCutoff(selected.id)
-      .then(({ suggested_cutoff, latest_data_date }) => {
-        if (!alive) return;
-        setLatestDataDate(latest_data_date);
-        setCutoffTouched((touched) => {
-          if (!touched) setCutoff(suggested_cutoff);
-          return touched;
-        });
+      .then(({ suggested_cutoff }) => {
+        if (alive) setCutoff(suggested_cutoff);
       })
       .catch(() => {
         // Keep the local fallback when no suggestion is available.
@@ -190,6 +185,7 @@ export function CreateRunPanel({
             <p className="mt-2 text-[12px] text-[color:var(--ink-5)]">
               {counts ? `${counts.customers.toLocaleString()} ลูกค้า · ` : ""}
               นำเข้า {formatRelative(selected.imported_at)}
+              {cutoff ? ` · ทำนาย ณ ${formatDate(cutoff)} (อัตโนมัติ)` : ""}
             </p>
           )}
         </div>
@@ -220,31 +216,10 @@ export function CreateRunPanel({
             className={`transition-transform ${showAdvanced ? "rotate-0" : "-rotate-90"}`}
           />
           <SlidersHorizontal size={13} />
-          ตั้งค่าขั้นสูง — cutoff override, เลือกเวอร์ชันโมเดล
+          ตั้งค่าขั้นสูง — เลือกเวอร์ชันโมเดล
         </button>
         {showAdvanced && (
           <div className="mt-3 space-y-4">
-            <label className="block max-w-[260px]">
-              <span className="type-label">Prediction cutoff</span>
-              <input
-                type="date"
-                value={cutoff}
-                onChange={(e) => {
-                  setCutoff(e.target.value);
-                  setCutoffTouched(true);
-                }}
-                disabled={creating || readySources.length === 0}
-                className={fieldCls}
-              />
-              <p className="mt-1.5 text-[12px] leading-5 text-[color:var(--ink-4)]">
-                {cutoffTouched
-                  ? "Manual — ใช้เฉพาะกรณีต้อง replay prediction ณ วันอื่นของ dataset เดิม"
-                  : latestDataDate
-                    ? `Auto · ข้อมูลล่าสุด ${latestDataDate}; predict as-of วันถัดไป`
-                    : "Auto — ระบบเลือกจากวันที่ข้อมูลล่าสุดของ source"}
-              </p>
-            </label>
-
             <div>
               <span className="type-label">เลือกโมเดลต่อ run</span>
               <p className="mt-1 mb-2 text-[12px] leading-5 text-[color:var(--ink-4)]">
