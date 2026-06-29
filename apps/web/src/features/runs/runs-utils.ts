@@ -82,6 +82,23 @@ export function formatDateTime(value: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString("en-GB", DATETIME_FMT);
 }
 
+/** Compact relative time in Thai, e.g. "เพิ่งเริ่ม", "5 นาทีก่อน", "2 ชม. ก่อน", "เมื่อวาน". */
+export function formatRelative(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const diffMs = Date.now() - d.getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "เพิ่งเริ่ม";
+  if (min < 60) return `${min} นาทีก่อน`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} ชม. ก่อน`;
+  const day = Math.floor(hr / 24);
+  if (day === 1) return "เมื่อวาน";
+  if (day < 7) return `${day} วันก่อน`;
+  return formatDate(value);
+}
+
 /** Today as YYYY-MM-DD in Asia/Bangkok (for <input type="date"> defaults). */
 export function todayISO(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: BKK });

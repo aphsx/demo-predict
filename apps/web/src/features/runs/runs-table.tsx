@@ -1,7 +1,8 @@
 "use client";
 /**
- * Spec §2.5 — prediction runs table. Polling while in_progress lives in
- * RunsView; this component renders rows + per-run actions.
+ * Prediction runs list (redesigned, slim). 5 columns: run (+ source subtitle),
+ * status (with inline progress / error), customers, when (relative), actions.
+ * Polling while in_progress lives in RunsView.
  */
 
 import { useState } from "react";
@@ -14,9 +15,7 @@ import {
 import { deletePredictionRun, retryPredictionRun, type PredictionRun } from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
 import { useRunStore } from "@/stores/run-store";
-import { formatDate, formatDateTime, runStatusLabel, runStatusTone } from "./runs-utils";
-
-const COLUMNS = 8;
+import { formatRelative, runStatusLabel, runStatusTone } from "./runs-utils";
 
 const actionBtnCls =
   "inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12px] font-semibold text-[color:var(--moby-600)] hover:bg-gray-50 disabled:opacity-40";
@@ -73,7 +72,7 @@ export function RunsTable({
     <>
       <SectionCard
         eyebrow="Run history"
-        title="Prediction runs"
+        title="run ล่าสุด"
         hint="หนึ่งแถวต่อหนึ่งรอบทำนาย — เปิด run ที่ completed เพื่อดู dashboard"
       >
         {error && (
@@ -92,7 +91,7 @@ export function RunsTable({
           <EmptyState
             icon={ListChecks}
             title="ยังไม่มี prediction run — import ข้อมูลและสร้าง run แรก"
-            hint="เลือก predict source ที่ ready แล้วกด Create run ด้านบน"
+            hint="เลือก predict source ที่ ready แล้วกด รัน ด้านบน"
           />
         ) : (
           <div className="overflow-x-auto rounded-[22px] border border-gray-200">
@@ -101,11 +100,8 @@ export function RunsTable({
                 <tr>
                   <th>Run</th>
                   <th>Status</th>
-                  <th>Source</th>
-                  <th>Cutoff</th>
                   <th className="text-right">Customers</th>
-                  <th>Created by</th>
-                  <th>Finished</th>
+                  <th>เมื่อไหร่</th>
                   <th></th>
                 </tr>
               </thead>
@@ -160,69 +156,61 @@ function RunRow({
 }) {
   const inProgress = run.status === "in_progress";
   return (
-    <>
-      <tr>
-        <td className="font-medium text-[color:var(--ink-1)]">{run.name}</td>
-        <td>
+    <tr>
+      <td>
+        <div className="font-medium text-[color:var(--ink-1)]">{run.name}</div>
+        <div className="text-[11.5px] text-[color:var(--ink-5)]">{run.predict_source_name}</div>
+      </td>
+      <td>
+        <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <StatusPill tone={runStatusTone(run.status)} loading={inProgress}>
               {runStatusLabel(run.status)}
             </StatusPill>
             {run.status === "failed" && run.error_message && (
               <span
-                className="text-[11px] text-[color:var(--danger)] truncate max-w-[220px]"
+                className="max-w-[220px] truncate text-[11px] text-[color:var(--danger)]"
                 title={run.error_message}
               >
                 {run.error_message}
               </span>
             )}
           </div>
-        </td>
-        <td className="text-[color:var(--ink-3)]">{run.predict_source_name}</td>
-        <td className="num">{formatDate(run.cutoff_date)}</td>
-        <td className="text-right num">{run.total_customers?.toLocaleString() ?? "—"}</td>
-        <td className="text-[11.5px] text-[color:var(--ink-4)]">{run.created_by ?? "—"}</td>
-        <td className="text-[11.5px] text-[color:var(--ink-4)]">
-          {formatDateTime(run.finished_at)}
-        </td>
-        <td className="text-right">
-          <div className="flex items-center justify-end gap-1.5">
-            {run.status === "completed" && (
-              <button
-                type="button"
-                onClick={onOpen}
-                className={actionBtnCls}
-              >
-                Open <ChevronRight size={11} />
-              </button>
-            )}
-            {run.status === "failed" && (
-              <button type="button" onClick={onRetry} disabled={retrying} className={actionBtnCls}>
-                <RefreshCw size={11} className={retrying ? "animate-spin" : undefined} />
-                Retry
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={deleting}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--ink-4)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-40"
-              title="Delete run"
-            >
-              {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
-            </button>
-          </div>
-        </td>
-      </tr>
-      {inProgress && run.progress && (
-        <tr>
-          <td colSpan={COLUMNS} className="!py-2 bg-[color:var(--moby-50)]">
-            <div className="max-w-md">
+          {inProgress && run.progress && (
+            <div className="max-w-[240px]">
               <ProgressMeter value={run.progress.pct} label={run.progress.step} />
             </div>
-          </td>
-        </tr>
-      )}
-    </>
+          )}
+        </div>
+      </td>
+      <td className="text-right num">{run.total_customers?.toLocaleString() ?? "—"}</td>
+      <td className="text-[color:var(--ink-3)]">
+        {formatRelative(run.finished_at ?? run.created_at)}
+      </td>
+      <td className="text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          {run.status === "completed" && (
+            <button type="button" onClick={onOpen} className={actionBtnCls}>
+              เปิด <ChevronRight size={11} />
+            </button>
+          )}
+          {run.status === "failed" && (
+            <button type="button" onClick={onRetry} disabled={retrying} className={actionBtnCls}>
+              <RefreshCw size={11} className={retrying ? "animate-spin" : undefined} />
+              ลองใหม่
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--ink-4)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-40"
+            title="ลบ run"
+          >
+            {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }

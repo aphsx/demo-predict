@@ -9,20 +9,17 @@ import { fetchPredictDataSources, type PredictDataSource } from "@/lib/api";
 import { fetchPredictionRuns, type PredictionRun } from "@/lib/ml-api";
 import { getDisplayError } from "@/lib/ui-error";
 import { CreateRunPanel } from "./create-run-panel";
-import { PredictSourcesSection } from "./predict-sources-section";
 import { RunsTable } from "./runs-table";
 import { RUN_POLL_MS } from "./runs-utils";
 
 export function RunsView() {
   const [sources, setSources] = useState<PredictDataSource[]>([]);
   const [runs, setRuns] = useState<PredictionRun[]>([]);
-  const [sourcesLoading, setSourcesLoading] = useState(true);
   const [runsLoading, setRunsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async ({ quiet = false }: { quiet?: boolean } = {}) => {
     if (!quiet) {
-      setSourcesLoading(true);
       setRunsLoading(true);
     }
     setError(null);
@@ -36,7 +33,6 @@ export function RunsView() {
     } catch (e) {
       setError(getDisplayError(e, "โหลด prediction runs ไม่สำเร็จ") ?? "โหลด prediction runs ไม่สำเร็จ");
     } finally {
-      setSourcesLoading(false);
       setRunsLoading(false);
     }
   }, []);
@@ -60,17 +56,11 @@ export function RunsView() {
           </div>
         )}
 
-        <CreateRunPanel sources={sources} onCreated={() => load({ quiet: true })} />
+        <CreateRunPanel sources={sources} onRefresh={() => load({ quiet: true })} />
 
         <RunsTable
           runs={runs}
           loading={runsLoading}
-          onRefresh={() => load({ quiet: true })}
-        />
-
-        <PredictSourcesSection
-          sources={sources}
-          loading={sourcesLoading}
           onRefresh={() => load({ quiet: true })}
         />
       </div>
