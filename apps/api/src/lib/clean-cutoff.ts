@@ -6,7 +6,14 @@
  * training-runs. It lives here once, with one transform per scope:
  *   - train:   month-aligned (latest_activity − horizon), the latest fully
  *              observed label cutoff.
- *   - predict: the day after the latest observed activity.
+ *   - predict: month-aligned — the first of the month after the latest
+ *              observed activity's month. Usage has monthly granularity and
+ *              training only ever uses month-aligned cutoffs, so a mid-month
+ *              predict cutoff would let features see a partial trailing month
+ *              the model never saw in training (train/serve skew). Flooring
+ *              `latest + 1 day` to the month start keeps parity: a month-end
+ *              `latest` includes that full month, a mid-month `latest` drops
+ *              the incomplete current month.
  */
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
@@ -41,12 +48,12 @@ export async function getTrainCutoffSuggestion(
   return row ?? EMPTY;
 }
 
-/** Suggested prediction cutoff: the day after the latest observed activity. */
+/** Suggested prediction cutoff: month-aligned floor of `latest_activity + 1 day`. */
 export async function getPredictCutoffSuggestion(
   sourceId: string
 ): Promise<CutoffSuggestion> {
   const [row] = await db.execute<CutoffSuggestion>(sql`
-    SELECT to_char(latest + 1, 'YYYY-MM-DD') AS cutoff_date,
+    SELECT to_char(date_trunc('month', (latest + 1)::timestamp)::date, 'YYYY-MM-DD') AS cutoff_date,
            to_char(latest, 'YYYY-MM-DD') AS latest_data_date
     FROM (
       SELECT GREATEST(

@@ -18,6 +18,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 
 from src.constants import (
+    DerivedThresholds,
     LifecycleStage,
     OutputStatus,
     RiskLevel,
@@ -31,6 +32,8 @@ from src.training import repository
 from src.training.artifacts import load_artifacts
 from src.training.data import database_url, load_predict_clean
 from src.training.features import (
+    BASE_TIER_A_FEATURES,
+    CREDIT_TIER_A_FEATURES,
     build_all_features,
     feature_code_hash,
 )
@@ -84,13 +87,36 @@ def _feature_contract_guard(model_type: str, bundle: dict[str, Any], frame: pd.D
     serialized preprocessor columns are present, prediction remains safe.
     """
 
-    features = _features_for_bundle(frame, bundle)
+    features = _features_for_bundle(frame, bundle)  # hard-validates required columns present
     card = bundle["model_card"]
     trained_hash = card.get("feature_code_hash")
     current_hash = feature_code_hash(list(features.columns))
-    if trained_hash and trained_hash != current_hash:
+    if not trained_hash or trained_hash == current_hash:
+        return
+
+    # A mismatch has two very different causes. Distinguish them so a genuine
+    # train/serve computation skew isn't hidden behind the same benign warning
+    # as an old-contract artifact.
+    trained_features = set(bundle.get("feature_names") or [])
+    contract_features = set(CREDIT_TIER_A_FEATURES if model_type == "credit" else BASE_TIER_A_FEATURES)
+    if trained_features != contract_features:
+        # Artifact was trained on a different (typically narrower) feature
+        # contract. Every column it actually consumes is present (validated
+        # above), so serving is safe — just note the version lag.
         logger.warning(
-            "Feature hash mismatch for %s champion %s, allowing compatible artifact columns.",
+            "Feature contract differs for %s champion %s (legacy narrower contract); "
+            "all required columns present, serving is safe.",
+            model_type,
+            card.get("version"),
+        )
+    else:
+        # Same feature list, but the builder SOURCE changed since training —
+        # the values computed at serve time may not match what the model was
+        # trained on (train/serve skew). Loud + actionable.
+        logger.warning(
+            "Feature COMPUTATION changed for %s champion %s since training "
+            "(same feature list, different builder source) — potential train/serve "
+            "skew; retrain/repromote recommended.",
             model_type,
             card.get("version"),
         )
@@ -109,8 +135,9 @@ def _run_drift_checks(
 ) -> set[str]:
     """Score PSI drift per model and persist one drift report each.
 
-    Returns the set of model_types with major drift (PSI > 0.25 on ≥1 feature).
-    Major drift surfaces as output_status=PARTIAL for affected customers.
+    Returns the set of model_types with major drift (≥MAJOR_DRIFT_MIN_FEATURES
+    features over the major PSI band). Major drift surfaces as
+    output_status=PARTIAL for affected customers.
     Champions trained before drift monitoring shipped carry no baseline and
     are skipped (not counted as drifted).
     """
@@ -140,7 +167,9 @@ def _run_drift_checks(
                 drift["minor_drift_count"],
                 drift["major_drift_count"],
             )
-        if drift.get("major_drift_count", 0) > 0:
+        # PARTIAL only when the run is genuinely major-drifted (≥N major
+        # features, see MAJOR_DRIFT_MIN_FEATURES) — not on a single noisy one.
+        if drift["overall_status"] == "major_drift":
             major_drift_models.add(model_type)
 
         report = ValidationReport(
@@ -272,6 +301,10 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     clv_bundle = champions["clv"]["bundle"]
     clv_features = _features_for_bundle(frame, clv_bundle)
     frame = _apply_clv(frame, clv_bundle, clv_features, payments, cutoff)
+    # p_alive health cuts travel with the CLV model (derived from its validation
+    # distribution at training). Legacy artifacts have no thresholds → fall back
+    # to the fixed constants.
+    p_alive_cuts = _p_alive_cuts(clv_bundle.get("thresholds"))
 
     # ── Credit quantiles ─────────────────────────────────────────
     progress("credit model", 65)
@@ -284,7 +317,7 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     frame = _apply_descriptive(frame, customers, payments, cutoff)
 
     # ── Derived business fields (§5) ──────────────────────────────
-    frame = _apply_derived(frame, cutoff)
+    frame = _apply_derived(frame, cutoff, p_alive_cuts)
 
     model_versions = {
         model_type: champions[model_type]["version"] for model_type in champions
@@ -319,6 +352,15 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
 
 
 # ── Model application helpers ────────────────────────────────────
+
+
+def _p_alive_cuts(clv_thresholds: dict[str, float] | None) -> tuple[float, float]:
+    """(at_risk_cut, watch_cut) from the CLV artifact, else fixed fallbacks."""
+
+    thr = clv_thresholds or {}
+    at_risk = float(thr.get("p_alive_at_risk", DerivedThresholds.P_ALIVE_ATRISK_FALLBACK))
+    watch = float(thr.get("p_alive_watch", DerivedThresholds.P_ALIVE_WATCH_FALLBACK))
+    return at_risk, watch
 
 
 def _risk_level(probability: float, thresholds: dict[str, float]) -> str | None:
@@ -580,7 +622,7 @@ def _apply_descriptive(
     change = pd.to_numeric(frame["usage_change_90d_pct"], errors="coerce").fillna(0.0)
     total_180 = pd.to_numeric(frame["usage_total_180d"], errors="coerce").fillna(0.0)
     frame["usage_trend"] = np.select(
-        [total_180 <= 0, change > 0.10, change < -0.10],
+        [total_180 <= 0, change > DerivedThresholds.MOMENTUM_BAND, change < -DerivedThresholds.MOMENTUM_BAND],
         ["no_usage", "increasing", "declining"],
         default="stable",
     )
@@ -626,7 +668,12 @@ def _apply_descriptive(
     return frame
 
 
-def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
+def _apply_derived(
+    frame: pd.DataFrame,
+    cutoff: pd.Timestamp,
+    p_alive_cuts: tuple[float, float],
+) -> pd.DataFrame:
+    at_risk_cut, watch_cut = p_alive_cuts
     # value tier (§3.5): percentile of CLV among active customers of the run
     active_mask = frame["lifecycle_stage"].isin(list(LifecycleStage.ACTIVE))
     clv = pd.to_numeric(frame["predicted_clv_6m"], errors="coerce")
@@ -635,7 +682,9 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     if pool.any():
         rank = clv[pool].rank(pct=True)
         tier.loc[pool] = np.select(
-            [rank >= 0.90, rank >= 0.50], [ValueTier.HIGH, ValueTier.MID], default=ValueTier.LOW
+            [rank >= DerivedThresholds.VALUE_TIER_HIGH_PCT, rank >= DerivedThresholds.VALUE_TIER_MID_PCT],
+            [ValueTier.HIGH, ValueTier.MID],
+            default=ValueTier.LOW,
         )
     frame["customer_value_tier"] = tier
 
@@ -663,9 +712,9 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     urgency.loc[credit_eligible] = UrgencyLevel.STABLE
     with_days = credit_eligible & pd.Series(days, index=frame.index).notna()
     days_series = pd.Series(days, index=frame.index)
-    urgency.loc[with_days & (days_series <= 90)] = UrgencyLevel.MONITOR
-    urgency.loc[with_days & (days_series <= 30)] = UrgencyLevel.WARNING
-    urgency.loc[with_days & (days_series <= 14)] = UrgencyLevel.CRITICAL
+    urgency.loc[with_days & (days_series <= DerivedThresholds.URGENCY_MONITOR_DAYS)] = UrgencyLevel.MONITOR
+    urgency.loc[with_days & (days_series <= DerivedThresholds.URGENCY_WARNING_DAYS)] = UrgencyLevel.WARNING
+    urgency.loc[with_days & (days_series <= DerivedThresholds.URGENCY_CRITICAL_DAYS)] = UrgencyLevel.CRITICAL
     frame["credit_urgency_level"] = urgency
 
     # priority score (§5.2) — rank by expected money at risk. revenue_at_risk
@@ -687,11 +736,13 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
     usage_change = pd.to_numeric(frame.get("usage_change_90d_pct"), errors="coerce")
     valuable = frame["customer_value_tier"].isin([ValueTier.HIGH, ValueTier.MID])
     churn_at_risk = risk_level.isin([RiskLevel.HIGH, RiskLevel.CRITICAL])
-    silent_decline = valuable & (p_alive < 0.20) & (usage_change < -0.10)
+    silent_decline = (
+        valuable & (p_alive < at_risk_cut) & (usage_change < -DerivedThresholds.MOMENTUM_BAND)
+    )
     needs_review = (churn_at_risk | silent_decline) & active_mask
     frame["needs_review"] = needs_review.fillna(False).astype(bool)
 
-    frame = _apply_segments(frame)
+    frame = _apply_segments(frame, p_alive_cuts)
     return frame
 
 
@@ -699,9 +750,10 @@ def _apply_derived(frame: pd.DataFrame, cutoff: pd.Timestamp) -> pd.DataFrame:
 # docs/CUSTOMER-SEGMENTS.md. Names/order are the single source in src.constants.
 
 
-def _apply_segments(frame: pd.DataFrame) -> pd.DataFrame:
+def _apply_segments(frame: pd.DataFrame, p_alive_cuts: tuple[float, float]) -> pd.DataFrame:
     """Assign a descriptive segment + a global priority_rank per customer (§5.4)."""
 
+    at_risk_cut, watch_cut = p_alive_cuts
     tier = frame["customer_value_tier"]
     risk = frame["churn_risk_level"].astype("object")
     p_alive = pd.to_numeric(frame["p_alive"], errors="coerce")
@@ -710,9 +762,9 @@ def _apply_segments(frame: pd.DataFrame) -> pd.DataFrame:
     stage = frame["lifecycle_stage"]
     sub_stage = frame["sub_stage"]
     valuable = tier.isin([ValueTier.HIGH, ValueTier.MID])
-    at_risk = risk.isin([RiskLevel.HIGH, RiskLevel.CRITICAL]) | (p_alive < 0.20)
-    watch = ~at_risk & (risk.eq(RiskLevel.MEDIUM) | (p_alive < 0.50))
-    growing = change > 0.10
+    at_risk = risk.isin([RiskLevel.HIGH, RiskLevel.CRITICAL]) | (p_alive < at_risk_cut)
+    watch = ~at_risk & (risk.eq(RiskLevel.MEDIUM) | (p_alive < watch_cut))
+    growing = change > DerivedThresholds.MOMENTUM_BAND
 
     is_churned = stage.eq(LifecycleStage.CHURNED)
     # Conditions are evaluated in priority order (first match wins). The

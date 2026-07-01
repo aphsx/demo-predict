@@ -438,7 +438,7 @@ def refit_for_backtest(
     x_trval = pd.concat([x_train, x_val], ignore_index=True)
     y_trval = np.concatenate([y_train, y_val])
 
-    _, oof = _cv_oof(champion, x_trval, y_trval)
+    _, oof, _ = _cv_oof(champion, x_trval, y_trval)
     calibrator = _fit_calibrator(oof, y_trval)
     f2_threshold = select_threshold_max_fbeta(y_trval, calibrator.transform(oof), beta=2.0)
     high_threshold = float(np.clip(f2_threshold, *HIGH_THRESHOLD_BAND))

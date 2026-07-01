@@ -48,7 +48,12 @@ class PromotionConfig:
     primary_metric: str
     higher_is_better: bool = True
     # Beat the incumbent champion's aggregate primary by at least this margin.
+    # The effective bar is max(champion_margin, champion_margin_rel * |champ|):
+    # an ABSOLUTE floor plus a RELATIVE floor. The relative floor is what stops
+    # a noise-sized win (e.g. +0.0001 PR-AUC) from rotating the champion — a
+    # tie-on-noise keeps the incumbent instead of churning production.
     champion_margin: float = 0.0
+    champion_margin_rel: float = 0.0
     # Reject if the worst backtest cutoff drops more than this fraction below the
     # median backtest (relative). Guards against a model that looks good on
     # average but collapses in some regime.
@@ -166,8 +171,13 @@ def _evaluate(c: CandidateEval, config: PromotionConfig) -> CandidateDecision:
         reasons.append(f"แพ้ baseline บน backtest {len(lost_cutoffs)}/{len(c.primary_backtests)} cutoff")
 
     champion_gap = _champion_gap(c, config)
-    if champion_gap is not None and champion_gap < config.champion_margin:
-        reasons.append("แพ้ champion เดิมบนค่าเฉลี่ย backtest")
+    if champion_gap is not None:
+        required = _champion_required_gap(c, config)
+        if champion_gap < required:
+            reasons.append(
+                f"ดีกว่า champion เดิมไม่ถึงเกณฑ์ (gap {champion_gap:+.4f} < {required:.4f}) "
+                "— ถือว่าเสมอในระดับ noise, คง champion เดิม"
+            )
 
     instability = _instability(c, config.higher_is_better)
     if instability is not None and instability > config.stability_max_rel_drop:
@@ -232,6 +242,25 @@ def _champion_gap(c: CandidateEval, config: PromotionConfig) -> float | None:
     cand = statistics.fmean(c.primary_backtests[k] for k in shared)
     champ = statistics.fmean(c.champion_backtests[k] for k in shared)
     return (cand - champ) if config.higher_is_better else (champ - cand)
+
+
+def _champion_required_gap(c: CandidateEval, config: PromotionConfig) -> float:
+    """Minimum gap over the incumbent to count as a real improvement.
+
+    max(absolute floor, relative floor). The relative floor scales with the
+    incumbent's own aggregate magnitude, so "1% better" means the same thing
+    whether the metric sits at 0.9 (PR-AUC) or 0.3 (a weaker Spearman).
+    """
+
+    abs_floor = config.champion_margin
+    if config.champion_margin_rel <= 0.0 or not c.champion_backtests:
+        return abs_floor
+    shared = [k for k in c.primary_backtests if k in c.champion_backtests]
+    if not shared:
+        return abs_floor
+    champ = statistics.fmean(c.champion_backtests[k] for k in shared)
+    rel_floor = config.champion_margin_rel * abs(champ)
+    return max(abs_floor, rel_floor)
 
 
 def _instability(c: CandidateEval, higher_is_better: bool) -> float | None:

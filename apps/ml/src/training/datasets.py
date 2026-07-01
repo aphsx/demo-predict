@@ -75,12 +75,22 @@ def build_cutoff_datasets(
     cutoff_date: pd.Timestamp,
     horizon_days: int = 180,
     seed: int = RANDOM_SEED,
+    active_window_days: int = 180,
 ) -> CutoffDatasets:
-    """Build features + labels + splits for one cutoff (TRAINING §2 steps 4–7)."""
+    """Build features + labels + splits for one cutoff (TRAINING §2 steps 4–7).
+
+    ``active_window_days`` defines eligibility (who counts as "active" at the
+    cutoff, and thus enters churn/CLV training). It is an explicit parameter
+    rather than a buried LabelConfig default so it is visible and tunable in one
+    place — but it is a GLOBAL knob, not per-run, because eligibility must mean
+    the same thing across runs for value tiers / segments to be comparable.
+    """
 
     cutoff = pd.Timestamp(cutoff_date)
     feature_result = build_all_features(customers, payments, usage, cutoff)
-    label_config = LabelConfig(cutoff_date=cutoff, horizon_days=horizon_days)
+    label_config = LabelConfig(
+        cutoff_date=cutoff, horizon_days=horizon_days, active_window_days=active_window_days
+    )
     labels = build_label_set(customers, payments, usage, label_config)
 
     churn = _build_churn_frame(feature_result, labels["churn"], seed)
