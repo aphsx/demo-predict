@@ -73,10 +73,15 @@ ECE_LIMIT = 0.05
 # miscalibration is rejected) plus a soft penalty above the desired target, NOT
 # a hairline veto. So the best-ranking, recalibrated candidate wins instead of
 # being knocked out by a noise-sized ECE miss.
+# champion_margin_rel: a challenger must beat the incumbent on the aggregate
+# backtest by ≥1% relative (churn/CLV) before it may take over production. A
+# smaller gap is treated as a tie-on-noise and the incumbent is kept, so the
+# champion does not rotate on sampling jitter (retrain-to-retrain stability).
 CHURN_PROMOTION_CONFIG = promotion.PromotionConfig(
     primary_metric="pr_auc",
     higher_is_better=True,
     champion_margin=0.0,
+    champion_margin_rel=0.01,
     stability_max_rel_drop=0.30,
     calibration_ceiling=0.10,
     calibration_target=ECE_LIMIT,
@@ -86,6 +91,7 @@ CLV_PROMOTION_CONFIG = promotion.PromotionConfig(
     primary_metric="spearman",
     higher_is_better=True,
     champion_margin=0.0,
+    champion_margin_rel=0.01,
     stability_max_rel_drop=0.30,
     calibration_ceiling=None,
     calibration_target=None,
@@ -98,6 +104,9 @@ CREDIT_PROMOTION_CONFIG = promotion.PromotionConfig(
     primary_metric="coverage_p10_p90",
     higher_is_better=True,
     champion_margin=0.0,
+    # Coverage already lives in a tight band (0.75–0.90), so a smaller relative
+    # floor is enough to reject noise-sized coverage wins.
+    champion_margin_rel=0.005,
     stability_max_rel_drop=0.25,
     calibration_ceiling=0.001,
     calibration_target=None,
@@ -910,6 +919,7 @@ def _train_and_register_clv(
             "baselines": result.baseline_metrics,
         },
         model_card=model_card,
+        thresholds=result.p_alive_thresholds or None,
         feature_baseline=build_feature_baseline(
             dataset.features("train"), dataset.feature_names, datasets.cutoff_date
         ),

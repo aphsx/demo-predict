@@ -21,12 +21,43 @@ import xgboost as xgb
 from lifetimes import BetaGeoFitter, GammaGammaFitter
 from scipy.stats import spearmanr
 
+from src.constants import DerivedThresholds
 from src.training.baselines import ClvSegmentMeanBaseline, clv_carryover_scores
 from src.training.datasets import SplitFrame
 from src.training.metrics import bootstrap_ci_regression, clv_metrics
 from src.training.preprocessing import PreprocessorConfig, transform_features
 
 logger = logging.getLogger(__name__)
+
+
+def derive_p_alive_thresholds(p_alive_values: np.ndarray) -> dict[str, float]:
+    """Per-model at-risk / watch p_alive health cuts from validation p_alive.
+
+    p_alive from BG/NBD is not guaranteed calibrated across cohorts — its scale
+    slides with purchase cadence and observation window (T). A fixed 0.20 line
+    therefore flags a different fraction of customers each run. Deriving the cut
+    from the validation p_alive QUANTILE at a target flag-rate keeps the flag-rate
+    stable while the concrete p_alive value adapts to the model. The cuts are
+    clamped so a degenerate distribution can never produce an absurd boundary,
+    and the pipeline falls back to the fixed constants when there aren't enough
+    finite values to estimate a quantile. Mirrors how churn risk thresholds are
+    derived at training and shipped in the artifact.
+    """
+
+    finite = np.asarray(p_alive_values, dtype=float)
+    finite = finite[np.isfinite(finite) & (finite > 0.0)]
+    lo_a, hi_a = DerivedThresholds.P_ALIVE_ATRISK_CLAMP
+    lo_w, hi_w = DerivedThresholds.P_ALIVE_WATCH_CLAMP
+    if finite.size < 50:
+        return {
+            "p_alive_at_risk": DerivedThresholds.P_ALIVE_ATRISK_FALLBACK,
+            "p_alive_watch": DerivedThresholds.P_ALIVE_WATCH_FALLBACK,
+        }
+    at_risk = float(np.clip(np.quantile(finite, DerivedThresholds.P_ALIVE_ATRISK_RATE), lo_a, hi_a))
+    watch = float(np.clip(np.quantile(finite, DerivedThresholds.P_ALIVE_WATCH_RATE), lo_w, hi_w))
+    # Health is monotone (at-risk is stricter than watch): keep at_risk < watch.
+    watch = max(watch, at_risk + 1e-6)
+    return {"p_alive_at_risk": round(at_risk, 4), "p_alive_watch": round(watch, 4)}
 
 RANDOM_SEED = 42
 TWEEDIE_TRIALS = 50
@@ -115,6 +146,9 @@ class ClvTrainResult:
     test_ci_json: dict[str, dict[str, float]] = field(default_factory=dict)
     magnitude_slope: float = 1.0
     magnitude_intercept: float = 0.0
+    # at-risk / watch p_alive cuts derived from validation p_alive (shipped in
+    # the artifact so prediction reads them instead of hardcoding 0.20 / 0.50).
+    p_alive_thresholds: dict[str, float] = field(default_factory=dict)
 
 
 def build_rfm_summary(payments: pd.DataFrame, acc_ids: pd.Series, cutoff: pd.Timestamp) -> pd.DataFrame:
@@ -203,6 +237,13 @@ def train_clv(
             logger.warning("BG-NBD penalizer=%s failed: %s", penalizer, exc)
     if best_bundle is None:
         raise RuntimeError("BG-NBD failed to fit for all penalizer values.")
+
+    # Derive the p_alive health cuts from this model's validation distribution.
+    val_p_alive = best_bundle.predict_frame(
+        build_rfm_summary(payments, val_acc, cutoff)
+    )["p_alive"].to_numpy()
+    p_alive_thresholds = derive_p_alive_thresholds(val_p_alive)
+    notify(f"clv: p_alive health cuts (derived) = {p_alive_thresholds}")
 
     # ── Candidate 2: LightGBM Tweedie on the Tier A features ──
     notify(f"clv: tuning LightGBM Tweedie with Optuna ({tweedie_trials} trials)")
@@ -401,6 +442,7 @@ def train_clv(
         test_ci_json=test_ci_json,
         magnitude_slope=magnitude_slope,
         magnitude_intercept=magnitude_intercept,
+        p_alive_thresholds=p_alive_thresholds,
     )
 
 

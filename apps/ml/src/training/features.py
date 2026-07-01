@@ -578,7 +578,14 @@ def build_usage_features(usage: pd.DataFrame, cutoff_date: pd.Timestamp) -> pd.D
     rows["usage_active_months_180d"] = rows["acc_id"].map(
         recent_180[recent_180["usage"] > 0].groupby("acc_id")["period"].nunique()
     )
-    rows["usage_consistency_ratio"] = rows["usage_active_months_180d"] / 6.0
+    # Divisor = the number of monthly usage buckets the 180d window can actually
+    # contain, derived from the window itself. A hardcoded 6.0 is wrong: a
+    # month-aligned 180d span holds ~5 month-start stamps (not 6), and an
+    # unaligned span can touch 7 — so /6.0 let the ratio under- or over-shoot 1.0.
+    window_start = cutoff - pd.Timedelta(days=180)
+    window_months = pd.date_range(window_start.normalize(), cutoff, freq="MS")
+    n_window_months = int(((window_months >= window_start) & (window_months < cutoff)).sum())
+    rows["usage_consistency_ratio"] = rows["usage_active_months_180d"] / max(n_window_months, 1)
     rows["usage_slope_6m"] = rows["acc_id"].map(_usage_slope_6m(history, cutoff))
 
     return rows[

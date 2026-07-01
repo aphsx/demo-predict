@@ -27,6 +27,12 @@ import pandas as pd
 # Industry-standard PSI bands.
 PSI_MINOR_THRESHOLD = 0.10
 PSI_MAJOR_THRESHOLD = 0.25
+# Escalate the WHOLE run to "major_drift" only when at least this many features
+# cross the major band. With ~24–27 correlated usage features, a single noisy
+# feature crossing 0.25 should not flip every scored customer to PARTIAL — that
+# reads as "the model is stale" when it isn't. One major feature still surfaces
+# as "minor_drift" (a soft warning), so nothing is hidden.
+MAJOR_DRIFT_MIN_FEATURES = 2
 DEFAULT_BIN_COUNT = 10
 # Laplace smoothing so an empty bin never yields div-by-zero / log(0) in PSI.
 _EPSILON = 1e-6
@@ -115,7 +121,13 @@ def compute_feature_drift(
         )
 
     per_feature.sort(key=lambda row: (row["psi"] is None, -(row["psi"] or 0.0)))
-    overall = "major_drift" if major else "minor_drift" if minor else "stable"
+    if major >= MAJOR_DRIFT_MIN_FEATURES:
+        overall = "major_drift"
+    elif minor or major:
+        # A single major-PSI feature still warrants a soft warning, not silence.
+        overall = "minor_drift"
+    else:
+        overall = "stable"
 
     return {
         "method": "PSI",
