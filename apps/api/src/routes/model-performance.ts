@@ -287,4 +287,30 @@ export const modelPerformanceRoutes = new Elysia({ prefix: "/model-performance" 
       return { message: error instanceof Error ? error.message : "Activation failed" };
     }
     return { ok: true };
+  })
+  // Permanently delete a non-production model version (artifacts + registry row).
+  // The ML service refuses to delete the current production champion.
+  .delete("/:modelType/versions/:id", async ({ params, userId, set }) => {
+    if (!isModelType(params.modelType)) {
+      set.status = 400;
+      return { message: "Unknown model type" };
+    }
+    if (!params.id) {
+      set.status = 400;
+      return { message: "model version id is required" };
+    }
+    try {
+      await triggerMlJob("/internal/model-delete", {
+        model_type: params.modelType,
+        model_version_id: params.id,
+        created_by: userId ?? null,
+      });
+    } catch (error) {
+      // The ML service rejects deleting the production champion with HTTP 400 —
+      // surface that as 409 Conflict (a state error), not a 502 gateway error.
+      const upstream = (error as { upstreamStatus?: number }).upstreamStatus;
+      set.status = upstream === 400 ? 409 : 502;
+      return { message: error instanceof Error ? error.message : "Delete failed" };
+    }
+    return { deleted: true };
   });

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -171,6 +172,31 @@ def current_champion(model_type: str) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+def version_for_serving(model_type: str, model_version_id: str) -> dict[str, Any] | None:
+    """Fetch a specific version row (same shape as `current_champion`) so a
+    prediction run can override the production champion for one model type.
+
+    Returns None when the version does not exist, belongs to another model_type,
+    or has no artifact — the caller falls back to the production champion.
+    """
+
+    with create_engine(database_url()).connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT v.id::text AS id, v.version, v.artifact_path, v.artifact_checksum,
+                       v.model_card_json, v.metrics_json
+                FROM ml_model_versions v
+                WHERE v.id = CAST(:version_id AS UUID) AND v.model_type = :model_type
+                """
+            ),
+            {"version_id": model_version_id, "model_type": model_type},
+        ).mappings().first()
+    if row is None or not row["artifact_path"]:
+        return None
+    return dict(row)
+
+
 def promote_model_version(
     *,
     model_type: str,
@@ -254,6 +280,94 @@ def promote_model_version(
                 "created_by": created_by,
             },
         )
+
+
+def delete_model_version(
+    *,
+    model_type: str,
+    model_version_id: str,
+    created_by: str | None = None,
+) -> dict[str, Any]:
+    """Permanently delete a non-production model version (artifacts + DB row).
+
+    Guardrails:
+      - the version must exist and belong to `model_type`;
+      - the current production champion (is_active / status='production') can
+        NEVER be deleted — switch champion first.
+
+    Removes the on-disk artifact directory, then deletes the
+    `ml_model_versions` row. FK cascades clean up `ml_model_evaluations` and
+    `ml_model_aliases`; `ml_model_activation_history` rows are kept with their
+    version references set to NULL (audit trail survives).
+    """
+
+    import shutil
+
+    from src.training.artifacts import models_dir
+
+    with create_engine(database_url()).connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT version, status, is_active, artifact_path
+                FROM ml_model_versions
+                WHERE id = CAST(:version_id AS UUID) AND model_type = :model_type
+                """
+            ),
+            {"version_id": model_version_id, "model_type": model_type},
+        ).mappings().first()
+
+    if row is None:
+        raise ValueError(f"No {model_type} model version {model_version_id}")
+    if row["is_active"] or row["status"] == "production":
+        raise ValueError(
+            f"{model_type} version {row['version']} is the production champion — "
+            "switch the production model to another version before deleting it"
+        )
+
+    artifact_path = row["artifact_path"]
+    artifact_removed = False
+    if artifact_path:
+        target = Path(artifact_path)
+        if not target.is_absolute():
+            target = models_dir() / target
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+            artifact_removed = True
+
+    with create_engine(database_url()).begin() as conn:
+        # Audit the deletion BEFORE removing the row. The version id is kept in
+        # `reason` text (not the FK columns, which ON DELETE SET NULL would clear)
+        # so the trail survives the row deletion.
+        conn.execute(
+            text(
+                """
+                INSERT INTO ml_model_activation_history (
+                  model_type, previous_model_version_id, new_model_version_id,
+                  action, reason, created_by
+                ) VALUES (:model_type, NULL, NULL, 'delete', :reason, :created_by)
+                """
+            ),
+            {
+                "model_type": model_type,
+                "reason": (
+                    f"Deleted {model_type} version {row['version']} "
+                    f"(id={model_version_id}, artifact_removed={artifact_removed})"
+                ),
+                "created_by": created_by,
+            },
+        )
+        conn.execute(
+            text("DELETE FROM ml_model_versions WHERE id = CAST(:version_id AS UUID)"),
+            {"version_id": model_version_id},
+        )
+
+    return {
+        "model_type": model_type,
+        "version": row["version"],
+        "model_version_id": model_version_id,
+        "artifact_removed": artifact_removed,
+    }
 
 
 def activate_model_version(

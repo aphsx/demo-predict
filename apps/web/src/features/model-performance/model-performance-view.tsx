@@ -3,15 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Activity } from "lucide-react";
 import { EmptyState, PageHeader, Skeleton } from "@/components/ui";
-import {
-  activateModelVersion,
-  fetchModelPerformance,
-  fetchModelVersions,
-  type ModelPerfEntry,
-  type ModelVersionSummary,
-} from "@/lib/ml-api";
+import { fetchModelPerformance, type ModelPerfEntry } from "@/lib/ml-api";
 import { ChurnDiagnostics } from "./churn-diagnostics";
 import { metricInfo } from "./metric-info";
+
+// This page is READ-ONLY: it shows the metrics of the current production
+// champion per model type. Version management (set production / delete) lives on
+// the Model Training page so "view" and "manage" stay cleanly separated.
 
 export function ModelPerformanceView() {
   const [entries, setEntries] = useState<ModelPerfEntry[] | null>(null);
@@ -31,14 +29,11 @@ export function ModelPerformanceView() {
 
   return (
     <main className="pb-12">
-      <PageHeader
-        eyebrow="Model accuracy"
-        title="Model Accuracy"
-      />
+      <PageHeader eyebrow="Model accuracy" title="Model Accuracy" />
 
       <div className="px-8 mt-4 space-y-5">
         <p className="max-w-4xl text-[12.5px] leading-6 text-[color:var(--ink-4)]">
-          Production values come from backend evaluations persisted in the model registry. No metric is hardcoded in the UI.
+          แสดง metric ของโมเดล production ปัจจุบัน (ดูอย่างเดียว) — จัดการเวอร์ชัน/ลบได้ที่หน้า Model Training
         </p>
 
         {error && <EmptyState icon={Activity} title="โหลด model performance ไม่สำเร็จ" hint={error} />}
@@ -62,7 +57,7 @@ export function ModelPerformanceView() {
         {!error && entries && entries.length > 0 && (
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
             {entries.map((entry) => (
-              <MetricSummaryCard key={entry.model_type} entry={entry} onChanged={load} />
+              <MetricSummaryCard key={entry.model_type} entry={entry} />
             ))}
           </section>
         )}
@@ -71,15 +66,7 @@ export function ModelPerformanceView() {
   );
 }
 
-const SWITCHABLE_TYPES = new Set(["churn", "clv", "credit"]);
-
-function MetricSummaryCard({
-  entry,
-  onChanged,
-}: {
-  entry: ModelPerfEntry;
-  onChanged: () => Promise<unknown> | void;
-}) {
+function MetricSummaryCard({ entry }: { entry: ModelPerfEntry }) {
   const primary = entry.primary_metric;
   const primaryInfo = metricInfo(primary.name);
   const split = entry.splits.find((item) => item.split === "test") ?? entry.splits[0] ?? null;
@@ -120,12 +107,12 @@ function MetricSummaryCard({
         {metricRows.map(([name, value]) => {
           const info = metricInfo(name);
           return (
-          <div key={name} className="grid grid-cols-[1fr_auto] gap-4 rounded-xl bg-gray-50 px-3 py-2.5">
-            <p className="text-[12px] font-semibold text-[color:var(--ink-2)]" title={info.tooltip}>
-              {info.label}
-            </p>
-            <p className="num text-[15px] font-semibold">{formatMetric(value)}</p>
-          </div>
+            <div key={name} className="grid grid-cols-[1fr_auto] gap-4 rounded-xl bg-gray-50 px-3 py-2.5">
+              <p className="text-[12px] font-semibold text-[color:var(--ink-2)]" title={info.tooltip}>
+                {info.label}
+              </p>
+              <p className="num text-[15px] font-semibold">{formatMetric(value)}</p>
+            </div>
           );
         })}
       </div>
@@ -149,102 +136,7 @@ function MetricSummaryCard({
           <ChurnDiagnostics entry={entry} />
         </div>
       )}
-
-      {SWITCHABLE_TYPES.has(entry.model_type) && (
-        <ModelVersionSwitcher modelType={entry.model_type} onChanged={onChanged} />
-      )}
     </section>
-  );
-}
-
-function ModelVersionSwitcher({
-  modelType,
-  onChanged,
-}: {
-  modelType: string;
-  onChanged: () => Promise<unknown> | void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [versions, setVersions] = useState<ModelVersionSummary[] | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (next && versions === null) {
-      fetchModelVersions(modelType)
-        .then(setVersions)
-        .catch((e: unknown) => setError(e instanceof Error ? e.message : "โหลดเวอร์ชันไม่สำเร็จ"));
-    }
-  }
-
-  async function activate(versionId: string) {
-    setBusyId(versionId);
-    setError(null);
-    try {
-      await activateModelVersion(modelType, versionId);
-      await onChanged();
-      setVersions(await fetchModelVersions(modelType));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "เปลี่ยนโมเดลไม่สำเร็จ");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <div className="mt-4 border-t border-gray-100 pt-3">
-      <button
-        type="button"
-        onClick={toggle}
-        className="text-[11.5px] font-semibold text-[color:var(--ink-3)] hover:underline"
-      >
-        {open ? "ซ่อนเวอร์ชัน" : "เปลี่ยนโมเดล production →"}
-      </button>
-
-      {open && (
-        <div className="mt-2 space-y-1.5">
-          {error && <p className="text-[11px] text-red-600">{error}</p>}
-          {versions === null && !error && (
-            <p className="text-[11px] text-[color:var(--ink-5)]">กำลังโหลด…</p>
-          )}
-          {versions?.length === 0 && (
-            <p className="text-[11px] text-[color:var(--ink-5)]">ยังไม่มีเวอร์ชัน</p>
-          )}
-          {versions?.map((v) => (
-            <div
-              key={v.id}
-              className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-lg bg-gray-50 px-2.5 py-1.5"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-[11.5px] font-medium text-[color:var(--ink-2)]">
-                  {v.version} · {v.algorithm || "—"}
-                </p>
-                <p className="text-[10.5px] text-[color:var(--ink-5)]">
-                  {v.primary_metric_name}:{" "}
-                  {v.primary_metric_value != null ? v.primary_metric_value.toFixed(4) : "—"}
-                </p>
-              </div>
-              {v.is_active ? (
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                  production
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busyId !== null}
-                  onClick={() => activate(v.id)}
-                  className="rounded-full bg-gray-900 px-2.5 py-1 text-[10.5px] font-semibold text-white disabled:opacity-50"
-                >
-                  {busyId === v.id ? "กำลังเปลี่ยน…" : "ใช้ตัวนี้"}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 

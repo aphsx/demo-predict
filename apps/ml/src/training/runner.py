@@ -341,7 +341,17 @@ def _train_and_register_churn(
     progress: Callable[[str, int], None],
 ) -> dict[str, Any]:
     progress("churn: baselines + candidates (Optuna)", 15)
-    dataset = datasets.churn
+    # Multi-cutoff pooling: older-cutoff rows join the TRAIN split only (val/test
+    # stay at the latest cutoff via pool_train_rows, which also drops held-out
+    # acc_ids so no split contamination is possible). At ~1.5–2k active-paid rows
+    # per cutoff this is the biggest lever on churn model quality. Churn uses
+    # frame features+labels directly (no per-cutoff refit inside the trainer), so
+    # pooling is leakage-safe — the same protocol already used for credit.
+    dataset = pool_train_rows(datasets.churn, [bt.churn for bt in backtest_sets])
+    print(
+        f"churn: pooled train rows {int((dataset.frame['split'] == 'train').sum())} "
+        f"from {1 + len(backtest_sets)} cutoffs"
+    )
     preprocessor = fit_preprocessor(
         dataset.features("train"), _feature_schema_for_dataset(datasets, dataset)
     )
@@ -416,8 +426,9 @@ def _train_and_register_churn(
     for entry in selection_log:
         print(f"churn: {entry['candidate']} eligible={entry['eligible']} champion={entry['is_champion']} — {entry['reason']}")
 
-    # Winner = best eligible candidate. If none is eligible, keep the incumbent
-    # champion but still record the strongest candidate as a non-promoted version.
+    # Serve the safety/quality winner. Opaque champions such as TabICL are valid
+    # predictors; prediction emits probabilities normally and leaves per-row
+    # churn_factors null when SHAP is not available.
     if decision.winner is not None:
         selected = by_name[decision.winner]
     else:
@@ -449,7 +460,7 @@ def _train_and_register_churn(
     version = next_version("churn")
     feature_contract = build_feature_set_contract(
         datasets.feature_result,
-        name="tier_a_24",
+        name="tier_a_27",
         version="v1",
         model_type="churn",
         feature_names=dataset.feature_names,
@@ -743,7 +754,17 @@ def _train_and_register_clv(
     progress: Callable[[str, int], None],
 ) -> dict[str, Any]:
     progress("clv: candidates (BG-NBD vs Tweedie)", 55)
-    dataset = datasets.clv
+    # Multi-cutoff pooling (train split only; val/test stay at the latest cutoff).
+    # The ML candidates (Tweedie / Hurdle) learn from the extra (features@t,
+    # revenue@t) pairs; BG-NBD collapses duplicate acc_ids so pooling is at worst
+    # neutral for it and never leaks (it fits RFM at the primary cutoff and never
+    # sees post-cutoff labels). Champion selection stays on the primary-cutoff
+    # validation split, so it remains a fair comparison.
+    dataset = pool_train_rows(datasets.clv, [bt.clv for bt in backtest_sets])
+    print(
+        f"clv: pooled train rows {int((dataset.frame['split'] == 'train').sum())} "
+        f"from {1 + len(backtest_sets)} cutoffs"
+    )
     preprocessor = fit_preprocessor(
         dataset.features("train"), _feature_schema_for_dataset(datasets, dataset)
     )
@@ -834,7 +855,7 @@ def _train_and_register_clv(
     version = next_version("clv")
     feature_contract = build_feature_set_contract(
         datasets.feature_result,
-        name="tier_a_24",
+        name="tier_a_27",
         version="v1",
         model_type="clv",
         feature_names=dataset.feature_names,
@@ -1115,7 +1136,7 @@ def _train_and_register_credit(
     version = next_version("credit")
     feature_contract = build_feature_set_contract(
         datasets.feature_result,
-        name="tier_a_27",
+        name="tier_a_31",
         version="v1",
         model_type="credit",
         feature_names=dataset.feature_names,

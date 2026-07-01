@@ -2,16 +2,16 @@
 
 Candidates are declared explicitly via the `candidates` parameter (or
 CHURN_CANDIDATES env var, comma-separated). Default pool:
-  logistic_regression, lightgbm
+  logistic_regression, lightgbm, tabicl
 
-Both default champions are natively explainable (coef_ / TreeExplainer), so
-every served customer gets faithful per-row churn_factors — the grounding the
+logistic_regression and lightgbm are natively explainable (coef_ / TreeExplainer),
+so every served customer gets faithful per-row churn_factors — the grounding the
 downstream AI explanation layer verbalizes (it must not invent reasons from raw
-features). XGBoost and TabICL are opt-in: add "xgboost" / "tabicl" to
-CHURN_CANDIDATES. XGBoost is redundant with LightGBM on all-numeric features;
-TabICL is a strong but OPAQUE foundation model — it cannot produce per-customer
-SHAP at serve scale, so promoting it would null churn_factors for the whole
-population. Keep it for benchmarking the explainable champions, not for serving.
+features). TabICL is in the default pool so it ALWAYS competes and can become
+the served champion when it wins the promotion gate, but it is an OPAQUE
+foundation model: prediction can use its probabilities, while per-row
+churn_factors will be null. XGBoost is opt-in (add "xgboost" to
+CHURN_CANDIDATES); it is redundant with LightGBM on all-numeric features.
 
 Random Forest is available but excluded from the default — it is slow and
 has not beaten a tuned LightGBM in any backtest on this dataset. Add
@@ -68,7 +68,12 @@ from src.training.preprocessing import PreprocessorConfig, transform_features
 logger = logging.getLogger(__name__)
 
 RANDOM_SEED = 42
-LGBM_TRIALS = 100
+# Reduced from 100 → 40: at this dataset's labelled size (~1.5–2k active-paid
+# rows per cutoff) a 100-trial Optuna search overfits the validation slice with
+# negligible CV PR-AUC gain. 40 TPE trials retain the useful search budget while
+# cutting the overfit-the-tuning-split risk; the promotion gate (vs baselines +
+# incumbent) is the real arbiter, not search depth.
+LGBM_TRIALS = 40
 XGB_TRIALS = 50
 EARLY_STOPPING_ROUNDS = 50
 # Usable band for the high-risk decision threshold (§13): clip the max-F2 point
@@ -87,7 +92,14 @@ TABICL_SAMPLE_LIMIT = 500_000
 # Default candidate pool — explicit list, not environment-detection.
 # Override via CHURN_CANDIDATES env var (comma-separated) or the
 # `candidates` kwarg on train_churn_candidates / train_churn.
-DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm"]
+# TabICL is in the default pool and competes like any other candidate. It runs on
+# CPU or GPU; its in-context training set is capped (TABICL_MAX_ROWS) so a
+# panel-pooled churn set cannot blow up its runtime (the cause of an earlier
+# hang). Auto-skipped only when the `tabicl` package is absent. If it wins the
+# gate it is served as the production churn predictor; the prediction runner then
+# emits null per-row churn_factors because SHAP is not available for it at serve
+# time (predictions themselves are unaffected).
+DEFAULT_CANDIDATES = ["logistic_regression", "lightgbm", "tabicl"]
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -122,6 +134,56 @@ def _new_tabicl_classifier() -> Any:
     from tabicl import TabICLClassifier  # optional dependency, imported lazily
 
     return TabICLClassifier(random_state=RANDOM_SEED, device=_tabicl_device())
+
+
+# In-context cap. TabICL is training-free: it ingests the whole training set at
+# fit/predict time, so its runtime grows with the number of rows it sees. Panel
+# pooling can multiply the churn train set several-fold, which is what made a run
+# that previously trained TabICL fine suddenly hang. Cap the rows TabICL ingests
+# (stratified) to keep it tractable on CPU or GPU; tree models still use the full
+# pooled set. Override with TABICL_MAX_ROWS env.
+TABICL_MAX_ROWS = int(os.getenv("TABICL_MAX_ROWS", "2000"))
+
+
+def _stratified_subsample(
+    x: pd.DataFrame, y: np.ndarray, max_rows: int, seed: int
+) -> tuple[pd.DataFrame, np.ndarray]:
+    """Stratified down-sample to <= max_rows, preserving class balance."""
+
+    y = np.asarray(y)
+    if len(y) <= max_rows:
+        return x, y
+    from sklearn.model_selection import train_test_split
+
+    keep, _ = train_test_split(
+        np.arange(len(y)), train_size=max_rows, random_state=seed, stratify=y
+    )
+    return x.iloc[keep], y[keep]
+
+
+class _CappedTabICLClassifier:
+    """TabICL wrapped to cap its in-context training set (CPU/GPU-tractable).
+
+    `fit` subsamples (stratified) to TABICL_MAX_ROWS, then delegates to a fresh
+    TabICL classifier. `predict_proba` is unchanged. Exposes the sklearn-style
+    interface the trainer, calibration, CV, artifact loader and prediction runner
+    all expect. Stays opaque (no coef_/feature_importances_) so churn_factors are
+    correctly emitted as null at serve time.
+    """
+
+    def __init__(self, max_rows: int = TABICL_MAX_ROWS, seed: int = RANDOM_SEED) -> None:
+        self.max_rows = max_rows
+        self.seed = seed
+        self._model: Any = None
+
+    def fit(self, x: pd.DataFrame, y: np.ndarray) -> "_CappedTabICLClassifier":
+        x_fit, y_fit = _stratified_subsample(x, y, self.max_rows, self.seed)
+        self._model = _new_tabicl_classifier()
+        self._model.fit(x_fit, y_fit)
+        return self
+
+    def predict_proba(self, x: pd.DataFrame) -> np.ndarray:
+        return self._model.predict_proba(x)
 
 
 @dataclass
@@ -240,15 +302,13 @@ def train_churn_candidates(
         fitted.append(_tune_xgboost(x_train, y_train, x_val, y_val, scale_pos_weight, xgb_trials))
 
     if "tabicl" in active:
-        if len(y_train) > TABICL_SAMPLE_LIMIT:
-            notify(
-                f"churn: TabICLv2 skipped — {len(y_train)} train rows exceed "
-                f"the {TABICL_SAMPLE_LIMIT} in-context limit"
-            )
-        elif importlib.util.find_spec("tabicl") is None:
+        if importlib.util.find_spec("tabicl") is None:
             notify("churn: TabICLv2 skipped — `tabicl` package not installed (pip install tabicl)")
         else:
-            notify("churn: fitting TabICLv2 candidate (foundation model, no hyperparameter tuning)")
+            notify(
+                f"churn: fitting TabICLv2 candidate (in-context; capped at "
+                f"{TABICL_MAX_ROWS} rows so a panel-pooled set stays tractable)"
+            )
             try:
                 fitted.append(_fit_tabicl(x_train, y_train, x_val, y_val))
             except Exception as exc:  # noqa: BLE001
@@ -264,13 +324,19 @@ def train_churn_candidates(
     # threshold selection (§13). The test split stays untouched until the end.
     x_trval = pd.concat([x_train, x_val], ignore_index=True)
     y_trval = np.concatenate([y_train, y_val])
+    # Group CV by acc_id so panel-pooled duplicate customers never span folds
+    # (row order matches x_trval = train rows then validation rows).
+    acc_trval = pd.concat(
+        [dataset.split("train")["acc_id"], dataset.split("validation")["acc_id"]],
+        ignore_index=True,
+    ).to_numpy()
 
     competition: dict[str, float] = {}
     cv_oof: dict[str, np.ndarray] = {}
     cv_fold_scores: dict[str, list[float]] = {}
     for candidate in fitted:
         candidate.params = _resolved_params(candidate)
-        cv_score, oof, fold_scores = _cv_oof(candidate, x_trval, y_trval)
+        cv_score, oof, fold_scores = _cv_oof(candidate, x_trval, y_trval, groups=acc_trval)
         cv_oof[candidate.name] = oof
         cv_fold_scores[candidate.name] = fold_scores
         competition[candidate.name] = round(cv_score, 4)
@@ -437,8 +503,12 @@ def refit_for_backtest(
 
     x_trval = pd.concat([x_train, x_val], ignore_index=True)
     y_trval = np.concatenate([y_train, y_val])
+    acc_trval = pd.concat(
+        [dataset.split("train")["acc_id"], dataset.split("validation")["acc_id"]],
+        ignore_index=True,
+    ).to_numpy()
 
-    _, oof, _ = _cv_oof(champion, x_trval, y_trval)
+    _, oof, _ = _cv_oof(champion, x_trval, y_trval, groups=acc_trval)
     calibrator = _fit_calibrator(oof, y_trval)
     f2_threshold = select_threshold_max_fbeta(y_trval, calibrator.transform(oof), beta=2.0)
     high_threshold = float(np.clip(f2_threshold, *HIGH_THRESHOLD_BAND))
@@ -455,19 +525,31 @@ def _cv_oof(
     x: pd.DataFrame,
     y: np.ndarray,
     n_folds: int = 5,
+    groups: np.ndarray | None = None,
 ) -> tuple[float, np.ndarray, list[float]]:
     """Stratified K-fold CV: mean PR-AUC + out-of-fold probabilities + per-fold scores.
 
     Returns (mean_cv_score, oof_probs, fold_scores). The caller uses fold_scores
     to compute a confidence interval on the CV estimate (the per-fold variance
     quantifies how stable the ranking metric is across data partitions).
+
+    When `groups` (acc_id) is supplied, uses StratifiedGroupKFold so the same
+    customer never appears in both a train and a held-out fold. This is required
+    once multi-cutoff panel pooling puts the same acc_id in several train rows —
+    otherwise both the CV PR-AUC ranking metric and the OOF-fitted calibrator are
+    optimistically biased by within-customer leakage across folds.
     """
-    from sklearn.model_selection import StratifiedKFold
+    from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
     oof = np.zeros(len(y), dtype=float)
     scores: list[float] = []
-    folds = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=RANDOM_SEED)
-    for fold_train, fold_test in folds.split(x, y):
+    if groups is not None:
+        folds: Any = StratifiedGroupKFold(n_splits=n_folds, shuffle=True, random_state=RANDOM_SEED)
+        split_iter = folds.split(x, y, groups)
+    else:
+        folds = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=RANDOM_SEED)
+        split_iter = folds.split(x, y)
+    for fold_train, fold_test in split_iter:
         model = clone_candidate_model(candidate, y[fold_train])
         model.fit(x.iloc[fold_train], y[fold_train])
         fold_probs = model.predict_proba(x.iloc[fold_test])[:, 1]
@@ -496,8 +578,9 @@ def clone_candidate_model(champion: ChurnCandidate, y_train: np.ndarray) -> Any:
     scale_pos_weight = float((y_train == 0).sum() / max(1, (y_train == 1).sum()))
     if champion.name == "tabicl":
         # Training-free foundation model: handles imbalance internally, so no
-        # scale_pos_weight. A fresh classifier re-runs in-context on the fold.
-        return _new_tabicl_classifier()
+        # scale_pos_weight. The capped wrapper re-runs in-context on the fold,
+        # subsampling so a panel-pooled fold cannot blow up TabICL's runtime.
+        return _CappedTabICLClassifier()
     if champion.name == "lightgbm":
         params = dict(champion.params)
         params["scale_pos_weight"] = scale_pos_weight
@@ -519,9 +602,13 @@ def _fit_tabicl(
 ) -> ChurnCandidate:
     """Fit a TabICLv2 candidate. No search space — it is training-free."""
 
-    model = _new_tabicl_classifier()
+    model = _CappedTabICLClassifier()
     model.fit(x_train, y_train)
-    params: dict[str, Any] = {"device": _tabicl_device(), "random_state": RANDOM_SEED}
+    params: dict[str, Any] = {
+        "device": _tabicl_device(),
+        "random_state": RANDOM_SEED,
+        "max_rows": TABICL_MAX_ROWS,
+    }
     return ChurnCandidate(
         name="tabicl",
         model=model,

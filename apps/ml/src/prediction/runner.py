@@ -31,19 +31,19 @@ from src.constants import (
 from src.training import repository
 from src.training.artifacts import load_artifacts
 from src.training.data import database_url, load_predict_clean
+from src.training.drift import (
+    compute_feature_drift,
+    drift_anomalies,
+    drift_report_status,
+)
 from src.training.features import (
     BASE_TIER_A_FEATURES,
     CREDIT_TIER_A_FEATURES,
     build_all_features,
     feature_code_hash,
 )
-from src.training.drift import (
-    compute_feature_drift,
-    drift_anomalies,
-    drift_report_status,
-)
 from src.training.preprocessing import transform_features
-from src.training.registry import current_champion
+from src.training.registry import current_champion, version_for_serving
 from src.training.validation import (
     ValidationReport,
     check_predict_feature_leakage,
@@ -72,13 +72,21 @@ CLV_TAIL_MIN_FREQUENCY = 2.0  # never blend single-payment customers
 
 def _features_for_bundle(frame: pd.DataFrame, bundle: dict[str, Any]) -> pd.DataFrame:
     feature_names = list(bundle["preprocessor"].feature_names)
-    missing = [feature_name for feature_name in feature_names if feature_name not in frame.columns]
+    missing = [
+        feature_name
+        for feature_name in feature_names
+        if feature_name not in frame.columns
+    ]
     if missing:
-        raise RuntimeError(f"Prediction features missing columns required by artifact: {missing}")
+        raise RuntimeError(
+            f"Prediction features missing columns required by artifact: {missing}"
+        )
     return frame[feature_names]
 
 
-def _feature_contract_guard(model_type: str, bundle: dict[str, Any], frame: pd.DataFrame) -> None:
+def _feature_contract_guard(
+    model_type: str, bundle: dict[str, Any], frame: pd.DataFrame
+) -> None:
     """Validate required columns; allow legacy compatible hashes.
 
     Feature hashes are now model-specific. Existing churn/CLV champions were
@@ -147,14 +155,18 @@ def _run_drift_checks(
         bundle = champion["bundle"]
         baseline = bundle.get("feature_baseline")
         if not baseline:
-            logger.info("drift: %s champion has no feature baseline — skipping", model_type)
+            logger.info(
+                "drift: %s champion has no feature baseline — skipping", model_type
+            )
             continue
 
         feature_names = list(bundle["preprocessor"].feature_names)
         mask = frame[_DRIFT_ELIGIBILITY[model_type]].to_numpy()
         scored = frame.loc[mask, feature_names]
         if scored.empty:
-            logger.info("drift: %s has no eligible rows to score — skipping", model_type)
+            logger.info(
+                "drift: %s has no eligible rows to score — skipping", model_type
+            )
             continue
 
         drift = compute_feature_drift(scored, baseline, model_type=model_type)
@@ -215,15 +227,33 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     _update_run(prediction_run_id, status=RunStatus.IN_PROGRESS, mark_started=True)
     progress("load data", 5)
 
-    # ── Champions (alias `production` only) ───────────────────────
+    # ── Models: production champion by default, or a per-run override ─────
+    # `model_overrides_json` maps model_type → version_id. A missing/None entry
+    # (or an invalid one) falls back to the production champion for that type.
+    overrides = run.get("model_overrides_json") or {}
+    if not isinstance(overrides, dict):
+        overrides = {}
     champions: dict[str, dict[str, Any]] = {}
     for model_type in ("churn", "clv", "credit"):
-        champion = current_champion(model_type)
-        if champion is None:
-            raise RuntimeError(f"No production model for '{model_type}' — train and promote first.")
+        selected = None
+        override_id = overrides.get(model_type)
+        if override_id:
+            selected = version_for_serving(model_type, str(override_id))
+            if selected is None:
+                raise RuntimeError(
+                    f"Selected {model_type} model version {override_id} not found "
+                    "or has no artifact — pick another version or use the champion."
+                )
+            logger.info("[%s] %s using override version %s", prediction_run_id[:8], model_type, selected["version"])
+        else:
+            selected = current_champion(model_type)
+            if selected is None:
+                raise RuntimeError(
+                    f"No production model for '{model_type}' — train and promote first."
+                )
         champions[model_type] = {
-            **champion,
-            "bundle": load_artifacts(champion["artifact_path"]),
+            **selected,
+            "bundle": load_artifacts(selected["artifact_path"]),
         }
 
     # ── Gates on the predict source ───────────────────────────────
@@ -238,7 +268,8 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     failed = [r for r in gate_reports if r.status == "failed"]
     if failed:
         raise RuntimeError(
-            "Predict source failed gates: " + ", ".join(r.validation_type for r in failed)
+            "Predict source failed gates: "
+            + ", ".join(r.validation_type for r in failed)
         )
 
     customers, payments, usage = load_predict_clean(source_id)
@@ -247,7 +278,9 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     feature_result = build_all_features(customers, payments, usage, cutoff)
     # lifecycle_df carries its own days_since_last_activity (same definition
     # as the feature) — drop it so the merge keeps the plain feature column.
-    lifecycle_df = feature_result.lifecycle_df.drop(columns=["days_since_last_activity"])
+    lifecycle_df = feature_result.lifecycle_df.drop(
+        columns=["days_since_last_activity"]
+    )
     frame = lifecycle_df.merge(feature_result.feature_df, on="acc_id", how="left")
     frame["acc_id"] = frame["acc_id"].astype(int)
 
@@ -263,7 +296,9 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
 
     # ── Feature drift monitoring (PSI vs training baseline) ───────
     progress("drift monitoring", 30)
-    major_drift_models = _run_drift_checks(prediction_run_id, source_id, champions, frame)
+    major_drift_models = _run_drift_checks(
+        prediction_run_id, source_id, champions, frame
+    )
 
     # ── Churn (calibrated probability + SHAP factors) ─────────────
     progress("churn model", 35)
@@ -280,7 +315,9 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     churn_prob = np.full(len(frame), np.nan)
     churn_mask = frame["el_churn"].to_numpy()
     if churn_mask.any():
-        x_churn = transform_features(churn_features[churn_mask], churn_bundle["preprocessor"])
+        x_churn = transform_features(
+            churn_features[churn_mask], churn_bundle["preprocessor"]
+        )
         raw_scores = churn_bundle["model"].predict_proba(x_churn)[:, 1]
         calibrator = churn_bundle["calibrator"]
         churn_prob[churn_mask] = (
@@ -329,7 +366,9 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
     # requires one row per customer. A fan-out from an upstream merge could in theory
     # produce duplicates; keep the last occurrence so the most-derived values win.
     frame = frame.drop_duplicates(subset=["acc_id"], keep="last")
-    rows = _build_output_rows(prediction_run_id, frame, model_versions, major_drift_models)
+    rows = _build_output_rows(
+        prediction_run_id, frame, model_versions, major_drift_models
+    )
     _replace_outputs(prediction_run_id, rows)
 
     # ── Gate 15 post-check (§6.7) ─────────────────────────────────
@@ -348,7 +387,9 @@ def _run_prediction_inner(prediction_run_id: str) -> None:
         progress={"step": "completed", "pct": 100},
         mark_finished=True,
     )
-    logger.info("prediction run %s completed (%d customers)", prediction_run_id, len(frame))
+    logger.info(
+        "prediction run %s completed (%d customers)", prediction_run_id, len(frame)
+    )
 
 
 # ── Model application helpers ────────────────────────────────────
@@ -364,7 +405,9 @@ def _p_alive_cuts(clv_thresholds: dict[str, float] | None) -> tuple[float, float
 
 
 def _risk_level(probability: float, thresholds: dict[str, float]) -> str | None:
-    if probability is None or (isinstance(probability, float) and math.isnan(probability)):
+    if probability is None or (
+        isinstance(probability, float) and math.isnan(probability)
+    ):
         return None
     if probability >= thresholds["critical"]:
         return "critical"
@@ -467,7 +510,9 @@ def _blend_clv_tail(
         tail |= np.nan_to_num(freq, nan=0.0) >= cut
     rok = revenue[np.isfinite(revenue)]
     if rok.size:
-        tail |= np.nan_to_num(revenue, nan=0.0) >= float(np.quantile(rok, tail_quantile))
+        tail |= np.nan_to_num(revenue, nan=0.0) >= float(
+            np.quantile(rok, tail_quantile)
+        )
 
     blended = tweedie_pred.copy()
     blended[tail] = np.maximum(tweedie_pred[tail], bg_clv[tail])
@@ -505,8 +550,10 @@ def _apply_clv(
         if champion in ("lgbm_tweedie", "xgb_tweedie", "hurdle"):
             x = transform_features(features_raw[clv_mask], clv_bundle["preprocessor"])
             ml_obj = (
-                model_object["tweedie"] if champion == "lgbm_tweedie"
-                else model_object["xgb"] if champion == "xgb_tweedie"
+                model_object["tweedie"]
+                if champion == "lgbm_tweedie"
+                else model_object["xgb"]
+                if champion == "xgb_tweedie"
                 else model_object.get("hurdle")
             )
             if ml_obj is None:
@@ -519,12 +566,22 @@ def _apply_clv(
                 if bgnbd is not None and champion != "hurdle":
                     # BG-NBD tail blend only for point estimators — hurdle already models zeros.
                     # tail_quantile is configurable via model_card so future runs can tighten/widen.
-                    tail_q = float(clv_bundle.get("model_card", {}).get("clv_tail_quantile", CLV_TAIL_QUANTILE))
+                    tail_q = float(
+                        clv_bundle.get("model_card", {}).get(
+                            "clv_tail_quantile", CLV_TAIL_QUANTILE
+                        )
+                    )
                     ml_pred = _blend_clv_tail(
                         ml_pred,
-                        bg_clv=eligible_acc.map(bg_pred["predicted_clv"]).fillna(0.0).to_numpy(),
-                        freq=pd.to_numeric(features_raw["payment_count_all"], errors="coerce").to_numpy()[clv_mask],
-                        revenue=pd.to_numeric(features_raw["total_revenue_all"], errors="coerce").to_numpy()[clv_mask],
+                        bg_clv=eligible_acc.map(bg_pred["predicted_clv"])
+                        .fillna(0.0)
+                        .to_numpy(),
+                        freq=pd.to_numeric(
+                            features_raw["payment_count_all"], errors="coerce"
+                        ).to_numpy()[clv_mask],
+                        revenue=pd.to_numeric(
+                            features_raw["total_revenue_all"], errors="coerce"
+                        ).to_numpy()[clv_mask],
                         tail_quantile=tail_q,
                     )
                 elif bgnbd is None and champion != "hurdle":
@@ -569,8 +626,12 @@ def _apply_credit(
         from src.training.credit_trainer import credit_anchor_log
 
         x = transform_features(features_raw[credit_mask], credit_bundle["preprocessor"])
-        q30 = horizons[30].predict_quantiles(x, credit_anchor_log(features_raw[credit_mask], 30))
-        q90 = horizons[90].predict_quantiles(x, credit_anchor_log(features_raw[credit_mask], 90))
+        q30 = horizons[30].predict_quantiles(
+            x, credit_anchor_log(features_raw[credit_mask], 30)
+        )
+        q90 = horizons[90].predict_quantiles(
+            x, credit_anchor_log(features_raw[credit_mask], 90)
+        )
         # The 30d and 90d quantiles come from independent heads, so a longer
         # horizon can occasionally fall below a shorter one. Cumulative usage is
         # non-decreasing in time, so enforce 90d >= 30d per quantile (cheap,
@@ -579,7 +640,9 @@ def _apply_credit(
         p10_30 = np.asarray(q30[0.10], dtype=float)
         p90_30 = np.asarray(q30[0.90], dtype=float)
         frame.loc[credit_mask, "predicted_credit_usage_30d"] = p50_30
-        frame.loc[credit_mask, "predicted_credit_usage_90d"] = np.maximum(q90[0.50], p50_30)
+        frame.loc[credit_mask, "predicted_credit_usage_90d"] = np.maximum(
+            q90[0.50], p50_30
+        )
         frame.loc[credit_mask, "credit_p10_30d"] = p10_30
         frame.loc[credit_mask, "credit_p90_30d"] = p90_30
         frame.loc[credit_mask, "credit_p10_90d"] = np.maximum(q90[0.10], p10_30)
@@ -615,7 +678,9 @@ def _apply_descriptive(
     frame["n_purchases"] = frame["acc_id"].map(n_purchases).fillna(0).astype(int)
     frame["total_revenue"] = frame["acc_id"].map(total_revenue).fillna(0.0)
     frame["avg_transaction_value"] = np.where(
-        frame["n_purchases"] > 0, frame["total_revenue"] / frame["n_purchases"].clip(lower=1), np.nan
+        frame["n_purchases"] > 0,
+        frame["total_revenue"] / frame["n_purchases"].clip(lower=1),
+        np.nan,
     )
 
     # usage_trend (§3.3) from usage_change_90d_pct
@@ -628,7 +693,9 @@ def _apply_descriptive(
     )
 
     # profile snapshot (§3.3) — snapshot fields are display-only Tier B data.
-    snapshot_source = customers.sort_values("acc_id").drop_duplicates("acc_id", keep="last")
+    snapshot_source = customers.sort_values("acc_id").drop_duplicates(
+        "acc_id", keep="last"
+    )
     snapshot_source = snapshot_source.set_index(snapshot_source["acc_id"].astype(int))
     share_columns = [
         "sms_usage_share",
@@ -646,17 +713,38 @@ def _apply_descriptive(
         customer = snap_map.get(int(row["acc_id"]))
         snapshots.append(
             {
-                "join_date": _date_or_none(customer["join_date"]) if customer is not None else None,
+                "join_date": _date_or_none(customer["join_date"])
+                if customer is not None
+                else None,
                 "customer_age_days": _int_or_none(row.get("customer_age_days")),
-                "status_sms": _str_or_none(customer["status_sms"]) if customer is not None else None,
-                "status_email": _str_or_none(customer["status_email"]) if customer is not None else None,
-                "credit_sms": _float_or_zero(customer["credit_sms"]) if customer is not None else 0.0,
-                "credit_email": _float_or_zero(customer["credit_email"]) if customer is not None else 0.0,
-                "expire_sms": _date_or_none(customer["expire_sms"]) if customer is not None else None,
-                "expire_email": _date_or_none(customer["expire_email"]) if customer is not None else None,
-                "last_access": _date_or_none(customer["last_access"]) if customer is not None else None,
-                "last_send": _date_or_none(customer["last_send"]) if customer is not None else None,
-                **{column: round(_float_or_zero(row.get(column)), 4) for column in share_columns},
+                "status_sms": _str_or_none(customer["status_sms"])
+                if customer is not None
+                else None,
+                "status_email": _str_or_none(customer["status_email"])
+                if customer is not None
+                else None,
+                "credit_sms": _float_or_zero(customer["credit_sms"])
+                if customer is not None
+                else 0.0,
+                "credit_email": _float_or_zero(customer["credit_email"])
+                if customer is not None
+                else 0.0,
+                "expire_sms": _date_or_none(customer["expire_sms"])
+                if customer is not None
+                else None,
+                "expire_email": _date_or_none(customer["expire_email"])
+                if customer is not None
+                else None,
+                "last_access": _date_or_none(customer["last_access"])
+                if customer is not None
+                else None,
+                "last_send": _date_or_none(customer["last_send"])
+                if customer is not None
+                else None,
+                **{
+                    column: round(_float_or_zero(row.get(column)), 4)
+                    for column in share_columns
+                },
                 "usage_total_180d": _float_or_zero(row.get("usage_total_180d")),
             }
         )
@@ -721,9 +809,13 @@ def _apply_derived(
     # model left empty (older artifacts without a topup_model).
     p50_30 = pd.to_numeric(frame["predicted_credit_usage_30d"], errors="coerce")
     daily_burn = p50_30 / 30.0
-    credit_balance = pd.to_numeric(frame["credit_balance_total"], errors="coerce").fillna(0.0)
+    credit_balance = pd.to_numeric(
+        frame["credit_balance_total"], errors="coerce"
+    ).fillna(0.0)
     heuristic_days = np.where(
-        daily_burn > 0, np.minimum(np.ceil(credit_balance / daily_burn), TOPUP_CAP_DAYS), np.nan
+        daily_burn > 0,
+        np.minimum(np.ceil(credit_balance / daily_burn), TOPUP_CAP_DAYS),
+        np.nan,
     )
     model_days = pd.to_numeric(frame["estimated_days_until_topup"], errors="coerce")
     days = np.where(model_days.notna(), model_days, heuristic_days)
@@ -745,7 +837,11 @@ def _apply_derived(
     # by revenue_at_risk. No text reason is generated here — the numeric score is
     # the only priority signal; any human-readable "why" is produced by the AI
     # explanation from the underlying numbers/SHAP factors.
-    var = pd.to_numeric(frame["revenue_at_risk"], errors="coerce").fillna(0.0).clip(lower=0.0)
+    var = (
+        pd.to_numeric(frame["revenue_at_risk"], errors="coerce")
+        .fillna(0.0)
+        .clip(lower=0.0)
+    )
     frame["priority_score"] = _display_score(var)
 
     # needs_review (§5.3) — surface the churn/p_alive disagreement. A valuable
@@ -779,7 +875,9 @@ def _apply_segments(frame: pd.DataFrame, p_alive_cuts: tuple[float, float]) -> p
     tier = frame["customer_value_tier"]
     risk = frame["churn_risk_level"].astype("object")
     p_alive = pd.to_numeric(frame["p_alive"], errors="coerce")
-    change = pd.to_numeric(frame.get("usage_change_90d_pct"), errors="coerce").fillna(0.0)
+    change = pd.to_numeric(frame.get("usage_change_90d_pct"), errors="coerce").fillna(
+        0.0
+    )
 
     stage = frame["lifecycle_stage"]
     sub_stage = frame["sub_stage"]
@@ -822,9 +920,13 @@ def _apply_segments(frame: pd.DataFrame, p_alive_cuts: tuple[float, float]) -> p
     rar = pd.to_numeric(frame["revenue_at_risk"], errors="coerce").fillna(0.0)
     clv = pd.to_numeric(frame["predicted_clv_6m"], errors="coerce").fillna(0.0)
     money = np.where(frame["segment"].isin(Segment.RETENTION), rar, clv)
-    order = pd.DataFrame({"seg": seg_rank.to_numpy(), "money": -money}, index=frame.index)
+    order = pd.DataFrame(
+        {"seg": seg_rank.to_numpy(), "money": -money}, index=frame.index
+    )
     ranked = order.sort_values(["seg", "money"]).index
-    frame["priority_rank"] = pd.Series(range(1, len(frame) + 1), index=ranked).reindex(frame.index)
+    frame["priority_rank"] = pd.Series(range(1, len(frame) + 1), index=ranked).reindex(
+        frame.index
+    )
     return frame
 
 
@@ -839,6 +941,7 @@ def _display_score(value_at_risk: pd.Series) -> pd.Series:
     if high - low < 1e-9:
         return pd.Series(0.0, index=value_at_risk.index)
     return (100.0 * (logged - low) / (high - low)).round(2)
+
 
 # ── Persistence ──────────────────────────────────────────────────
 
@@ -858,24 +961,39 @@ def _build_output_rows(
         eligibility = _eligibility_json(row)
         eligibility_dict = json.loads(eligibility)
 
-        all_eligible = all(model["eligible"] for model in eligibility_dict.values())
+        predicted_models = [
+            model
+            for model in eligibility_dict.values()
+            if model["status"] == "predicted"
+        ]
+        eligible_unpredicted_models = [
+            model
+            for model in eligibility_dict.values()
+            if model["eligible"] and model["status"] != "predicted"
+        ]
         # Major PSI drift on a model that processed this customer → downgrade to PARTIAL
         # so downstream consumers know predictions may be unreliable.
         customer_drift_models = [
-            mt for mt in major_drift_models
+            mt
+            for mt in major_drift_models
             if bool(row.get(_eligibility_col_map.get(mt, ""), False))
         ]
         has_major_drift = bool(customer_drift_models)
 
-        output_status = (
-            OutputStatus.PREDICTED if all_eligible and not has_major_drift else OutputStatus.PARTIAL
-        )
+        if not predicted_models:
+            output_status = OutputStatus.INSUFFICIENT_DATA
+        elif eligible_unpredicted_models or has_major_drift:
+            output_status = OutputStatus.PARTIAL
+        else:
+            output_status = OutputStatus.PREDICTED
         base_notes = _output_notes(eligibility_dict)
         drift_notes = [
             f"{mt}: major feature drift detected (PSI > 0.25) — predictions may be unreliable"
             for mt in sorted(customer_drift_models)
         ]
-        all_note_parts = [n for n in ([base_notes] if base_notes else []) + drift_notes if n]
+        all_note_parts = [
+            n for n in ([base_notes] if base_notes else []) + drift_notes if n
+        ]
         output_notes = "; ".join(all_note_parts) if all_note_parts else None
 
         interval = None
@@ -896,23 +1014,35 @@ def _build_output_rows(
                 "sub_stage": _str_or_none(row["sub_stage"]),
                 "churn_probability": _round_or_none(row["churn_probability"], 4),
                 "churn_risk_level": _str_or_none(row["churn_risk_level"]),
-                "churn_factors_json": json.dumps(row["churn_factors"], ensure_ascii=False)
+                "churn_factors_json": json.dumps(
+                    row["churn_factors"], ensure_ascii=False
+                )
                 if row["churn_factors"] is not None
                 else None,
                 "predicted_clv_6m": _round_or_none(row["predicted_clv_6m"], 2),
                 "p_alive": _round_or_none(row["p_alive"], 4),
                 "customer_value_tier": _str_or_none(row["customer_value_tier"]),
                 "revenue_at_risk": _round_or_none(row["revenue_at_risk"], 2),
-                "predicted_credit_usage_30d": _round_or_none(row["predicted_credit_usage_30d"], 2),
-                "predicted_credit_usage_90d": _round_or_none(row["predicted_credit_usage_90d"], 2),
+                "predicted_credit_usage_30d": _round_or_none(
+                    row["predicted_credit_usage_30d"], 2
+                ),
+                "predicted_credit_usage_90d": _round_or_none(
+                    row["predicted_credit_usage_90d"], 2
+                ),
                 "credit_forecast_interval_json": interval,
-                "estimated_days_until_topup": _int_or_none(row["estimated_days_until_topup"]),
+                "estimated_days_until_topup": _int_or_none(
+                    row["estimated_days_until_topup"]
+                ),
                 "credit_urgency_level": _str_or_none(row["credit_urgency_level"]),
                 "usage_trend": _str_or_none(row["usage_trend"]),
-                "days_since_last_activity": _int_or_none(row["days_since_last_activity"]),
+                "days_since_last_activity": _int_or_none(
+                    row["days_since_last_activity"]
+                ),
                 "n_purchases": int(row["n_purchases"]),
                 "total_revenue": _round_or_none(row["total_revenue"], 2) or 0.0,
-                "avg_transaction_value": _round_or_none(row["avg_transaction_value"], 2),
+                "avg_transaction_value": _round_or_none(
+                    row["avg_transaction_value"], 2
+                ),
                 "ever_paid": bool(row["ever_paid"]),
                 "priority_score": _round_or_none(row["priority_score"], 2) or 0.0,
                 "segment": _str_or_none(row.get("segment")),
@@ -922,7 +1052,9 @@ def _build_output_rows(
                 "output_notes": output_notes,
                 "model_eligibility_json": eligibility,
                 "model_versions_json": model_versions_json,
-                "profile_snapshot_json": json.dumps(row["profile_snapshot"], ensure_ascii=False),
+                "profile_snapshot_json": json.dumps(
+                    row["profile_snapshot"], ensure_ascii=False
+                ),
             }
         )
     return rows
@@ -952,12 +1084,18 @@ def _eligibility_json(row: dict[str, Any]) -> str:
     def block(status_reason: tuple[str, str], predicted_value: Any) -> dict[str, Any]:
         status, reason = status_reason
         eligible = status == "eligible"
-        if eligible and predicted_value is not None and not (
-            isinstance(predicted_value, float) and math.isnan(predicted_value)
+        if (
+            eligible
+            and predicted_value is not None
+            and not (isinstance(predicted_value, float) and math.isnan(predicted_value))
         ):
             return {"eligible": True, "status": "predicted", "reason": reason}
         if eligible:
-            return {"eligible": True, "status": "insufficient_data", "reason": "ข้อมูลไม่พอประเมิน"}
+            return {
+                "eligible": True,
+                "status": "insufficient_data",
+                "reason": "ข้อมูลไม่พอประเมิน",
+            }
         return {"eligible": False, "status": "not_eligible", "reason": reason}
 
     def churn_block() -> dict[str, Any]:
@@ -991,17 +1129,37 @@ def _output_notes(eligibility: dict[str, Any]) -> str | None:
 
 
 OUTPUT_COLUMNS = [
-    "prediction_run_id", "acc_id", "lifecycle_stage", "sub_stage",
-    "churn_probability", "churn_risk_level", "churn_factors_json",
-    "predicted_clv_6m", "p_alive", "customer_value_tier", "revenue_at_risk",
-    "predicted_credit_usage_30d", "predicted_credit_usage_90d",
-    "credit_forecast_interval_json", "estimated_days_until_topup",
-    "credit_urgency_level", "usage_trend",
-    "days_since_last_activity", "n_purchases", "total_revenue",
-    "avg_transaction_value", "ever_paid", "priority_score",
-    "segment", "priority_rank", "needs_review",
-    "output_status", "output_notes",
-    "model_eligibility_json", "model_versions_json", "profile_snapshot_json",
+    "prediction_run_id",
+    "acc_id",
+    "lifecycle_stage",
+    "sub_stage",
+    "churn_probability",
+    "churn_risk_level",
+    "churn_factors_json",
+    "predicted_clv_6m",
+    "p_alive",
+    "customer_value_tier",
+    "revenue_at_risk",
+    "predicted_credit_usage_30d",
+    "predicted_credit_usage_90d",
+    "credit_forecast_interval_json",
+    "estimated_days_until_topup",
+    "credit_urgency_level",
+    "usage_trend",
+    "days_since_last_activity",
+    "n_purchases",
+    "total_revenue",
+    "avg_transaction_value",
+    "ever_paid",
+    "priority_score",
+    "segment",
+    "priority_rank",
+    "needs_review",
+    "output_status",
+    "output_notes",
+    "model_eligibility_json",
+    "model_versions_json",
+    "profile_snapshot_json",
 ]
 
 
@@ -1022,9 +1180,15 @@ def _replace_outputs(prediction_run_id: str, rows: list[dict[str, Any]]) -> None
                 f"produced but not persisted: {dropped}"
             )
     placeholders = ", ".join(
-        f":{column}" if column not in (
-            "prediction_run_id", "churn_factors_json", "credit_forecast_interval_json",
-            "model_eligibility_json", "model_versions_json", "profile_snapshot_json",
+        f":{column}"
+        if column
+        not in (
+            "prediction_run_id",
+            "churn_factors_json",
+            "credit_forecast_interval_json",
+            "model_eligibility_json",
+            "model_versions_json",
+            "profile_snapshot_json",
         )
         else {
             "prediction_run_id": "CAST(:prediction_run_id AS UUID)",
@@ -1047,7 +1211,9 @@ def _replace_outputs(prediction_run_id: str, rows: list[dict[str, Any]]) -> None
     )
     with create_engine(database_url()).begin() as conn:
         conn.execute(
-            text("DELETE FROM ml_prediction_outputs WHERE prediction_run_id = CAST(:id AS UUID)"),
+            text(
+                "DELETE FROM ml_prediction_outputs WHERE prediction_run_id = CAST(:id AS UUID)"
+            ),
             {"id": prediction_run_id},
         )
         for start in range(0, len(rows), INSERT_CHUNK):
@@ -1149,15 +1315,20 @@ def _save_postcheck_report(
 
 def _load_run(prediction_run_id: str) -> dict[str, Any]:
     with create_engine(database_url()).connect() as conn:
-        row = conn.execute(
-            text(
-                """
-                SELECT id::text, predict_source_id::text, status, cutoff_date, created_by
+        row = (
+            conn.execute(
+                text(
+                    """
+                SELECT id::text, predict_source_id::text, status, cutoff_date, created_by,
+                       model_overrides_json
                 FROM ml_prediction_runs WHERE id = CAST(:id AS UUID)
                 """
-            ),
-            {"id": prediction_run_id},
-        ).mappings().first()
+                ),
+                {"id": prediction_run_id},
+            )
+            .mappings()
+            .first()
+        )
     if row is None:
         raise RuntimeError(f"Prediction run {prediction_run_id} not found")
     return dict(row)
@@ -1199,7 +1370,9 @@ def _update_run(
         return
     with create_engine(database_url()).begin() as conn:
         conn.execute(
-            text(f"UPDATE ml_prediction_runs SET {', '.join(sets)} WHERE id = CAST(:id AS UUID)"),
+            text(
+                f"UPDATE ml_prediction_runs SET {', '.join(sets)} WHERE id = CAST(:id AS UUID)"
+            ),
             params,
         )
 
@@ -1208,7 +1381,11 @@ def _update_run(
 
 
 def _round_or_none(value: Any, digits: int) -> float | None:
-    if value is None or (isinstance(value, float) and math.isnan(value)) or pd.isna(value):
+    if (
+        value is None
+        or (isinstance(value, float) and math.isnan(value))
+        or pd.isna(value)
+    ):
         return None
     return round(float(value), digits)
 
@@ -1241,7 +1418,9 @@ def _json_scalar(value: Any) -> Any:
     if value is None or pd.isna(value):
         return None
     if isinstance(value, (np.floating, np.integer)):
-        return round(value.item(), 4) if isinstance(value, np.floating) else value.item()
+        return (
+            round(value.item(), 4) if isinstance(value, np.floating) else value.item()
+        )
     if isinstance(value, float):
         return round(value, 4)
     return value

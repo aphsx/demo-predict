@@ -17,6 +17,7 @@ Every doc in this repo and what it answers. Start at the top.
 | [`ML-V2-DASHBOARD-SPEC.md`](ML-V2-DASHBOARD-SPEC.md) | Every web page/widget, field-by-field, value provenance | TH |
 | [`ML-V2-OUTPUT-CONTRACT.md`](ML-V2-OUTPUT-CONTRACT.md) | `ml_prediction_outputs` field contract + derived-field formulas | TH |
 | [`ML-V2-TRAINING-PIPELINE.md`](ML-V2-TRAINING-PIPELINE.md) | Training pipeline, anti-leakage suite, metrics, promotion gate, retraining | TH |
+| [`ML-V2-CHANGE-REVIEW.md`](ML-V2-CHANGE-REVIEW.md) | Point-in-time change log + senior review (model deletion, panel training, new features, TabICL, fixes) + required validation steps | EN |
 
 ## Features & workflow
 

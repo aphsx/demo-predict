@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
+    "build": "bunx tsc --noEmit -p tsconfig.json",
+    "lint": "bunx tsc --noEmit -p tsconfig.json",
+    "typecheck": "bunx tsc --noEmit -p tsconfig.json",
+    "test": "bun test src",
     "db:introspect": "drizzle-kit introspect"
   },
   "dependencies": {

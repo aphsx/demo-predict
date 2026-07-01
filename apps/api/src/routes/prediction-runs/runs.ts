@@ -1,10 +1,11 @@
 import Elysia, { t } from "elysia";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../../db/client";
 import { mlPredictionRuns, predictDataSources, user } from "../../db/schema";
 import { requireUser } from "../../lib/auth-middleware";
 import { triggerMlJob } from "../../lib/ml-internal";
 import { denyNotFound } from "../../lib/access-control";
+import { getPredictCutoffSuggestion } from "../../lib/clean-cutoff";
 import { DATE_RE, UUID_RE } from "../../lib/constants";
 import { fetchRun, mapRun, requireOwnedRun, runSelect } from "./_helpers";
 
@@ -34,31 +35,32 @@ export const runsRoutes = new Elysia()
       const [source] = await db
         .select({ id: predictDataSources.id, importStatus: predictDataSources.importStatus })
         .from(predictDataSources)
-        .where(eq(predictDataSources.id, body.predict_source_id))
+        .where(and(eq(predictDataSources.id, body.predict_source_id), eq(predictDataSources.importedBy, userId!)))
         .limit(1);
       if (!source) return denyNotFound(set, "Predict data source not found");
       if (source.importStatus !== "ready") {
         set.status = 400;
         return { message: "Predict data source must be ready before prediction" };
       }
-      const [suggested] = await db.execute<{ cutoff_date: string | null }>(sql`
-        SELECT to_char(latest + 1, 'YYYY-MM-DD') AS cutoff_date
-        FROM (
-          SELECT GREATEST(
-            (SELECT MAX(payment_date)::date
-             FROM predict_clean_payments WHERE source_id = ${body.predict_source_id}),
-            (SELECT MAX(make_date(year, month, 1))
-             FROM predict_clean_usage
-             WHERE source_id = ${body.predict_source_id}
-               AND year IS NOT NULL
-               AND month IS NOT NULL)
-          ) AS latest
-        ) s
-      `);
-      const cutoffDate = body.cutoff_date ?? suggested?.cutoff_date;
+      const suggested = await getPredictCutoffSuggestion(body.predict_source_id);
+      const cutoffDate = body.cutoff_date ?? suggested.cutoff_date;
       if (!cutoffDate) {
         set.status = 400;
         return { message: "No clean activity data for this source yet" };
+      }
+
+      // Optional per-run model overrides. Only provided, valid-UUID entries are
+      // stored; missing model types fall back to the production champion.
+      const overrides: Record<string, string> = {};
+      for (const modelType of ["churn", "clv", "credit"] as const) {
+        const versionId = body.model_overrides?.[modelType];
+        if (versionId) {
+          if (!UUID_RE.test(versionId)) {
+            set.status = 400;
+            return { message: `model_overrides.${modelType} must be a UUID` };
+          }
+          overrides[modelType] = versionId;
+        }
       }
 
       const [inserted] = await db
@@ -69,6 +71,7 @@ export const runsRoutes = new Elysia()
           cutoffDate,
           status: "pending",
           createdBy: userId!,
+          modelOverridesJson: Object.keys(overrides).length > 0 ? overrides : null,
         })
         .returning({ id: mlPredictionRuns.id });
 
@@ -89,6 +92,14 @@ export const runsRoutes = new Elysia()
         predict_source_id: t.String(),
         name: t.String({ minLength: 1 }),
         cutoff_date: t.Optional(t.String()),
+        // Per-run model overrides — version id per model type; omit to use champion.
+        model_overrides: t.Optional(
+          t.Object({
+            churn: t.Optional(t.String()),
+            clv: t.Optional(t.String()),
+            credit: t.Optional(t.String()),
+          })
+        ),
       }),
     }
   )

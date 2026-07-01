@@ -3,11 +3,11 @@
  * Response contract mirrors apps/web/src/lib/mlApi.ts (snake_case keys).
  */
 import Elysia, { t } from "elysia";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { mlTrainingRuns, trainDataSources, user } from "../db/schema";
 import { requireUser } from "../lib/auth-middleware";
-import { denyNotFound } from "../lib/access-control";
+import { denyNotFound, requireOwnedForRead } from "../lib/access-control";
 import { triggerMlJob } from "../lib/ml-internal";
 import { getTrainCutoffSuggestion } from "../lib/clean-cutoff";
 import {
@@ -108,7 +108,7 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
       const [source] = await db
         .select({ id: trainDataSources.id, importStatus: trainDataSources.importStatus })
         .from(trainDataSources)
-        .where(eq(trainDataSources.id, body.train_source_id))
+        .where(and(eq(trainDataSources.id, body.train_source_id), eq(trainDataSources.importedBy, userId!)))
         .limit(1);
       if (!source) return denyNotFound(set, "Train data source not found");
       if (source.importStatus !== "ready") {
@@ -213,10 +213,32 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
   )
   .get(
     "/:id",
-    async ({ params, set }) => {
+    async ({ params, userId, set }) => {
+      const run = await fetchTrainingRun(params.id);
+      const denied = requireOwnedForRead(run, run?.createdBy, userId, set, "Training run not found");
+      if (denied) return denied;
+      return mapTrainingRun(run!);
+    },
+    { params: t.Object({ id: t.String() }) }
+  )
+  // Delete a training run from history. Only FAILED runs may be removed — a
+  // completed run is an audit record of a model that was (or could be) served,
+  // and deleting it would cascade to its ml_model_versions. Owner-scoped.
+  .delete(
+    "/:id",
+    async ({ params, userId, set }) => {
       const run = await fetchTrainingRun(params.id);
       if (!run) return denyNotFound(set, "Training run not found");
-      return mapTrainingRun(run);
+      if (run.createdBy && run.createdBy !== userId) {
+        set.status = 403;
+        return { message: "You do not own this training run" };
+      }
+      if (run.status !== "failed") {
+        set.status = 409;
+        return { message: "Only failed training runs can be deleted" };
+      }
+      await db.delete(mlTrainingRuns).where(eq(mlTrainingRuns.id, run.id));
+      return { deleted: true };
     },
     { params: t.Object({ id: t.String() }) }
   );

@@ -135,3 +135,31 @@ async def internal_model_activate(request: Request):
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     return {"activated": True, **result}
+
+
+@app.post("/internal/model-delete")
+async def internal_model_delete(request: Request):
+    """Permanently delete a non-production model version (UI action).
+
+    Synchronous: removes the on-disk artifacts and the registry row in one
+    transaction. The production champion is protected — registry raises if the
+    caller targets it.
+    """
+    _require_internal_token(request)
+    body = await request.json()
+    model_type = body.get("model_type")
+    model_version_id = body.get("model_version_id")
+    if not model_type or not model_version_id:
+        raise HTTPException(400, "model_type and model_version_id are required")
+
+    from src.training.registry import delete_model_version
+
+    try:
+        result = delete_model_version(
+            model_type=model_type,
+            model_version_id=model_version_id,
+            created_by=body.get("created_by"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"deleted": True, **result}
