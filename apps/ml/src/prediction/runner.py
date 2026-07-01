@@ -674,6 +674,28 @@ def _apply_derived(
     p_alive_cuts: tuple[float, float],
 ) -> pd.DataFrame:
     at_risk_cut, watch_cut = p_alive_cuts
+
+    # ── Churn abstention (§3.4) ───────────────────────────────────
+    # Active-Paid customers with too little history get a churn score driven by
+    # zero-filled features, not real signal. Abstain: null the churn outputs and
+    # mark churn eligibility insufficient_data (via churn_abstained → eligibility
+    # JSON) so no one acts on a guess. Done first so revenue_at_risk / segments /
+    # needs_review all see the abstained (null) churn downstream.
+    age_days = pd.to_numeric(frame.get("customer_age_days"), errors="coerce")
+    abstain = (
+        frame["el_churn"].to_numpy()
+        & (age_days < DerivedThresholds.CHURN_ABSTAIN_MIN_TENURE_DAYS).to_numpy()
+    )
+    frame["churn_abstained"] = abstain
+    if abstain.any():
+        frame.loc[abstain, "churn_probability"] = np.nan
+        frame.loc[abstain, "churn_risk_level"] = None
+        # object column of SHAP lists — rebuild elementwise (no .loc array-set).
+        frame["churn_factors"] = [
+            None if ab else factors
+            for ab, factors in zip(abstain, frame["churn_factors"])
+        ]
+
     # value tier (§3.5): percentile of CLV among active customers of the run
     active_mask = frame["lifecycle_stage"].isin(list(LifecycleStage.ACTIVE))
     clv = pd.to_numeric(frame["predicted_clv_6m"], errors="coerce")
@@ -938,9 +960,20 @@ def _eligibility_json(row: dict[str, Any]) -> str:
             return {"eligible": True, "status": "insufficient_data", "reason": "ข้อมูลไม่พอประเมิน"}
         return {"eligible": False, "status": "not_eligible", "reason": reason}
 
+    def churn_block() -> dict[str, Any]:
+        # Abstention: eligible by stage, but too little history to trust — say so
+        # explicitly instead of the generic "insufficient data" message.
+        if bool(row.get("churn_abstained")):
+            return {
+                "eligible": True,
+                "status": "insufficient_data",
+                "reason": "insufficient_history — อายุลูกค้าสั้นกว่า 90 วัน feature ยังไม่พอ งดประเมิน churn (abstain)",
+            }
+        return block(churn_reason, row["churn_probability"])
+
     return json.dumps(
         {
-            "churn": block(churn_reason, row["churn_probability"]),
+            "churn": churn_block(),
             "clv": block(clv_reason, row["predicted_clv_6m"]),
             "credit": block(credit_reason, row["predicted_credit_usage_30d"]),
         },
@@ -1042,17 +1075,28 @@ def _post_check(prediction_run_id: str, frame: pd.DataFrame) -> dict[str, Any]:
         ).scalar_one()
 
     eligible_churn = int(frame["el_churn"].sum())
-    churn_nulls_in_eligible = int(
-        frame.loc[frame["el_churn"], "churn_probability"].isna().sum()
+    abstained_series = (
+        frame["churn_abstained"].astype(bool)
+        if "churn_abstained" in frame.columns
+        else pd.Series(False, index=frame.index)
     )
+    abstained_churn = int((frame["el_churn"] & abstained_series).sum())
+    # Only customers we actually attempted to score (eligible AND not abstained)
+    # should have a churn probability. Abstention nulls are intentional (thin
+    # history) and are surfaced via model_eligibility.churn=insufficient_data,
+    # so they are excluded from this "unexpected null" bug gate.
+    scored_mask = frame["el_churn"] & ~abstained_series
+    scored_churn = int(scored_mask.sum())
+    churn_nulls_in_scored = int(frame.loc[scored_mask, "churn_probability"].isna().sum())
     failures: list[str] = []
     if inserted != len(frame):
         failures.append(f"row count {inserted} != customers {len(frame)}")
     if out_of_range > 0:
         failures.append(f"{out_of_range} rows with scores outside [0,1]")
-    if eligible_churn > 0 and churn_nulls_in_eligible / eligible_churn > 0.01:
+    if scored_churn > 0 and churn_nulls_in_scored / scored_churn > 0.01:
         failures.append(
-            f"churn null rate among eligible too high ({churn_nulls_in_eligible}/{eligible_churn})"
+            f"churn null rate among scored (non-abstained) eligible too high "
+            f"({churn_nulls_in_scored}/{scored_churn})"
         )
     return {
         "passed": not failures,
@@ -1061,7 +1105,9 @@ def _post_check(prediction_run_id: str, frame: pd.DataFrame) -> dict[str, Any]:
             "rows_inserted": int(inserted),
             "customers": int(len(frame)),
             "eligible_churn": eligible_churn,
-            "churn_nulls_in_eligible": churn_nulls_in_eligible,
+            "abstained_churn": abstained_churn,
+            "scored_churn": scored_churn,
+            "churn_nulls_in_scored": churn_nulls_in_scored,
         },
     }
 

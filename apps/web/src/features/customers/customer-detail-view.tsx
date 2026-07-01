@@ -139,7 +139,14 @@ export function CustomerDetailView({
                 <HeroMetric
                   label="Churn"
                   value={churnPct != null ? `${churnPct.toFixed(1)}%` : "—"}
-                  hint={customer.churn_risk_level ?? "not eligible"}
+                  hint={
+                    customer.churn_risk_level ??
+                    // Active-Paid but no score = abstained (too little history to
+                    // trust), not "ineligible". Say so instead of implying non-active.
+                    (customer.lifecycle_stage === "Active Paid"
+                      ? "ข้อมูลไม่พอ (abstain)"
+                      : "not eligible")
+                  }
                   valueColor={CHURN_COLOR}
                 />
                 <HeroMetric

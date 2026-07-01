@@ -127,6 +127,19 @@ class DerivedThresholds:
     P_ALIVE_ATRISK_FALLBACK: Final = 0.20
     P_ALIVE_WATCH_FALLBACK: Final = 0.50
 
+    # Churn ABSTENTION. A customer whose tenure is shorter than the churn
+    # feature windows has them mostly zero-filled — no prior-90d usage, no
+    # 6-month slope — so the churn score is driven by defaults, not real
+    # behaviour: a confident-looking number the model has no basis for. Below
+    # this tenure we abstain (churn eligibility → insufficient_data, no risk
+    # level emitted) rather than hand an account manager a guess.
+    #
+    # Keyed on TENURE, not payment count: this is a prepaid business (buy credit
+    # once, use it for months), so a single-payment customer still has rich
+    # usage signal — n_purchases is not what zero-fills the features. 90 days =
+    # under one recent-90d window; ~11% of active-paid on the reference data.
+    CHURN_ABSTAIN_MIN_TENURE_DAYS: Final = 90
+
     # Training-time derivation of the per-model p_alive cuts: pick the validation
     # p_alive quantile at these target flag-rates, then clamp to the band below so
     # a degenerate cohort can't produce an absurd cut. Deriving from quantiles
