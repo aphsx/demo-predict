@@ -1,23 +1,23 @@
 import Elysia, { t } from "elysia";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../../db/client";
 import { mlPredictionRuns, predictDataSources, user } from "../../db/schema";
 import { requireUser } from "../../lib/auth-middleware";
 import { triggerMlJob } from "../../lib/ml-internal";
-import { denyNotFound } from "../../lib/access-control";
+import { denyNotFound, requireCreatorOrAdminForMutation } from "../../lib/access-control";
 import { getPredictCutoffSuggestion } from "../../lib/clean-cutoff";
-import { DATE_RE, UUID_RE } from "../../lib/constants";
-import { fetchRun, mapRun, requireOwnedRun, runSelect } from "./_helpers";
+import { DATE_RE, RUN_STATUS, UUID_RE } from "../../lib/constants";
+import { fetchRun, mapRun, requireRunFound, runSelect } from "./_helpers";
 
 export const runsRoutes = new Elysia()
   .use(requireUser)
-  .get("/", async ({ userId }) => {
+  // Org-wide: every authenticated user sees all runs.
+  .get("/", async () => {
     const rows = await db
       .select(runSelect)
       .from(mlPredictionRuns)
       .leftJoin(predictDataSources, eq(mlPredictionRuns.predictSourceId, predictDataSources.id))
       .leftJoin(user, eq(mlPredictionRuns.createdBy, user.id))
-      .where(eq(mlPredictionRuns.createdBy, userId!))
       .orderBy(desc(mlPredictionRuns.createdAt));
     return rows.map(mapRun);
   })
@@ -35,7 +35,7 @@ export const runsRoutes = new Elysia()
       const [source] = await db
         .select({ id: predictDataSources.id, importStatus: predictDataSources.importStatus })
         .from(predictDataSources)
-        .where(and(eq(predictDataSources.id, body.predict_source_id), eq(predictDataSources.importedBy, userId!)))
+        .where(eq(predictDataSources.id, body.predict_source_id))
         .limit(1);
       if (!source) return denyNotFound(set, "Predict data source not found");
       if (source.importStatus !== "ready") {
@@ -69,7 +69,7 @@ export const runsRoutes = new Elysia()
           predictSourceId: body.predict_source_id,
           name: body.name,
           cutoffDate,
-          status: "pending",
+          status: RUN_STATUS.PENDING,
           createdBy: userId!,
           modelOverridesJson: Object.keys(overrides).length > 0 ? overrides : null,
         })
@@ -80,7 +80,7 @@ export const runsRoutes = new Elysia()
       } catch (e) {
         await db
           .update(mlPredictionRuns)
-          .set({ status: "failed", errorMessage: (e as Error).message })
+          .set({ status: RUN_STATUS.FAILED, errorMessage: (e as Error).message })
           .where(eq(mlPredictionRuns.id, inserted.id));
       }
 
@@ -105,28 +105,32 @@ export const runsRoutes = new Elysia()
   )
   .get(
     "/:id",
-    async ({ params, userId, set }) => {
+    async ({ params, set }) => {
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireRunFound(run, set);
       if (denied) return denied;
       return mapRun(run!);
     },
     { params: t.Object({ id: t.String() }) }
   )
+  // Retry mutates the run record — creator or admin only.
   .post(
     "/:id/retry",
-    async ({ params, userId, set }) => {
+    async ({ params, userId, isAdmin, set }) => {
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireCreatorOrAdminForMutation(run, run?.createdBy, userId, isAdmin, set, {
+        notFound: "Prediction run not found",
+        forbidden: "Only the creator of this run or an admin can retry it.",
+      });
       if (denied) return denied;
-      if (run!.status !== "failed") {
+      if (run!.status !== RUN_STATUS.FAILED) {
         set.status = 400;
         return { message: "Only failed runs can be retried" };
       }
 
       await db
         .update(mlPredictionRuns)
-        .set({ status: "pending", errorMessage: null, progressJson: null })
+        .set({ status: RUN_STATUS.PENDING, errorMessage: null, progressJson: null })
         .where(eq(mlPredictionRuns.id, run!.id));
 
       try {
@@ -134,7 +138,7 @@ export const runsRoutes = new Elysia()
       } catch (e) {
         await db
           .update(mlPredictionRuns)
-          .set({ status: "failed", errorMessage: (e as Error).message })
+          .set({ status: RUN_STATUS.FAILED, errorMessage: (e as Error).message })
           .where(eq(mlPredictionRuns.id, run!.id));
       }
 
@@ -145,9 +149,12 @@ export const runsRoutes = new Elysia()
   )
   .delete(
     "/:id",
-    async ({ params, userId, set }) => {
+    async ({ params, userId, isAdmin, set }) => {
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireCreatorOrAdminForMutation(run, run?.createdBy, userId, isAdmin, set, {
+        notFound: "Prediction run not found",
+        forbidden: "Only the creator of this run or an admin can delete it.",
+      });
       if (denied) return denied;
       await db.delete(mlPredictionRuns).where(eq(mlPredictionRuns.id, run!.id));
       return { deleted: true };

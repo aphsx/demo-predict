@@ -123,7 +123,7 @@ export const summaryRoutes = new Elysia()
   .use(requireUser)
   .get(
     "/:id/summary",
-    async ({ params, userId, set }) => {
+    async ({ params, set }) => {
       if (!UUID_RE.test(params.id)) return denyNotFound(set, "Prediction run not found");
       const [row] = await db
         .select({
@@ -133,7 +133,7 @@ export const summaryRoutes = new Elysia()
         .from(mlPredictionRuns)
         .leftJoin(predictDataSources, eq(mlPredictionRuns.predictSourceId, predictDataSources.id))
         .leftJoin(user, eq(mlPredictionRuns.createdBy, user.id))
-        .where(and(eq(mlPredictionRuns.id, params.id), eq(mlPredictionRuns.createdBy, userId!)))
+        .where(eq(mlPredictionRuns.id, params.id))
         .limit(1);
       if (!row) return denyNotFound(set, "Prediction run not found");
       return buildSummary(row);

@@ -76,9 +76,9 @@ import sys
 APP_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _spawn_job(module: str, flag: str, run_id: str) -> int:
+def _spawn_job(module: str, *args: str) -> int:
     process = subprocess.Popen(
-        [sys.executable, "-m", module, flag, run_id],
+        [sys.executable, "-m", module, *args],
         cwd=str(APP_ROOT),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -106,6 +106,31 @@ async def internal_prediction_run(request: Request):
     if not prediction_run_id:
         raise HTTPException(400, "prediction_run_id is required")
     pid = _spawn_job("src.cli.predict", "--prediction-run-id", prediction_run_id)
+    return {"accepted": True, "prediction_run_id": prediction_run_id, "pid": pid}
+
+
+@app.post("/internal/outcome-backfill")
+async def internal_outcome_backfill(request: Request):
+    """Realized-outcome backfill (TRAINING-PIPELINE §15).
+
+    Body (all optional): { prediction_run_id, force }. Without an id the job
+    measures every unmeasured completed prediction run; results land in
+    ml_model_evaluations (evaluation_type='production_holdout').
+    """
+    _require_internal_token(request)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 - an empty body means "backfill everything".
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    args: list[str] = []
+    prediction_run_id = body.get("prediction_run_id")
+    if prediction_run_id:
+        args += ["--prediction-run-id", str(prediction_run_id)]
+    if body.get("force"):
+        args.append("--force")
+    pid = _spawn_job("src.cli.backfill_outcomes", *args)
     return {"accepted": True, "prediction_run_id": prediction_run_id, "pid": pid}
 
 

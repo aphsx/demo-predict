@@ -86,16 +86,16 @@ function buildScopeNote(scope: UserScope, boundRun: BoundRun | null): string {
   const lines: string[] = [];
   lines.push(
     scope.runIds.length
-      ? `This user owns these prediction run ids: ${scope.runIds.join(", ")}. ` +
+      ? `Available prediction run ids (shared org-wide): ${scope.runIds.join(", ")}. ` +
           `Filter ml_prediction_outputs by prediction_run_id IN (...) and ` +
           `ml_prediction_runs by id IN (...) using ONLY these ids.`
-      : `This user has no prediction runs yet — do not query ml_prediction_runs / ml_prediction_outputs.`
+      : `There are no prediction runs yet — do not query ml_prediction_runs / ml_prediction_outputs.`
   );
   lines.push(
     scope.sourceIds.length
-      ? `This user owns these predict source ids: ${scope.sourceIds.join(", ")}. ` +
+      ? `Available predict source ids (shared org-wide): ${scope.sourceIds.join(", ")}. ` +
           `Filter predict_clean_* by source_id using ONLY these ids.`
-      : `This user has no predict sources yet — do not query predict_clean_* tables.`
+      : `There are no predict sources yet — do not query predict_clean_* tables.`
   );
   return lines.join("\n");
 }

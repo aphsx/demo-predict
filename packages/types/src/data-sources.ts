@@ -22,6 +22,10 @@ export interface DataSource {
   imported_by: string | null;
   importer_name: string | null;
   importer_email: string | null;
+  /** Creator's user id — same as imported_by (uniform creator contract). */
+  created_by: string | null;
+  /** Creator's display name, falling back to email. */
+  created_by_name: string | null;
   created_at: string;
 }
 

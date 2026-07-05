@@ -178,6 +178,9 @@ CREATE TABLE public.ml_model_evaluations (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     model_version_id uuid NOT NULL,
     training_run_id uuid NOT NULL,
+    -- Realized-outcome loop (TRAINING-PIPELINE §15): production_holdout rows
+    -- link the evaluation to the prediction run whose predictions were measured.
+    prediction_run_id uuid,
     model_type text NOT NULL,
     evaluation_type text NOT NULL,
     dataset_split text NOT NULL,
@@ -1159,6 +1162,7 @@ CREATE TABLE public."user" (
     "givenName" text,
     "familyName" text,
     locale text,
+    role text DEFAULT 'member' NOT NULL,
     "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
     "updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -1769,6 +1773,13 @@ CREATE INDEX idx_ml_evaluations_model_version ON public.ml_model_evaluations USI
 --
 
 CREATE INDEX idx_ml_evaluations_training_run ON public.ml_model_evaluations USING btree (training_run_id);
+
+
+--
+-- Name: idx_ml_evaluations_prediction_run; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_ml_evaluations_prediction_run ON public.ml_model_evaluations USING btree (prediction_run_id);
 
 
 --
@@ -2427,6 +2438,14 @@ ALTER TABLE ONLY public.ml_model_evaluations
 
 ALTER TABLE ONLY public.ml_model_evaluations
     ADD CONSTRAINT ml_model_evaluations_training_run_id_fkey FOREIGN KEY (training_run_id) REFERENCES public.ml_training_runs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ml_model_evaluations ml_model_evaluations_prediction_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ml_model_evaluations
+    ADD CONSTRAINT ml_model_evaluations_prediction_run_id_fkey FOREIGN KEY (prediction_run_id) REFERENCES public.ml_prediction_runs(id) ON DELETE CASCADE;
 
 
 --

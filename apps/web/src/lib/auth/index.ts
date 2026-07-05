@@ -9,3 +9,4 @@
  */
 export * from "./client";
 export * from "./redirect";
+export * from "./use-is-admin";

@@ -7,7 +7,9 @@ import { aiChatRoutes } from "./routes/ai-chat";
 import { predictionRunRoutes } from "./routes/prediction-runs";
 import { trainingRunRoutes } from "./routes/training-runs";
 import { modelPerformanceRoutes } from "./routes/model-performance";
+import { outcomeBackfillRoutes } from "./routes/outcome-backfill";
 import { releaseStaleTrainImports, releaseStalePredict } from "./lib/abort-data-source";
+import { startStaleRunReaper } from "./lib/run-reaper";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -23,6 +25,9 @@ Promise.all([releaseStaleTrainImports(), releaseStalePredict()])
     }
   })
   .catch((e) => console.error("[api] Failed to release stale imports:", e));
+
+// Mark runs stuck in a non-terminal status as failed — now and every 5 minutes.
+startStaleRunReaper();
 
 const app = new Elysia()
   .use(
@@ -45,6 +50,8 @@ const app = new Elysia()
   .use(trainingRunRoutes)
   // ML v2 — champion model performance (spec §2.4)
   .use(modelPerformanceRoutes)
+  // ML v2 — realized-outcome backfill trigger (TRAINING-PIPELINE §15, admin)
+  .use(outcomeBackfillRoutes)
   .get("/health", () => {
     return {
       status: "ok",

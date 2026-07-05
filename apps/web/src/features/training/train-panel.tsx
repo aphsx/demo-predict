@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { SectionCard } from "@/components/ui";
 import type { TrainDataSource } from "@/lib/api";
+import { ADMIN_ONLY_TITLE, useIsAdmin } from "@/lib/auth";
 import { ProgressCard } from "./progress-card";
 import { formatFileSize, getCleanCounts, PRIMARY_BUTTON_CLS } from "./training-utils";
 import { DEFAULT_HORIZON_DAYS } from "./training-run-utils";
@@ -64,6 +65,9 @@ export function TrainPanel({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const uploadRef = useRef<HTMLInputElement>(null);
+  // Import / training / dataset deletion are admin-only (the API returns 403).
+  const { isAdmin, loading: roleLoading } = useIsAdmin();
+  const adminLocked = !roleLoading && !isAdmin;
 
   useEffect(() => {
     setCutoffDate("");
@@ -75,7 +79,8 @@ export function TrainPanel({
   }, [suggestedCutoff]);
 
   const horizonValid = Number.isInteger(horizonDays) && horizonDays > 0;
-  const canTrain = Boolean(selectedSource) && Boolean(cutoffDate) && horizonValid && !creating;
+  const canTrain =
+    Boolean(selectedSource) && Boolean(cutoffDate) && horizonValid && !creating && !adminLocked;
   const counts = selectedSource ? getCleanCounts(selectedSource) : null;
 
   return (
@@ -87,6 +92,7 @@ export function TrainPanel({
         <button
           type="button"
           disabled={!canTrain}
+          title={adminLocked ? ADMIN_ONLY_TITLE : undefined}
           onClick={() => onTrain({ cutoff_date: cutoffDate, horizon_days: horizonDays })}
           className={`${PRIMARY_BUTTON_CLS} sm:min-w-[140px]`}
         >
@@ -116,8 +122,9 @@ export function TrainPanel({
             <button
               type="button"
               onClick={() => onDeleteSource(selectedSource)}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-gray-200 bg-white text-[color:var(--ink-4)] shadow-[var(--shadow-1)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)]"
-              title="ลบ dataset นี้"
+              disabled={adminLocked}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-gray-200 bg-white text-[color:var(--ink-4)] shadow-[var(--shadow-1)] hover:border-[color:var(--danger)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:cursor-not-allowed disabled:opacity-45"
+              title={adminLocked ? ADMIN_ONLY_TITLE : "ลบ dataset นี้"}
             >
               <Trash2 size={15} />
             </button>
@@ -125,7 +132,9 @@ export function TrainPanel({
           <button
             type="button"
             onClick={() => setShowUpload((v) => !v)}
-            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-3.5 text-[12.5px] font-semibold text-[color:var(--moby-600)] shadow-[var(--shadow-1)] hover:bg-gray-50"
+            disabled={adminLocked}
+            title={adminLocked ? ADMIN_ONLY_TITLE : undefined}
+            className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-3.5 text-[12.5px] font-semibold text-[color:var(--moby-600)] shadow-[var(--shadow-1)] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45"
           >
             <UploadCloud size={14} />
             upload ใหม่
@@ -134,7 +143,9 @@ export function TrainPanel({
 
         <p className="mt-2 text-[12px] text-[color:var(--ink-5)]">
           {selectedSource
-            ? `${counts ? `${counts.customers.toLocaleString()} แถว · ` : ""}cutoff ${
+            ? `${counts ? `${counts.customers.toLocaleString()} แถว · ` : ""}${
+                selectedSource.created_by_name ? `นำเข้าโดย ${selectedSource.created_by_name} · ` : ""
+              }cutoff ${
                 cutoffDate || "—"
               } (อัตโนมัติ${latestDataDate ? `, ข้อมูลล่าสุด ${latestDataDate}` : ""}) · horizon ${horizonDays} วัน`
             : "เลือก dataset ที่ Ready หรือ upload ไฟล์ Excel ใหม่"}

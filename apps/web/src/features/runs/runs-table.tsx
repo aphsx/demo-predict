@@ -13,9 +13,28 @@ import {
   EmptyState, ProgressMeter, SectionCard, Skeleton, StatusPill,
 } from "@/components/ui";
 import { deletePredictionRun, retryPredictionRun, type PredictionRun } from "@/lib/ml-api";
+import { canMutateAsCreator, CREATOR_OR_ADMIN_TITLE, useIsAdmin } from "@/lib/auth";
 import { getDisplayError } from "@/lib/ui-error";
 import { useRunStore } from "@/stores/run-store";
 import { formatRelative, runStatusLabel, runStatusTone } from "./runs-utils";
+
+/** Auto-created runs are named "Auto — {source} {YYYY-MM-DD}" by the import API. */
+const AUTO_RUN_PREFIX = "Auto — ";
+
+export function isAutoRun(run: Pick<PredictionRun, "name">): boolean {
+  return run.name.startsWith(AUTO_RUN_PREFIX);
+}
+
+function AutoRunBadge() {
+  return (
+    <span
+      title="run นี้ถูกสร้างอัตโนมัติหลัง import ข้อมูล predict"
+      className="inline-flex h-[18px] shrink-0 items-center rounded-full bg-[color:var(--moby-50)] px-1.5 text-[10px] font-semibold uppercase tracking-[.08em] text-[color:var(--moby-600)]"
+    >
+      Auto
+    </span>
+  );
+}
 
 const actionBtnCls =
   "inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-[12px] font-semibold text-[color:var(--moby-600)] hover:bg-gray-50 disabled:opacity-40";
@@ -31,6 +50,7 @@ export function RunsTable({
 }) {
   const router = useRouter();
   const setRunId = useRunStore((s) => s.setRunId);
+  const { isAdmin, userId } = useIsAdmin();
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingDeleteRun, setPendingDeleteRun] = useState<PredictionRun | null>(null);
@@ -110,6 +130,7 @@ export function RunsTable({
                   <RunRow
                     key={run.id}
                     run={run}
+                    canMutate={canMutateAsCreator(isAdmin, userId, run.created_by)}
                     retrying={retryingId === run.id}
                     deleting={deletingId === run.id}
                     onOpen={() => openRun(run)}
@@ -141,6 +162,7 @@ export function RunsTable({
 
 function RunRow({
   run,
+  canMutate,
   retrying,
   deleting,
   onOpen,
@@ -148,6 +170,8 @@ function RunRow({
   onDelete,
 }: {
   run: PredictionRun;
+  /** Creator-or-admin rule (mirrors the API's mutation guard). */
+  canMutate: boolean;
   retrying: boolean;
   deleting: boolean;
   onOpen: () => void;
@@ -158,8 +182,14 @@ function RunRow({
   return (
     <tr>
       <td>
-        <div className="font-medium text-[color:var(--ink-1)]">{run.name}</div>
-        <div className="text-[11.5px] text-[color:var(--ink-5)]">{run.predict_source_name}</div>
+        <div className="flex items-center gap-1.5 font-medium text-[color:var(--ink-1)]">
+          <span className="min-w-0 truncate">{run.name}</span>
+          {isAutoRun(run) && <AutoRunBadge />}
+        </div>
+        <div className="text-[11.5px] text-[color:var(--ink-5)]">
+          {run.predict_source_name}
+          {run.created_by_name ? ` · โดย ${run.created_by_name}` : ""}
+        </div>
       </td>
       <td>
         <div className="flex flex-col gap-1.5">
@@ -195,7 +225,13 @@ function RunRow({
             </button>
           )}
           {run.status === "failed" && (
-            <button type="button" onClick={onRetry} disabled={retrying} className={actionBtnCls}>
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={retrying || !canMutate}
+              title={canMutate ? undefined : CREATOR_OR_ADMIN_TITLE}
+              className={actionBtnCls}
+            >
               <RefreshCw size={11} className={retrying ? "animate-spin" : undefined} />
               ลองใหม่
             </button>
@@ -203,9 +239,9 @@ function RunRow({
           <button
             type="button"
             onClick={onDelete}
-            disabled={deleting}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--ink-4)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:opacity-40"
-            title="ลบ run"
+            disabled={deleting || !canMutate}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--ink-4)] hover:bg-[color:var(--danger-bg)] hover:text-[color:var(--danger)] disabled:cursor-not-allowed disabled:opacity-40"
+            title={canMutate ? "ลบ run" : CREATOR_OR_ADMIN_TITLE}
           >
             {deleting ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
           </button>

@@ -1,13 +1,16 @@
 /**
  * [NEW] ML v2 training runs API — docs/ML-V2-DASHBOARD-SPEC.md §2.6/§7.
  * Response contract mirrors apps/web/src/lib/mlApi.ts (snake_case keys).
+ *
+ * Org-shared model: reads are org-wide for any authenticated user; triggering
+ * training is admin-only; deleting a (failed) run is creator-or-admin.
  */
 import Elysia, { t } from "elysia";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { mlTrainingRuns, trainDataSources, user } from "../db/schema";
-import { requireUser } from "../lib/auth-middleware";
-import { denyNotFound, requireOwnedForRead } from "../lib/access-control";
+import { requireAdmin, requireUser } from "../lib/auth-middleware";
+import { denyNotFound, requireFoundForRead } from "../lib/access-control";
 import { triggerMlJob } from "../lib/ml-internal";
 import { getTrainCutoffSuggestion } from "../lib/clean-cutoff";
 import {
@@ -15,7 +18,7 @@ import {
   type TrainingRun,
   type TrainingRunResult,
 } from "../lib/ml-contract";
-import { DATE_RE, UUID_RE } from "../lib/constants";
+import { DATE_RE, RUN_STATUS, UUID_RE } from "../lib/constants";
 const DEFAULT_HORIZON_DAYS = 180;
 const ACTIVE_WINDOW_DAYS = 180;
 
@@ -29,6 +32,7 @@ const runSelect = {
   finishedAt: mlTrainingRuns.finishedAt,
   createdBy: mlTrainingRuns.createdBy,
   creatorName: user.name,
+  creatorEmail: user.email,
   createdAt: mlTrainingRuns.createdAt,
   errorMessage: mlTrainingRuns.errorMessage,
   progressJson: mlTrainingRuns.progressJson,
@@ -45,6 +49,7 @@ interface TrainingRunRow {
   finishedAt: Date | null;
   createdBy: string | null;
   creatorName: string | null;
+  creatorEmail: string | null;
   createdAt: Date;
   errorMessage: string | null;
   progressJson: unknown;
@@ -60,7 +65,8 @@ function mapTrainingRun(row: TrainingRunRow): TrainingRun {
     horizon_days: row.horizonDays,
     started_at: (row.startedAt ?? row.createdAt).toISOString(),
     finished_at: row.finishedAt?.toISOString() ?? null,
-    created_by: row.creatorName ?? row.createdBy,
+    created_by: row.createdBy,
+    created_by_name: row.creatorName ?? row.creatorEmail ?? null,
     error_message: row.errorMessage,
     progress:
       row.status === "in_progress"
@@ -82,18 +88,9 @@ async function fetchTrainingRun(id: string): Promise<TrainingRunRow | null> {
   return rows[0] ?? null;
 }
 
-export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
-  .use(requireUser)
-  .get("/", async ({ userId }) => {
-    const rows = await db
-      .select(runSelect)
-      .from(mlTrainingRuns)
-      .leftJoin(trainDataSources, eq(mlTrainingRuns.sourceId, trainDataSources.id))
-      .leftJoin(user, eq(mlTrainingRuns.createdBy, user.id))
-      .where(eq(mlTrainingRuns.createdBy, userId!))
-      .orderBy(desc(mlTrainingRuns.createdAt));
-    return rows.map(mapTrainingRun);
-  })
+// Admin-only: triggering training mutates the shared model registry.
+const adminTrainingRoutes = new Elysia()
+  .use(requireAdmin)
   .post(
     "/",
     async ({ body, userId, set }) => {
@@ -108,7 +105,7 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
       const [source] = await db
         .select({ id: trainDataSources.id, importStatus: trainDataSources.importStatus })
         .from(trainDataSources)
-        .where(and(eq(trainDataSources.id, body.train_source_id), eq(trainDataSources.importedBy, userId!)))
+        .where(eq(trainDataSources.id, body.train_source_id))
         .limit(1);
       if (!source) return denyNotFound(set, "Train data source not found");
       if (source.importStatus !== "ready") {
@@ -184,7 +181,7 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
           sourceId: body.train_source_id,
           cutoffDate,
           horizonDays,
-          status: "pending",
+          status: RUN_STATUS.PENDING,
           createdBy: userId!,
         })
         .returning({ id: mlTrainingRuns.id });
@@ -194,7 +191,7 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
       } catch (e) {
         await db
           .update(mlTrainingRuns)
-          .set({ status: "failed", errorMessage: (e as Error).message })
+          .set({ status: RUN_STATUS.FAILED, errorMessage: (e as Error).message })
           .where(eq(mlTrainingRuns.id, inserted.id));
       }
 
@@ -210,12 +207,26 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
         dataset_name: t.Optional(t.String()),
       }),
     }
-  )
+  );
+
+export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
+  .use(requireUser)
+  // Org-wide: every authenticated user sees all training runs.
+  .get("/", async () => {
+    const rows = await db
+      .select(runSelect)
+      .from(mlTrainingRuns)
+      .leftJoin(trainDataSources, eq(mlTrainingRuns.sourceId, trainDataSources.id))
+      .leftJoin(user, eq(mlTrainingRuns.createdBy, user.id))
+      .orderBy(desc(mlTrainingRuns.createdAt));
+    return rows.map(mapTrainingRun);
+  })
+  .use(adminTrainingRoutes)
   .get(
     "/:id",
-    async ({ params, userId, set }) => {
+    async ({ params, set }) => {
       const run = await fetchTrainingRun(params.id);
-      const denied = requireOwnedForRead(run, run?.createdBy, userId, set, "Training run not found");
+      const denied = requireFoundForRead(run, set, "Training run not found");
       if (denied) return denied;
       return mapTrainingRun(run!);
     },
@@ -223,17 +234,17 @@ export const trainingRunRoutes = new Elysia({ prefix: "/training-runs" })
   )
   // Delete a training run from history. Only FAILED runs may be removed — a
   // completed run is an audit record of a model that was (or could be) served,
-  // and deleting it would cascade to its ml_model_versions. Owner-scoped.
+  // and deleting it would cascade to its ml_model_versions. Creator or admin.
   .delete(
     "/:id",
-    async ({ params, userId, set }) => {
+    async ({ params, userId, isAdmin, set }) => {
       const run = await fetchTrainingRun(params.id);
       if (!run) return denyNotFound(set, "Training run not found");
-      if (run.createdBy && run.createdBy !== userId) {
+      if (!isAdmin && run.createdBy !== userId) {
         set.status = 403;
-        return { message: "You do not own this training run" };
+        return { message: "Only the creator of this training run or an admin can delete it." };
       }
-      if (run.status !== "failed") {
+      if (run.status !== RUN_STATUS.FAILED) {
         set.status = 409;
         return { message: "Only failed training runs can be deleted" };
       }

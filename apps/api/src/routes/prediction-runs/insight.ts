@@ -1,7 +1,7 @@
 import Elysia, { t } from "elysia";
 import { requireUser } from "../../lib/auth-middleware";
 import { createRunInsight, getRunInsight } from "../../lib/ai";
-import { fetchRun, requireOwnedRun } from "./_helpers";
+import { fetchRun, requireRunFound } from "./_helpers";
 
 /**
  * Run-level AI base summary (the "สรุปก่อน" of the whole customer base).
@@ -12,9 +12,9 @@ export const insightRoutes = new Elysia()
   .use(requireUser)
   .get(
     "/:id/insight",
-    async ({ params, userId, set }) => {
+    async ({ params, set }) => {
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireRunFound(run, set);
       if (denied) return denied;
       return getRunInsight(run!.id);
     },
@@ -22,9 +22,9 @@ export const insightRoutes = new Elysia()
   )
   .post(
     "/:id/insight",
-    async ({ params, body, userId, set }) => {
+    async ({ params, body, set }) => {
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireRunFound(run, set);
       if (denied) return denied;
       if (run!.status !== "completed") {
         set.status = 400;

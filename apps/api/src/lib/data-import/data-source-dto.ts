@@ -44,6 +44,9 @@ export function mapDataSourceRow(row: DataSourceRow) {
     imported_by: row.importedBy,
     importer_name: row.importerName ?? null,
     importer_email: row.importerEmail ?? null,
+    // Uniform creator contract (matches prediction/training runs).
+    created_by: row.importedBy,
+    created_by_name: row.importerName ?? row.importerEmail ?? null,
     created_at: row.createdAt.toISOString(),
   };
 }

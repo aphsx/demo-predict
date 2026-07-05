@@ -21,7 +21,10 @@ export interface TrainingRun {
   horizon_days: number;
   started_at: string;
   finished_at: string | null;
+  /** Creator's user id (null when the creator's account was deleted). */
   created_by: string | null;
+  /** Creator's display name, falling back to email. */
+  created_by_name: string | null;
   error_message: string | null;
   progress: { phase: string; pct: number } | null;
   results: TrainingRunResult[] | null;

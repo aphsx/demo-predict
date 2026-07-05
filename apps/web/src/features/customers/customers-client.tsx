@@ -38,6 +38,7 @@ const FILTER_KEYS = [
   "search",
   "customer_value_tier",
   "churn_risk_level",
+  "credit_urgency_level",
 ] as const satisfies readonly (keyof CustomerFilters)[];
 const SORT_KEYS = [
   "acc_id",
@@ -46,6 +47,9 @@ const SORT_KEYS = [
   "priority_score",
   "predicted_clv_6m",
   "total_revenue",
+  "revenue_at_risk",
+  "estimated_days_until_topup",
+  "days_since_last_activity",
   "ai_status",
 ] as const satisfies readonly CustomerSortKey[];
 const SORT_DIRECTIONS = ["asc", "desc"] as const satisfies readonly CustomerSortDirection[];
@@ -56,6 +60,7 @@ function filtersFromSearchParams(sp: URLSearchParams): CustomerFilters {
     search: sp.get("search") || "",
     customer_value_tier: sp.get("customer_value_tier") || "",
     churn_risk_level: sp.get("churn_risk_level") || "",
+    credit_urgency_level: sp.get("credit_urgency_level") || "",
   };
 }
 
@@ -161,6 +166,33 @@ function CustomersClientInner() {
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   };
 
+  /** Preset click: filters + sort in ONE router.replace (two sequential updates
+   *  would each rebuild from the stale URL and drop the other's params). */
+  const applyPreset = (nextFilters: CustomerFilters, nextSort: CustomerSort | null) => {
+    setFilters(nextFilters);
+    setSort(nextSort);
+    setPageNumber(1);
+
+    const params = new URLSearchParams(Array.from(sp.entries()));
+    FILTER_KEYS.forEach((key) => {
+      const value = nextFilters[key].trim();
+      if (value) {
+        params.set(key, value);
+      } else {
+        params.delete(key);
+      }
+    });
+    if (nextSort) {
+      params.set("sort", `${nextSort.key}:${nextSort.direction}`);
+    } else {
+      params.delete("sort");
+    }
+    params.delete("page");
+
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
+
   const updatePage = (nextPage: number) => {
     const safePage = Math.max(1, nextPage);
     setPageNumber(safePage);
@@ -196,6 +228,7 @@ function CustomersClientInner() {
       lifecycle_stage: filters.lifecycle_stage as OutputsQuery["lifecycle_stage"],
       customer_value_tier: filters.customer_value_tier as OutputsQuery["customer_value_tier"],
       churn_risk_level: filters.churn_risk_level as OutputsQuery["churn_risk_level"],
+      credit_urgency_level: filters.credit_urgency_level as OutputsQuery["credit_urgency_level"],
     })
       .then((result) => {
         if (!alive) return;
@@ -219,6 +252,7 @@ function CustomersClientInner() {
     filters.lifecycle_stage,
     filters.customer_value_tier,
     filters.churn_risk_level,
+    filters.credit_urgency_level,
     pageNumber,
     sort,
   ]);
@@ -294,6 +328,7 @@ function CustomersClientInner() {
       sort={sort}
       onFiltersChange={updateFilters}
       onSortChange={updateSort}
+      onPresetApply={applyPreset}
       onPageChange={updatePage}
       onGenerateAi={handleGenerateAi}
       aiError={aiError}

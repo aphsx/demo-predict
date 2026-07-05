@@ -23,6 +23,23 @@ export const USER_PROFILE_FIELD_KEYS = Object.keys(USER_PROFILE_FIELDS) as Array
 
 export type UserProfileFieldKey = keyof typeof USER_PROFILE_FIELDS;
 
+// ── Org roles ─────────────────────────────────────────────────────────────────
+
+/** Org-shared access model: admins manage data/training/roles, members view +
+ *  create prediction runs + use AI chat. Stored in `user.role` (default member). */
+export const USER_ROLE = {
+  ADMIN: "admin",
+  MEMBER: "member",
+} as const;
+
+export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
+
+/** Better Auth `additionalFields` entry for the role column. `input: false`
+ *  keeps it read-only from the client — only admins/bootstrap may change it. */
+export const USER_ROLE_FIELD = {
+  role: { type: "string", required: false, input: false, defaultValue: USER_ROLE.MEMBER },
+} as const;
+
 /** The full authenticated-user shape (Better Auth built-ins + our profile fields). */
 export interface AuthUser {
   id: string;
@@ -33,6 +50,7 @@ export interface AuthUser {
   givenName: string | null;
   familyName: string | null;
   locale: string | null;
+  role: UserRole;
   createdAt: Date;
   updatedAt: Date;
 }

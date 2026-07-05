@@ -1,12 +1,15 @@
 /**
  * [NEW] Train raw data API — import 8-sheet Excel into train_data_sources + train_raw_sheet_*.
+ *
+ * Org-shared model: reads are org-wide; importing is admin-only; deleting a
+ * source is creator-or-admin.
  */
 import Elysia, { t } from "elysia";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { trainDataSources, user } from "../db/schema";
-import { requireOwnedForMutation } from "../lib/access-control";
-import { requireUser } from "../lib/auth-middleware";
+import { requireCreatorOrAdminForMutation } from "../lib/access-control";
+import { requireAdmin, requireUser } from "../lib/auth-middleware";
 import { UUID_RE } from "../lib/constants";
 import { getTrainCutoffSuggestion } from "../lib/clean-cutoff";
 import { prepareTrainDataSource } from "../lib/train-import";
@@ -41,6 +44,121 @@ const sourceSelect = {
   importerName: user.name,
   importerEmail: user.email,
 };
+
+// Admin-only: importing/replacing shared training data.
+const adminTrainDataRoutes = new Elysia()
+  .use(requireAdmin)
+  .post(
+    "/import",
+    async ({ body, userId, set }) => {
+      const filename = body.file.name ?? "upload.xlsx";
+      if (!isXlsxFilename(filename)) {
+        set.status = 400;
+        return { message: "Only .xlsx files are supported" };
+      }
+
+      const buffer = await readImportBuffer(body.file);
+
+      try {
+        const sourceId = await prepareTrainDataSource({
+          buffer,
+          filename,
+          name: body.name,
+          client_label: body.client_label ?? null,
+          notes: body.notes ?? null,
+          imported_by: userId!,
+        });
+        const result = await runTrainImportPipeline({
+          buffer,
+          filename,
+          name: body.name,
+          client_label: body.client_label ?? null,
+          notes: body.notes ?? null,
+          imported_by: userId!,
+          sourceId,
+        });
+        return result;
+      } catch (e) {
+        const err = e as Error & { code?: string; source_id?: string };
+        if (err.code === "DUPLICATE_FILE") {
+          set.status = 409;
+          return { message: err.message, source_id: err.source_id };
+        }
+        set.status = 400;
+        return { message: err.message ?? "Import failed" };
+      }
+    },
+    {
+      body: t.Object({
+        file: t.File(),
+        name: t.String({ minLength: 1 }),
+        client_label: t.Optional(t.String()),
+        notes: t.Optional(t.String()),
+      }),
+    }
+  )
+  .post(
+    "/import/async",
+    async ({ body, userId, set }) => {
+      const filename = body.file.name ?? "upload.xlsx";
+      if (!isXlsxFilename(filename)) {
+        set.status = 400;
+        return { message: "Only .xlsx files are supported" };
+      }
+
+      let buffer: Buffer;
+      try {
+        buffer = await readImportBuffer(body.file);
+      } catch (e) {
+        set.status = 413;
+        return { message: (e as Error).message };
+      }
+
+      try {
+        const sourceId = await prepareTrainDataSource({
+          buffer,
+          filename,
+          name: body.name,
+          client_label: body.client_label ?? null,
+          notes: body.notes ?? null,
+          imported_by: userId!,
+        });
+
+        await publishTrainPipelineProgress(sourceId, {
+          progress: 3,
+          step: "Upload received — connecting progress…",
+          phase: "raw",
+        });
+
+        runTrainImportJob(sourceId, {
+          buffer,
+          filename,
+          name: body.name,
+          client_label: body.client_label ?? null,
+          notes: body.notes ?? null,
+          imported_by: userId!,
+        });
+
+        return { source_id: sourceId, import_status: "importing" };
+      } catch (e) {
+        const err = e as Error & { code?: string; source_id?: string };
+        if (err.code === "DUPLICATE_FILE") {
+          set.status = 409;
+          return { message: err.message, source_id: err.source_id };
+        }
+        set.status = 400;
+        return { message: err.message ?? "Import failed" };
+      }
+    },
+    {
+      body: t.Object({
+        file: t.File(),
+        name: t.String({ minLength: 1 }),
+        client_label: t.Optional(t.String()),
+        notes: t.Optional(t.String()),
+      }),
+    }
+  );
 
 export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
   .use(requireUser)
@@ -202,7 +320,7 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
   )
   .delete(
     "/:id",
-    async ({ params, userId, set }) => {
+    async ({ params, userId, isAdmin, set }) => {
       const [row] = await db
         .select({
           importStatus: trainDataSources.importStatus,
@@ -212,9 +330,9 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
         .where(eq(trainDataSources.id, params.id))
         .limit(1);
 
-      const denied = requireOwnedForMutation(row, row?.importedBy, userId, set, {
+      const denied = requireCreatorOrAdminForMutation(row, row?.importedBy, userId, isAdmin, set, {
         notFound: "Train data source not found",
-        forbidden: "You can view this training data source, but only the importer can delete it.",
+        forbidden: "Only the importer of this data source or an admin can delete it.",
       });
       if (denied) return denied;
 
@@ -223,114 +341,4 @@ export const trainDataRoutes = new Elysia({ prefix: "/train-data-sources" })
     },
     { params: t.Object({ id: t.String() }) }
   )
-  .post(
-    "/import",
-    async ({ body, userId, set }) => {
-      const filename = body.file.name ?? "upload.xlsx";
-      if (!isXlsxFilename(filename)) {
-        set.status = 400;
-        return { message: "Only .xlsx files are supported" };
-      }
-
-      const buffer = await readImportBuffer(body.file);
-
-      try {
-        const sourceId = await prepareTrainDataSource({
-          buffer,
-          filename,
-          name: body.name,
-          client_label: body.client_label ?? null,
-          notes: body.notes ?? null,
-          imported_by: userId!,
-        });
-        const result = await runTrainImportPipeline({
-          buffer,
-          filename,
-          name: body.name,
-          client_label: body.client_label ?? null,
-          notes: body.notes ?? null,
-          imported_by: userId!,
-          sourceId,
-        });
-        return result;
-      } catch (e) {
-        const err = e as Error & { code?: string; source_id?: string };
-        if (err.code === "DUPLICATE_FILE") {
-          set.status = 409;
-          return { message: err.message, source_id: err.source_id };
-        }
-        set.status = 400;
-        return { message: err.message ?? "Import failed" };
-      }
-    },
-    {
-      body: t.Object({
-        file: t.File(),
-        name: t.String({ minLength: 1 }),
-        client_label: t.Optional(t.String()),
-        notes: t.Optional(t.String()),
-      }),
-    }
-  )
-  .post(
-    "/import/async",
-    async ({ body, userId, set }) => {
-      const filename = body.file.name ?? "upload.xlsx";
-      if (!isXlsxFilename(filename)) {
-        set.status = 400;
-        return { message: "Only .xlsx files are supported" };
-      }
-
-      let buffer: Buffer;
-      try {
-        buffer = await readImportBuffer(body.file);
-      } catch (e) {
-        set.status = 413;
-        return { message: (e as Error).message };
-      }
-
-      try {
-        const sourceId = await prepareTrainDataSource({
-          buffer,
-          filename,
-          name: body.name,
-          client_label: body.client_label ?? null,
-          notes: body.notes ?? null,
-          imported_by: userId!,
-        });
-
-        await publishTrainPipelineProgress(sourceId, {
-          progress: 3,
-          step: "Upload received — connecting progress…",
-          phase: "raw",
-        });
-
-        runTrainImportJob(sourceId, {
-          buffer,
-          filename,
-          name: body.name,
-          client_label: body.client_label ?? null,
-          notes: body.notes ?? null,
-          imported_by: userId!,
-        });
-
-        return { source_id: sourceId, import_status: "importing" };
-      } catch (e) {
-        const err = e as Error & { code?: string; source_id?: string };
-        if (err.code === "DUPLICATE_FILE") {
-          set.status = 409;
-          return { message: err.message, source_id: err.source_id };
-        }
-        set.status = 400;
-        return { message: err.message ?? "Import failed" };
-      }
-    },
-    {
-      body: t.Object({
-        file: t.File(),
-        name: t.String({ minLength: 1 }),
-        client_label: t.Optional(t.String()),
-        notes: t.Optional(t.String()),
-      }),
-    }
-  );
+  .use(adminTrainDataRoutes);

@@ -313,16 +313,20 @@ function ThinkingBubble({ message }: { message: string }) {
 function EmptyState({ onPrompt, runName }: { onPrompt: (p: string) => void; runName: string | null }) {
   const prompts = runName
     ? [
-        "สรุป churn risk ของ run นี้",
-        "ลูกค้า priority_score สูงสุด 10 อันดับ",
-        "lifecycle distribution เป็นอย่างไร",
+        "สรุปภาพรวม churn ของ run นี้",
+        "ลูกค้ากลุ่มเสี่ยงสูงที่มีมูลค่าสูงมีใครบ้าง",
+        "ลูกค้าคนไหนเครดิตใกล้หมดใน 30 วัน",
+        "ลูกค้า priority สูงสุด 10 อันดับ",
         "account ไหน revenue_at_risk สูงสุด",
+        "เทรนด์การใช้งาน SMS เดือนล่าสุดเป็นยังไง",
       ]
     : [
-        "สรุป churn risk รวมทุก run",
+        "สรุปภาพรวม churn ของ run ล่าสุด",
+        "ลูกค้ากลุ่มเสี่ยงสูงที่มีมูลค่าสูงมีใครบ้าง",
+        "ลูกค้าคนไหนเครดิตใกล้หมดใน 30 วัน",
+        "เทรนด์การใช้งาน SMS เดือนล่าสุดเป็นยังไง",
         "เปรียบเทียบจำนวนลูกค้าแต่ละ run",
-        "ลูกค้า priority_score สูงสุด 10 อันดับ",
-        "credit_urgency_level critical มีกี่ราย",
+        "ลูกค้า priority สูงสุด 10 อันดับ",
       ];
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">

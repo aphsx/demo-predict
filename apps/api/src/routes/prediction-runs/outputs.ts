@@ -8,7 +8,7 @@ import { UUID_RE } from "../../lib/constants";
 import {
   fetchRun,
   mapOutput,
-  requireOwnedRun,
+  requireRunFound,
   SORT_COLUMNS,
   type OutputsQueryParams,
 } from "./_helpers";
@@ -43,10 +43,10 @@ export const outputsRoutes = new Elysia()
   .use(requireUser)
   .get(
     "/:id/outputs",
-    async ({ params, query, userId, set }) => {
+    async ({ params, query, set }) => {
       if (!UUID_RE.test(params.id)) return denyNotFound(set, "Prediction run not found");
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireRunFound(run, set);
       if (denied) return denied;
 
       const page = Math.max(1, query.page ?? 1);
@@ -88,13 +88,13 @@ export const outputsRoutes = new Elysia()
   )
   .get(
     "/:id/outputs/:acc_id",
-    async ({ params, userId, set }) => {
+    async ({ params, set }) => {
       const accId = Number(params.acc_id);
       if (!UUID_RE.test(params.id) || !Number.isInteger(accId)) {
         return denyNotFound(set, "Prediction output not found");
       }
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireRunFound(run, set);
       if (denied) return denied;
       const [row] = await db
         .select()

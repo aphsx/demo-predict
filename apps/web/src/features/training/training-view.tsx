@@ -28,6 +28,7 @@ import {
 import { getDisplayError } from "@/lib/ui-error";
 import { ModelStatusCards } from "./model-status-cards";
 import { TrainPanel } from "./train-panel";
+import { TrainingHistoryTable } from "./training-history-table";
 import { getTimestamp, wait } from "./training-utils";
 import { promotedSummary } from "./training-run-utils";
 
@@ -95,6 +96,7 @@ export function TrainingView() {
 
   // Training-run state
   const [runs, setRuns] = useState<TrainingRun[]>([]);
+  const [runsLoading, setRunsLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [trainError, setTrainError] = useState<string | null>(null);
   const [suggestedCutoff, setSuggestedCutoff] = useState<string | null>(null);
@@ -173,6 +175,8 @@ export function TrainingView() {
       setRuns(applyTrainingRuns(data, knownStatusesRef.current));
     } catch (e) {
       setTrainError(getDisplayError(e, "โหลดสถานะ training ไม่สำเร็จ"));
+    } finally {
+      setRunsLoading(false);
     }
   }, []);
 
@@ -311,6 +315,8 @@ export function TrainingView() {
         />
 
         <ModelStatusCards key={latestCompleted?.finished_at ?? "none"} latestRun={latestCompleted} />
+
+        <TrainingHistoryTable runs={runs} loading={runsLoading} />
       </div>
 
       {pendingDeleteSource && (

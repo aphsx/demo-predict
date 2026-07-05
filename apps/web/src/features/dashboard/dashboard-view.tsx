@@ -31,6 +31,17 @@ export function DashboardView({ summary, runId }: { summary: RunSummary; runId: 
 
   return (
     <main className="min-w-0 px-4 py-6 pb-12 sm:px-6 lg:px-8">
+      {/* Active-run banner — the dashboard auto-selects the latest completed run;
+          switch to older runs via the run selector in the top-right header. */}
+      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="type-display text-[22px] leading-tight">
+          ข้อมูล ณ วันที่ {overview.run.cutoff_date}
+        </h2>
+        <span className="min-w-0 truncate text-[13px] text-[color:var(--ink-4)]">
+          Run: {overview.run.name} — เปลี่ยน run เก่าได้จากตัวเลือกมุมขวาบน
+        </span>
+      </div>
+
       <div className="mb-6">
         <RunInsightCard runId={runId} />
       </div>

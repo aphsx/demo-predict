@@ -46,7 +46,10 @@ export interface PredictionRun {
   predict_source_name: string;
   cutoff_date: string;
   total_customers: number | null;
+  /** Creator's user id (null when the creator's account was deleted). */
   created_by: string | null;
+  /** Creator's display name, falling back to email. */
+  created_by_name: string | null;
   created_at: string;
   finished_at: string | null;
   error_message: string | null;

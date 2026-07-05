@@ -19,8 +19,10 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
+import { notifyStatusDialog } from "@/components/global-status-dialog-host";
 import { SectionCard } from "@/components/ui";
 import { uploadPredictDataFile, type PredictDataSource } from "@/lib/api";
+import { ADMIN_ONLY_TITLE, useIsAdmin } from "@/lib/auth";
 import {
   createPredictionRun,
   fetchModelVersions,
@@ -185,6 +187,7 @@ export function CreateRunPanel({
             <p className="mt-2 text-[12px] text-[color:var(--ink-5)]">
               {counts ? `${counts.customers.toLocaleString()} ลูกค้า · ` : ""}
               นำเข้า {formatRelative(selected.imported_at)}
+              {selected.created_by_name ? ` โดย ${selected.created_by_name}` : ""}
               {cutoff ? ` · ทำนาย ณ ${formatDate(cutoff)} (อัตโนมัติ)` : ""}
             </p>
           )}
@@ -264,15 +267,19 @@ export function CreateRunPanel({
   );
 }
 
-/** "+ import ใหม่" toggle that reveals an inline upload form. */
+/** "+ import ใหม่" toggle that reveals an inline upload form (admin only). */
 function ImportToggleButton({ onImported }: { onImported: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
+  const { isAdmin, loading: roleLoading } = useIsAdmin();
+  const disabled = !roleLoading && !isAdmin;
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-3.5 text-[12.5px] font-semibold text-[color:var(--moby-600)] shadow-[var(--shadow-1)] hover:bg-gray-50"
+        disabled={disabled}
+        title={disabled ? ADMIN_ONLY_TITLE : undefined}
+        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-3.5 text-[12.5px] font-semibold text-[color:var(--moby-600)] shadow-[var(--shadow-1)] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45"
       >
         <Plus size={14} />
         import ใหม่
@@ -310,8 +317,17 @@ function InlineImportForm({
     setBusy(true);
     setError(null);
     try {
-      await uploadPredictDataFile(file, datasetName, clientLabel.trim() || undefined);
+      const result = await uploadPredictDataFile(file, datasetName, clientLabel.trim() || undefined);
       await onImported();
+      // The import auto-creates + triggers a prediction run — surface it so the
+      // user knows the new run in the history table is already underway.
+      if (result.auto_prediction_run_id) {
+        notifyStatusDialog({
+          tone: "success",
+          title: "นำเข้าข้อมูลสำเร็จ",
+          message: `ระบบเริ่ม prediction run ให้อัตโนมัติแล้ว (Auto — ${datasetName}) — ติดตามสถานะได้จากตาราง run ด้านล่าง`,
+        });
+      }
     } catch (e) {
       setError(getDisplayError(e, "นำเข้าข้อมูลไม่สำเร็จ") ?? "นำเข้าข้อมูลไม่สำเร็จ");
     } finally {

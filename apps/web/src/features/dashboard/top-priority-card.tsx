@@ -13,7 +13,7 @@ import {
 } from "@/features/customers/customer-row-ui";
 import { TEXT_SAFE } from "./palette";
 
-/** Top 5 priority customers (spec §2.1) — เรียงตาม priority_score */
+/** Top 10 priority customers (spec §2.1, TOP_PRIORITY_LIMIT) — เรียงตาม priority_score */
 export function TopPriorityCard({ summary, runId }: { summary: RunSummary; runId: string }) {
   const router = useRouter();
   const customerHref = (accId: number) => `/customers/${accId}?run=${runId}`;

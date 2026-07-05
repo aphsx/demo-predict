@@ -57,15 +57,18 @@ export function HighValueMedal() {
   );
 }
 
-/** Grid template shared by /customers table and dashboard top-priority widget. */
+/** Grid template shared by /customers table and dashboard top-priority widget.
+ *  10 columns: account, lifecycle, churn, score, CLV, revenue, revenue at risk,
+ *  credit urgency, days inactive, AI. The xl table scrolls horizontally when
+ *  narrower than the min width (see customers-view.tsx). */
 export const CUSTOMER_ROW_GRID =
-  "grid-cols-1 xl:grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_110px_150px_150px_120px]";
+  "grid-cols-1 xl:grid-cols-[minmax(150px,1.1fr)_minmax(170px,1.2fr)_90px_80px_120px_120px_130px_120px_100px_90px]";
 
 export const TOP_PRIORITY_ROW_GRID =
   "grid-cols-1 xl:grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_110px_150px]";
 
 export const CUSTOMER_ROW_HEADER_GRID =
-  "grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_110px_150px_150px_120px]";
+  "grid-cols-[minmax(150px,1.1fr)_minmax(170px,1.2fr)_90px_80px_120px_120px_130px_120px_100px_90px]";
 
 export const TOP_PRIORITY_ROW_HEADER_GRID =
   "grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.4fr)_120px_110px_150px]";

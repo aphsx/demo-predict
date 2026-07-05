@@ -80,7 +80,9 @@ class ValidationCheck:
 class ValidationReport:
     source_id: str
     source_kind: SourceKind
-    validation_type: Literal["profile", "schema", "label_viability", "leakage", "drift"]
+    validation_type: Literal[
+        "profile", "schema", "label_viability", "leakage", "drift", "realized_outcome"
+    ]
     status: ReportStatus
     row_count: int
     stats: dict[str, Any]

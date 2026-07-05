@@ -10,7 +10,7 @@ import {
   predictDataSources,
   user,
 } from "../../db/schema";
-import { requireOwnedForRead } from "../../lib/access-control";
+import { requireFoundForRead } from "../../lib/access-control";
 import {
   EMPTY_MODEL_VERSIONS,
   num,
@@ -39,6 +39,7 @@ export const runSelect = {
   totalCustomers: mlPredictionRuns.totalCustomers,
   createdBy: mlPredictionRuns.createdBy,
   creatorName: user.name,
+  creatorEmail: user.email,
   createdAt: mlPredictionRuns.createdAt,
   finishedAt: mlPredictionRuns.finishedAt,
   errorMessage: mlPredictionRuns.errorMessage,
@@ -55,6 +56,7 @@ export interface RunRow {
   totalCustomers: number | null;
   createdBy: string | null;
   creatorName: string | null;
+  creatorEmail: string | null;
   createdAt: Date;
   finishedAt: Date | null;
   errorMessage: string | null;
@@ -70,7 +72,8 @@ export function mapRun(row: RunRow): PredictionRun {
     predict_source_name: row.predictSourceName ?? row.predictSourceId,
     cutoff_date: row.cutoffDate,
     total_customers: row.totalCustomers,
-    created_by: row.creatorName ?? row.createdBy,
+    created_by: row.createdBy,
+    created_by_name: row.creatorName ?? row.creatorEmail ?? null,
     created_at: row.createdAt.toISOString(),
     finished_at: row.finishedAt?.toISOString() ?? null,
     error_message: row.errorMessage,
@@ -93,12 +96,12 @@ export async function fetchRun(id: string): Promise<RunRow | null> {
   return rows[0] ?? null;
 }
 
-export function requireOwnedRun(
+/** Org-wide read guard — 404 only when the run does not exist. */
+export function requireRunFound(
   run: RunRow | null,
-  userId: string | null | undefined,
   set: { status?: number | string }
 ) {
-  return requireOwnedForRead(run, run?.createdBy, userId, set, "Prediction run not found");
+  return requireFoundForRead(run, set, "Prediction run not found");
 }
 
 // ── Output row mapping ─────────────────────────────────────────

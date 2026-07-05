@@ -4,12 +4,13 @@
  * Conversations persist to PostgreSQL (ai_conversations / ai_messages) and may
  * be bound to a prediction run (ai_conversations.run_id). A bound conversation
  * hard-scopes every Text-to-SQL query to that run; a global conversation can
- * query across all the user's own runs. The binding is fixed at creation — a
- * chat about run A stays about run A even when the active run changes.
+ * query across all org runs (runs/sources are shared org-wide). The binding is
+ * fixed at creation — a chat about run A stays about run A even when the active
+ * run changes.
  *
  * Sending a message streams a token-by-token SSE response from the orchestrator.
  *
- * Routes (all require auth; all queries scoped to userId):
+ * Routes (all require auth; conversations themselves stay private per user):
  *   GET    /ai-chat/config
  *   GET    /ai-chat/conversations
  *   POST   /ai-chat/conversations              { title?, run_id? }
@@ -43,13 +44,13 @@ async function getConversation(id: string, userId: string) {
   return conv ?? null;
 }
 
-/** Verify the user owns a prediction run before binding a chat to it. */
-async function userOwnsRun(runId: string, userId: string): Promise<boolean> {
+/** Verify a prediction run exists before binding a chat to it (org-shared). */
+async function runExists(runId: string): Promise<boolean> {
   if (!UUID_RE.test(runId)) return false;
   const [row] = await db
     .select({ id: mlPredictionRuns.id })
     .from(mlPredictionRuns)
-    .where(and(eq(mlPredictionRuns.id, runId), eq(mlPredictionRuns.createdBy, userId)))
+    .where(eq(mlPredictionRuns.id, runId))
     .limit(1);
   return Boolean(row);
 }
@@ -91,8 +92,8 @@ export const aiChatRoutes = new Elysia({ prefix: "/ai-chat" })
     async ({ body, userId, set }) => {
       let runId: string | null = null;
       if (body.run_id) {
-        if (!(await userOwnsRun(body.run_id, userId!))) {
-          set.status = 403;
+        if (!(await runExists(body.run_id))) {
+          set.status = 404;
           return { message: "Prediction run not found", code: "run_not_found" };
         }
         runId = body.run_id;

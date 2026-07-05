@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { USER_PROFILE_FIELDS } from "@moby/types";
+import { USER_PROFILE_FIELDS, USER_ROLE_FIELD } from "@moby/types";
 import pg from "pg";
 
 const { Pool } = pg;
@@ -53,8 +53,8 @@ export const auth = betterAuth({
     },
   },
   user: {
-    // Extra columns populated from the Google profile (single source: @moby/types).
-    additionalFields: { ...USER_PROFILE_FIELDS },
+    // Extra columns populated from the Google profile + org role (single source: @moby/types).
+    additionalFields: { ...USER_PROFILE_FIELDS, ...USER_ROLE_FIELD },
     // Allow users to delete their own account (cascades to session + account rows).
     deleteUser: { enabled: true },
   },

@@ -7,7 +7,7 @@ import Elysia from "elysia";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { mlModelAliases, mlModelEvaluations, mlModelVersions } from "../db/schema";
-import { requireUser } from "../lib/auth-middleware";
+import { requireAdmin, requireUser } from "../lib/auth-middleware";
 import {
   DEFAULT_RISK_THRESHOLDS,
   type CandidateResult,
@@ -214,52 +214,10 @@ interface VersionCard {
   algorithm?: string;
 }
 
-export const modelPerformanceRoutes = new Elysia({ prefix: "/model-performance" })
-  .use(requireUser)
-  .get("/", async (): Promise<ModelPerfEntry[]> => {
-    const entries: ModelPerfEntry[] = [LIFECYCLE_ENTRY];
-    for (const modelType of MODEL_TYPES) {
-      const entry = await buildEntry(modelType);
-      if (entry) entries.push(entry);
-    }
-    return entries;
-  })
-  // All trained versions for a model type — fuels the production-override picker.
-  .get("/:modelType/versions", async ({ params, set }): Promise<ModelVersionSummary[]> => {
-    if (!isModelType(params.modelType)) {
-      set.status = 400;
-      return [];
-    }
-    const primary = PRIMARY_METRIC[params.modelType];
-    const rows = await db
-      .select({
-        id: mlModelVersions.id,
-        version: mlModelVersions.version,
-        status: mlModelVersions.status,
-        isActive: mlModelVersions.isActive,
-        trainedAt: mlModelVersions.trainedAt,
-        modelCardJson: mlModelVersions.modelCardJson,
-        testMetricsJson: mlModelVersions.testMetricsJson,
-      })
-      .from(mlModelVersions)
-      .where(eq(mlModelVersions.modelType, params.modelType))
-      .orderBy(desc(mlModelVersions.trainedAt));
-
-    return rows.map((row) => {
-      const metricValue = asMetrics(row.testMetricsJson)[primary.key];
-      return {
-        id: row.id,
-        model_type: params.modelType,
-        version: row.version,
-        algorithm: (row.modelCardJson as VersionCard | null)?.algorithm ?? "",
-        status: row.status,
-        is_active: row.isActive,
-        trained_at: row.trainedAt?.toISOString() ?? null,
-        primary_metric_name: primary.name,
-        primary_metric_value: typeof metricValue === "number" ? metricValue : null,
-      };
-    });
-  })
+// Champion pinning and version deletion change what every user is served —
+// admin only, same pattern as data imports and training runs.
+const adminModelPerformanceRoutes = new Elysia()
+  .use(requireAdmin)
   // Manually pin a version to production. Reuses the ML service's promotion
   // transaction (action='manual_override') so the registry stays consistent.
   .post("/:modelType/activate", async ({ params, body, userId, set }) => {
@@ -314,3 +272,51 @@ export const modelPerformanceRoutes = new Elysia({ prefix: "/model-performance" 
     }
     return { deleted: true };
   });
+
+export const modelPerformanceRoutes = new Elysia({ prefix: "/model-performance" })
+  .use(requireUser)
+  .get("/", async (): Promise<ModelPerfEntry[]> => {
+    const entries: ModelPerfEntry[] = [LIFECYCLE_ENTRY];
+    for (const modelType of MODEL_TYPES) {
+      const entry = await buildEntry(modelType);
+      if (entry) entries.push(entry);
+    }
+    return entries;
+  })
+  // All trained versions for a model type — fuels the production-override picker.
+  .get("/:modelType/versions", async ({ params, set }): Promise<ModelVersionSummary[]> => {
+    if (!isModelType(params.modelType)) {
+      set.status = 400;
+      return [];
+    }
+    const primary = PRIMARY_METRIC[params.modelType];
+    const rows = await db
+      .select({
+        id: mlModelVersions.id,
+        version: mlModelVersions.version,
+        status: mlModelVersions.status,
+        isActive: mlModelVersions.isActive,
+        trainedAt: mlModelVersions.trainedAt,
+        modelCardJson: mlModelVersions.modelCardJson,
+        testMetricsJson: mlModelVersions.testMetricsJson,
+      })
+      .from(mlModelVersions)
+      .where(eq(mlModelVersions.modelType, params.modelType))
+      .orderBy(desc(mlModelVersions.trainedAt));
+
+    return rows.map((row) => {
+      const metricValue = asMetrics(row.testMetricsJson)[primary.key];
+      return {
+        id: row.id,
+        model_type: params.modelType,
+        version: row.version,
+        algorithm: (row.modelCardJson as VersionCard | null)?.algorithm ?? "",
+        status: row.status,
+        is_active: row.isActive,
+        trained_at: row.trainedAt?.toISOString() ?? null,
+        primary_metric_name: primary.name,
+        primary_metric_value: typeof metricValue === "number" ? metricValue : null,
+      };
+    });
+  })
+  .use(adminModelPerformanceRoutes);

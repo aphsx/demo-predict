@@ -329,6 +329,9 @@ export interface PredictImportDone {
   sheet_manifest: Record<string, number>;
   file_checksum_sha256: string;
   clean_manifest?: TrainCleanManifest;
+  /** Set when the import auto-created + triggered a prediction run (default on;
+   *  opt out with auto_run=false). Null when auto-run failed or was skipped. */
+  auto_prediction_run_id?: string | null;
 }
 
 export async function fetchPredictDataSources(): Promise<PredictDataSource[]> {

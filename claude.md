@@ -9,8 +9,15 @@ trust the code and fix this file.
 ## Project Overview
 
 Internal analytics platform for **1Moby**, a B2B SaaS messaging company (SMS/Email service).
-~5 internal users. Analyzes uploaded Excel data to predict customer churn, segment customers
-by CLV / value tier, and forecast credit consumption.
+Used by internal staff across multiple teams (~10–50 users). Analyzes uploaded Excel data to
+predict customer churn, segment customers by CLV / value tier, and forecast credit consumption.
+
+**Access model (org-shared):** all data sources, runs, and dashboards are visible to every
+authenticated user. Two roles on `user.role`: `admin` (import data, trigger training, delete
+anything, pin/delete model versions, trigger outcome backfill) and `member` (default — view
+everything, create prediction runs, AI chat). Bootstrap admins via `ADMIN_EMAILS` env.
+Deletes are creator-or-admin. AI chat conversations stay private per user, but Text-to-SQL
+queries are scoped org-wide (deterministic id allowlist in `apps/api/src/lib/ai/scope.ts`).
 
 **Deployment target:** Local Docker first. Production decision deferred.
 
@@ -208,17 +215,28 @@ were **permanently cut** — do not reintroduce them.
 
 ## Job Flow (prediction run)
 
-1. User imports predict data on `/runs` (`POST /predict-data-sources/import`) — raw + clean in one job;
+1. Admin imports predict data on `/runs` (`POST /predict-data-sources/import`) — raw + clean in one job;
    progress streamed via Redis Stream `predict-import:{source_id}`.
-2. User creates a run (`POST /prediction-runs`) with `{ predict_source_id, name, cutoff_date }`.
-3. Elysia calls FastAPI `/internal/prediction-runs` (token-gated), which spawns `predict_v2.py`.
+2. On import success an **auto prediction run** is created + triggered with the suggested cutoff
+   (`apps/api/src/lib/auto-prediction-run.ts`; opt out with `auto_run: false`). Users can still
+   create manual runs (`POST /prediction-runs`) with `{ predict_source_id, name, cutoff_date }`.
+3. Elysia calls FastAPI `/internal/prediction-runs` (token-gated, AbortController timeout
+   `ML_INTERNAL_TIMEOUT_MS`), which spawns `predict_v2.py`.
 4. The prediction runner loads `predict_clean_*` → gates → features → lifecycle + eligibility →
    champion models (churn / clv / credit) → SHAP (churn) → derived fields → **batch insert** into
    `ml_prediction_outputs` (one row per customer).
 5. Run status moves `in_progress` → `completed` / `failed` (every exception ends in `failed` + `error_message`).
+   A stale-run reaper (`apps/api/src/lib/run-reaper.ts`) marks runs non-terminal for longer than
+   `STALE_RUN_TIMEOUT_MINUTES` (default 120) as failed, on startup and every 5 minutes.
 
 Training follows the same shape via `POST /training-runs` → `/internal/training-runs` → `train_v2.py`
 (see `docs/ML-V2-TRAINING-PIPELINE.md`).
+
+**Realized-outcome loop:** once a run's horizon has elapsed and newer predict data exists,
+`python -m src.cli.backfill_outcomes` (spawned via `POST /internal/outcome-backfill`, triggered by
+admin `POST /outcome-backfill`) rebuilds actual labels with the training label builders and upserts
+per-run realized metrics as `ml_model_evaluations` rows (`evaluation_type='production_holdout'`,
+keyed by `prediction_run_id`). Read via `GET /prediction-runs/:id/realized-outcomes`.
 
 ## Architectural Decisions
 
@@ -232,37 +250,46 @@ Training follows the same shape via `POST /training-runs` → `/internal/trainin
 | **Drizzle in introspect mode** | `db/init/001_schema.sql` owns schema; Drizzle reflects it. No `drizzle-kit generate`, no Alembic. |
 | **PostgreSQL not MongoDB** | Data is relational. All ML output is tabular. |
 
-## Route Map (Elysia — all keys snake_case, all routes `requireUser`)
+## Route Map (Elysia — all keys snake_case, all routes `requireUser`; reads are org-wide,
+## admin-only writes marked [admin], deletes are creator-or-admin)
 
 ```
 Auth
   /api/auth/*                       Better Auth native handler
 
 Prediction runs
-  GET    /prediction-runs                       list runs
+  GET    /prediction-runs                       list runs (+ created_by / created_by_name)
   POST   /prediction-runs                       create run { predict_source_id, name, cutoff_date }
   GET    /prediction-runs/:id                   run detail + progress
-  DELETE /prediction-runs/:id                   owner only, cascade
+  DELETE /prediction-runs/:id                   creator or admin, cascade
   GET    /prediction-runs/:id/summary           dashboard aggregates (SQL-side)
   GET    /prediction-runs/:id/outputs           paginated customer table (sort/filter)
   GET    /prediction-runs/:id/outputs/:acc_id   Customer 360 (output + profile snapshot)
   GET    /prediction-runs/:id/customers/:acc_id/usage-monthly | payments
+  GET    /prediction-runs/:id/realized-outcomes realized metrics once horizon elapsed
 
 Data sources
-  POST   /predict-data-sources/import           import predict Excel (raw + clean)
-  POST   /train-data-sources/import             import train Excel (raw + clean)
+  POST   /predict-data-sources/import           [admin] import predict Excel (raw + clean);
+                                                auto-triggers a prediction run (auto_run=false to skip)
+  POST   /train-data-sources/import             [admin] import train Excel (raw + clean)
+  GET    /{train,predict}-data-sources[/...]    lists/detail/progress — org-wide reads
+  DELETE /{train,predict}-data-sources/:id      creator or admin
 
 Training / models
-  POST   /training-runs                         trigger training { train_source_id, cutoff_date, horizon_days }
-  GET    /training-runs/:id                     progress + gate results + metrics
+  POST   /training-runs                         [admin] trigger training { train_source_id, cutoff_date, horizon_days }
+  GET    /training-runs / :id                   history + progress + gate results + metrics
   GET    /model-performance                     champion per model_type + evaluations + baselines
+  POST   /model-performance/:type/activate      [admin] pin a version to production
+  DELETE /model-performance/:type/versions/:id  [admin] delete a non-production version
+  POST   /outcome-backfill                      [admin] trigger realized-outcome backfill
 
 AI chat
   GET    /ai-chat/config                         { configured, provider, model } for the UI status line
   GET/POST/PATCH/DELETE /ai-chat/conversations[/:id]   POST accepts { title?, run_id? } (run-bound chat)
   POST   /ai-chat/conversations/:id/messages    SSE token stream (thinking/token/evidence/title/done/error)
-                                                self-correcting Text-to-SQL agent; row-scope enforced to
-                                                the user's own runs/sources (run-bound chats: that run only)
+                                                self-correcting Text-to-SQL agent; row-scope enforced
+                                                org-wide via deterministic id allowlist (run-bound
+                                                chats: that run only); conversations private per user
 
 Health
   GET    /health
@@ -307,6 +334,9 @@ GOOGLE_CLIENT_SECRET
 ALLOWED_ORIGINS          # http://localhost:3000
 INTERNAL_SERVICE_TOKEN   # shared with ml service
 ML_INTERNAL_URL          # http://ml:8000
+ML_INTERNAL_TIMEOUT_MS   # Elysia → FastAPI call timeout (default 30000)
+ADMIN_EMAILS             # comma-separated bootstrap admins (role=admin)
+STALE_RUN_TIMEOUT_MINUTES # reaper threshold for stuck runs (default 120)
 MODEL_DIR                # /app/models
 OLLAMA_API_KEY / OLLAMA_HOST / OLLAMA_MODEL        # AI chat + insights
 OLLAMA_EMBED_MODEL / AI_RAG_TOP_K                  # RAG (planned)
@@ -332,9 +362,14 @@ NEXT_PUBLIC_AUTH_URL     # http://localhost:3000 (browser-visible)
 - **AI chat RAG** — enable the `vector` extension + knowledge tables, ingest `docs/`, real retrieval
   (see `docs/AI-ASSISTANT.md`).
 - **R2 integration** — store `.pkl` artifacts in Cloudflare R2 (currently local filesystem).
-- **Realized-outcome loop** — measure predictions against actuals once a horizon completes
-  (see `docs/ML-V2-TRAINING-PIPELINE.md` §15).
+- **CLV log-space retrain (P1)** — proper fix for whale under-prediction (hybrid tail mitigation
+  is shipped; retrain + promotion gates need a populated DB).
+- **Real deployment** — 10–50 users need a real server + HTTPS + scheduled Postgres backups;
+  "local Docker first" no longer holds.
 - **Real email notifications** on pipeline completion.
+
+Done: ~~Realized-outcome loop~~ (shipped — `src/outcomes/`, `POST /outcome-backfill`,
+`GET /prediction-runs/:id/realized-outcomes`; see Job Flow above).
 
 ## What NOT to Change
 
@@ -345,7 +380,8 @@ NEXT_PUBLIC_AUTH_URL     # http://localhost:3000 (browser-visible)
 ## Always Check
 
 - Is the run status updated to `in_progress`/`completed`/`failed` at the right points?
-- Are all Elysia routes using `requireUser` and scoped by `userId`?
-- Does run-ownership verification return 403 (not bypass) when ownership is null?
+- Are all Elysia routes behind `requireUser`? Reads are org-wide by design; writes that change
+  shared state (imports, training, champion pinning, backfill) must be behind `requireAdmin`.
+- Do deletes enforce creator-or-admin and return 403 (not bypass) otherwise?
 - Are uploaded files validated (size, MIME, required sheet presence) before inserting?
 - Are batch inserts used (never row-by-row `for` loops)?

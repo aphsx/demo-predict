@@ -33,6 +33,7 @@ export const user = pgTable("user", {
   givenName: text("givenName"),
   familyName: text("familyName"),
   locale: text("locale"),
+  role: text("role").notNull().default("member"),
   createdAt: timestamp("createdAt", { withTimezone: true }).notNull().default(sql`NOW()`),
   updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull().default(sql`NOW()`),
 });
@@ -542,6 +543,10 @@ export const mlModelEvaluations = pgTable(
     trainingRunId: uuid("training_run_id").notNull().references(() => mlTrainingRuns.id, {
       onDelete: "cascade",
     }),
+    // Realized-outcome loop (TRAINING-PIPELINE §15): set on production_holdout rows.
+    predictionRunId: uuid("prediction_run_id").references(() => mlPredictionRuns.id, {
+      onDelete: "cascade",
+    }),
     modelType: text("model_type").notNull(),
     evaluationType: text("evaluation_type").notNull(),
     datasetSplit: text("dataset_split").notNull(),
@@ -564,6 +569,7 @@ export const mlModelEvaluations = pgTable(
   (t) => [
     index("idx_ml_evaluations_model_version").on(t.modelVersionId),
     index("idx_ml_evaluations_training_run").on(t.trainingRunId),
+    index("idx_ml_evaluations_prediction_run").on(t.predictionRunId),
     index("idx_ml_evaluations_type_split").on(t.modelType, t.evaluationType, t.datasetSplit),
   ]
 );

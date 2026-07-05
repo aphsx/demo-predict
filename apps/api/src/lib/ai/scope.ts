@@ -2,25 +2,26 @@
  * Row-scope enforcement for AI Text-to-SQL.
  *
  * The SQL guard (sql-guard.ts) proves a query is a safe, read-only SELECT over
- * modeled tables. This module proves the query only touches data the *current
- * user* is allowed to see, and — for run-bound conversations — only the bound
- * run.
+ * modeled tables. This module proves the query only touches data that exists in
+ * the org (all runs/sources are shared org-wide), and — for run-bound
+ * conversations — only the bound run.
  *
- * Previously this was prompt-trusted: the planner was *told* the user's run ids
- * and asked nicely to filter by them. A model mistake or prompt-injection could
- * read another user's predictions. Here we enforce it deterministically:
+ * Access model: the platform is org-shared. Every authenticated user may read
+ * every prediction run and data source, so the scope here is "all known ids"
+ * rather than per-user ownership. The deterministic checks still matter:
  *
  *   - Run-scoped tables (ml_prediction_runs / ml_prediction_outputs) and
- *     source-scoped tables (predict_clean_*) must carry an explicit id filter.
- *   - Every UUID literal in the query must belong to the user's own run ids or
- *     source ids. A foreign id ⇒ reject (with feedback so the agent can retry).
+ *     source-scoped tables (predict_clean_*) must carry an explicit id filter,
+ *     so queries stay anchored to concrete runs instead of scanning everything.
+ *   - Every UUID literal in the query must be a known run/source id. An unknown
+ *     id ⇒ reject (with feedback so the agent can retry).
  *   - A run-bound conversation must reference its own run id.
  *
  * The check is intentionally conservative: when in doubt it rejects and lets the
  * self-correcting agent regenerate, rather than letting a query through.
  */
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 const UUID_LITERAL_RE =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -36,9 +37,9 @@ const SOURCE_SCOPED_TABLES = [
 ];
 
 export type UserScope = {
-  /** Prediction run ids owned by the user. */
+  /** All prediction run ids in the org (shared visibility). */
   runIds: string[];
-  /** Predict data source ids owned by the user. */
+  /** All predict data source ids in the org (shared visibility). */
   sourceIds: string[];
 };
 
@@ -46,31 +47,27 @@ export type ScopeCheck =
   | { ok: true }
   | { ok: false; reason: string };
 
-/** Load the ids the current user is allowed to query, in one round-trip each. */
-export async function loadUserScope(userId: string): Promise<UserScope> {
+/**
+ * Load the ids the current user is allowed to query, in one round-trip each.
+ * Org-shared model: every authenticated user may query every run/source, so
+ * this returns all known ids. `_userId` is kept for call-site compatibility
+ * and future per-team scoping.
+ */
+export async function loadUserScope(_userId: string): Promise<UserScope> {
   const [{ db }, { mlPredictionRuns, predictDataSources }] = await Promise.all([
     import("../../db/client"),
     import("../../db/schema"),
   ]);
 
   const [runs, sources] = await Promise.all([
-    db
-      .select({ id: mlPredictionRuns.id })
-      .from(mlPredictionRuns)
-      .where(eq(mlPredictionRuns.createdBy, userId)),
-    db
-      .select({ id: predictDataSources.id })
-      .from(predictDataSources)
-      .where(eq(predictDataSources.importedBy, userId)),
+    db.select({ id: mlPredictionRuns.id }).from(mlPredictionRuns),
+    db.select({ id: predictDataSources.id }).from(predictDataSources),
   ]);
   return { runIds: runs.map((r) => r.id), sourceIds: sources.map((s) => s.id) };
 }
 
-/** True when the user owns a run and we can resolve its source id. */
-export async function loadRunSourceId(
-  runId: string,
-  userId: string
-): Promise<string | null> {
+/** Resolve a run's source id. Org-shared: any existing run resolves. */
+export async function loadRunSourceId(runId: string): Promise<string | null> {
   const [{ db }, { mlPredictionRuns }] = await Promise.all([
     import("../../db/client"),
     import("../../db/schema"),
@@ -79,7 +76,7 @@ export async function loadRunSourceId(
   const [row] = await db
     .select({ sourceId: mlPredictionRuns.predictSourceId })
     .from(mlPredictionRuns)
-    .where(and(eq(mlPredictionRuns.id, runId), eq(mlPredictionRuns.createdBy, userId)))
+    .where(eq(mlPredictionRuns.id, runId))
     .limit(1);
   return row?.sourceId ?? null;
 }

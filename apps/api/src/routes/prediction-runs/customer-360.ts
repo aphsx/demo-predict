@@ -10,16 +10,16 @@ import {
   loadCustomerPayments,
   loadCustomerUsageMonthly,
 } from "../../lib/ai";
-import { fetchRun, mapOutput, requireOwnedRun } from "./_helpers";
+import { fetchRun, mapOutput, requireRunFound } from "./_helpers";
 
 export const customer360Routes = new Elysia()
   .use(requireUser)
   .get(
     "/:id/customers/:acc_id/usage-monthly",
-    async ({ params, userId, set }) => {
+    async ({ params, set }) => {
       const accId = Number(params.acc_id);
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireRunFound(run, set);
       if (denied) return denied;
       if (!Number.isInteger(accId)) return denyNotFound(set, "Prediction run not found");
       return loadCustomerUsageMonthly(run!, accId);
@@ -28,10 +28,10 @@ export const customer360Routes = new Elysia()
   )
   .get(
     "/:id/customers/:acc_id/payments",
-    async ({ params, userId, set }) => {
+    async ({ params, set }) => {
       const accId = Number(params.acc_id);
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireRunFound(run, set);
       if (denied) return denied;
       if (!Number.isInteger(accId)) return denyNotFound(set, "Prediction run not found");
       return loadCustomerPayments(run!, accId);
@@ -40,14 +40,14 @@ export const customer360Routes = new Elysia()
   )
   .post(
     "/:id/outputs/:acc_id/ai-explanation",
-    async ({ params, body, userId, set }) => {
+    async ({ params, body, set }) => {
       const accId = Number(params.acc_id);
       if (!UUID_RE.test(params.id) || !Number.isInteger(accId)) {
         return denyNotFound(set, "Prediction output not found");
       }
 
       const run = await fetchRun(params.id);
-      const denied = requireOwnedRun(run, userId, set);
+      const denied = requireRunFound(run, set);
       if (denied) return denied;
 
       const [row] = await db

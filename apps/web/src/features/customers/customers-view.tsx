@@ -2,12 +2,22 @@
 
 import { useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, RotateCcw, Search } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  RotateCcw,
+  Search,
+} from "lucide-react";
+import { notifyStatusDialog } from "@/components/global-status-dialog-host";
 import { StatusDialog } from "@/components/status-dialog";
 import { Skeleton } from "@/components/ui";
 import { formatCurrency } from "@/lib/format";
-import type { PredictionOutput } from "@/lib/ml-api";
+import type { OutputsQuery, PredictionOutput } from "@/lib/ml-api";
 import { shouldConfirmAiOverwrite } from "./customer-ai";
+import { EXPORT_ROW_CAP, exportOutputsCsv } from "./export-csv";
 import { GenAiButton } from "./gen-ai-button";
 import {
   CUSTOMER_ROW_GRID,
@@ -30,6 +40,10 @@ export type CustomerRow = Pick<
   | "customer_value_tier"
   | "n_purchases"
   | "total_revenue"
+  | "revenue_at_risk"
+  | "credit_urgency_level"
+  | "estimated_days_until_topup"
+  | "days_since_last_activity"
   | "priority_score"
   | "ai_status"
   | "ai_explanation"
@@ -42,6 +56,9 @@ export type CustomerSortKey =
   | "priority_score"
   | "predicted_clv_6m"
   | "total_revenue"
+  | "revenue_at_risk"
+  | "estimated_days_until_topup"
+  | "days_since_last_activity"
   | "ai_status";
 
 export type CustomerSortDirection = "asc" | "desc";
@@ -56,6 +73,7 @@ export interface CustomerFilters {
   search: string;
   customer_value_tier: string;
   churn_risk_level: string;
+  credit_urgency_level: string;
 }
 
 const EMPTY_FILTERS: CustomerFilters = {
@@ -63,6 +81,82 @@ const EMPTY_FILTERS: CustomerFilters = {
   search: "",
   customer_value_tier: "",
   churn_risk_level: "",
+  credit_urgency_level: "",
+};
+
+/** Quick preset = one click sets filters + sort together (single URL update). */
+export interface CustomerPreset {
+  key: string;
+  label: string;
+  filters: CustomerFilters;
+  sort: CustomerSort | null;
+}
+
+// Server filters are single-value (eq), so "เสี่ยงสูง" pins churn_risk_level to
+// "high" and surfaces critical rows via the revenue_at_risk sort.
+export const CUSTOMER_PRESETS: CustomerPreset[] = [
+  {
+    key: "high_value_high_risk",
+    label: "มูลค่าสูง + เสี่ยงสูง",
+    filters: { ...EMPTY_FILTERS, customer_value_tier: "high", churn_risk_level: "high" },
+    sort: { key: "revenue_at_risk", direction: "desc" },
+  },
+  {
+    key: "credit_running_out",
+    label: "เครดิตใกล้หมด",
+    filters: { ...EMPTY_FILTERS, credit_urgency_level: "critical" },
+    sort: { key: "estimated_days_until_topup", direction: "asc" },
+  },
+  {
+    key: "long_inactive",
+    label: "หายไปนาน",
+    filters: { ...EMPTY_FILTERS },
+    sort: { key: "days_since_last_activity", direction: "desc" },
+  },
+  {
+    key: "all",
+    label: "ทั้งหมด",
+    filters: { ...EMPTY_FILTERS },
+    sort: null,
+  },
+];
+
+function presetIsActive(
+  preset: CustomerPreset,
+  filters: CustomerFilters,
+  sort: CustomerSort | null
+): boolean {
+  const filterKeys = Object.keys(EMPTY_FILTERS) as Array<keyof CustomerFilters>;
+  const filtersMatch = filterKeys.every((key) =>
+    key === "search" ? true : filters[key] === preset.filters[key]
+  );
+  const sortMatch =
+    preset.sort === null
+      ? sort === null
+      : sort !== null && sort.key === preset.sort.key && sort.direction === preset.sort.direction;
+  return filtersMatch && sortMatch;
+}
+
+/** Build the server outputs query for the current view (shared with CSV export). */
+export function toOutputsQuery(
+  filters: CustomerFilters,
+  sort: CustomerSort | null
+): Omit<OutputsQuery, "page" | "page_size"> {
+  return {
+    sort: sort ? `${sort.key}:${sort.direction}` : undefined,
+    search: filters.search.trim() || undefined,
+    lifecycle_stage: filters.lifecycle_stage as OutputsQuery["lifecycle_stage"],
+    customer_value_tier: filters.customer_value_tier as OutputsQuery["customer_value_tier"],
+    churn_risk_level: filters.churn_risk_level as OutputsQuery["churn_risk_level"],
+    credit_urgency_level: filters.credit_urgency_level as OutputsQuery["credit_urgency_level"],
+  };
+}
+
+const URGENCY_COLORS: Record<string, string> = {
+  critical: "#fc4c02",
+  warning: "#ffa400",
+  monitor: "#9ca3af",
+  stable: "#006bff",
 };
 
 interface CustomersViewProps {
@@ -76,6 +170,8 @@ interface CustomersViewProps {
   sort: CustomerSort | null;
   onFiltersChange: (filters: CustomerFilters) => void;
   onSortChange: (sort: CustomerSort | null) => void;
+  /** Applies filters + sort atomically (one URL update) — used by presets. */
+  onPresetApply: (filters: CustomerFilters, sort: CustomerSort | null) => void;
   onPageChange: (page: number) => void;
   onGenerateAi: (accId: number, options?: { force?: boolean }) => Promise<void>;
   aiError?: string | null;
@@ -92,6 +188,7 @@ function Inner({
   sort,
   onFiltersChange,
   onSortChange,
+  onPresetApply,
   onPageChange,
   onGenerateAi,
   aiError = null,
@@ -100,6 +197,10 @@ function Inner({
 
   const [generatingAccIds, setGeneratingAccIds] = useState<Set<number>>(() => new Set());
   const [pendingOverwriteAccId, setPendingOverwriteAccId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{ loaded: number; total: number } | null>(
+    null
+  );
 
   const setFilter = (key: keyof CustomerFilters, value: string) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -137,6 +238,33 @@ function Inner({
       return;
     }
     void runAiGeneration(row.acc_id);
+  };
+
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    setExportProgress(null);
+    try {
+      const result = await exportOutputsCsv(runId, toOutputsQuery(filters, sort), (loaded, t) =>
+        setExportProgress({ loaded, total: t })
+      );
+      if (result.capped) {
+        notifyStatusDialog({
+          tone: "warning",
+          title: `Export ถูกตัดที่ ${EXPORT_ROW_CAP.toLocaleString()} แถว`,
+          message: `ผลลัพธ์ที่ตรงเงื่อนไขมี ${result.total.toLocaleString()} แถว — ไฟล์ CSV มีเฉพาะ ${result.rows.toLocaleString()} แถวแรกตามการเรียงปัจจุบัน กรุณา filter ให้แคบลงถ้าต้องการครบทุกแถว`,
+        });
+      }
+    } catch (e: unknown) {
+      notifyStatusDialog({
+        tone: "error",
+        title: "Export CSV ไม่สำเร็จ",
+        message: e instanceof Error ? e.message : "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
+      });
+    } finally {
+      setExporting(false);
+      setExportProgress(null);
+    }
   };
 
   const activeFilters = Object.entries(filters).filter(([_, value]) => value).length;
@@ -195,6 +323,11 @@ function Inner({
                     Risk: {filters.churn_risk_level} ✕
                   </FilterChip>
                 )}
+                {filters.credit_urgency_level && (
+                  <FilterChip active onClick={() => setFilter("credit_urgency_level", "")}>
+                    Urgency: {filters.credit_urgency_level} ✕
+                  </FilterChip>
+                )}
                 {activeFilters > 0 && (
                   <button
                     type="button"
@@ -206,38 +339,78 @@ function Inner({
                 )}
               </div>
             </div>
-          </div>
 
-          <div className={`grid gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] max-xl:hidden ${CUSTOMER_ROW_HEADER_GRID}`}>
-            <SortableHeader label="Account" sortKey="acc_id" activeSort={sort} onSort={cycleSort} />
-            <SortableHeader label="Lifecycle" sortKey="lifecycle_stage" activeSort={sort} onSort={cycleSort} />
-            <SortableHeader label="Churn" sortKey="churn_probability" activeSort={sort} onSort={cycleSort} />
-            <SortableHeader label="Score" sortKey="priority_score" activeSort={sort} onSort={cycleSort} alignRight />
-            <SortableHeader label="CLV 6m" sortKey="predicted_clv_6m" activeSort={sort} onSort={cycleSort} alignRight />
-            <SortableHeader label="Revenue" sortKey="total_revenue" activeSort={sort} onSort={cycleSort} alignRight />
-            <SortableHeader label="AI" sortKey="ai_status" activeSort={sort} onSort={cycleSort} alignRight />
-          </div>
-
-          <div className="divide-y divide-gray-100">
-            {pendingRows && [...Array(8)].map((_, i) => (
-              <div key={i} className="px-5 py-4"><Skeleton className="h-10" /></div>
-            ))}
-            {!pendingRows && rows.map((r) => (
-              <CustomerTableRow
-                key={r.acc_id}
-                row={r}
-                href={customerHref(r.acc_id)}
-                inFlight={generatingAccIds.has(r.acc_id)}
-                onNavigate={(href) => router.push(href)}
-                onGenAiClick={(event) => handleGenAiClick(event, r)}
-              />
-            ))}
-            {!pendingRows && rows.length === 0 && (
-              <div className="px-5 py-12 text-center">
-                <p className="text-[15px] font-semibold text-[color:var(--ink-2)]">No customers match this view</p>
-                <p className="mt-1 text-[13px] text-[color:var(--ink-4)]">Reset filters or search another account ID.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)]">
+                มุมมองด่วน
+              </span>
+              {CUSTOMER_PRESETS.map((preset) => (
+                <FilterChip
+                  key={preset.key}
+                  active={presetIsActive(preset, filters, sort)}
+                  onClick={() =>
+                    onPresetApply({ ...preset.filters, search: filters.search }, preset.sort)
+                  }
+                >
+                  {preset.label}
+                </FilterChip>
+              ))}
+              <div className="ml-auto">
+                <button
+                  type="button"
+                  onClick={() => void handleExport()}
+                  disabled={exporting || total === 0}
+                  title="ดาวน์โหลดทุกแถวที่ตรง filter ปัจจุบันเป็น CSV (UTF-8, เปิดใน Excel ได้)"
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 text-[12px] font-semibold text-[color:var(--moby-600)] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Download size={13} className={exporting ? "animate-bounce" : undefined} />
+                  {exporting
+                    ? exportProgress
+                      ? `กำลัง export… ${exportProgress.loaded.toLocaleString()}/${Math.min(exportProgress.total, EXPORT_ROW_CAP).toLocaleString()}`
+                      : "กำลัง export…"
+                    : "Export CSV"}
+                </button>
               </div>
-            )}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <div className="xl:min-w-[1220px]">
+              <div className={`grid gap-4 border-b border-gray-100 bg-gray-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] max-xl:hidden ${CUSTOMER_ROW_HEADER_GRID}`}>
+                <SortableHeader label="Account" sortKey="acc_id" activeSort={sort} onSort={cycleSort} />
+                <SortableHeader label="Lifecycle" sortKey="lifecycle_stage" activeSort={sort} onSort={cycleSort} />
+                <SortableHeader label="Churn" sortKey="churn_probability" activeSort={sort} onSort={cycleSort} />
+                <SortableHeader label="Score" sortKey="priority_score" activeSort={sort} onSort={cycleSort} alignRight />
+                <SortableHeader label="CLV 6m" sortKey="predicted_clv_6m" activeSort={sort} onSort={cycleSort} alignRight />
+                <SortableHeader label="Revenue" sortKey="total_revenue" activeSort={sort} onSort={cycleSort} alignRight />
+                <SortableHeader label="At risk" sortKey="revenue_at_risk" activeSort={sort} onSort={cycleSort} alignRight />
+                <SortableHeader label="Credit" sortKey="estimated_days_until_topup" activeSort={sort} onSort={cycleSort} alignRight />
+                <SortableHeader label="Inactive" sortKey="days_since_last_activity" activeSort={sort} onSort={cycleSort} alignRight />
+                <SortableHeader label="AI" sortKey="ai_status" activeSort={sort} onSort={cycleSort} alignRight />
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {pendingRows && [...Array(8)].map((_, i) => (
+                  <div key={i} className="px-5 py-4"><Skeleton className="h-10" /></div>
+                ))}
+                {!pendingRows && rows.map((r) => (
+                  <CustomerTableRow
+                    key={r.acc_id}
+                    row={r}
+                    href={customerHref(r.acc_id)}
+                    inFlight={generatingAccIds.has(r.acc_id)}
+                    onNavigate={(href) => router.push(href)}
+                    onGenAiClick={(event) => handleGenAiClick(event, r)}
+                  />
+                ))}
+                {!pendingRows && rows.length === 0 && (
+                  <div className="px-5 py-12 text-center">
+                    <p className="text-[15px] font-semibold text-[color:var(--ink-2)]">No customers match this view</p>
+                    <p className="mt-1 text-[13px] text-[color:var(--ink-4)]">Reset filters or search another account ID.</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 border-t border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -303,6 +476,7 @@ function CustomerTableRow({
   onGenAiClick: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const churnPct = r.churn_probability != null ? r.churn_probability * 100 : null;
+  const urgency = r.credit_urgency_level;
   return (
     <div
       role="button"
@@ -327,6 +501,31 @@ function CustomerTableRow({
       <MetricCell label="Score" value={r.priority_score.toFixed(0)} alignRight />
       <MetricCell label="CLV 6m" value={r.predicted_clv_6m != null ? formatCurrency(r.predicted_clv_6m) : "—"} alignRight />
       <MetricCell label="Revenue" value={r.total_revenue != null ? formatCurrency(r.total_revenue) : "—"} alignRight />
+      <MetricCell
+        label="At risk"
+        value={r.revenue_at_risk != null ? formatCurrency(r.revenue_at_risk) : "—"}
+        valueColor={r.revenue_at_risk != null && r.revenue_at_risk > 0 ? "#fc4c02" : undefined}
+        alignRight
+      />
+      <div className="xl:text-right">
+        <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[color:var(--ink-5)] xl:hidden">
+          Credit
+        </p>
+        <p
+          className="num mt-0.5 text-[14px] font-semibold xl:mt-0"
+          style={urgency ? { color: URGENCY_COLORS[urgency] ?? undefined } : undefined}
+        >
+          {urgency ?? "—"}
+        </p>
+        {r.estimated_days_until_topup != null && (
+          <p className="text-[11px] text-[color:var(--ink-5)]">topup ~{r.estimated_days_until_topup} วัน</p>
+        )}
+      </div>
+      <MetricCell
+        label="Inactive"
+        value={r.days_since_last_activity != null ? `${r.days_since_last_activity} วัน` : "—"}
+        alignRight
+      />
       <div className="flex justify-start xl:justify-end">
         <GenAiButton ai={r} inFlight={inFlight} onClick={onGenAiClick} />
       </div>

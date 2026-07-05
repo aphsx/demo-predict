@@ -94,5 +94,6 @@ export const RISK_LEVELS: RiskLevel[] = ["low", "medium", "high", "critical"];
 export const VALUE_TIERS: ValueTier[] = ["high", "mid", "low", "none"];
 export const URGENCY_LEVELS: UrgencyLevel[] = ["critical", "warning", "monitor", "stable"];
 
-/** Max customers shown in top-priority widget. Shared by web and api summary query. */
-export const TOP_PRIORITY_LIMIT = 5;
+/** Max customers shown in top-priority widget (dashboard spec: Top 10).
+ *  Shared by web and api summary query. */
+export const TOP_PRIORITY_LIMIT = 10;
